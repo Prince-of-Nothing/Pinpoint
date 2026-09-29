@@ -6,6 +6,7 @@ Images used in the MVP presentation (Canva deck and demo script).
 |---|---|---|
 | `app-*.png` | Real web-client panels with the demo data from `backend/scripts/seed_demo.py` | Playwright screenshots of the running app (2x) |
 | `app-map.png` | Map markers, accuracy circle and popup | Same; map tiles were unavailable in the capture environment, so the map background is blank |
+| `always-together-demo.mp4` | 95-second demo video: two real browser sessions side by side (Maria receives, Alex shares) with captions, then a replay of the security script output | `e2e/demo-video/record.js` + `compose.js` (see the README there); map tiles were blocked while recording |
 | `diagram-*.png` | Architecture, consent model, token lifecycle, security controls, demo terminal output | HTML rendered in the deck's style (DM Serif Display, Inter, indigo accent), transparent background |
 
 The terminal image reproduces real output of `backend/scripts/demo_security.sh`.

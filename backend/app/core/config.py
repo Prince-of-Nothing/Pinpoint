@@ -13,7 +13,7 @@ from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Development placeholder only; production start-up rejects it (see validator below).
-DEV_SECRET_KEY = "dev-only-insecure-secret-key-change-me-0123456789"  # noqa: S105
+DEV_SECRET_KEY = "dev-only-insecure-secret-key-change-me-0123456789"  # noqa: S105  # nosec B105
 
 
 class Settings(BaseSettings):

@@ -1,0 +1,45 @@
+# Local development / demonstration stack: API + PostgreSQL + Redis.
+# Usage: docker compose up --build   ->  http://localhost:8000/
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: always_together
+      POSTGRES_USER: always_together
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U always_together -d always_together"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+psycopg://always_together:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/always_together
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: ${SECRET_KEY:-local-dev-only-secret-change-me-for-anything-public}
+      # Browsers accept Secure cookies on http://localhost; set to false for other plain-http hosts
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+    ports:
+      - "127.0.0.1:8000:8000"
+
+volumes:
+  db-data:

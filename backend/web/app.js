@@ -258,6 +258,7 @@ function initMap() {
 }
 
 const FRESHNESS_COLOURS = { live: "#1a9d55", stale: "#d98b00", dead: "#8a93a0" };
+const FRESHNESS_BADGE = { live: "live", stale: "stale", dead: "no signal", unknown: "no data" };
 const FRESHNESS_TEXT = {
   live: "Live",
   stale: "Stale - no recent update",
@@ -294,7 +295,7 @@ async function refreshMap() {
   for (const item of items) {
     const row = el("li", {},
       el("span", { text: displayName(item.user) }),
-      el("span", { className: `badge ${item.freshness}`, text: item.freshness }),
+      el("span", { className: `badge ${item.freshness}`, text: FRESHNESS_BADGE[item.freshness] }),
       el("span", { className: "meta", text: `Updated ${ago(item.recorded_at)} · ${item.precision} · share ${item.share_expires_at ? "until " + when(item.share_expires_at) : "until revoked"}` })
     );
     list.append(row);

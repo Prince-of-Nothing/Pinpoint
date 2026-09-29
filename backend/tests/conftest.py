@@ -21,12 +21,14 @@ from fastapi.testclient import TestClient  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
+from app.services.ratelimit import get_backend  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def _fresh_database():
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
+    get_backend().reset()
     yield
 
 

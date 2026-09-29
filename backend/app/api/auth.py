@@ -19,7 +19,7 @@ from app.schemas.auth import (
     TokenResponse,
     UserSelf,
 )
-from app.services import audit
+from app.services import audit, ratelimit
 from app.services.passwords import (
     burn_verification_time,
     hash_password,
@@ -85,7 +85,12 @@ def _clear_auth_cookies(response: Response) -> None:
 # ------------------------------------------------------------ registration
 
 
-@router.post("/register", response_model=UserSelf, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserSelf,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[ratelimit.rate_limit(ratelimit.REGISTER)],
+)
 def register(body: RegisterRequest, request: Request, db: DbSession) -> User:
     problems = password_policy_violations(body.password, username=body.username, email=body.email)
     if problems:
@@ -127,7 +132,9 @@ def register(body: RegisterRequest, request: Request, db: DbSession) -> User:
 # ------------------------------------------------------------------ login
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post(
+    "/login", response_model=TokenResponse, dependencies=[ratelimit.rate_limit(ratelimit.LOGIN)]
+)
 def login(body: LoginRequest, request: Request, response: Response, db: DbSession) -> TokenResponse:
     settings = get_settings()
     identifier = body.login.strip().lower()
@@ -209,7 +216,11 @@ def login(body: LoginRequest, request: Request, response: Response, db: DbSessio
 # ---------------------------------------------------------------- refresh
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    dependencies=[ratelimit.rate_limit(ratelimit.REFRESH)],
+)
 def refresh(
     request: Request, response: Response, db: DbSession, body: RefreshRequest | None = None
 ) -> TokenResponse:
@@ -355,7 +366,11 @@ def revoke_session(
 # --------------------------------------------------------------- password
 
 
-@router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[ratelimit.rate_limit(ratelimit.PASSWORD_CHANGE)],
+)
 def change_password(
     body: PasswordChangeRequest, request: Request, user: CurrentUser, db: DbSession
 ) -> Response:

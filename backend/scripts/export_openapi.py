@@ -1,6 +1,6 @@
 """Write the as-built OpenAPI schema to docs/reference/openapi.json.
 
-    cd backend && python scripts/export_openapi.py
+cd backend && python scripts/export_openapi.py
 """
 
 import json

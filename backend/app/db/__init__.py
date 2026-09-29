@@ -1,5 +1,5 @@
-"""Database module initialization."""
+"""Database package."""
 
-from app.db.session import Base, get_db, init_db, SessionLocal
+from app.db.base import Base, UTCDateTime
 
-__all__ = ["Base", "get_db", "init_db", "SessionLocal"]
+__all__ = ["Base", "UTCDateTime"]

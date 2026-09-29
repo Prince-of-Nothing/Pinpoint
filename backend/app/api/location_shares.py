@@ -5,7 +5,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import or_, select
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, audited_forbidden, deny_foreign
 from app.core.errors import ProblemError, not_found
 from app.core.timeutils import utcnow
 from app.models import LocationShare
@@ -32,10 +32,12 @@ def _out(share: LocationShare, viewer_id: str) -> ShareOut:
     )
 
 
-def _visible_share(db, share_id: str, user_id: str) -> LocationShare:
+def _visible_share(db, request: Request, share_id: str, user_id: str) -> LocationShare:
     share = db.get(LocationShare, share_id)
-    if share is None or user_id not in (share.owner_id, share.recipient_id):
+    if share is None:
         raise not_found("Location share")
+    if user_id not in (share.owner_id, share.recipient_id):
+        raise deny_foreign(db, request, user_id, "location_share", share_id, "Location share")
     return share
 
 
@@ -112,8 +114,8 @@ def create_share(body: ShareCreate, request: Request, user: CurrentUser, db: DbS
 
 
 @router.get("/{share_id}", response_model=ShareOut)
-def get_share(share_id: str, user: CurrentUser, db: DbSession) -> ShareOut:
-    return _out(_visible_share(db, share_id, user.id), user.id)
+def get_share(share_id: str, request: Request, user: CurrentUser, db: DbSession) -> ShareOut:
+    return _out(_visible_share(db, request, share_id, user.id), user.id)
 
 
 @router.patch(
@@ -124,9 +126,11 @@ def get_share(share_id: str, user: CurrentUser, db: DbSession) -> ShareOut:
 def update_share(
     share_id: str, body: ShareUpdate, request: Request, user: CurrentUser, db: DbSession
 ):
-    share = _visible_share(db, share_id, user.id)
+    share = _visible_share(db, request, share_id, user.id)
     if share.owner_id != user.id:
-        raise ProblemError(403, "FORBIDDEN", "Only the owner can change a location share.")
+        raise audited_forbidden(
+            db, request, user.id, "location_share", share.id, "Only the owner can change a share."
+        )
     now = utcnow()
     if not share.is_active(now):
         raise ProblemError(409, "SHARE_INACTIVE", "This share has ended; create a new one.")
@@ -159,7 +163,7 @@ def update_share(
 )
 def revoke_share(share_id: str, request: Request, user: CurrentUser, db: DbSession):
     """The owner stops sharing, or the recipient stops receiving. Effective immediately."""
-    share = _visible_share(db, share_id, user.id)
+    share = _visible_share(db, request, share_id, user.id)
     if share.revoked_at is None:
         share.revoked_at = utcnow()
         share.revoked_reason = "owner_revoked" if share.owner_id == user.id else "recipient_removed"

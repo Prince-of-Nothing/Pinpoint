@@ -5,7 +5,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import or_, select
 
-from app.api.deps import CurrentSession, CurrentUser, DbSession, unauthorized
+from app.api.deps import CurrentSession, CurrentUser, DbSession, deny_foreign, unauthorized
 from app.core.config import get_settings
 from app.core.errors import ProblemError, not_found
 from app.core.timeutils import utcnow
@@ -348,7 +348,9 @@ def revoke_session(
 ) -> Response:
     target = db.get(AuthSession, session_id)
     # Another user's session is indistinguishable from a missing one (no IDOR oracle)
-    if target is None or target.user_id != current.user_id or target.revoked_at is not None:
+    if target is not None and target.user_id != current.user_id:
+        raise deny_foreign(db, request, current.user_id, "session", session_id, "Session")
+    if target is None or target.revoked_at is not None:
         raise not_found("Session")
     revoke(db, target, "user_revoked")
     audit.record(

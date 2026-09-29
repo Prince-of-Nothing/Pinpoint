@@ -88,3 +88,43 @@ def require_admin(request: Request, db: DbSession, user: CurrentUser) -> User:
 
 
 AdminUser = Annotated[User, Depends(require_admin)]
+
+
+def deny_foreign(
+    db: Session, request: Request, actor_id: str, target_type: str, target_id: str, what: str
+) -> ProblemError:
+    """
+    Record an access attempt on a record that exists but belongs to someone
+    else (a likely IDOR probe) and return the same 404 a missing record gets,
+    so the caller learns nothing.
+    """
+    audit.record(
+        db,
+        "authz.denied",
+        outcome="denied",
+        actor_id=actor_id,
+        target_type=target_type,
+        target_id=target_id,
+        request=request,
+        path=request.url.path,
+    )
+    db.commit()
+    return ProblemError(404, "NOT_FOUND", f"{what} not found.")
+
+
+def audited_forbidden(
+    db: Session, request: Request, actor_id: str, target_type: str, target_id: str, detail: str
+) -> ProblemError:
+    """Record a denied action by a party who can see the record but lacks the right."""
+    audit.record(
+        db,
+        "authz.denied",
+        outcome="denied",
+        actor_id=actor_id,
+        target_type=target_type,
+        target_id=target_id,
+        request=request,
+        path=request.url.path,
+    )
+    db.commit()
+    return ProblemError(403, "FORBIDDEN", detail)

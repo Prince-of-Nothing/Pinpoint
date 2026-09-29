@@ -11,7 +11,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Request
 from sqlalchemy import func, or_, select
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, deny_foreign
 from app.core.errors import ProblemError, not_found
 from app.core.timeutils import utcnow
 from app.models import CheckIn, CheckInStatus, LocationShare, User
@@ -103,10 +103,12 @@ def create_check_in(body: CheckInCreate, request: Request, user: CurrentUser, db
     return _out(check_in, now)
 
 
-def _own_active(db, check_in_id: str, user_id: str) -> CheckIn:
+def _own_active(db, request: Request, check_in_id: str, user_id: str) -> CheckIn:
     check_in = db.get(CheckIn, check_in_id)
-    if check_in is None or check_in.user_id != user_id:
+    if check_in is None:
         raise not_found("Check-in")
+    if check_in.user_id != user_id:
+        raise deny_foreign(db, request, user_id, "check_in", check_in_id, "Check-in")
     if check_in.status != CheckInStatus.ACTIVE.value:
         raise ProblemError(409, "CHECK_IN_CLOSED", "This check-in is already closed.")
     return check_in
@@ -114,7 +116,7 @@ def _own_active(db, check_in_id: str, user_id: str) -> CheckIn:
 
 @router.post("/{check_in_id}/complete", response_model=CheckInOut)
 def complete_check_in(check_in_id: str, request: Request, user: CurrentUser, db: DbSession):
-    check_in = _own_active(db, check_in_id, user.id)
+    check_in = _own_active(db, request, check_in_id, user.id)
     now = utcnow()
     late = derive_state(check_in, now) in ("overdue", "missed")
     check_in.status = CheckInStatus.COMPLETED.value
@@ -134,7 +136,7 @@ def complete_check_in(check_in_id: str, request: Request, user: CurrentUser, db:
 
 @router.post("/{check_in_id}/cancel", response_model=CheckInOut)
 def cancel_check_in(check_in_id: str, request: Request, user: CurrentUser, db: DbSession):
-    check_in = _own_active(db, check_in_id, user.id)
+    check_in = _own_active(db, request, check_in_id, user.id)
     now = utcnow()
     check_in.status = CheckInStatus.CANCELLED.value
     check_in.cancelled_at = now

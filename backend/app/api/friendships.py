@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request, Response, status
 from sqlalchemy import or_, select
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, audited_forbidden, deny_foreign
 from app.core.errors import ProblemError, not_found
 from app.core.timeutils import utcnow
 from app.models import Friendship, FriendshipStatus, pair_key
@@ -30,11 +30,13 @@ def _out(friendship: Friendship, viewer_id: str) -> FriendshipOut:
     )
 
 
-def _own_friendship(db, friendship_id: str, user_id: str) -> Friendship:
+def _own_friendship(db, request: Request, friendship_id: str, user_id: str) -> Friendship:
     friendship = db.get(Friendship, friendship_id)
-    # Non-parties get the same 404 as a missing record (no IDOR oracle)
-    if friendship is None or user_id not in (friendship.requester_id, friendship.addressee_id):
+    if friendship is None:
         raise not_found("Friendship")
+    # Non-parties get the same 404 as a missing record (no IDOR oracle), and it is audited
+    if user_id not in (friendship.requester_id, friendship.addressee_id):
+        raise deny_foreign(db, request, user_id, "friendship", friendship_id, "Friendship")
     return friendship
 
 
@@ -95,9 +97,11 @@ def send_request(body: UsernameRequest, request: Request, user: CurrentUser, db:
 
 @router.post("/{friendship_id}/accept", response_model=FriendshipOut)
 def accept(friendship_id: str, request: Request, user: CurrentUser, db: DbSession):
-    friendship = _own_friendship(db, friendship_id, user.id)
+    friendship = _own_friendship(db, request, friendship_id, user.id)
     if friendship.addressee_id != user.id:
-        raise ProblemError(403, "FORBIDDEN", "Only the recipient can accept a friend request.")
+        raise audited_forbidden(
+            db, request, user.id, "friendship", friendship.id, "Only the recipient can accept."
+        )
     if friendship.status != FriendshipStatus.PENDING.value:
         raise ProblemError(409, "NOT_PENDING", "This request is no longer pending.")
     friendship.status = FriendshipStatus.ACCEPTED.value
@@ -116,9 +120,11 @@ def accept(friendship_id: str, request: Request, user: CurrentUser, db: DbSessio
 
 @router.post("/{friendship_id}/decline", status_code=status.HTTP_204_NO_CONTENT)
 def decline(friendship_id: str, request: Request, user: CurrentUser, db: DbSession):
-    friendship = _own_friendship(db, friendship_id, user.id)
+    friendship = _own_friendship(db, request, friendship_id, user.id)
     if friendship.addressee_id != user.id:
-        raise ProblemError(403, "FORBIDDEN", "Only the recipient can decline a friend request.")
+        raise audited_forbidden(
+            db, request, user.id, "friendship", friendship.id, "Only the recipient can decline."
+        )
     if friendship.status != FriendshipStatus.PENDING.value:
         raise ProblemError(409, "NOT_PENDING", "This request is no longer pending.")
     db.delete(friendship)
@@ -137,7 +143,7 @@ def decline(friendship_id: str, request: Request, user: CurrentUser, db: DbSessi
 @router.delete("/{friendship_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove(friendship_id: str, request: Request, user: CurrentUser, db: DbSession):
     """Cancel an outgoing request or end a friendship. Location shares end with it."""
-    friendship = _own_friendship(db, friendship_id, user.id)
+    friendship = _own_friendship(db, request, friendship_id, user.id)
     was_pending = friendship.status == FriendshipStatus.PENDING.value
     if was_pending and friendship.requester_id != user.id:
         raise ProblemError(

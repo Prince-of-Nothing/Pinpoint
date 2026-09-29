@@ -36,6 +36,10 @@
 
 ## October to December continuation
 
+The detailed, month-by-month plan is in
+[Development Plan: October to December](../how-to/development-plan-october-december.md);
+September status is in [Implementation Plan and Status](../how-to/implementation-plan.md).
+
 - Production authentication, passkeys/MFA, recovery, and device/session
   management.
 - Mobile battery and background-location validation on supported devices.

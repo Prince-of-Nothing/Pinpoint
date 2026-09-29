@@ -28,6 +28,39 @@ See [Architecture Models](./architecture-models.md) for the high-level
 technology/model choices underlying these building blocks, and
 [Domain Data Model](../reference/domain-data-model.md) for the entity-level detail.
 
+## 5.1a As built (September MVP)
+
+The MVP is a modular monolith in `backend/`:
+
+```mermaid
+flowchart LR
+    Browser["Web client<br/>backend/web (HTML/JS + Leaflet)"] -->|HTTPS JSON, Bearer JWT| API
+    subgraph API["FastAPI application (backend/app)"]
+        MW["core/middleware.py<br/>security headers, body limit"]
+        ERR["core/errors.py<br/>Problem Details"]
+        DEPS["api/deps.py<br/>token + session validation, RBAC, audited denials"]
+        AUTH["api/auth.py<br/>register, login, refresh, sessions, password"]
+        SOC["api/users.py, friendships.py, blocks.py<br/>profiles and relationships"]
+        LOC["api/location_shares.py, locations.py<br/>directional consent, recipient view"]
+        CHK["api/checkins.py"]
+        ADM["api/admin.py"]
+        SVC["services/<br/>passwords, tokens, sessions, ratelimit,<br/>audit, relationships, locations"]
+    end
+    API -->|SQLAlchemy, app_runtime role| PG[(PostgreSQL)]
+    API -->|rate-limit counters| RD[(Redis)]
+    Browser -->|tiles| OSM[OpenStreetMap tile server]
+```
+
+| Planned building block | MVP implementation |
+|---|---|
+| User mobile apps | Web client (`backend/web`); Flutter deferred ([ADR 0004](../adr/web-client-for-mvp-demonstration.md)) |
+| Backend server and APIs | `backend/app` (FastAPI) |
+| Identity service | `api/auth.py`, `services/{passwords,tokens,sessions}.py`, `models/{user,auth_session}.py` |
+| Relationship service | `api/{friendships,blocks,users}.py`, `services/relationships.py` |
+| Location service | `api/{location_shares,locations}.py`, `services/locations.py` |
+| Operations | `services/{audit,ratelimit}.py`, `api/admin.py`, `app/cli.py` |
+| Movement/discovery, content, optional services | Deferred |
+
 ## 5.2 Level 2: Component Breakdown
 
 ### Location service and movement/discovery service

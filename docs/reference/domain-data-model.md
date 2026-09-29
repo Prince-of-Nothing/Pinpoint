@@ -15,6 +15,28 @@ Relationships must encode purpose, scope, expiry, revocation, and visibility. A
 social membership must not imply a `LocationShare`. Precise `LocationUpdate`
 records require stricter retention than public prompt submissions.
 
+## MVP schema (as built)
+
+Implemented in `backend/app/models/` with the Alembic migrations in
+`backend/alembic/versions/`. Every externally visible id is a random UUID;
+all timestamps are timezone-aware UTC.
+
+| Table | Purpose | Key rules |
+|---|---|---|
+| `users` | Account, profile fields (`display_name`, `bio`), `role` (`user`/`admin`), lockout state | `username` and `email` unique and lower-cased; Argon2id `password_hash` |
+| `auth_sessions` | One login on one device: expiry, last activity, revocation reason, IP, user agent, hashed CSRF token | Access tokens are valid only while their session is |
+| `refresh_tokens` | SHA-256 hash of each refresh token, `used_at` for rotation | Reuse of a used token revokes the session |
+| `friendships` | `requester_id`, `addressee_id`, `status` (`pending`/`accepted`) | `pair_key` unique: one row per pair; declined/removed rows are deleted |
+| `blocks` | `blocker_id` → `blocked_id` | Unique pair; creating one removes the friendship and shares |
+| `location_shares` | Directional consent: `owner_id` → `recipient_id`, `precision`, `purpose`, `expires_at`, `revoked_at`, `revoked_reason` | One active share per direction; never implied by friendship |
+| `latest_locations` | One row per user: coordinates, accuracy, battery, charging, `recorded_at`, `received_at` | No history ([ADR 0005](../adr/store-latest-location-only.md)); owner can delete |
+| `check_ins` | `due_at`, `grace_minutes`, `status` (`active`/`completed`/`cancelled`), note | Overdue/missed derived on read |
+| `audit_events` | Append-only security events: type, outcome, actor, target, IP, details (JSON) | Never stores secrets or coordinates; runtime DB role cannot update or delete rows |
+
+`UserHandle`, `Profile`, `Device`, `ConsentGrant` and `LocationUpdate` from
+the conceptual model below are folded into `users`, `auth_sessions`,
+`location_shares` and `latest_locations` for the MVP.
+
 ## Identity and profile
 
 `User` is identified internally by an immutable ID. `UserHandle` stores the

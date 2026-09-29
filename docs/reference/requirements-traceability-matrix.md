@@ -17,6 +17,25 @@ evidence**.
 | **REQ-08** Security baseline | N/A (cross-cutting) | All endpoints | All relevant tables | SC-01 Authentication; SC-04 Input/API security; SC-05 Session/transport security; SC-06 Data protection; SC-09 Incident response | Input validation/parameterized queries on all endpoints; session/token protection; rate limiting on sensitive endpoints; error responses safe (no stack traces); security events recorded for authz/IDOR/rate limit/input | Security control register entries for SC-01 through SC-09; penetration test summary; dependency/vulnerability scan |
 | **REQ-09** Documentation evidence | N/A (documentation screen) | N/A | N/A | All relevant security controls | RTM itself is the evidence artifact; mentor review of architecture, stack, data model, security, testing, and deferred-scope docs | This RTM document; architecture proposal sign-off; mentor review checklist |
 
+## Implementation status (as built, September MVP)
+
+| REQ | Status | Implemented by | Automated tests |
+|---|---|---|---|
+| REQ-01 Profile privacy | **Implemented** (usernames + optional display name; group-member view N/A until groups exist) | `GET/PATCH /users/me`, `GET /users/{username}` | `test_social.py` (profile tests) |
+| REQ-02 Mutual friendship | **Implemented** | `/friendships`, `/blocks` | `test_social.py`, IDOR matrix |
+| REQ-03 Directional sharing | **Implemented** (exact/approximate, purpose, expiry, revoke) | `/location-shares`, `GET /locations/visible` | `test_location_shares.py`, `test_locations.py` |
+| REQ-04 Battery-aware updates | **Partial**: server stores battery/charging and flags low battery; web client presets + automatic saver; native background sampling deferred to the Flutter app | `PUT /locations/me`, web client | `test_locations.py::test_low_battery_flag` |
+| REQ-05 Check-ins | **Partial**: manual check-ins with grace period, overdue/missed states, visible to share recipients; scheduled/trip check-ins and push reminders deferred | `/check-ins` | `test_checkins.py` |
+| REQ-06 Stale-state display | **Implemented** (live/stale/dead/unknown, last-known battery, no live indicator when stale) | `GET /locations/visible`, map markers | `test_locations.py::test_freshness_transitions` |
+| REQ-07 Map and navigation | **Implemented** in the web client (OSM + attribution, unauthorised friends absent, coordinate-only links); built-in routing deferred | web client, `navigation` field | `test_locations.py::test_navigation_links_contain_only_coordinates`, e2e run |
+| REQ-08 Security baseline | **Implemented** for the MVP scope (see register for limitations) | all endpoints | [Security Test Report](../evidence/security-test-report.md) |
+| REQ-09 Documentation evidence | **Implemented** | this repository | [Evidence index](../evidence/README.md) |
+
+Note: the endpoint names in the matrix above reflect the original plan; the
+implemented paths are listed in [API Contract (as built)](./api-contract.md)
+(e.g. `latest_locations` is `GET /locations/visible`; map data comes from the
+same endpoint).
+
 ## How to read the matrix
 
 - **REQ** – The requirement number from REQ-01 through REQ-09 (see

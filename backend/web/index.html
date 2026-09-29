@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Always Together</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+  <script src="vendor/leaflet/leaflet.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Always Together</h1>
+    <div id="whoami" class="whoami hidden">
+      <span id="whoami-name"></span>
+      <button id="logout-btn" class="ghost">Log out</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner hidden" role="alert"></div>
+
+  <!-- Authentication -->
+  <main id="auth-view" class="auth-view">
+    <section class="card">
+      <h2>Log in</h2>
+      <form id="login-form" autocomplete="on">
+        <label>Username or email <input name="login" required maxlength="254" autocomplete="username"></label>
+        <label>Password <input name="password" type="password" required maxlength="128" autocomplete="current-password"></label>
+        <button type="submit">Log in</button>
+      </form>
+    </section>
+    <section class="card">
+      <h2>Create account</h2>
+      <form id="register-form" autocomplete="on">
+        <label>Username <input name="username" required minlength="3" maxlength="30" pattern="[a-zA-Z0-9_]{3,30}" autocomplete="username"></label>
+        <label>Email <input name="email" type="email" required maxlength="254" autocomplete="email"></label>
+        <label>Display name (optional) <input name="display_name" maxlength="50"></label>
+        <label>Password <input name="password" type="password" required minlength="10" maxlength="128" autocomplete="new-password"></label>
+        <p class="hint">At least 10 characters. Long passphrases are welcome; common passwords are refused.</p>
+        <button type="submit">Create account</button>
+      </form>
+    </section>
+  </main>
+
+  <!-- Application -->
+  <main id="app-view" class="app-view hidden">
+    <nav class="tabs" role="tablist">
+      <button data-tab="map" class="active">Map</button>
+      <button data-tab="friends">Friends</button>
+      <button data-tab="sharing">Sharing</button>
+      <button data-tab="checkins">Check-ins</button>
+      <button data-tab="account">Account</button>
+    </nav>
+
+    <section id="tab-map" class="tab">
+      <div class="map-layout">
+        <div id="map" class="map" aria-label="Map of friends who share their location with you"></div>
+        <aside class="side">
+          <div class="card">
+            <h3>My location</h3>
+            <label>Reporting
+              <select id="report-mode">
+                <option value="off">Off (not sending)</option>
+                <option value="gps">Device location</option>
+                <option value="manual">Manual (click the map)</option>
+              </select>
+            </label>
+            <label>Update frequency
+              <select id="report-preset">
+                <option value="30">High - every 30 s</option>
+                <option value="120" selected>Balanced - every 2 min</option>
+                <option value="600">Battery saver - every 10 min</option>
+              </select>
+            </label>
+            <p class="hint" id="battery-hint">Battery saver turns on automatically below 20% when not charging.</p>
+            <p id="my-status" class="status-line">Not sending.</p>
+            <button id="erase-location" class="ghost">Erase my stored location</button>
+          </div>
+          <div class="card">
+            <h3>Visible to me</h3>
+            <ul id="visible-list" class="list"></ul>
+            <p class="hint">Only friends who chose to share with you appear here.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="tab-friends" class="tab hidden">
+      <div class="grid">
+        <div class="card">
+          <h3>Add a friend</h3>
+          <form id="friend-request-form" class="inline">
+            <input name="username" placeholder="username" required minlength="3" maxlength="30">
+            <button type="submit">Send request</button>
+          </form>
+          <h3>Incoming requests</h3>
+          <ul id="incoming-list" class="list"></ul>
+          <h3>Sent requests</h3>
+          <ul id="outgoing-list" class="list"></ul>
+        </div>
+        <div class="card">
+          <h3>Friends</h3>
+          <p class="hint">Being friends does not share any location. Use the Sharing tab for that.</p>
+          <ul id="friends-list" class="list"></ul>
+          <h3>Blocked</h3>
+          <ul id="blocked-list" class="list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-sharing" class="tab hidden">
+      <div class="grid">
+        <div class="card">
+          <h3>Share my location</h3>
+          <form id="share-form">
+            <label>With friend <select name="recipient_username" id="share-friend" required></select></label>
+            <label>Precision
+              <select name="precision">
+                <option value="approximate">Approximate (about 1 km)</option>
+                <option value="exact">Exact</option>
+              </select>
+            </label>
+            <label>For
+              <select name="expires_in_minutes">
+                <option value="60">1 hour</option>
+                <option value="480">8 hours</option>
+                <option value="1440">24 hours</option>
+                <option value="10080">7 days</option>
+                <option value="">Until I stop</option>
+              </select>
+            </label>
+            <label>Purpose (optional) <input name="purpose" maxlength="100" placeholder="e.g. walking home"></label>
+            <button type="submit">Start sharing</button>
+          </form>
+        </div>
+        <div class="card">
+          <h3>I share with</h3>
+          <ul id="outgoing-shares" class="list"></ul>
+          <h3>Shared with me</h3>
+          <ul id="incoming-shares" class="list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-checkins" class="tab hidden">
+      <div class="grid">
+        <div class="card">
+          <h3>New check-in</h3>
+          <form id="checkin-form">
+            <label>I will check in within
+              <select name="due_in_minutes">
+                <option value="15">15 minutes</option>
+                <option value="30" selected>30 minutes</option>
+                <option value="60">1 hour</option>
+                <option value="120">2 hours</option>
+                <option value="480">8 hours</option>
+              </select>
+            </label>
+            <label>Grace period
+              <select name="grace_minutes">
+                <option value="5">5 minutes</option>
+                <option value="15" selected>15 minutes</option>
+                <option value="30">30 minutes</option>
+              </select>
+            </label>
+            <label>Note (optional) <input name="note" maxlength="140" placeholder="e.g. hiking the ridge trail"></label>
+            <button type="submit">Start check-in</button>
+          </form>
+          <h3>My check-ins</h3>
+          <ul id="my-checkins" class="list"></ul>
+        </div>
+        <div class="card">
+          <h3>Friends' check-ins</h3>
+          <p class="hint">Visible when that friend shares their location with you.</p>
+          <ul id="shared-checkins" class="list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="tab-account" class="tab hidden">
+      <div class="grid">
+        <div class="card">
+          <h3>Profile</h3>
+          <form id="profile-form">
+            <label>Display name <input name="display_name" maxlength="50"></label>
+            <label>Bio <input name="bio" maxlength="160"></label>
+            <p class="hint">Only friends can see your profile. Everyone else sees your username only.</p>
+            <button type="submit">Save</button>
+          </form>
+          <h3>Change password</h3>
+          <form id="password-form">
+            <label>Current password <input name="current_password" type="password" required autocomplete="current-password"></label>
+            <label>New password <input name="new_password" type="password" required minlength="10" maxlength="128" autocomplete="new-password"></label>
+            <button type="submit">Change password</button>
+          </form>
+        </div>
+        <div class="card">
+          <h3>Active sessions</h3>
+          <ul id="sessions-list" class="list"></ul>
+          <button id="logout-all-btn" class="danger">Log out everywhere</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

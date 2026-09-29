@@ -1,9 +1,11 @@
 """FastAPI application factory."""
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app import models  # noqa: F401  (registers tables)
 from app.api import (
@@ -21,6 +23,7 @@ from app.core.errors import install_error_handlers
 from app.core.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
 
 API_PREFIX = "/api/v1"
+WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
 
 def create_app() -> FastAPI:
@@ -67,6 +70,10 @@ def create_app() -> FastAPI:
     @app.get(f"{API_PREFIX}/health", tags=["Health"])
     def health() -> dict:
         return {"status": "ok", "version": app.version}
+
+    # The web client is served from the same origin, so no CORS is needed for it
+    if WEB_DIR.is_dir():
+        app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
 
     return app
 

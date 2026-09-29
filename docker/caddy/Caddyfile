@@ -1,0 +1,11 @@
+# Optional HTTPS front-end for demonstrations: docker compose --profile https up
+# Uses Caddy's internal CA; browsers will warn until that CA is trusted.
+{
+	auto_https disable_redirects
+}
+
+https://localhost {
+	tls internal
+	encode gzip
+	reverse_proxy api:8000
+}

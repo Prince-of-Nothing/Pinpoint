@@ -26,6 +26,9 @@ class Settings(BaseSettings):
 
     # Database / Redis
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/always_together"
+    # Optional separate owner account for schema migrations; the API itself
+    # should connect with a role that can only read/write rows (least privilege)
+    migration_database_url: str | None = None
     redis_url: str = "redis://localhost:6379/0"
 
     # Tokens

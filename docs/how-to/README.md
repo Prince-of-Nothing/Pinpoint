@@ -10,6 +10,7 @@
 | [Development Plan: October to December](./development-plan-october-december.md) | Next three months: native app, identity, safety features, infrastructure, validation |
 | [Deploy for University Demonstration](./deploy-for-demonstration.md) | Step-by-step deployment for live demos during assessment |
 | [MVP Demo Script](./mvp-demo-script.md) | Timed walkthrough of the live demonstration |
+| [MVP Presentation Speech](./mvp-presentation-speech.md) | Speech for the Canva slide deck, per slide group |
 | [Testing and Quality Strategy](./testing-and-quality-strategy.md) | How to run every check; test layers and coverage |
 
 ## Planned Guides

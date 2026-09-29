@@ -1,8 +1,14 @@
 # THESIS DOCUMENT CONTENT
 
+> **Implementation status (September MVP).** Statements below describe the
+> implemented MVP unless marked as planned. What is built, and what is
+> deferred, is tracked in
+> [docs/how-to/implementation-plan.md](docs/how-to/implementation-plan.md);
+> the scope changes are recorded in ADRs 0003-0005 under `docs/adr/`.
+
 ## ABSTRACT
 
-Always Together is a privacy-first mobile application designed to help people stay connected in the real world through consent-based location sharing, navigation, and safety features. This thesis presents the security architecture, implementation strategies, and validation evidence for a location-sharing system that prioritizes user safety, privacy, and battery-aware availability. The core contribution is a directional authorization model where friendship does not automatically grant location access—each sharing relationship requires explicit, revocable consent with configurable precision, purpose, and expiry. The system implements comprehensive security controls including authentication with token rotation, server-side authorization on every resource access, input validation, CSRF protection, encrypted storage and transport, rate limiting, and audit logging. The architecture follows a modular monolith design using Flutter for cross-platform mobile development, FastAPI for the backend, PostgreSQL for persistent storage, Redis for job queuing, and WebSocket for realtime updates. Key innovations include stale-state detection that prevents false safety confidence, battery-aware update frequencies that adapt to device conditions, and a multi-layer security approach that treats the mobile client as untrusted while enforcing all authorization decisions server-side. Testing evidence demonstrates protection against common vulnerabilities including IDOR attacks, session hijacking, injection attacks, and cross-tenant data leakage. The project maintains extensive documentation covering architecture decisions, threat models, security controls, incident response procedures, and requirements traceability from user stories through implementation to test evidence. This work contributes practical patterns for building safety-critical mobile applications where location privacy and explicit consent are fundamental requirements rather than afterthoughts.
+Always Together is a privacy-first mobile application designed to help people stay connected in the real world through consent-based location sharing, navigation, and safety features. This thesis presents the security architecture, implementation strategies, and validation evidence for a location-sharing system that prioritizes user safety, privacy, and battery-aware availability. The core contribution is a directional authorization model where friendship does not automatically grant location access—each sharing relationship requires explicit, revocable consent with configurable precision, purpose, and expiry. The system implements comprehensive security controls including authentication with token rotation, server-side authorization on every resource access, input validation, CSRF protection, encrypted storage and transport, rate limiting, and audit logging. The architecture follows a modular monolith design: the implemented MVP uses FastAPI for the backend, PostgreSQL for persistent storage, Redis for rate limiting and a same-origin web client with an OpenStreetMap map, while a Flutter mobile client, a background job queue and a WebSocket realtime channel are planned extensions. Key innovations include stale-state detection that prevents false safety confidence, battery-aware update frequencies that adapt to device conditions, and a multi-layer security approach that treats the mobile client as untrusted while enforcing all authorization decisions server-side. Testing evidence demonstrates protection against common vulnerabilities including IDOR attacks, session hijacking and token replay, CSRF, injection attacks, mass assignment and cross-account data leakage (140 automated tests, 97% line coverage). The project maintains extensive documentation covering architecture decisions, threat models, security controls, incident response procedures, and requirements traceability from user stories through implementation to test evidence. This work contributes practical patterns for building safety-critical mobile applications where location privacy and explicit consent are fundamental requirements rather than afterthoughts.
 
 Keywords: location sharing, privacy, authorization, mobile security, consent management, stale-state detection, directional permissions
 
@@ -30,7 +36,7 @@ Explicitly deferred beyond the MVP scope are movement trails and search corridor
 
 The primary objectives of this project are:
 
-1. Implement robust authentication and session management using OAuth 2.0/OIDC with PKCE, short-lived access tokens (15-minute lifetime), rotating refresh tokens, and device/session management capabilities.
+1. Implement robust authentication and session management: Argon2id password hashing, short-lived access tokens (15-minute lifetime) bound to server-side sessions, rotating refresh tokens with reuse detection, and device/session management. OAuth 2.0/OIDC with PKCE and passkeys are the planned next step (ADR 0003).
 
 2. Design and enforce server-side authorization where every API request undergoes authorization checks evaluating current consent state, friendship relationships, block lists, and resource ownership.
 
@@ -46,17 +52,17 @@ The primary objectives of this project are:
 
 ### Technical Approach and Architecture
 
-The Always Together system employs a modular monolith architecture chosen for its balance of security simplicity, testability, and deployment manageability within the internship timeline. The technology stack consists of:
+The Always Together system employs a modular monolith architecture chosen for its balance of security simplicity, testability, and deployment manageability within the internship timeline. The implemented MVP stack consists of:
 
-- Mobile Client: Flutter framework with native platform channels for Android and iOS
+- Client: same-origin web client (HTML/JavaScript) with Leaflet and OpenStreetMap tiles
 - Backend API: FastAPI with SQLAlchemy ORM and Alembic migrations
-- Database: PostgreSQL with row-level security policies
-- Queue and Cache: Redis with strict TTL policies via Celery
-- Object Storage: S3-compatible encrypted storage with signed URLs
-- Realtime Transport: Authenticated WebSocket gateway
-- Identity Provider: OAuth 2.0/OpenID Connect with PKCE S256
-- Map Services: OpenStreetMap-derived tile and routing providers
-- Operations: Docker containers with GitHub Actions CI/CD
+- Database: PostgreSQL with a least-privilege runtime role and an append-only audit table
+- Cache: Redis for rate limiting
+- Authentication: Argon2id passwords, session-bound JWT access tokens, rotating refresh tokens, CSRF-protected cookies for the web client
+- Map Services: OpenStreetMap tiles and coordinate-only external navigation links
+- Operations: Docker Compose (optional Caddy HTTPS) with GitHub Actions CI (lint, bandit, pip-audit, migrations, tests)
+
+Planned extensions (October to December): Flutter mobile client with native background location, Celery job queue for reminders, authenticated WebSocket/SSE realtime updates, OAuth 2.0/OIDC with PKCE and passkeys, S3-compatible encrypted object storage, and PostgreSQL row-level security policies.
 
 ### Security Architecture Overview
 

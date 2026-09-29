@@ -1,191 +1,123 @@
 # Local Development Setup
 
-This tutorial walks through setting up a complete local development environment for Always Together. Follow these steps to run the application locally for development or demonstration purposes.
+This tutorial gets the Always Together MVP running on your machine, first
+with Docker (fastest), then natively for development and testing.
 
 ## Prerequisites
 
-Before starting, ensure you have:
+- Docker with Docker Compose v2
+- Python 3.11+ (for native development and tests)
+- Git
+- Optional: Node.js 18+ and Playwright for the browser end-to-end test
 
-- **Docker Desktop** (v20.10+) installed and running
-- **Python 3.11+** installed locally
-- **Flutter SDK** (v3.13+) installed and configured
-- **Git** for version control
-- **Node.js 18+** (optional, for some tooling)
-
-## Step 1: Clone the Repository
+## Step 1: Clone the repository
 
 ```bash
-git clone https://github.com/your-org/always-together.git
-cd always-together
+git clone https://github.com/Bangreedy-2/LocationSharing.git
+cd LocationSharing
 ```
 
-## Step 2: Start Backend Services with Docker
-
-The backend requires PostgreSQL, Redis, and FastAPI. Use Docker Compose to start all services:
+## Step 2: Start the stack with Docker
 
 ```bash
-cd docker/
-docker-compose up -d
+docker compose up --build
 ```
 
-This starts:
-- **PostgreSQL** on port 5432
-- **Redis** on port 6379
-- **FastAPI backend** on port 8000
+This starts three services:
 
-Verify services are running:
+- **api**: runs the database migrations as the schema owner, then serves
+  the API and the web client on <http://localhost:8000> as the restricted
+  `app_runtime` database role
+- **db**: PostgreSQL 16 (not exposed outside Docker)
+- **redis**: Redis 7 for rate limiting (not exposed)
 
-```bash
-docker-compose ps
-```
-
-Expected output:
-```
-NAME                    STATUS         PORTS
-postgres               Up (healthy)   5432/tcp
-redis                  Up (healthy)   6379/tcp
-fastapi-backend        Up             0.0.0.0:8000->8000/tcp
-```
-
-## Step 3: Run Database Migrations
-
-```bash
-docker-compose exec fastapi-backend python -m alembic upgrade head
-```
-
-This creates all required tables including:
-- `users` — User accounts and profiles
-- `friendships` — Bidirectional friend relationships
-- `location_shares` — Directional consent records
-- `location_updates` — Encrypted location data
-- `check_ins` — Safety check-in records
-- `audit_logs` — Privacy-preserving access logs
-
-## Step 4: Seed Development Data (Optional)
-
-For demonstration purposes, seed the database with test users:
-
-```bash
-docker-compose exec fastapi-backend python scripts/seed_dev_data.py
-```
-
-This creates:
-- 5 test user accounts with pre-configured friendships
-- Sample location shares with various expiry times
-- Mock location updates for map visualization
-
-## Step 5: Configure Mobile Environment
-
-Create a Flutter environment configuration file:
-
-```bash
-cd mobile/
-cat > .env << EOF
-API_BASE_URL=http://localhost:8000/api/v1
-WEBSOCKET_URL=ws://localhost:8000/ws
-OAUTH_CLIENT_ID=mobile-dev-client
-ENVIRONMENT=development
-EOF
-```
-
-## Step 6: Run the Mobile App
-
-### For Android:
-
-```bash
-cd mobile/
-flutter pub get
-flutter run
-```
-
-### For iOS:
-
-```bash
-cd mobile/
-flutter pub get
-cd ios/
-pod install
-cd ..
-flutter run
-```
-
-## Step 7: Verify the Setup
-
-Test the API is responding:
+Check it:
 
 ```bash
 curl http://localhost:8000/api/v1/health
+# {"status":"ok","version":"0.2.0"}
 ```
 
-Expected response:
-```json
-{
-  "status": "healthy",
-  "database": "connected",
-  "redis": "connected",
-  "version": "0.1.0-mvp"
-}
-```
+Open <http://localhost:8000/> for the web client and
+<http://localhost:8000/docs> for interactive API docs (development only).
 
-## Common Issues and Solutions
-
-### Issue: Docker containers fail to start
-
-**Solution:** Check if ports 5432, 6379, or 8000 are already in use:
+## Step 3: Add demo data (optional)
 
 ```bash
-lsof -i :5432
-lsof -i :6379
-lsof -i :8000
+docker compose exec api python scripts/seed_demo.py
 ```
 
-Stop conflicting services or change ports in `docker-compose.yml`.
+This creates demo accounts with friendships, shares of different precision
+and expiry, locations of different freshness and a check-in. The script
+prints the accounts and the shared password. See the
+[demonstration guide](../how-to/deploy-for-demonstration.md).
 
-### Issue: Flutter cannot connect to backend
-
-**Solution:** For Android emulator, use `10.0.2.2` instead of `localhost`:
+Create an administrator (the password is read from the environment or a
+prompt, never from the command line arguments):
 
 ```bash
-cat > .env << EOF
-API_BASE_URL=http://10.0.2.2:8000/api/v1
-WEBSOCKET_URL=ws://10.0.2.2:8000/ws
-EOF
+docker compose exec -e ADMIN_PASSWORD='a long admin passphrase' api \
+    python -m app.cli create-admin --username ops --email ops@example.com
 ```
 
-For iOS simulator, `localhost` works correctly.
-
-### Issue: Database migration fails
-
-**Solution:** Drop and recreate the database:
+## Step 4: Native development (without Docker for the API)
 
 ```bash
-docker-compose down -v
-docker-compose up -d
-docker-compose exec fastapi-backend python -m alembic upgrade head
+cd backend
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env        # then edit DATABASE_URL / SECRET_KEY
 ```
 
-## Next Steps
-
-After setup is complete:
-
-1. **Try your first location share** — See [Your First Location Share](./your-first-location-share.md)
-2. **Understand consent flows** — See [Understanding Consent Flows](./understanding-consent-flows.md)
-3. **Configure privacy settings** — See [Privacy Settings Walkthrough](./privacy-settings-walkthrough.md)
-
-## Teardown
-
-To stop all services:
+Run against a local PostgreSQL and Redis (or keep using the Docker ones by
+exposing their ports):
 
 ```bash
-docker-compose down
+alembic upgrade head
+uvicorn app.main:app --reload
 ```
 
-To stop and remove all data:
+For a quick throwaway run without PostgreSQL or Redis:
 
 ```bash
-docker-compose down -v
+DATABASE_URL=sqlite:///./dev.db RATE_LIMIT_BACKEND=memory COOKIE_SECURE=false \
+    sh -c 'alembic upgrade head && uvicorn app.main:app --reload'
 ```
 
----
+## Step 5: Run the checks
 
-*For production deployment instructions, see [How to Deploy](../how-to/how-to-deploy.md).*
+```bash
+cd backend
+pytest                                   # 140 tests
+ruff check . && ruff format --check .
+bandit -c pyproject.toml -r app
+pip-audit -r requirements.txt
+python scripts/security_evidence.py      # regenerates docs/evidence/security-test-report.md
+```
+
+Browser end-to-end test (API must be running on port 8000):
+
+```bash
+npm install playwright && npx playwright install chromium
+node e2e/web-client-flow.js
+```
+
+Note: each run registers two new accounts and the registration rate limit
+is 5 per hour per IP. Flush Redis (`docker compose exec redis redis-cli
+flushall`) between repeated runs.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| Login works but reloading the page logs you out | The browser rejected the `Secure` cookie on a non-localhost HTTP host. Use `localhost`, the HTTPS profile, or set `COOKIE_SECURE=false` for local testing only |
+| `429 Too Many Requests` | A rate limit was hit; wait for `Retry-After` or flush Redis in development |
+| API refuses to start with "Insecure production configuration" | `ENVIRONMENT=production` requires a random `SECRET_KEY` (32+ characters), `DEBUG=false` and `COOKIE_SECURE=true` |
+| Map is grey | The browser cannot reach `tile.openstreetmap.org` (offline or blocked network) |
+
+## Next steps
+
+- [API Contract (as built)](../reference/api-contract.md)
+- [Testing and Quality Strategy](../how-to/testing-and-quality-strategy.md)
+- [Security Control Register](../reference/security-control-register.md)

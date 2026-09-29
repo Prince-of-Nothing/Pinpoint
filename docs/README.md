@@ -57,6 +57,20 @@ This approach costs more upfront. That's acceptable because:
 
 Compare to Bluesky's informal docs: their approach works for protocol experimentation with technical users. Our approach fits safety-critical apps with non-technical stakeholders and compliance requirements.
 
+## Implementation Status (September MVP)
+
+The MVP is implemented in [`backend/`](../backend) (FastAPI API, PostgreSQL
+schema, web client). Start here:
+
+| Question | Document |
+|---|---|
+| What is built, per internship task? | [Implementation Plan and Status](./how-to/implementation-plan.md) |
+| Which security controls exist and how were they tested? | [Security Control Register](./reference/security-control-register.md), [Evidence](./evidence/README.md) |
+| What does the API look like? | [API Contract (as built)](./reference/api-contract.md) |
+| Why does the MVP differ from the original stack? | ADRs [0003](./adr/password-auth-with-rotating-refresh-tokens.md), [0004](./adr/web-client-for-mvp-demonstration.md), [0005](./adr/store-latest-location-only.md) |
+| What happens next? | [Development Plan: October to December](./how-to/development-plan-october-december.md) |
+| How do I run and demo it? | [Local Setup](./tutorials/local-development-setup.md), [Demonstration](./how-to/deploy-for-demonstration.md), [Demo Script](./how-to/mvp-demo-script.md) |
+
 ## Quick Navigation for Assessment
 
 | Evidence Category | Primary Documents |
@@ -66,10 +80,11 @@ Compare to Bluesky's informal docs: their approach works for protocol experiment
 | **Architecture Design** | [Architecture Models](./architecture/architecture-models.md), [Building Blocks](./architecture/building-block-view.md), [Deployment](./architecture/deployment-view.md) |
 | **Security Engineering** | [Security Architecture](./architecture/security-architecture-and-data-protection.md), [Threat Controls](./architecture/security-threats-and-controls.md), [Security Control Register](./reference/security-control-register.md) |
 | **Data Protection** | [Privacy & Data Handling](./architecture/privacy-and-data-handling.md), [Domain Data Model](./reference/domain-data-model.md) |
-| **API Design** | [API Contract](./reference/api-contract.md), [API Security Implementation](./reference/api-security-implementation.md) |
+| **API Design** | [API Contract (as built)](./reference/api-contract.md), [API Security Implementation (target)](./reference/api-security-implementation.md) |
+| **Security Evidence** | [Security Test Report](./evidence/security-test-report.md), [Evidence Index](./evidence/README.md) |
 | **Research & Validation** | [Pre-Implementation Validation](./explanation/pre-implementation-validation.md), [Research Notes](./explanation/research-notes-and-references.md) |
 | **Decision History** | [ADR Index](./architecture/architecture-decisions-link.md) |
-| **Project Planning** | [Development Roadmap](./explanation/development-roadmap-and-evidence.md) |
+| **Project Planning** | [Implementation Status](./how-to/implementation-plan.md), [October-December Plan](./how-to/development-plan-october-december.md), [Development Roadmap](./explanation/development-roadmap-and-evidence.md) |
 
 ## Design Artifacts
 
@@ -103,6 +118,7 @@ docs/
 ├── how-to/                   # Task-oriented guides
 ├── reference/                # APIs, data models, requirements
 ├── explanation/              # Design rationale and research
+├── evidence/                 # Generated test report and recorded verification runs
 │
 ├── architecture/             # arc42 template (12 sections)
 │   ├── introduction-and-goals.md
@@ -133,7 +149,10 @@ docs/
 └── adr/                      # Architecture Decision Records
     ├── template.md
     ├── record-architecture-decisions.md
-    └── adopt-always-together-product-direction.md
+    ├── adopt-always-together-product-direction.md
+    ├── password-auth-with-rotating-refresh-tokens.md
+    ├── web-client-for-mvp-demonstration.md
+    └── store-latest-location-only.md
 ```
 
 ## Maintaining Documentation Quality

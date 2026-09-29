@@ -19,6 +19,7 @@ const state = {
   user: null,
   map: null,
   markers: new Map(),
+  mapFitted: false,
   pollTimer: null,
   activeTab: "map",
   report: { mode: "off", watchId: null, lastSent: 0, lastPosition: null, battery: null, manualMarker: null },
@@ -159,6 +160,14 @@ function showLoggedOut() {
   state.user = null;
   stopReporting();
   clearInterval(state.pollTimer);
+  // Drop the previous user's friends from the map so nothing lingers for the next login
+  for (const entry of state.markers.values()) {
+    entry.dot.remove();
+    entry.area.remove();
+  }
+  state.markers.clear();
+  state.mapFitted = false;
+  $("#visible-list").replaceChildren();
   $("#app-view").classList.add("hidden");
   $("#whoami").classList.add("hidden");
   $("#auth-view").classList.remove("hidden");
@@ -305,15 +314,25 @@ async function refreshMap() {
     let entry = state.markers.get(item.share_id);
     if (!entry) {
       entry = {
+        // The accuracy circle is drawn first and ignores clicks, so the dot stays clickable
+        area: L.circle([item.latitude, item.longitude], { radius: 1, weight: 1, fillOpacity: 0.08, interactive: false }).addTo(state.map),
         dot: L.circleMarker([item.latitude, item.longitude], { radius: 8, weight: 2 }).addTo(state.map),
-        area: L.circle([item.latitude, item.longitude], { radius: 1, weight: 1, fillOpacity: 0.08 }).addTo(state.map),
       };
       state.markers.set(item.share_id, entry);
-      row.addEventListener("click", () => state.map.setView([item.latitude, item.longitude], 15));
     }
     entry.dot.setLatLng([item.latitude, item.longitude]).setStyle({ color: colour, fillColor: colour, fillOpacity: item.freshness === "live" ? 0.9 : 0.4, dashArray: item.freshness === "live" ? null : "4 4" });
     entry.area.setLatLng([item.latitude, item.longitude]).setRadius(item.accuracy_m || 1).setStyle({ color: colour });
     entry.dot.bindPopup(popupFor(item));
+    row.addEventListener("click", () => {
+      state.map.setView(entry.dot.getLatLng(), 15);
+      entry.dot.openPopup();
+    });
+  }
+  // Frame everyone who shares with me the first time locations arrive
+  if (!state.mapFitted && seen.size > 0) {
+    const points = [...seen].map((id) => state.markers.get(id).dot.getLatLng());
+    state.map.fitBounds(L.latLngBounds(points).pad(0.4), { maxZoom: 15 });
+    state.mapFitted = true;
   }
   for (const [shareId, entry] of state.markers) {
     if (!seen.has(shareId)) {

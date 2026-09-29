@@ -5,7 +5,7 @@
  *    and rate-limit counters cleared: redis-cli flushall)
  *   npm install playwright && npx playwright install chromium
  *   node e2e/demo-video/record.js            # writes out/maria.webm, out/alex.webm, out/marks.json
- *   python e2e/demo-video/compose.py         # builds out/always-together-demo.mp4
+ *   node e2e/demo-video/compose.js           # builds out/always-together-demo.mp4
  *
  * Maria (demo_parent) is on the left, Alex (demo_child) on the right. Every
  * action goes through the real web client and API. A visible cursor is drawn

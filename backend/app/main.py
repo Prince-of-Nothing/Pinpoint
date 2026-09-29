@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401  (registers tables)
-from app.api import auth, blocks, friendships, users
+from app.api import auth, blocks, friendships, location_shares, users
 from app.core.config import get_settings
 from app.core.errors import install_error_handlers
 from app.core.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
@@ -48,6 +48,9 @@ def create_app() -> FastAPI:
     app.include_router(users.router, prefix=f"{API_PREFIX}/users", tags=["Users"])
     app.include_router(friendships.router, prefix=f"{API_PREFIX}/friendships", tags=["Friendships"])
     app.include_router(blocks.router, prefix=f"{API_PREFIX}/blocks", tags=["Blocks"])
+    app.include_router(
+        location_shares.router, prefix=f"{API_PREFIX}/location-shares", tags=["Location sharing"]
+    )
 
     @app.get(f"{API_PREFIX}/health", tags=["Health"])
     def health() -> dict:

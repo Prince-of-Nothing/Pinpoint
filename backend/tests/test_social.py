@@ -3,17 +3,9 @@
 from sqlalchemy import select
 
 from app.models import AuditEvent
-from tests.helpers import create_account
+from tests.helpers import befriend, create_account
 
 FRIENDS = "/api/v1/friendships"
-
-
-def befriend(client, a, b) -> str:
-    request = client.post(FRIENDS, headers=a.headers, json={"username": b.username})
-    assert request.status_code == 201, request.text
-    fid = request.json()["id"]
-    assert client.post(f"{FRIENDS}/{fid}/accept", headers=b.headers).status_code == 200
-    return fid
 
 
 # ------------------------------------------------------------- friendships

@@ -34,12 +34,16 @@ class Settings(BaseSettings):
     jwt_issuer: str = "always-together-api"
     jwt_audience: str = "always-together-clients"
     access_token_expire_minutes: int = Field(default=15, ge=1, le=60)
-    refresh_token_expire_days: int = Field(default=7, ge=1, le=30)
 
-    # Sessions
+    # Sessions (a refresh token never outlives its session)
     session_absolute_timeout_hours: int = Field(default=12, ge=1, le=24 * 30)
-    session_idle_timeout_minutes: int = Field(default=60 * 24, ge=5)
+    session_idle_timeout_minutes: int = Field(default=30, ge=5)
     max_sessions_per_user: int = Field(default=10, ge=1)
+
+    # Argon2id cost parameters (RFC 9106 "second recommended" profile by default)
+    password_hash_time_cost: int = Field(default=3, ge=1)
+    password_hash_memory_kib: int = Field(default=64 * 1024, ge=1024)
+    password_hash_parallelism: int = Field(default=4, ge=1)
 
     # Cookies (web client)
     cookie_secure: bool = True

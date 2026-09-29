@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401  (registers tables)
+from app.api import auth
 from app.core.config import get_settings
 from app.core.errors import install_error_handlers
 from app.core.middleware import BodySizeLimitMiddleware, SecurityHeadersMiddleware
@@ -42,6 +43,8 @@ def create_app() -> FastAPI:
         )
     app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
     app.add_middleware(SecurityHeadersMiddleware, hsts=is_production)
+
+    app.include_router(auth.router, prefix=f"{API_PREFIX}/auth", tags=["Authentication"])
 
     @app.get(f"{API_PREFIX}/health", tags=["Health"])
     def health() -> dict:

@@ -8,6 +8,10 @@ os.environ.update(
         "DATABASE_URL": "sqlite://",
         "RATE_LIMIT_BACKEND": "memory",
         "COOKIE_SECURE": "false",  # the test client talks plain http://testserver
+        # Cheap Argon2 parameters keep the suite fast; production uses the defaults
+        "PASSWORD_HASH_TIME_COST": "1",
+        "PASSWORD_HASH_MEMORY_KIB": "1024",
+        "PASSWORD_HASH_PARALLELISM": "1",
     }
 )
 

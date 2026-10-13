@@ -107,6 +107,17 @@ func (a *App) Router() http.Handler {
 		r.With(a.requireAuth).Get("/friends", a.handleListFriendLocations)
 	})
 
+	// Offline-first OpenStreetMap tile serving + downloadable map packs.
+	// Tiles are public (no session needed) and served from the local cache;
+	// missing tiles are back-filled from upstream at most once each.
+	r.Get("/tiles/{z}/{x}/{y}.png", a.handleTile)
+	r.Route("/api/v1/maps", func(r chi.Router) {
+		r.Get("/packs", a.handleMapPacks)
+		r.Get("/packs/{name}/manifest", a.handleMapPackManifest)
+		r.With(a.requireAuth).Post("/requests", a.handleMapRegionRequest)
+		r.With(a.requireAdmin).Get("/requests", a.handleListMapRequests)
+	})
+
 	// Consistent 404/405 envelopes instead of plain-text defaults.
 	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
 		if h := a.staticFileServer(); h != nil && !strings.HasPrefix(req.URL.Path, "/api/") {

@@ -114,7 +114,7 @@ flushall`) between repeated runs.
 | Login works but reloading the page logs you out | The browser rejected the `Secure` cookie on a non-localhost HTTP host. Use `localhost`, the HTTPS profile, or set `COOKIE_SECURE=false` for local testing only |
 | `429 Too Many Requests` | A rate limit was hit; wait for `Retry-After` or flush Redis in development |
 | API refuses to start with "Insecure production configuration" | `ENVIRONMENT=production` requires a random `SECRET_KEY` (32+ characters), `DEBUG=false` and `COOKIE_SECURE=true` |
-| Map is grey | The browser cannot reach `tile.openstreetmap.org` (offline or blocked network) |
+| Map is grey | The browser cannot reach `tile.openstreetmap.org` (offline or blocked network) | 
 
 ## Next steps
 

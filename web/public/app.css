@@ -1,0 +1,62 @@
+:root {
+  --bg: #0f172a; --card: #1e293b; --border: #334155;
+  --text: #e2e8f0; --muted: #94a3b8;
+  --primary: #38bdf8; --danger: #f87171; --ok: #34d399;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); }
+.hidden { display: none !important; }
+.muted { color: var(--muted); font-size: .9rem; }
+.error { color: var(--danger); }
+
+.view { min-height: 100vh; }
+#view-auth { display: flex; align-items: center; justify-content: center; }
+.auth-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; width: min(420px, 92vw); }
+.brand { margin: 0 0 .25rem; font-size: 1.6rem; }
+.brand.small { font-size: 1.1rem; }
+.tagline { color: var(--muted); margin-top: 0; }
+label { display: block; margin: .8rem 0 .2rem; font-size: .85rem; color: var(--muted); }
+input, select { width: 100%; padding: .6rem .7rem; border-radius: 8px; border: 1px solid var(--border); background: #0b1220; color: var(--text); }
+input:focus, select:focus { outline: 2px solid var(--primary); }
+.btn { padding: .55rem 1rem; border-radius: 8px; border: 1px solid var(--border); background: #273549; color: var(--text); cursor: pointer; }
+.btn:hover { filter: brightness(1.15); }
+.btn.primary { background: var(--primary); color: #06283d; border-color: transparent; font-weight: 600; }
+.btn.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+.btn.ghost { background: transparent; }
+.btn.full { width: 100%; margin-top: 1rem; }
+.demo-hint { margin-top: 1.2rem; color: var(--muted); font-size: .85rem; }
+.demo-hint code { background: #0b1220; padding: .1rem .3rem; border-radius: 4px; }
+
+.topbar { display: flex; align-items: center; gap: 1rem; padding: .7rem 1.2rem; background: var(--card); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; flex-wrap: wrap; }
+.topbar nav { display: flex; gap: .4rem; flex: 1; }
+.tab { background: transparent; border: none; color: var(--muted); padding: .5rem .9rem; border-radius: 8px; cursor: pointer; font-size: .95rem; }
+.tab.active { background: #273549; color: var(--text); font-weight: 600; }
+.userbox { display: flex; align-items: center; gap: .6rem; }
+main { padding: 1.2rem; max-width: 1100px; margin: 0 auto; }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.row { display: flex; gap: .5rem; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+.row.end { justify-content: flex-end; }
+.row input, .row select { width: auto; min-width: 140px; }
+
+#map { height: 420px; border-radius: 12px; border: 1px solid var(--border); background: url('https://tile.openstreetmap.org/12/2048/1360.png') center/64px; }
+.friend-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .8rem; margin-top: 1rem; }
+.friend-list li, .cards li { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: .9rem 1rem; }
+.cards { list-style: none; padding: 0; display: grid; gap: .8rem; }
+.badge { display: inline-block; font-size: .72rem; padding: .15rem .5rem; border-radius: 999px; background: #273549; color: var(--muted); margin-left: .4rem; }
+.badge.exact { background: #14532d; color: #bbf7d0; }
+.badge.approximate { background: #78350f; color: #fde68a; }
+.badge.city_only { background: #7f1d1d; color: #fecaca; }
+.badge.stale { background: #7f1d1d; color: #fecaca; }
+.fresh-ok { color: var(--ok); }
+.fresh-warn { color: #fbbf24; }
+.fresh-stale { color: var(--danger); }
+
+.table { width: 100%; border-collapse: collapse; }
+.table th, .table td { text-align: left; padding: .5rem .7rem; border-bottom: 1px solid var(--border); }
+
+dialog { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 14px; padding: 1.4rem; width: min(400px, 90vw); }
+dialog::backdrop { background: rgba(0,0,0,.6); }
+
+.toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--primary); color: var(--text); padding: .7rem 1.1rem; border-radius: 10px; z-index: 100; }
+.toast.err { border-color: var(--danger); }

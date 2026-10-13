@@ -1,0 +1,46 @@
+# Always Together — one-command local deployment.
+#
+#   docker compose up --build
+#
+# Web app:  http://localhost:8080   (nginx serving the SPA + reverse proxy)
+# API:      http://localhost:8080/api/v1/... (proxied to the Go backend)
+# Backend direct: http://localhost:9000 (healthcheck at /health)
+#
+# Demo accounts are seeded automatically (SEED_DEMO_DATA=true):
+#   alice@example.com / DemoPass123!
+#   bob@example.com   / DemoPass456!
+#   admin@example.com / ChangeMe123!   (administrator, must change password)
+services:
+  backend:
+    build:
+      context: ./backend
+    image: always-together/backend:latest
+    restart: unless-stopped
+    environment:
+      PORT: "8000"
+      APP_NAME: "Always Together API"
+      DEBUG: "false"
+      COOKIE_INSECURE: "true"          # local dev over plain HTTP; remove behind TLS
+      SEED_DEMO_DATA: "true"           # demo accounts on first boot; disable in production
+      ALLOWED_ORIGINS: "http://localhost:8080,http://localhost:3000"
+      SECRET_KEY: "change-me-in-production-min-32-characters-long!!"
+    expose:
+      - "8000"
+    ports:
+      - "9000:8000"                    # optional: hit the API directly
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  web:
+    build:
+      context: ./web
+    image: always-together/web:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"                      # open http://localhost:8080

@@ -1,98 +1,90 @@
 # Always Together
 
-A privacy-first location-sharing platform: stay connected with the people you trust, on your terms.
+A privacy-first location-sharing platform for trusted friends. Friendship does
+not grant access to anyone's location: each person explicitly chooses who can
+see them, at what precision, and for how long. Every share can be revoked, and
+recipients can see whether a location is fresh or stale.
 
-**Always Together** enforces *directional consent*: being friends with someone does **not**
-automatically grant access to your location. Every share is explicit, configurable
-(exact / approximate / city-only), purpose-bound, time-limited, and instantly revocable —
-with all authorization decisions enforced **server-side**.
+This repository contains both backend implementations:
 
-> 📚 This repository is part of a thesis project. See [`thesis_content.md`](thesis_content.md)
-> for the full academic write-up, threat model, and validation evidence.
+- **Go API** in `backend/cmd` and `backend/internal` (the default Docker stack).
+- **Python/FastAPI API** in `backend/app` (available as an alternate Docker
+  profile and for local development).
 
----
+Both implementations are accompanied by the web client, tests, database
+migrations, security controls, and project documentation.
 
-## Stack
+## Features
 
-| Layer        | Technology                                             | Location        |
-|--------------|--------------------------------------------------------|-----------------|
-| Backend API  | Go 1.22 · chi router · JWT/session auth · bcrypt       | `backend/`      |
-| Web client   | Vanilla-JS SPA (OpenStreetMap tiles, no build step)    | `web/public/`   |
-| Mobile       | Kotlin / Jetpack Compose (Android-first)               | `mobile/` *(planned)* |
-| Deployment   | Docker Compose (API + nginx web) or single Go binary   | `docker-compose.yml` |
+- Private-by-default accounts, sessions, and password management
+- Friend requests, removal, and blocking
+- Directional location sharing with precision, purpose, expiry, and revocation
+- Live, stale, and expired location states
+- Safety check-ins, admin account management, and audit logging
+- Browser client with an OpenStreetMap map
 
-The original Python/FastAPI prototype was fully refactored to Go; no Python remains in the repo.
-
-## Quick start (zero configuration)
+## Quick start: Go API and web client
 
 ```bash
 docker compose up --build
 ```
 
-Then open **http://localhost:8080**. Demo data is seeded automatically:
+Open <http://localhost:8080>. The local demo stack seeds demo accounts; these
+credentials and its default secrets are for local development only.
 
-| Account | Email                | Password       | Notes                     |
-|---------|----------------------|----------------|---------------------------|
-| Admin   | `admin@example.com`  | `ChangeMe123!` | Forced password change    |
-| Alice   | `alice@example.com`  | `DemoPass123!` | Friends with Bob          |
-| Bob     | `bob@example.com`    | `DemoPass456!` | Mutual shares + Paris locs|
+## Run the Python/FastAPI API
 
-### Run without Docker
+The Python service is available separately on <http://localhost:8001>. It uses
+PostgreSQL and Redis from the optional `python` Compose profile:
+
+```bash
+docker compose --profile python up --build python-api
+```
+
+For local development without Docker:
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
+pytest
+```
+
+See [Local Development Setup](docs/tutorials/local-development-setup.md) for
+the Python database setup and additional details.
+
+## Run the Go API locally
 
 ```bash
 cd backend
-go build ./... && go test ./...
-WEB_ROOT=web/public SEED_DEMO_DATA=true COOKIE_INSECURE=true go run ./cmd/server
-# API on :9000, serving the bundled web client too
+go test ./...
+go run ./cmd/server
 ```
 
-## Core features (MVP)
-
-- Pseudonymous accounts & profiles
-- Mutual friendship requests (add / accept / reject)
-- **Directional sharing permissions** with precision, purpose, and expiry
-- Current-location publishing (device geolocation or manual coordinates)
-- Freshness & stale-state indicators (never a false sense of safety)
-- OpenStreetMap display + external navigation export
-- Rate limiting, CSRF protection, secure errors, audit-friendly logging
-- Admin provisioning (user creation, lock/unlock)
-
-Deferred by design (documented as extension phases): movement trails, visited-region maps,
-messaging/calls, random groups, advanced moderation. See `docs/ROADMAP.md`.
+The Go API listens on port 8000 by default. Set `PORT` to change it.
 
 ## Repository layout
 
+```text
+backend/app/          Python/FastAPI implementation
+backend/alembic/      Python database migrations
+backend/tests/        Python test suite
+backend/cmd/          Go API entry point
+backend/internal/     Go configuration, handlers, models, security, and store
+backend/web/          Python-served web client
+web/                  Go deployment web client and nginx reverse proxy
+docker/               PostgreSQL role setup and Caddy HTTPS configuration
+docs/                 Architecture, reference, deployment, and project guides
 ```
-backend/            Go API (cmd/, internal/{config,models,store,handlers,security})
-  Dockerfile        Multi-stage static build, non-root, healthcheck
-  web/public/       Copy of the SPA served when WEB_ROOT is set
-web/                Web client source + nginx Dockerfile (proxies /api → backend)
-docs/               Project description, roadmap, architecture, security policy,
-                    contribution guide, code of conduct, release plan, glossary…
-thesis_content.md   Full thesis document
-docker-compose.yml  One-command deployment
-```
 
-## Documentation index
+## Documentation
 
-| Document                              | What it covers                                        |
-|---------------------------------------|-------------------------------------------------------|
-| [PROJECT.md](docs/PROJECT.md)         | Vision, problem statement, scope, objectives          |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, data model, request flow             |
-| [SECURITY.md](docs/SECURITY.md)       | Security model + **vulnerability reporting**          |
-| [PRIVACY.md](docs/PRIVACY.md)         | Consent model & data handling promises                |
-| [ROADMAP.md](docs/ROADMAP.md)         | Future plans, phases, backlog                         |
-| [CONTRIBUTING.md](CONTRIBUTING.md)    | How to contribute, review rules, dev workflow         |
-| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community standards                                |
-| [TESTING.md](docs/TESTING.md)         | Test strategy & evidence requirements                 |
-| [DEPLOYMENT.md](docs/DEPLOYMENT.md)   | Docker, env vars, production checklist                |
-| [CHANGELOG.md](CHANGELOG.md)          | Release history (Keep a Changelog)                    |
-| [GLOSSARY.md](docs/GLOSSARY.md)       | Domain terms (directional consent, stale-state…)      |
-| [TASKS.md](docs/TASKS.md)             | 40-task board: 5 members × 8 weeks, dependencies & completion protocol |
-| [PLANNED_TASKS.md](docs/PLANNED_TASKS.md) | Backlog beyond the board (grooming list)            |
-| [uml/](docs/uml/README.md)            | UML/C4 diagrams: context, containers, sequences, ER, states, deployment |
-
-## License
-
-Pending — this is currently an academic/thesis work. Until a license file is added,
-all rights are reserved to the author.
+- [Documentation home](docs/README.md)
+- [Project overview](docs/PROJECT.md) and [architecture](docs/ARCHITECTURE.md)
+- [Deployment](docs/DEPLOYMENT.md) and [testing](docs/TESTING.md)
+- [Security policy](docs/SECURITY.md) and [privacy](docs/PRIVACY.md)
+- [Python API contract](docs/reference/api-contract.md)
+- [Python local development guide](docs/tutorials/local-development-setup.md)
+- [Go backend guide](backend/README.md)
+- [Roadmap](docs/ROADMAP.md)

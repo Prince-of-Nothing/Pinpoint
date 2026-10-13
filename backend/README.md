@@ -1,7 +1,7 @@
 # Always Together Backend (Go)
 
-HTTP API for the Always Together product. The backend was refactored from the
-original Python/FastAPI prototype to a single Go service.
+HTTP API for the Always Together product. The Go service is maintained
+alongside the Python/FastAPI implementation in `app/`.
 
 ## Stack
 
@@ -31,6 +31,9 @@ curl localhost:8000/health
 
 Configuration is read from environment variables; see `.env.example` for all
 keys and defaults.
+
+The Python/FastAPI service has its own dependencies and container definition:
+use `Dockerfile.python` or follow the [Python development guide](../docs/tutorials/local-development-setup.md).
 
 ## Testing
 

@@ -1,0 +1,24 @@
+[project]
+name = "always-together-backend"
+version = "0.2.0"
+description = "Privacy-first location sharing API (Always Together MVP)"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = ["B008"]  # FastAPI dependency injection uses calls in defaults
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+
+[tool.bandit]
+exclude_dirs = ["tests", "alembic"]

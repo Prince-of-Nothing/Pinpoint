@@ -36,7 +36,7 @@ stateDiagram-v2
     Suspended --> Active : moderator reinstates
     Active --> ErasureQueued : GDPR deletion requested (T29)
     Suspended --> ErasureQueued : GDPR deletion requested
-    ErasureQueued --> Deleted : cascade purge (locs, shares, audit anonymized) 
+    ErasureQueued --> Deleted : cascade purge (locs, shares, audit anonymized)
     Deleted --> [*]
 ```
 

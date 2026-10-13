@@ -1,8 +1,22 @@
+# Git and local configuration
 .git
 .env
-*.md
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+tests/
+*.db
+
+# Go and generated output
 bin/
 dist/
 vendor/
-Dockerfile
-.dockerignore

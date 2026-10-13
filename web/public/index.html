@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Always Together</title>
+  <link rel="stylesheet" href="app.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📍</text></svg>" />
+</head>
+<body>
+  <!-- ===================== AUTH VIEW ===================== -->
+  <section id="view-auth" class="view">
+    <div class="auth-card">
+      <h1 class="brand">📍 Always Together</h1>
+      <p class="tagline">Privacy-first location sharing with explicit, revocable consent.</p>
+      <form id="login-form" autocomplete="on">
+        <label>Email
+          <input type="email" id="login-email" required autocomplete="username"
+                 placeholder="alice@example.com" />
+        </label>
+        <label>Password
+          <input type="password" id="login-password" required autocomplete="current-password"
+                 placeholder="••••••••" />
+        </label>
+        <button type="submit" class="btn primary full" id="login-btn">Sign in</button>
+        <p id="login-error" class="error hidden"></p>
+      </form>
+      <details class="demo-hint">
+        <summary>Demo accounts</summary>
+        <ul>
+          <li><code>alice@example.com</code> / <code>DemoPass123!</code></li>
+          <li><code>bob@example.com</code> / <code>DemoPass456!</code></li>
+          <li><code>admin@example.com</code> / <code>ChangeMe123!</code></li>
+        </ul>
+      </details>
+    </div>
+  </section>
+
+  <!-- ===================== APP SHELL ===================== -->
+  <section id="view-app" class="view hidden">
+    <header class="topbar">
+      <span class="brand small">📍 Always Together</span>
+      <nav>
+        <button class="tab active" data-tab="map">Map</button>
+        <button class="tab" data-tab="friends">Friends</button>
+        <button class="tab" data-tab="shares">Sharing</button>
+        <button class="tab admin-only hidden" data-tab="admin">Admin</button>
+      </nav>
+      <div class="userbox">
+        <span id="whoami"></span>
+        <button class="btn ghost" id="change-pw-btn">Password</button>
+        <button class="btn danger" id="logout-btn">Log out</button>
+      </div>
+    </header>
+
+    <main>
+      <!-- MAP TAB -->
+      <div id="tab-map" class="panel">
+        <div class="panel-head">
+          <h2>Friend locations</h2>
+          <div class="row">
+            <input id="loc-lat" type="number" step="0.0001" placeholder="lat" />
+            <input id="loc-lon" type="number" step="0.0001" placeholder="lon" />
+            <button class="btn primary" id="publish-loc">Share my location</button>
+            <button class="btn" id="refresh-map">Refresh</button>
+          </div>
+        </div>
+        <div id="map" role="img" aria-label="OpenStreetMap of friend locations"></div>
+        <ul id="friend-list" class="friend-list"></ul>
+        <p id="map-status" class="muted"></p>
+      </div>
+
+      <!-- FRIENDS TAB -->
+      <div id="tab-friends" class="panel hidden">
+        <div class="panel-head">
+          <h2>Friends</h2>
+          <form id="friend-request-form" class="row">
+            <input type="email" id="friend-email" required placeholder="friend@example.com" />
+            <button class="btn primary" type="submit">Send request</button>
+          </form>
+        </div>
+        <ul id="friendship-list" class="cards"></ul>
+        <p id="friends-msg" class="muted"></p>
+      </div>
+
+      <!-- SHARING TAB -->
+      <div id="tab-shares" class="panel hidden">
+        <div class="panel-head">
+          <h2>Location sharing permissions</h2>
+          <form id="share-form" class="row wrap">
+            <select id="share-friendship" required></select>
+            <select id="share-direction" required>
+              <option value="mutual">mutual</option>
+              <option value="to_friend">to_friend (I let them see me)</option>
+              <option value="from_friend">from_friend (I see them only)</option>
+            </select>
+            <select id="share-precision">
+              <option value="exact">exact</option>
+              <option value="approximate">approximate</option>
+              <option value="city_only">city_only</option>
+            </select>
+            <button class="btn primary" type="submit">Create share</button>
+          </form>
+        </div>
+        <ul id="share-list" class="cards"></ul>
+        <p id="shares-msg" class="muted"></p>
+      </div>
+
+      <!-- ADMIN TAB -->
+      <div id="tab-admin" class="panel hidden">
+        <div class="panel-head">
+          <h2>User administration</h2>
+          <form id="create-user-form" class="row wrap">
+            <input type="email" id="new-email" required placeholder="email" />
+            <input id="new-name" required placeholder="full name" />
+            <input id="new-pass" type="text" required placeholder="temp password" minlength="10" />
+            <select id="new-role">
+              <option value="resident">resident</option>
+              <option value="administrator">administrator</option>
+            </select>
+            <button class="btn primary" type="submit">Create user</button>
+          </form>
+        </div>
+        <table id="users-table" class="table">
+          <thead><tr><th>ID</th><th>Email</th><th>Name</th><th>Role</th><th>Active</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </main>
+  </section>
+
+  <!-- ===================== MODALS ===================== -->
+  <dialog id="pw-dialog">
+    <form id="pw-form" method="dialog">
+      <h3>Change password</h3>
+      <label>Current password <input type="password" id="pw-current" /></label>
+      <label>New password <input type="password" id="pw-new" required minlength="10" /></label>
+      <label>Confirm new password <input type="password" id="pw-confirm" required minlength="10" /></label>
+      <p id="pw-error" class="error hidden"></p>
+      <div class="row end">
+        <button class="btn ghost" value="cancel" formnovalidate>Cancel</button>
+        <button class="btn primary" id="pw-submit" value="ok">Change</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

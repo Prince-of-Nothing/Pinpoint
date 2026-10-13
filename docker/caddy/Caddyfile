@@ -7,5 +7,5 @@
 https://localhost {
 	tls internal
 	encode gzip
-	reverse_proxy api:8000
+	reverse_proxy python-api:8000
 }

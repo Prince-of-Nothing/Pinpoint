@@ -1,12 +1,47 @@
-# Local development / demonstration stack: API + PostgreSQL + Redis.
-#   docker compose up --build                  ->  http://localhost:8000/
-#   docker compose --profile https up --build  ->  https://localhost:8443/ (Caddy, internal CA)
+# Default stack: Go API and web client.
+#   docker compose up --build
 #
-# The defaults below are for local use only. Set POSTGRES_PASSWORD,
-# APP_DB_PASSWORD and SECRET_KEY (e.g. in a .env file) for anything shared.
+# Optional Python/FastAPI stack:
+#   docker compose --profile python up --build python-api
 services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: always-together/backend:latest
+    restart: unless-stopped
+    environment:
+      PORT: "8000"
+      APP_NAME: "Always Together API"
+      DEBUG: "false"
+      COOKIE_INSECURE: "true"
+      SEED_DEMO_DATA: "true"
+      ALLOWED_ORIGINS: "http://localhost:8080,http://localhost:3000"
+      SECRET_KEY: "change-me-in-production-min-32-characters-long!!"
+    expose:
+      - "8000"
+    ports:
+      - "127.0.0.1:9000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  web:
+    build:
+      context: ./web
+    image: always-together/web:latest
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
   db:
     image: postgres:16-alpine
+    profiles: ["python", "https"]
     environment:
       POSTGRES_DB: always_together
       POSTGRES_USER: always_together
@@ -20,20 +55,23 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    networks: [internal]
 
   redis:
     image: redis:7-alpine
+    profiles: ["python", "https"]
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
-    networks: [internal]
 
-  api:
-    build: ./backend
+  python-api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.python
+    image: always-together/python-api:latest
+    profiles: ["python", "https"]
     depends_on:
       db:
         condition: service_healthy
@@ -41,38 +79,25 @@ services:
         condition: service_healthy
     environment:
       ENVIRONMENT: development
-      # The API runs as the restricted runtime role; migrations run as the owner
       DATABASE_URL: postgresql+psycopg://app_runtime:${APP_DB_PASSWORD:-local-dev-runtime}@db:5432/always_together
       MIGRATION_DATABASE_URL: postgresql+psycopg://always_together:${POSTGRES_PASSWORD:-local-dev-only}@db:5432/always_together
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-local-dev-only-secret-change-me-for-anything-public}
-      # Browsers accept Secure cookies on http://localhost; set to false for other plain-http hosts
-      COOKIE_SECURE: ${COOKIE_SECURE:-true}
-      FORWARDED_ALLOW_IPS: 172.28.0.10
+      COOKIE_SECURE: "false"
+      ALLOWED_ORIGINS: ""
     ports:
-      - "127.0.0.1:8000:8000"
-    networks:
-      internal:
-        ipv4_address: 172.28.0.20
+      - "127.0.0.1:8001:8000"
 
   caddy:
     image: caddy:2-alpine
     profiles: ["https"]
-    depends_on: [api]
+    depends_on:
+      - python-api
     volumes:
       - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
     ports:
       - "127.0.0.1:8443:443"
-    networks:
-      internal:
-        ipv4_address: 172.28.0.10
-
-networks:
-  internal:
-    ipam:
-      config:
-        - subnet: 172.28.0.0/24
 
 volumes:
   db-data:

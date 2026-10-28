@@ -16,6 +16,11 @@ type Settings struct {
 	// Database
 	DatabaseURL string
 
+	// Driver selects the persistence backend: memory (default, per-process)
+	// or postgres. Postgres falls back to memory with a warning when the
+	// database is unreachable (local development).
+	DBDriver string
+
 	// Redis
 	RedisURL string
 
@@ -111,7 +116,8 @@ func load() *Settings {
 	return &Settings{
 		DatabaseURL: envStr("DATABASE_URL",
 			"postgresql://postgres:postgres@localhost:5432/always_together"),
-		RedisURL: envStr("REDIS_URL", "redis://localhost:6379/0"),
+		DBDriver:    envStr("DB_DRIVER", "memory"),
+		RedisURL:    envStr("REDIS_URL", "redis://localhost:6379/0"),
 
 		SecretKey: envStr("SECRET_KEY",
 			"change-this-secret-key-in-production-min-32-characters-long"),

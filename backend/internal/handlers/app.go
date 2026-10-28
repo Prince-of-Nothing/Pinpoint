@@ -2,6 +2,7 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -25,11 +26,28 @@ type App struct {
 	lockouts map[string]time.Time
 }
 
-// NewApp constructs an application with a fresh in-memory store.
+// NewApp constructs an application with the store selected by DB_DRIVER
+// (memory by default; postgres with graceful fallback to memory).
 func NewApp() *App {
+	settings := config.Get()
+	repo, err := store.Open(settings.DBDriver, settings.DatabaseURL)
+	if err != nil {
+		log.Fatalf("store: %v", err) // unknown driver: fail closed on typos
+	}
 	return &App{
-		Settings:    config.Get(),
-		Store:       store.New(),
+		Settings:    settings,
+		Store:       repo,
+		RateLimiter: NewRateLimiter(),
+		lockouts:    make(map[string]time.Time),
+	}
+}
+
+// NewAppWithStore constructs an application around a specific repository
+// (tests, future DI wiring).
+func NewAppWithStore(settings *config.Settings, repo store.Repository) *App {
+	return &App{
+		Settings:    settings,
+		Store:       repo,
 		RateLimiter: NewRateLimiter(),
 		lockouts:    make(map[string]time.Time),
 	}

@@ -52,12 +52,12 @@ Rules the team follows (and that a CI check / GitHub Action can enforce):
 - Notes: reuse CSRF/session handling patterns from `web/public/app.js`.
 
 ### T04 · Kotlin Android project scaffold
-- **Slot:** M4 · **Due:** end of W1 · **Requires:** — · **Status:** ⬜ Planned
+- **Slot:** M4 · **Due:** end of W1 · **Requires:** — · **Status:** ✅ Done (M1)
 - Scope: create `mobile/` Gradle (Kotlin DSL) project, Jetpack Compose baseline, MVVM module layout (`app`, `core:network`, `core:data`, `feature:auth`, `feature:map`, `feature:friends`, `feature:sharing`), Retrofit + kotlinx.serialization API client targeting `/api/v1`, debug build flavor pointing at local compose stack.
-- Notes: no iOS emulator needed — Android emulator covers the loop (decision recorded in ROADMAP).
+- Notes: no iOS emulator needed — Android emulator covers the loop (decision recorded in ROADMAP). Delivered with two extensions: `core:domain` (pure-Kotlin contracts) and `core:map` (MapLibre isolation layer); manual-DI composition root instead of Hilt (see `mobile/README.md`). Compile-verified in CI (`mobile` job), not locally.
 
 ### T05 · CI pipeline (build/test/lint/docker)
-- **Slot:** M5 · **Due:** end of W1 · **Requires:** — · **Status:** ⬜ Planned
+- **Slot:** M5 · **Due:** end of W1 · **Requires:** — · **Status:** 🚧 In progress (Go build/vet/test incl. Postgres conformance, Python suite, and Android assembleDebug jobs live; hadolint, compose smoke test, README badge pending)
 - Scope: GitHub Actions: `go build/vet/test -race` on backend, `node --check` on web JS, hadolint on Dockerfiles, docker compose smoke test (`/health`), artifact upload. Add badge to README.
 - Notes: later extended by T06, T14, T22, T35.
 
@@ -78,8 +78,9 @@ Rules the team follows (and that a CI check / GitHub Action can enforce):
 - Scope: `audit_log` writes on every location read/share change, retention policy env var, admin export CSV endpoint, privacy review notes appended to `docs/PRIVACY.md`.
 
 ### T09 · Android auth flow (login, session, keystore)
-- **Slot:** M4 · **Due:** end of W2 · **Requires:** T04 · **Status:** ⬜ Planned
+- **Slot:** M4 · **Due:** end of W2 · **Requires:** T04 · **Status:** 🚧 In progress (login + Keystore session storage done in M1; MockWebServer tests + forced-password-change screen pending)
 - Scope: Compose screens for login/forced password change, OkHttp cookie jar, token/session storage in EncryptedSharedPreferences (Android Keystore), refresh/logout invalidation matching backend semantics, unit tests with MockWebServer.
+- Notes: M1 deviation — tokens are AES-GCM encrypted via Android Keystore + DataStore (not EncryptedSharedPreferences, which is deprecated); bearer + CSRF tokens are sent from an in-memory cache, cookies unused on mobile.
 
 ### T10 · Kiosk web client (`webk`) MVP
 - **Slot:** M5 · **Due:** end of W2 · **Requires:** — · **Status:** ⬜ Planned
@@ -103,8 +104,9 @@ Rules the team follows (and that a CI check / GitHub Action can enforce):
 - Scope: role field (user/moderator/admin) enforced in backend middleware, admin UI for role changes, audit-log viewer page, bulk invite CSV.
 
 ### T14 · Android map screen (OSM tiles + pins)
-- **Slot:** M4 · **Due:** end of W3 · **Requires:** T09 · **Status:** ⬜ Planned
-- Scope: osmdroid MapView wrapper in Compose AndroidView, friend pins with freshness colors mirroring web states, precision badges, navigate-export intent (geo URI), offline tile cache policy.
+- **Slot:** M4 · **Due:** end of W3 · **Requires:** T09 · **Status:** 🚧 In progress (map view + offline region downloads + geo: nav export done in M1; friend pins with freshness colors pending)
+- Scope: map SDK wrapper in Compose AndroidView, friend pins with freshness colors mirroring web states, precision badges, navigate-export intent (geo URI), offline tile cache policy.
+- Notes: SDK decision amended in M1 — **MapLibre Native** (BSD-2, zero telemetry, first-class offline region downloads) replaces osmdroid; offline navigation ships as `geo:` intent export + `RoutingEngine` stub (GraphHopper/Valhalla later). Licensing obligations documented in `mobile/THIRD_PARTY_NOTICES.md` (OSM ODbL attribution enforced in UI, no bulk downloads from public OSM servers).
 
 ### T15 · Structured logging + request IDs across services
 - **Slot:** M5 · **Due:** end of W3 · **Requires:** T05 · **Status:** ⬜ Planned

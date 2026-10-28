@@ -74,9 +74,21 @@ backend/cmd/          Go API entry point
 backend/internal/     Go configuration, handlers, models, security, and store
 backend/web/          Python-served web client
 web/                  Go deployment web client and nginx reverse proxy
+mobile/               Kotlin/Jetpack Compose Android app (see mobile/README.md)
 docker/               PostgreSQL role setup and Caddy HTTPS configuration
 docs/                 Architecture, reference, deployment, and project guides
 ```
+
+## Android app
+
+The `mobile/` directory holds a privacy-first Android client (0 trackers):
+Clean Architecture modules, MapLibre maps with offline region downloads,
+`geo:`-URI navigation hand-off, and Keystore-encrypted sessions. Build
+instructions, the module map, and full third-party licensing notes (OSM
+ODbL, MapLibre BSD-2, tile-usage policy compliance) live in
+[mobile/README.md](mobile/README.md) and
+[mobile/THIRD_PARTY_NOTICES.md](mobile/THIRD_PARTY_NOTICES.md). CI compiles
+it on every push (`mobile` job).
 
 ## Documentation
 

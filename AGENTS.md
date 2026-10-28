@@ -7,6 +7,7 @@ Two backend implementations of the same API, per the root `README.md`:
 - **Go API** (default Docker stack): `backend/cmd/server` + `backend/internal/`.
 - **Python/FastAPI API** (alternate): `backend/app`, migrations in `backend/alembic/`, tests in `backend/tests/`.
 - Web clients: `web/` (Go stack, nginx) and `backend/web/` (Python-served).
+- Android app: `mobile/` — Kotlin/Jetpack Compose, Clean Architecture modules (`app` composition root + `core:{domain,network,data,map}` + `feature:{auth,map,friends,sharing}`), MapLibre maps, 0 trackers. See `mobile/README.md`.
 - Docs in `docs/` (arc42 + Diátaxis + ADRs); full-stack demo via `docker compose`.
 
 Contribution rules live in root `CONTRIBUTING.md` (Go) and `docs/CONTRIBUTING.md` (docs): small PRs, Conventional Commits, docs in the same PR, security changes need a regression test *and* a fail-closed test.
@@ -34,7 +35,14 @@ alembic upgrade head && alembic check   # needs DATABASE_URL (PostgreSQL)
 
 Full stack: `docker compose up --build` → http://localhost:8080 (seeds demo accounts; local-only credentials). Python API on :8001 via `docker compose --profile python up --build python-api`.
 
-CI (`.github/workflows/ci.yml`) runs all of the above plus migrations against a Postgres 16 service; `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/always_together`.
+Android (from `mobile/`; needs JDK 17 + Android SDK 35 — **not installable on the original dev machine**, so compile verification happens in CI's `mobile` job):
+
+```bash
+gradle :app:assembleDebug          # debug APK; points at http://10.0.2.2:8000/api/v1/
+gradle :core:domain:test :core:network:test   # pure-JVM module tests
+```
+
+CI (`.github/workflows/ci.yml`) runs all of the above plus migrations against a Postgres 16 service; `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/always_together`. The `backend-go` job sets `TEST_DATABASE_URL` so the store conformance suite (T01) runs against real Postgres.
 
 ## Gotchas
 
@@ -42,6 +50,8 @@ CI (`.github/workflows/ci.yml`) runs all of the above plus migrations against a 
 - `backend/dump.rdb` is a stray committed Redis dump — leave it unless asked.
 - Security is thesis-mandated: server-side enforcement only, no secrets or real user data anywhere including tests (root `CONTRIBUTING.md`).
 - Password/session/token logic differs between the Go and Python implementations — mirror changes deliberately, and check which stack a doc describes before editing.
+- Mobile module rules (enforced by Gradle deps): `:feature:*` sees `:core:domain` only; Retrofit/OkHttp stay in `:core:network`; MapLibre stays in `:core:map` (only `MapLibreIntegration.kt` + `OfflineMapManager.kt` import `org.maplibre.*`). New dependencies go in `mobile/gradle/libs.versions.toml`.
+- Mobile privacy baseline is thesis-relevant: no Firebase/FCM/analytics/crash SDKs, ever. Any new third-party lib must be added to `mobile/THIRD_PARTY_NOTICES.md` in the same PR. OSM attribution must stay visible on the map screen (ODbL).
 
 ## Commits
 

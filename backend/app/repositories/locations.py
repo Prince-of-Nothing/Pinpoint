@@ -6,7 +6,6 @@ owner (upsert). No history is accumulated — data minimisation by design.
 """
 
 from datetime import datetime
-from typing import List, Optional
 
 from sqlalchemy.orm import Session as OrmSession
 
@@ -20,7 +19,7 @@ class LocationShareRepository:
     def __init__(self, db: OrmSession):
         self._db = db
 
-    def get_by_id(self, share_id: int) -> Optional[LocationShare]:
+    def get_by_id(self, share_id: int) -> LocationShare | None:
         return self._db.get(LocationShare, share_id)
 
     def add(self, share: LocationShare) -> LocationShare:
@@ -28,11 +27,11 @@ class LocationShareRepository:
         self._db.flush()
         return share
 
-    def find_between(self, owner_id: int, other_id: int) -> Optional[LocationShare]:
+    def find_between(self, owner_id: int, other_id: int) -> LocationShare | None:
         """Active share owned by owner_id whose friendship links to other_id."""
         return self._match_counterparty(owner_id, other_id)
 
-    def _match_counterparty(self, owner_id: int, other_id: int) -> Optional[LocationShare]:
+    def _match_counterparty(self, owner_id: int, other_id: int) -> LocationShare | None:
         from app.models.user import Friendship
 
         return (
@@ -47,10 +46,10 @@ class LocationShareRepository:
             .first()
         )
 
-    def get_active_between(self, owner_id: int, viewer_id: int) -> Optional[LocationShare]:
+    def get_active_between(self, owner_id: int, viewer_id: int) -> LocationShare | None:
         return self._match_counterparty(owner_id, viewer_id)
 
-    def list_active_incoming_for(self, viewer_id: int) -> List[LocationShare]:
+    def list_active_incoming_for(self, viewer_id: int) -> list[LocationShare]:
         """All active shares owned by someone else and directed at viewer."""
         from app.models.user import Friendship
 
@@ -65,7 +64,7 @@ class LocationShareRepository:
             .all()
         )
 
-    def list_owned_by(self, owner_id: int) -> List[LocationShare]:
+    def list_owned_by(self, owner_id: int) -> list[LocationShare]:
         return (
             self._db.query(LocationShare)
             .filter(LocationShare.owner_id == owner_id)
@@ -104,20 +103,16 @@ class LocationUpdateRepository:
     def __init__(self, db: OrmSession):
         self._db = db
 
-    def get_latest(self, owner_id: int) -> Optional[LocationUpdate]:
-        return (
-            self._db.query(LocationUpdate)
-            .filter(LocationUpdate.owner_id == owner_id)
-            .first()
-        )
+    def get_latest(self, owner_id: int) -> LocationUpdate | None:
+        return self._db.query(LocationUpdate).filter(LocationUpdate.owner_id == owner_id).first()
 
     def upsert_latest(
         self,
         owner_id: int,
         latitude: float,
         longitude: float,
-        accuracy: Optional[float],
-        battery_level: Optional[int],
+        accuracy: float | None,
+        battery_level: int | None,
         recorded_at: datetime,
     ) -> LocationUpdate:
         update = self.get_latest(owner_id)

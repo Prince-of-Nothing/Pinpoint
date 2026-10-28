@@ -15,8 +15,7 @@ Design patterns applied:
 
 from dataclasses import dataclass
 from datetime import timedelta
-from enum import Enum
-from typing import List, Optional
+from enum import StrEnum
 
 from app.core.config import get_settings
 from app.core.timeutils import ensure_utc, utcnow
@@ -29,9 +28,9 @@ from app.repositories.people import (
 from app.services.audit import AuditLogger, get_null_audit_logger
 from app.services.password_policy import DEFAULT_PASSWORD_POLICY, PasswordPolicy
 from app.services.security import (
+    generate_session_token,
     get_dummy_password_hash,
     get_password_hash,
-    generate_session_token,
     hash_token,
     normalize_email,
     pseudonymize_email,
@@ -42,13 +41,13 @@ from app.services.token_service import TokenService, get_token_service
 settings = get_settings()
 
 
-class AuthErrorCode(str, Enum):
+class AuthErrorCode(StrEnum):
     """Machine-readable authentication failure codes (never leak state)."""
 
     INVALID_CREDENTIALS = "AUTHENTICATION_FAILED"
-    INVALID_TOKEN = "INVALID_TOKEN"
-    PASSWORD_CHANGE_REQUIRED = "PASSWORD_CHANGE_REQUIRED"
-    WEAK_PASSWORD = "WEAK_PASSWORD"
+    INVALID_TOKEN = "INVALID_TOKEN"  # noqa: S105 - error code, not a secret
+    PASSWORD_CHANGE_REQUIRED = "PASSWORD_CHANGE_REQUIRED"  # noqa: S105 - error code
+    WEAK_PASSWORD = "WEAK_PASSWORD"  # noqa: S105 - error code, not a secret
 
 
 class AuthenticationError(Exception):
@@ -78,9 +77,9 @@ class AuthService:
         users: UserRepository,
         sessions: SessionRepository,
         attempts: LoginAttemptRepository,
-        tokens: Optional[TokenService] = None,
-        audit: Optional[AuditLogger] = None,
-        password_policy: Optional[PasswordPolicy] = None,
+        tokens: TokenService | None = None,
+        audit: AuditLogger | None = None,
+        password_policy: PasswordPolicy | None = None,
     ):
         self._users = users
         self._sessions = sessions
@@ -91,8 +90,9 @@ class AuthService:
 
     # Login -----------------------------------------------------------------
 
-    def login(self, email: str, password: str, ip_address: str,
-              user_agent: Optional[str] = None) -> LoginResult:
+    def login(
+        self, email: str, password: str, ip_address: str, user_agent: str | None = None
+    ) -> LoginResult:
         """
         Authenticate a user and start a server-side session.
 
@@ -183,7 +183,7 @@ class AuthService:
 
     # Logout ----------------------------------------------------------------
 
-    def logout_by_session_token(self, session_token: Optional[str]) -> bool:
+    def logout_by_session_token(self, session_token: str | None) -> bool:
         """Revoke the session behind a raw cookie token. Idempotent."""
         if not session_token:
             return False
@@ -193,13 +193,15 @@ class AuthService:
         self._commit()
         return revoked
 
-    def logout_by_session_id(self, session_id: int, actor_id: Optional[int]) -> bool:
+    def logout_by_session_id(self, session_id: int, actor_id: int | None) -> bool:
         """Revoke a session identified by its id (JWT `sid` claim)."""
         session = self._sessions.get_by_id(session_id)
         if session is None or session.revoked_at is not None:
             return False
         self._sessions.revoke(session, utcnow())
-        self._audit.record("auth.logout", actor_id=actor_id, target_type="session", target_id=session_id)
+        self._audit.record(
+            "auth.logout", actor_id=actor_id, target_type="session", target_id=session_id
+        )
         self._commit()
         return True
 
@@ -209,20 +211,27 @@ class AuthService:
 
     # Password management (Template Method) ---------------------------------
 
-    def change_password(self, user: User, current_password: str,
-                        new_password: str, keep_session_id: Optional[int] = None) -> None:
+    def change_password(
+        self,
+        user: User,
+        current_password: str,
+        new_password: str,
+        keep_session_id: int | None = None,
+    ) -> None:
         """Self-service password change: verifies the current password first."""
         if not verify_password(current_password, user.password_hash):
-            self._audit.record("auth.password_change_failed", actor_id=user.id,
-                               reason="wrong_current_password")
+            self._audit.record(
+                "auth.password_change_failed", actor_id=user.id, reason="wrong_current_password"
+            )
             self._commit()
             raise AuthenticationError(
                 AuthErrorCode.INVALID_CREDENTIALS, "Current password is incorrect."
             )
         self._apply_password_change(user, new_password, keep_session_id)
 
-    def force_change_password(self, user: User, new_password: str,
-                              keep_session_id: Optional[int] = None) -> None:
+    def force_change_password(
+        self, user: User, new_password: str, keep_session_id: int | None = None
+    ) -> None:
         """First-login temporary-password change (no current password check)."""
         if not user.must_change_password:
             raise AuthenticationError(
@@ -230,13 +239,15 @@ class AuthService:
             )
         self._apply_password_change(user, new_password, keep_session_id)
 
-    def _apply_password_change(self, user: User, new_password: str,
-                               keep_session_id: Optional[int]) -> None:
+    def _apply_password_change(
+        self, user: User, new_password: str, keep_session_id: int | None
+    ) -> None:
         """Shared skeleton for both password-change variants (Template Method)."""
         issues = self._policy.validate(new_password)
         if issues:
-            self._audit.record("auth.password_change_failed", actor_id=user.id,
-                               reason="weak_password")
+            self._audit.record(
+                "auth.password_change_failed", actor_id=user.id, reason="weak_password"
+            )
             self._commit()
             raise AuthenticationError(
                 AuthErrorCode.WEAK_PASSWORD,
@@ -278,8 +289,7 @@ class AuthService:
         user.failed_login_attempts = 0
         self._audit.record("auth.account_unlocked", actor_id=user.id)
 
-    def _failed_attempt(self, normalized_email: str, ip_address: str,
-                        reason: str) -> None:
+    def _failed_attempt(self, normalized_email: str, ip_address: str, reason: str) -> None:
         self._attempts.record(pseudonymize_email(normalized_email), ip_address, success=False)
         self._audit.record("auth.login_failed", reason=reason)
 

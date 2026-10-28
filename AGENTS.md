@@ -7,6 +7,8 @@ Two backend implementations of the same API, per the root `README.md`:
 - **Go API** (default Docker stack): `backend/cmd/server` + `backend/internal/`.
 - **Python/FastAPI API** (alternate): `backend/app`, migrations in `backend/alembic/`, tests in `backend/tests/`.
 - Web clients: `web/` (Go stack, nginx) and `backend/web/` (Python-served).
+  - `web/public/js/` is modular vanilla ES modules (no npm/bundler — keep it that way; every new file goes in the `sw.js` SHELL list and gets `node --input-type=module --check` in CI). Tile source is one line in `js/config.js`; never `tile.openstreetmap.org` (OSMF policy) and keep the ODbL attribution visible. CSP in `web/nginx.conf` must allow-list the tile host in `img-src`. Licensing: `web/THIRD_PARTY_NOTICES.md`.
+  - `backend/web/` (Python stack) is a separate Leaflet-based client with its own tests (`backend/tests/test_web_client.py`, incl. a tile-policy regression test) — mirror tile/compliance changes there deliberately.
 - Android app: `mobile/` — Kotlin/Jetpack Compose, Clean Architecture modules (`app` composition root + `core:{domain,network,data,map}` + `feature:{auth,map,friends,sharing}`), MapLibre maps, 0 trackers. See `mobile/README.md`.
 - Docs in `docs/` (arc42 + Diátaxis + ADRs); full-stack demo via `docker compose`.
 

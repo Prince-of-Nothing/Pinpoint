@@ -14,8 +14,7 @@ unfixed CVEs around algorithm handling; PyJWT is actively maintained).
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 import jwt
 
@@ -25,8 +24,8 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-TOKEN_TYPE_ACCESS = "access"
-TOKEN_TYPE_REFRESH = "refresh"
+TOKEN_TYPE_ACCESS = "access"  # noqa: S105 - token type label, not a secret
+TOKEN_TYPE_REFRESH = "refresh"  # noqa: S105 - token type label, not a secret
 
 
 @dataclass(frozen=True)
@@ -44,8 +43,9 @@ class TokenClaims:
 class TokenService:
     """Facade over JWT creation and validated decoding."""
 
-    def __init__(self, secret_key: str, algorithm: str,
-                 access_ttl_minutes: int, refresh_ttl_days: int):
+    def __init__(
+        self, secret_key: str, algorithm: str, access_ttl_minutes: int, refresh_ttl_days: int
+    ):
         self._secret = secret_key
         self._algorithm = algorithm
         self._access_ttl = timedelta(minutes=access_ttl_minutes)
@@ -71,9 +71,10 @@ class TokenService:
             ttl=self._refresh_ttl,
         )
 
-    def _encode(self, *, user_id: int, session_id: int, token_version: int,
-                token_type: str, ttl: timedelta) -> str:
-        now = datetime.now(timezone.utc)
+    def _encode(
+        self, *, user_id: int, session_id: int, token_version: int, token_type: str, ttl: timedelta
+    ) -> str:
+        now = datetime.now(UTC)
         payload = {
             "sub": str(user_id),
             "sid": session_id,
@@ -89,7 +90,7 @@ class TokenService:
 
     # Validation -------------------------------------------------------------
 
-    def decode(self, token: str, expected_type: str = TOKEN_TYPE_ACCESS) -> Optional[TokenClaims]:
+    def decode(self, token: str, expected_type: str = TOKEN_TYPE_ACCESS) -> TokenClaims | None:
         """
         Decode and validate a JWT.
 
@@ -120,14 +121,14 @@ class TokenService:
                 token_version=int(payload["ver"]),
                 token_type=str(payload["type"]),
                 jti=str(payload["jti"]),
-                expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
+                expires_at=datetime.fromtimestamp(payload["exp"], tz=UTC),
             )
         except (TypeError, ValueError):
             logger.warning("Rejected token: malformed claims")
             return None
 
 
-_token_service: Optional[TokenService] = None
+_token_service: TokenService | None = None
 
 
 def get_token_service() -> TokenService:

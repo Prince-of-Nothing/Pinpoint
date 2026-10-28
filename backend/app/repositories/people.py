@@ -8,7 +8,6 @@ layer owns transaction boundaries.
 """
 
 from datetime import datetime
-from typing import List, Optional
 
 from sqlalchemy.orm import Session as OrmSession
 
@@ -27,15 +26,11 @@ class UserRepository:
     def __init__(self, db: OrmSession):
         self._db = db
 
-    def get_by_id(self, user_id: int) -> Optional[User]:
+    def get_by_id(self, user_id: int) -> User | None:
         return self._db.get(User, user_id)
 
-    def get_by_email_normalized(self, email_normalized: str) -> Optional[User]:
-        return (
-            self._db.query(User)
-            .filter(User.email_normalized == email_normalized)
-            .first()
-        )
+    def get_by_email_normalized(self, email_normalized: str) -> User | None:
+        return self._db.query(User).filter(User.email_normalized == email_normalized).first()
 
     def add(self, user: User) -> User:
         self._db.add(user)
@@ -54,14 +49,10 @@ class SessionRepository:
         self._db.flush()
         return session
 
-    def get_by_token_hash(self, token_hash: str) -> Optional[Session]:
-        return (
-            self._db.query(Session)
-            .filter(Session.token_hash == token_hash)
-            .first()
-        )
+    def get_by_token_hash(self, token_hash: str) -> Session | None:
+        return self._db.query(Session).filter(Session.token_hash == token_hash).first()
 
-    def get_by_id(self, session_id: int) -> Optional[Session]:
+    def get_by_id(self, session_id: int) -> Session | None:
         return self._db.get(Session, session_id)
 
     def revoke(self, session: Session, when: datetime) -> None:
@@ -76,8 +67,9 @@ class SessionRepository:
         )
         return revoked > 0
 
-    def revoke_all_for_user(self, user_id: int, when: datetime,
-                            except_session_id: Optional[int] = None) -> int:
+    def revoke_all_for_user(
+        self, user_id: int, when: datetime, except_session_id: int | None = None
+    ) -> int:
         query = self._db.query(Session).filter(
             Session.user_id == user_id,
             Session.revoked_at.is_(None),
@@ -110,10 +102,10 @@ class FriendshipRepository:
     def __init__(self, db: OrmSession):
         self._db = db
 
-    def get_by_id(self, friendship_id: int) -> Optional[Friendship]:
+    def get_by_id(self, friendship_id: int) -> Friendship | None:
         return self._db.get(Friendship, friendship_id)
 
-    def find_between(self, user_a: int, user_b: int) -> Optional[Friendship]:
+    def find_between(self, user_a: int, user_b: int) -> Friendship | None:
         """Find a friendship row in either direction between two users."""
         return (
             self._db.query(Friendship)
@@ -129,18 +121,15 @@ class FriendshipRepository:
         self._db.flush()
         return friendship
 
-    def list_for_user(self, user_id: int) -> List[Friendship]:
+    def list_for_user(self, user_id: int) -> list[Friendship]:
         return (
             self._db.query(Friendship)
-            .filter(
-                (Friendship.requester_id == user_id)
-                | (Friendship.receiver_id == user_id)
-            )
+            .filter((Friendship.requester_id == user_id) | (Friendship.receiver_id == user_id))
             .order_by(Friendship.created_at.desc())
             .all()
         )
 
-    def friend_ids_for(self, user_id: int) -> List[int]:
+    def friend_ids_for(self, user_id: int) -> list[int]:
         """IDs of accepted, non-blocked friends of a user."""
         rows = (
             self._db.query(Friendship)

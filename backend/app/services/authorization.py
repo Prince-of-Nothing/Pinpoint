@@ -15,8 +15,7 @@ router ever decides visibility with inline conditionals.
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
-from typing import Dict, Optional
+from enum import StrEnum
 
 from app.core.timeutils import utcnow
 from app.models.user import (
@@ -29,7 +28,7 @@ from app.models.user import (
 from app.repositories.people import FriendshipRepository
 
 
-class Relationship(str, Enum):
+class Relationship(StrEnum):
     """Viewer's relationship to a target account."""
 
     SELF = "self"
@@ -64,6 +63,7 @@ class RelationshipService:
 # ---------------------------------------------------------------------------
 # Precision reducers (Strategy + registry)
 # ---------------------------------------------------------------------------
+
 
 class PrecisionReducer(ABC):
     """Reduces a coordinate pair to a coarser representation."""
@@ -113,13 +113,13 @@ class CityOnlyPrecision(PrecisionReducer):
         return round(latitude, 1), round(longitude, 1)
 
 
-PRECISION_REDUCERS: Dict[str, PrecisionReducer] = {
+PRECISION_REDUCERS: dict[str, PrecisionReducer] = {
     reducer.label: reducer
     for reducer in (ExactPrecision(), ApproximatePrecision(), CityOnlyPrecision())
 }
 
 
-def get_precision_reducer(level: Optional[str]) -> PrecisionReducer:
+def get_precision_reducer(level: str | None) -> PrecisionReducer:
     """Look up a reducer; unknown levels fail closed to the coarsest option."""
     return PRECISION_REDUCERS.get(level or "", PRECISION_REDUCERS["city_only"])
 
@@ -128,12 +128,13 @@ def get_precision_reducer(level: Optional[str]) -> PrecisionReducer:
 # Location access policy (complete mediation for location reads)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class LocationAccessDecision:
     """Result of a location-access check."""
 
     allowed: bool
-    precision_level: Optional[str] = None
+    precision_level: str | None = None
     reason: str = ""
 
 
@@ -151,8 +152,8 @@ class LocationAccessPolicy:
         self,
         viewer_id: int,
         owner_id: int,
-        share: Optional[LocationShare],
-        now: Optional[datetime] = None,
+        share: LocationShare | None,
+        now: datetime | None = None,
     ) -> LocationAccessDecision:
         now = now or utcnow()
 
@@ -161,11 +162,12 @@ class LocationAccessPolicy:
 
         if not share.is_currently_valid(now):
             return LocationAccessDecision(
-                False, None,
+                False,
+                None,
                 "share_revoked" if share.revoked_at or not share.is_active else "share_expired",
             )
 
-        friendship: Optional[Friendship] = share.friendship
+        friendship: Friendship | None = share.friendship
         if friendship is None or friendship.status != FriendshipStatus.ACCEPTED:
             return LocationAccessDecision(False, None, "friendship_not_accepted")
 
@@ -188,12 +190,13 @@ class LocationAccessPolicy:
 # Profile visibility policy (SC-03: private by default)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class VisibleProfile:
     """Relationship-filtered projection of a user profile."""
 
-    user_id: Optional[int]
-    display_name: Optional[str]
+    user_id: int | None
+    display_name: str | None
     is_full: bool
     reason: str
 
@@ -204,7 +207,7 @@ class ProfileVisibilityPolicy:
     def visible_profile(
         self,
         viewer_id: int,
-        target: Optional[User],
+        target: User | None,
         relationship: Relationship,
     ) -> VisibleProfile:
         if target is None:

@@ -28,9 +28,10 @@ dependencies {
     // exists upstream; tile source is app-configured (see DefaultMapConfig).
     implementation(libs.maplibre.android)
 
-    // Compose for the MapView interop wrapper.
+    // Compose for the MapView interop wrapper (foundation for fillMaxSize).
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
+    implementation(libs.compose.foundation)
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

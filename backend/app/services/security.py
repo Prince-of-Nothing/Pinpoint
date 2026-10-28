@@ -11,7 +11,6 @@ import hashlib
 import hmac
 import secrets
 from functools import lru_cache
-from typing import List, Tuple
 
 from passlib.context import CryptContext
 
@@ -48,7 +47,7 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password[:MAX_PASSWORD_BYTES])
 
 
-@lru_cache()
+@lru_cache
 def get_dummy_password_hash() -> str:
     """
     Null Object for anti-enumeration (timing equalisation).
@@ -119,7 +118,7 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
-def is_weak_password(password: str) -> Tuple[bool, List[str]]:
+def is_weak_password(password: str) -> tuple[bool, list[str]]:
     """
     Check if password meets the configured policy.
     Back-compatible wrapper over the PasswordPolicy chain (Strategy).

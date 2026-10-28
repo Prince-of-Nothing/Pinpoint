@@ -16,7 +16,7 @@ import time
 from collections import deque
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Deque, Dict, Protocol
+from typing import Protocol
 
 from app.core.config import get_settings
 
@@ -53,7 +53,7 @@ class InMemoryRateLimiter:
     """
 
     def __init__(self):
-        self._hits: Dict[str, Deque[float]] = {}
+        self._hits: dict[str, deque[float]] = {}
         self._lock = threading.Lock()
 
     def hit(self, key: str, limit: int, window_seconds: int) -> RateLimitResult:
@@ -125,7 +125,7 @@ class RedisRateLimiter:
         )
 
 
-@lru_cache()
+@lru_cache
 def get_rate_limiter() -> RateLimiter:
     """Select the configured rate-limit backend (factory, cached)."""
     if settings.rate_limit_backend == "redis":
@@ -137,6 +137,7 @@ def get_rate_limiter() -> RateLimiter:
         except Exception as exc:
             logger.warning(
                 "REDIS backend configured but unavailable (%s); "
-                "falling back to per-process in-memory limiter.", exc,
+                "falling back to per-process in-memory limiter.",
+                exc,
             )
     return InMemoryRateLimiter()

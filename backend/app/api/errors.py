@@ -5,7 +5,7 @@ Every error response uses the same envelope: type/title/status/detail plus a
 machine-readable error_code. Internal details never cross the boundary.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -40,11 +40,11 @@ def problem(
     status_code: int,
     error_code: str,
     message: str,
-    fields: Optional[Dict[str, Any]] = None,
-    headers: Optional[Dict[str, str]] = None,
+    fields: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     """Build an RFC 7807 response."""
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "type": f"about://errors/{PROBLEM_TYPES.get(status_code, 'error')}",
         "title": DEFAULT_TITLES.get(status_code, "Error"),
         "status": status_code,

@@ -43,6 +43,18 @@ CI (`.github/workflows/ci.yml`) runs all of the above plus migrations against a 
 - Security is thesis-mandated: server-side enforcement only, no secrets or real user data anywhere including tests (root `CONTRIBUTING.md`).
 - Password/session/token logic differs between the Go and Python implementations — mirror changes deliberately, and check which stack a doc describes before editing.
 
+## Commits
+
+Every commit is co-authored by the human team members (not bots). Add trailers on each commit:
+
+```
+Co-authored-by: Mordret <blacksnake@noreply.codeberg.org>
+Co-authored-by: Andrei Cliucovschi <cliucovschiandrei@gmail.com>
+Co-authored-by: Pleșu Dinu <dinu.plesu@isa.utm.md>
+```
+
+Exclude bots: `qwen.ai[bot]`, copilot, dependabot. Local git author is already Mordret.
+
 ## Docs conventions
 
 - Diagrams are Mermaid text, never binary images; keep the table in `docs/architecture/diagrams/README.md` in sync with files that exist.

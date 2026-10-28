@@ -90,6 +90,16 @@ ODbL, MapLibre BSD-2, tile-usage policy compliance) live in
 [mobile/THIRD_PARTY_NOTICES.md](mobile/THIRD_PARTY_NOTICES.md). CI compiles
 it on every push (`mobile` job).
 
+## Web client (Go stack)
+
+`web/` holds a privacy-first browser client: modular vanilla ES modules with
+no build step and zero third-party JavaScript (0 trackers enforced by CSP),
+offline app shell via service worker (UI only — location data is never
+cached), session restore across reloads, and policy-compliant OSM tiles with
+visible ODbL attribution. See [web/README.md](web/README.md) and
+[web/THIRD_PARTY_NOTICES.md](web/THIRD_PARTY_NOTICES.md). The Python stack
+serves a separate Leaflet-based client from `backend/web/`.
+
 ## Documentation
 
 - [Documentation home](docs/README.md)

@@ -57,7 +57,7 @@ Rules the team follows (and that a CI check / GitHub Action can enforce):
 - Notes: no iOS emulator needed — Android emulator covers the loop (decision recorded in ROADMAP). Delivered with two extensions: `core:domain` (pure-Kotlin contracts) and `core:map` (MapLibre isolation layer); manual-DI composition root instead of Hilt (see `mobile/README.md`). Compile-verified in CI (`mobile` job), not locally.
 
 ### T05 · CI pipeline (build/test/lint/docker)
-- **Slot:** M5 · **Due:** end of W1 · **Requires:** — · **Status:** 🚧 In progress (Go build/vet/test incl. Postgres conformance, Python suite, and Android assembleDebug jobs live; hadolint, compose smoke test, README badge pending)
+- **Slot:** M5 · **Due:** end of W1 · **Requires:** — · **Status:** 🚧 In progress (Go build/vet/test incl. Postgres conformance, Python suite, web JS syntax-check + manifest validation, and Android assembleDebug jobs live; hadolint, compose smoke test, README badge pending)
 - Scope: GitHub Actions: `go build/vet/test -race` on backend, `node --check` on web JS, hadolint on Dockerfiles, docker compose smoke test (`/health`), artifact upload. Add badge to README.
 - Notes: later extended by T06, T14, T22, T35.
 

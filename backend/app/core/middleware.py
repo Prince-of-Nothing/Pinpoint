@@ -4,12 +4,15 @@ from starlette.datastructures import Headers
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-# The web client only loads its own scripts/styles and OpenStreetMap tiles.
+# The web client only loads its own scripts/styles and map tiles. Tiles come
+# from the Wikimedia Foundation endpoint (welcomes app usage; OSMF's
+# tile.openstreetmap.org prohibits it). Data is (c) OpenStreetMap
+# contributors, attribution rendered by the client (ODbL).
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; "
     "script-src 'self'; "
     "style-src 'self'; "
-    "img-src 'self' data: https://tile.openstreetmap.org; "
+    "img-src 'self' data: https://maps.wikimedia.org; "
     "connect-src 'self'; "
     "font-src 'self'; "
     "object-src 'none'; "

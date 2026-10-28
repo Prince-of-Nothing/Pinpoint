@@ -256,7 +256,10 @@ function refreshAll() {
 function initMap() {
   if (state.map || typeof L === "undefined") return;
   state.map = L.map("map").setView([44.4268, 26.1025], 12);
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  // Wikimedia Foundation tiles welcome app usage (OSMF's own tile servers
+  // do not — their Tile Usage Policy prohibits serving apps); same ODbL
+  // data, same attribution requirement. Self-host for production.
+  L.tileLayer("https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png", {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
   }).addTo(state.map);

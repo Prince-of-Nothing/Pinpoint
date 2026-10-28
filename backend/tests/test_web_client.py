@@ -14,6 +14,21 @@ def test_index_served_with_csp(client):
     assert "frame-ancestors 'none'" in csp
 
 
+def test_csp_tile_source_is_policy_compliant(client):
+    """Tiles must come from an app-friendly host, never OSMF's own servers.
+
+    OSMF's Tile Usage Policy prohibits using tile.openstreetmap.org as an
+    app backend; the client (and this CSP) use the Wikimedia Foundation
+    endpoint instead. Regression: don't silently revert the tile host.
+    """
+    csp = client.get("/").headers["content-security-policy"]
+    assert "https://maps.wikimedia.org" in csp
+    assert "tile.openstreetmap.org" not in csp
+    app_js = client.get("/app.js").text
+    assert "maps.wikimedia.org" in app_js
+    assert "tile.openstreetmap.org" not in app_js
+
+
 def test_static_assets_served(client):
     for path in ("/app.js", "/styles.css", "/vendor/leaflet/leaflet.js"):
         assert client.get(path).status_code == 200, path

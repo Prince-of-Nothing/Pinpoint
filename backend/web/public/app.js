@@ -134,7 +134,7 @@ function renderMap(locs) {
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
       const img = document.createElement("img");
-      img.src = `https://tile.openstreetmap.org/${z}/${tx0 - 1 + i}/${ty0 - 1 + j}.png`;
+      img.src = `https://maps.wikimedia.org/osm-intl/${z}/${tx0 - 1 + i}/${ty0 - 1 + j}.png`;
       img.alt = "";
       img.loading = "lazy";
       img.style.cssText = `position:absolute;width:256px;height:256px;left:${i * 256 - ox}px;top:${j * 256 - oy}px;filter:brightness(.75) saturate(.8);`;

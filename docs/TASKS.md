@@ -36,9 +36,10 @@ Rules the team follows (and that a CI check / GitHub Action can enforce):
 ## Week 1 — Foundations
 
 ### T01 · PostgreSQL persistence layer (store interface → repo pattern)
-- **Slot:** M1 · **Due:** end of W1 · **Requires:** — · **Status:** ⬜ Planned
+- **Slot:** M1 · **Due:** end of W1 · **Requires:** — · **Status:** 🚧 In progress (Mordret, 2026-10-28)
 - Scope: define repository interfaces extracted from `internal/store`, implement Postgres-backed store with `database/sql` + `pgx`, connection pooling, graceful fallback config `DB_DRIVER=memory|postgres`. Keep existing tests green against both drivers.
 - Notes: unblocks almost the entire backend track.
+- Progress: repository interfaces (`store.Repository` + per-entity sub-interfaces), Postgres implementation (`internal/store/postgres.go`, pgx stdlib, schema bootstrap), `DB_DRIVER` wiring with graceful fallback, and a two-driver conformance suite are landed (4 commits). Remaining before ✅: run the suite against a real PostgreSQL (CI service with `TEST_DATABASE_URL`, which needs the T05 Go CI job).
 
 ### T02 · Database migrations tooling
 - **Slot:** M2 · **Due:** end of W1 · **Requires:** — · **Status:** ⬜ Planned

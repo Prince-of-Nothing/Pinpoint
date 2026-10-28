@@ -1,174 +1,102 @@
 """
-Application configuration and settings.
+Application configuration loaded from environment variables.
 
-Design patterns applied:
-- Singleton: one cached Settings instance via get_settings().
-- Fail-safe defaults (Saltzer & Schroeder): no working secret ships in code.
-  Production refuses to boot with a missing, short, or placeholder secret;
-  development gets a random per-process secret instead of a fixed default.
+Security-relevant defaults are safe for local development only; production
+start-up is refused when insecure values (default secret, debug mode,
+non-secure cookies) are detected.
 """
 
-import logging
-import secrets
 from functools import lru_cache
-from typing import Annotated, List
+from typing import Annotated, Literal
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-logger = logging.getLogger(__name__)
-
-VALID_ENVIRONMENTS = {"development", "testing", "production"}
+# Development placeholder only; production start-up rejects it (see validator below).
+DEV_SECRET_KEY = "dev-only-insecure-secret-key-change-me-0123456789"  # noqa: S105  # nosec B105
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables."""
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
-    # Environment -----------------------------------------------------------
-    environment: str = "development"
-    debug: bool = False  # fail-safe default: no verbose errors by default
-
-    # Database --------------------------------------------------------------
-    database_url: str = "postgresql://postgres:postgres@localhost:5432/always_together"
-
-    # Redis -----------------------------------------------------------------
-    redis_url: str = "redis://localhost:6379/0"
-    rate_limit_backend: str = "memory"  # memory | redis
-
-    # Security --------------------------------------------------------------
-    # Empty by default on purpose. See get_settings() for dev/test fallback.
-    secret_key: str = ""
-    algorithm: str = "HS256"  # validated against an allowlist, "none" rejected
-    access_token_expire_minutes: int = 15  # short-lived, per API security guide
-    refresh_token_expire_days: int = 7
-
-    # Sessions --------------------------------------------------------------
-    session_cookie_name: str = "session_id"
-    session_max_age_seconds: int = 10800  # 3 hours absolute lifetime
-    session_idle_timeout_seconds: int = 1800  # 30 minutes inactivity timeout
-    csrf_cookie_name: str = "csrf_token"
-
-    # Rate limiting ---------------------------------------------------------
-    rate_limit_requests: int = 10
-    rate_limit_window_seconds: int = 60
-
-    # Account lockout -------------------------------------------------------
-    lockout_threshold: int = 5
-    lockout_duration_minutes: int = 15
-
-    # Transport / browser hardening -----------------------------------------
-    # NoDecode: env vars are comma-separated (not JSON); split_csv_lists below
-    # handles the parsing so ALLOWED_ORIGINS=a,b works as documented.
-    allowed_origins: Annotated[List[str], NoDecode] = ["http://localhost:3000", "http://localhost:8080"]
-    trusted_hosts: Annotated[List[str], NoDecode] = ["localhost", "127.0.0.1", "testserver"]
-
-    # Application -----------------------------------------------------------
+    # Application
     app_name: str = "Always Together API"
-    enable_docs: bool = True  # forced off in production unless set explicitly
+    environment: Literal["development", "test", "production"] = "development"
+    debug: bool = False
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        case_sensitive=False,
-        extra="ignore",
-    )
+    # Database / Redis
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/always_together"
+    # Optional separate owner account for schema migrations; the API itself
+    # should connect with a role that can only read/write rows (least privilege)
+    migration_database_url: str | None = None
+    redis_url: str = "redis://localhost:6379/0"
 
-    # Validators ------------------------------------------------------------
+    # Tokens
+    secret_key: str = DEV_SECRET_KEY
+    jwt_algorithm: Literal["HS256", "HS384", "HS512"] = "HS256"
+    jwt_issuer: str = "always-together-api"
+    jwt_audience: str = "always-together-clients"
+    access_token_expire_minutes: int = Field(default=15, ge=1, le=60)
 
-    @field_validator("allowed_origins", "trusted_hosts", mode="before")
+    # Sessions (a refresh token never outlives its session)
+    session_absolute_timeout_hours: int = Field(default=12, ge=1, le=24 * 30)
+    session_idle_timeout_minutes: int = Field(default=30, ge=5)
+    max_sessions_per_user: int = Field(default=10, ge=1)
+
+    # Argon2id cost parameters (RFC 9106 "second recommended" profile by default)
+    password_hash_time_cost: int = Field(default=3, ge=1)
+    password_hash_memory_kib: int = Field(default=64 * 1024, ge=1024)
+    password_hash_parallelism: int = Field(default=4, ge=1)
+
+    # Cookies (web client)
+    cookie_secure: bool = True
+    refresh_cookie_name: str = "at_refresh"
+    csrf_cookie_name: str = "at_csrf"
+    csrf_header_name: str = "X-CSRF-Token"
+
+    # Account lockout
+    lockout_threshold: int = Field(default=5, ge=1)
+    lockout_duration_minutes: int = Field(default=15, ge=1)
+
+    # Rate limiting
+    rate_limit_enabled: bool = True
+    rate_limit_backend: Literal["redis", "memory"] = "redis"
+
+    # Location freshness thresholds
+    location_live_seconds: int = Field(default=5 * 60, ge=30)
+    location_dead_seconds: int = Field(default=60 * 60, ge=60)
+    approximate_grid_degrees: float = Field(default=0.01, gt=0, le=1)
+
+    # Request limits
+    max_request_body_bytes: int = Field(default=64 * 1024, ge=1024)
+
+    # CORS (only needed if the web client is served from another origin)
+    allowed_origins: Annotated[list[str], NoDecode] = []
+
+    @field_validator("allowed_origins", mode="before")
     @classmethod
-    def split_csv_lists(cls, value):
-        """Accept comma-separated strings from env vars as well as JSON lists."""
+    def _split_origins(cls, value):
         if isinstance(value, str):
-            stripped = value.strip()
-            if stripped.startswith("["):
-                import json
-
-                try:
-                    parsed = json.loads(stripped)
-                    if isinstance(parsed, list):
-                        return parsed
-                except ValueError:
-                    pass
-            return [item.strip() for item in stripped.split(",") if item.strip()]
-        return value
-
-    @field_validator("environment")
-    @classmethod
-    def validate_environment(cls, value: str) -> str:
-        if value not in VALID_ENVIRONMENTS:
-            raise ValueError(f"ENVIRONMENT must be one of {sorted(VALID_ENVIRONMENTS)}")
-        return value
-
-    @field_validator("algorithm")
-    @classmethod
-    def validate_algorithm(cls, value: str) -> str:
-        # Allowlist: rejects "none" and anything unexpected (JWT alg confusion).
-        if value not in {"HS256"}:
-            raise ValueError("ALGORITHM must be HS256")
-        return value
-
-    @field_validator("rate_limit_backend")
-    @classmethod
-    def validate_rate_limit_backend(cls, value: str) -> str:
-        if value not in {"memory", "redis"}:
-            raise ValueError("RATE_LIMIT_BACKEND must be 'memory' or 'redis'")
-        return value
-
-    @field_validator("access_token_expire_minutes")
-    @classmethod
-    def validate_token_lifetime(cls, value: int) -> int:
-        if not 1 <= value <= 60:
-            raise ValueError("ACCESS_TOKEN_EXPIRE_MINUTES must be between 1 and 60")
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
 
     @model_validator(mode="after")
-    def enforce_production_security(self) -> "Settings":
-        """Refuse insecure configuration in production (fail fast, fail safe)."""
-        if self.is_production:
-            secret = self.secret_key or ""
-            placeholder = secret.lower().startswith(("change", "your-", "dev-", "example"))
-            if len(secret) < 32 or placeholder:
-                raise ValueError(
-                    "SECRET_KEY must be a unique random value of at least 32 characters "
-                    "in production (placeholder values are rejected)."
+    def _refuse_insecure_production(self) -> "Settings":
+        if self.environment == "production":
+            problems = []
+            if self.secret_key == DEV_SECRET_KEY or len(self.secret_key) < 32:
+                problems.append(
+                    "SECRET_KEY must be set to a random value of at least 32 characters"
                 )
             if self.debug:
-                raise ValueError("DEBUG must be false in production.")
+                problems.append("DEBUG must be false")
+            if not self.cookie_secure:
+                problems.append("COOKIE_SECURE must be true")
+            if problems:
+                raise ValueError("Insecure production configuration: " + "; ".join(problems))
         return self
 
-    @property
-    def is_production(self) -> bool:
-        return self.environment == "production"
 
-    @property
-    def docs_enabled(self) -> bool:
-        """Interactive API docs are disabled in production by default."""
-        return self.enable_docs and not self.is_production
-
-
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
-    """
-    Get the cached settings instance (Singleton).
-
-    If no SECRET_KEY is configured outside production, generate a random
-    per-process key so development/testing never fall back to a shared,
-    guessable secret. Production configuration without a real key raises at
-    startup (see Settings.enforce_production_security).
-    """
-    try:
-        settings = Settings()
-    except Exception as exc:  # pragma: no cover - exercised via env validation
-        logger.error("Invalid configuration: %s", exc)
-        raise
-
-    if not settings.secret_key:
-        if settings.is_production:  # pragma: no cover - guarded by validator
-            raise RuntimeError("SECRET_KEY is required in production.")
-        settings.secret_key = secrets.token_urlsafe(48)
-        logger.warning(
-            "SECRET_KEY not configured; generated an ephemeral per-process key. "
-            "Sessions/tokens will not survive a restart. Set SECRET_KEY in .env."
-        )
-
-    return settings
+    return Settings()

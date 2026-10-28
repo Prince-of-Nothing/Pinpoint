@@ -1,29 +1,13 @@
-# Always Together backend dependencies.
-# Pinned ranges: reproducible installs without floating to breaking majors.
-
-# Web framework / server
-fastapi>=0.115,<1.0
-uvicorn[standard]>=0.30,<1.0
-
-# Data
-sqlalchemy>=2.0,<3.0
-pydantic>=2.7,<3.0
-pydantic-settings>=2.2,<3.0
-email-validator>=2.1,<3.0
-
-# Security
-# bcrypt pinned to 4.0.x: passlib 1.7.4 is incompatible with bcrypt >= 4.1
-# (it relies on bcrypt.__about__, which was removed). Remove the pin once
-# passlib ships a compatible release.
-passlib[bcrypt]>=1.7.4,<2.0
-bcrypt==4.0.1
-# PyJWT instead of python-jose: actively maintained, no known unfixed
-# algorithm-handling CVEs.
-PyJWT>=2.8,<3.0
-
-# Infrastructure (optional at runtime: falls back to in-memory limiter)
-redis>=5.0,<6.0
-
-# Tests
-pytest>=8.0,<9.0
-httpx>=0.27,<1.0
+# Runtime dependencies (pinned; audited with pip-audit)
+fastapi==0.141.1
+starlette==1.7.0
+uvicorn[standard]==0.54.0
+SQLAlchemy==2.1.1
+alembic==1.20.0
+psycopg[binary]==3.3.6
+pydantic==2.13.5
+pydantic-settings==2.15.0
+email-validator==2.3.0
+argon2-cffi==25.1.0
+PyJWT==2.15.1
+redis==8.1.0

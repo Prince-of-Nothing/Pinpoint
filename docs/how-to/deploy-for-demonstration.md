@@ -1,184 +1,94 @@
 # How to Deploy for University Demonstration
 
-This guide covers deploying Always Together for live demonstration during university assessment or internship review.
+Run the MVP locally for an in-person or screen-shared demonstration. The
+talk track is in the [MVP Demo Script](./mvp-demo-script.md).
 
-## Quick Deployment Options
+## Option 1: Local Docker demo (recommended)
 
-### Option 1: Local Demo (Recommended for Grading)
-
-For in-person demonstrations to evaluators, run everything locally:
-
-```bash
-# Start all services
-cd docker/
-docker-compose up -d
-
-# Run migrations
-docker-compose exec fastapi-backend python -m alembic upgrade head
-
-# Seed demo data
-docker-compose exec fastapi-backend python scripts/seed_dev_data.py
-
-# Launch mobile app
-cd ../mobile/
-flutter run
-```
-
-**Advantages:**
-- No internet dependency
-- Full control over demo data
-- Can show backend logs in real-time
-- No deployment costs
-
-### Option 2: Cloud Deployment (For Remote Review)
-
-Deploy to a cloud provider for remote access by evaluators.
-
-#### Prerequisites
-
-- Docker Hub account (for container registry)
-- Cloud provider account (AWS, GCP, or DigitalOcean)
-- Domain name (optional, for HTTPS)
-
-#### Step 1: Build and Push Containers
+No cloud account needed, and everything runs offline except the map tiles.
 
 ```bash
-# Build backend image
-docker build -t your-dockerhub/always-together-backend:latest ./backend
+git clone https://github.com/Bangreedy-2/LocationSharing.git
+cd LocationSharing
 
-# Push to registry
-docker push your-dockerhub/always-together-backend:latest
+# Use your own secret even for a demo (any long random value)
+export SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+
+docker compose up --build -d
+docker compose exec api python scripts/seed_demo.py
+docker compose exec -e ADMIN_PASSWORD='a long admin passphrase' api \
+    python -m app.cli create-admin --username ops --email ops@example.com
 ```
 
-#### Step 2: Deploy to Cloud
+Open <http://localhost:8000/>.
 
-**DigitalOcean App Platform (Simplest):**
-
-1. Create new App Platform application
-2. Connect GitHub repository
-3. Configure services:
-   - Backend: `docker-compose.yml`
-   - Database: Managed PostgreSQL
-   - Cache: Managed Redis
-4. Set environment variables:
-   ```
-   DATABASE_URL=postgresql://...
-   REDIS_URL=redis://...
-   JWT_SECRET=<generate-random-secret>
-   ENVIRONMENT=production
-   ```
-5. Deploy
-
-**AWS ECS (More Control):**
+For HTTPS (shows the TLS setup; the browser warns until Caddy's local CA is trusted):
 
 ```bash
-# Use AWS Copilot for easy deployment
-copilot init --app always-together \
-  --type "Backend Service" \
-  --dockerfile "./backend/Dockerfile" \
-  --port 8000
-
-copilot env deploy --name production
-copilot svc deploy --name api --env production
+docker compose --profile https up --build -d     # https://localhost:8443/
 ```
 
-#### Step 3: Configure Mobile App
+### Demo accounts
 
-Update Flutter environment for production API:
+Created by `scripts/seed_demo.py`. All use the password printed by the
+script (default `together demo 2026`, override with `DEMO_PASSWORD`).
+
+| Username | Name | Scenario |
+|---|---|---|
+| `demo_parent` | Maria | Receives three shares: live (exact), stale (approximate), no signal (exact); has blocked `demo_blocked` |
+| `demo_child` | Alex | Shares exact location with Maria until revoked; low battery; active check-in; pending request from Sam |
+| `demo_friend1` | Sam | Shares approximate location with Maria for 8 hours (last update 20 min ago) |
+| `demo_friend2` | Jordan | Shares exact location for 24 hours but last update was 3 hours ago; missed check-in |
+| `demo_blocked` | Casey | Blocked by Maria; sees her as a non-existent user |
+
+Reset to the initial state at any time:
 
 ```bash
-cd mobile/
-cat > .env << EOF
-API_BASE_URL=https://api.always-together-demo.example.com/api/v1
-WEBSOCKET_URL=wss://api.always-together-demo.example.com/ws
-OAUTH_CLIENT_ID=mobile-prod-client
-ENVIRONMENT=production
-EOF
+docker compose exec api python scripts/seed_demo.py --reset
+docker compose exec redis redis-cli flushall      # clears rate-limit counters
 ```
 
-Build release APK/IPA:
+## Option 2: Hosted demo (remote review)
 
-```bash
-# Android
-flutter build apk --release
+The same image runs on any container host with managed PostgreSQL and Redis.
 
-# iOS
-flutter build ios --release
-```
+1. Build and push: `docker build -t <registry>/always-together-api:latest backend && docker push …`
+2. Create PostgreSQL. Run `docker/postgres/init-roles.sh` once (as the owner,
+   with `APP_DB_PASSWORD` set) to create the restricted `app_runtime` role.
+3. Set environment variables on the service:
 
-## Pre-Demonstration Checklist
+   | Variable | Value |
+   |---|---|
+   | `ENVIRONMENT` | `production` |
+   | `SECRET_KEY` | 48+ random characters from a secrets manager |
+   | `DATABASE_URL` | `postgresql+psycopg://app_runtime:…@host/always_together` |
+   | `MIGRATION_DATABASE_URL` | owner connection string (used only by `alembic upgrade head`) |
+   | `REDIS_URL` | managed Redis URL |
+   | `FORWARDED_ALLOW_IPS` | the load balancer's address range |
 
-Before the demo, verify:
+4. Put the service behind HTTPS (platform TLS or Caddy with a real domain).
+   In production mode the API refuses insecure settings, disables `/docs`
+   and sends HSTS.
+5. Seed demo data with `ENVIRONMENT=development` in a one-off job only; the
+   seed script refuses to run in production mode.
 
-- [ ] All services are healthy (`/api/v1/health` returns 200)
-- [ ] Database is seeded with demo accounts
-- [ ] At least 3 location shares are active with different expiry times
-- [ ] Test login works for all demo accounts
-- [ ] Map displays friend locations correctly
-- [ ] Check-in creation and completion works
-- [ ] Friendship request flow works end-to-end
-- [ ] Privacy settings are visible and functional
-- [ ] Backend logs are accessible for showing audit trail
-- [ ] Internet connection is stable (for cloud demo)
+## Pre-demonstration checklist
 
-## Demo Accounts
+- [ ] `curl http://localhost:8000/api/v1/health` returns `{"status":"ok",…}`
+- [ ] Demo data seeded (`seed_demo.py --reset`) and Redis flushed
+- [ ] Log in as `demo_parent`: the map shows three markers (green, orange, grey)
+- [ ] The map tiles load (internet access to `tile.openstreetmap.org`)
+- [ ] A second browser profile or private window is ready for `demo_child`
+- [ ] Terminal ready for `sh backend/scripts/demo_security.sh`
+- [ ] `backend/`: `pytest` passes, and the latest `docs/evidence/security-test-report.md` is open
+- [ ] Backup: screen recording of the full demo in case of network problems
 
-Pre-configured accounts for demonstration:
+## Troubleshooting during the demo
 
-| Username | Password | Scenario |
-|----------|----------|----------|
-| `demo_parent` | `Demo123!` | Parent monitoring child's location |
-| `demo_child` | `Demo123!` | Child sharing location with parent |
-| `demo_friend1` | `Demo123!` | Friend with approximate location sharing |
-| `demo_friend2` | `Demo123!` | Friend with exact location sharing |
-| `demo_blocked` | `Demo123!` | Demonstrating block functionality |
-
-## Troubleshooting During Demo
-
-### Issue: Map shows no locations
-
-**Quick Fix:** Force location update:
-```bash
-curl -X POST http://localhost:8000/api/v1/admin/force_location_update \
-  -H "Authorization: Bearer <admin-token>" \
-  -d '{"user_id": "usr_demo123", "lat": 40.7128, "lng": -74.0060}'
-```
-
-### Issue: WebSocket connection fails
-
-**Quick Fix:** Restart WebSocket service:
-```bash
-docker-compose restart websocket
-```
-
-### Issue: OAuth login hangs
-
-**Quick Fix:** Use direct token for demo:
-```bash
-curl http://localhost:8000/api/v1/admin/demo_token?user=demo_parent
-# Returns pre-generated access token
-```
-
-## Post-Demo Cleanup
-
-For temporary demos, clean up resources:
-
-```bash
-# Local demo
-docker-compose down -v
-
-# Cloud demo (DigitalOcean)
-doctl apps delete <app-id>
-
-# Cloud demo (AWS)
-copilot app delete --name always-together
-```
-
-## Security Note for Demos
-
-**Important:** Demo deployments should NOT use real user data. All demo accounts are fictional and isolated from production systems. Never demonstrate with actual personal location data during assessment.
-
----
-
-*For local development setup, see [Local Development Setup](../tutorials/local-development-setup.md).*  
-*For production deployment architecture, see [Deployment View](../architecture/deployment-view.md).*
+| Problem | Quick fix |
+|---|---|
+| Map is grey | No internet access to OSM tiles. The markers and list still work; switch to the recorded video for the map part |
+| Login keeps failing with 429 | Rate limit hit: `docker compose exec redis redis-cli flushall` |
+| A demo account is locked | Log in as the admin and unlock it (`POST /api/v1/admin/users/{id}/unlock`), or re-run `seed_demo.py --reset` |
+| Reload logs you out | Use `http://localhost` (not an IP address), or the HTTPS profile |
+| Locations show as stale | Expected over time. Re-seed, or report a new position (Map → Reporting → Manual → click the map) |

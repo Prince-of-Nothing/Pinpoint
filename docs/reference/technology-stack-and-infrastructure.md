@@ -84,6 +84,23 @@ providers is a recorded decision rather than a hidden assumption. All
 interfaces (identity, relationships, location, content, notifications) are
 designed so they can be separated later if scale requires it.
 
+## As built (September MVP)
+
+| Layer | Frozen choice | MVP as built |
+|---|---|---|
+| Mobile client | Flutter | Same-origin web client (HTML/JS, Leaflet 1.9.4 vendored); Flutter deferred ([ADR 0004](../adr/web-client-for-mvp-demonstration.md)) |
+| Backend | FastAPI + SQLAlchemy + Alembic | FastAPI 0.141, SQLAlchemy 2.1, Alembic 1.20, Pydantic 2 |
+| Database | PostgreSQL | PostgreSQL 16 with a least-privilege runtime role; SQLite in-memory for tests |
+| Queue/cache | Redis + Celery | Redis for rate limiting only; no Celery yet ([ADR 0005](../adr/store-latest-location-only.md)) |
+| Object storage | S3-compatible | Not needed yet (no media in the MVP) |
+| Realtime | WebSocket gateway | 30-second polling from the web client |
+| Identity | OIDC + PKCE | Argon2id passwords + session-bound JWT + rotating refresh tokens ([ADR 0003](../adr/password-auth-with-rotating-refresh-tokens.md)) |
+| Maps | OSM tiles + deep links | OSM tiles with attribution; OSM, Google Maps and `geo:` links |
+| Operations | Docker + GitHub Actions | Docker Compose (+ optional Caddy HTTPS), GitHub Actions CI |
+
+All versions are pinned in `backend/requirements*.txt` and checked with
+pip-audit.
+
 ## Baseline architecture rationale
 
 A modular monolith is used rather than microservices for the MVP: one

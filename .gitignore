@@ -1,32 +1,47 @@
-# Byte-compiled / cache
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+build/
+dist/
 
 # Virtual environments
 .venv/
 venv/
-env/
 
-# Environment / secrets — never commit real configuration
+# Environment and secrets (never commit real credentials)
 .env
 .env.*
 !.env.example
+*.pem
+*.key
 
-# Build artifacts
-dist/
-build/
+# Local databases
+*.db
+*.sqlite3
 
 # Logs and temp files
 *.log
 *.tmp
 *.swp
 
-# Editors
+# Editors and OS
 .vscode/
 .idea/
+.DS_Store
+Thumbs.db
 
-# Local databases (SQLite dev/test runs)
-*.db
-*.sqlite3
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Go build output
+backend/server

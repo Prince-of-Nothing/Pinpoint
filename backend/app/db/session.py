@@ -1,62 +1,41 @@
-"""
-Database session management and connection setup.
-Provides database engine, session factory, and base model class.
+"""Database engine and session factory."""
 
-Design patterns applied:
-- Singleton: one engine and one session factory per process.
-- Dependency Injection: routers receive a Session via FastAPI Depends(get_db).
-"""
+from collections.abc import Iterator
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
 
-settings = get_settings()
 
-connect_args = {}
-if settings.database_url.startswith("sqlite"):
-    # Required for FastAPI/TestClient usage with SQLite in tests.
-    connect_args = {"check_same_thread": False}
+def build_engine(database_url: str, echo: bool = False) -> Engine:
+    if database_url.startswith("sqlite"):
+        kwargs: dict = {"connect_args": {"check_same_thread": False}}
+        if ":memory:" in database_url or database_url == "sqlite://":
+            kwargs["poolclass"] = StaticPool
+        engine = create_engine(database_url, echo=echo, **kwargs)
 
-# Create database engine with connection pooling.
-# SQL echo is intentionally never enabled: query text can contain PII
-# (emails, coordinates) and must not leak into application logs.
-engine = create_engine(
-    settings.database_url,
-    pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
-    connect_args=connect_args,
-)
+        @event.listens_for(engine, "connect")
+        def _enable_sqlite_foreign_keys(dbapi_connection, _record):
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
 
-if settings.database_url.startswith("sqlite"):
-    @event.listens_for(engine, "connect")
-    def _set_sqlite_pragma(dbapi_connection, connection_record):  # pragma: no cover
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()
-
-# Session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        return engine
+    return create_engine(database_url, echo=echo, pool_pre_ping=True, pool_size=10, max_overflow=20)
 
 
-class Base(DeclarativeBase):
-    """Declarative base for all ORM models."""
+_settings = get_settings()
+engine = build_engine(_settings.database_url, echo=_settings.debug)
+SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
-def get_db():
-    """
-    Dependency that provides a database session.
-    Ensures proper cleanup after request completion.
-    """
-    db: Session = SessionLocal()
+def get_db() -> Iterator[Session]:
+    """FastAPI dependency yielding a request-scoped database session."""
+    db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
-
-
-def init_db() -> None:
-    """Initialize database by creating all tables."""
-    Base.metadata.create_all(bind=engine)

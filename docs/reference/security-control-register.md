@@ -1,197 +1,284 @@
 # Security Control Register
 
-Each selected security control is explained using the same five questions:
-what problem it addresses, why the problem matters here, how it is
-implemented, how it is tested, and what limitations remain.
+Each control answers the same questions: what problem it addresses, why it
+matters here, how it is implemented **as built**, how it is tested, what
+the result was and which limitations remain. Status values: **Implemented**
+(built and tested), **Partial** (MVP subset built; remainder planned) and
+**Deferred** (designed, planned for October to December).
+
+Test names refer to `backend/tests/`. The latest run with per-test results is
+in [Security Test Report](../evidence/security-test-report.md).
+
+## Summary
+
+| ID | Control | Status | Main evidence |
+|---|---|---|---|
+| SC-01 | Authentication | Implemented (passwords); passkeys/MFA deferred | `test_auth.py`, `test_rate_limit.py` |
+| SC-02 | Directional authorization | Implemented | `test_location_shares.py`, `test_locations.py`, IDOR matrix |
+| SC-03 | Private-by-default profiles | Implemented | `test_social.py` |
+| SC-04 | Input and API security | Implemented | `test_security_attacks.py`, `test_core.py` |
+| SC-05 | Session and transport security | Implemented | `test_auth.py`, `test_web_client.py`, e2e run |
+| SC-06 | Data protection | Partial | DB least-privilege evidence, latest-location-only storage |
+| SC-07 | Battery and stale-state safety | Partial (server + web client) | `test_locations.py`, `test_checkins.py` |
+| SC-08 | Abuse reporting and monitoring | Partial (audit trail + admin RBAC only) | `test_authz_audit.py`, `test_admin.py` |
+| SC-09 | Incident response | Documented | [Incident Response Plan](../architecture/incident-response-plan.md) |
+
+## Mapping to the internship Task 6 list
+
+| Task 6 item | Where it is implemented |
+|---|---|
+| Secure authentication | `app/api/auth.py`, `app/services/sessions.py` (SC-01) |
+| Password hashing | `app/services/passwords.py`: Argon2id + policy (SC-01) |
+| RBAC / authorization | `app/api/deps.py` (`require_admin`, `deny_foreign`), share checks in `app/api/locations.py` (SC-02, SC-03) |
+| Input validation | `app/schemas/*` (`StrictRequest`), `app/core/errors.py`, `app/core/middleware.py` (SC-04) |
+| Secure JWT / session handling | `app/services/tokens.py`, `app/services/sessions.py`, `app/api/deps.py` (SC-05) |
+| API rate limiting | `app/services/ratelimit.py` (SC-01, SC-04) |
+
+---
 
 ## SC-01 Authentication
 
-- **Problem:** account takeover through stolen or weak credentials.
-- **Relevance:** an attacker who controls an account could change trusted
-  contacts or expose location.
-- **Implementation target:** passkeys or OAuth 2.0/OIDC with short-lived
-  access tokens, refresh-token rotation, device/session management, and
-  optional MFA. Passwords, if supported, use a modern slow password hash and
-  never appear in logs.
-- **Implemented (MVP, password path):** bcrypt hashing
-  (`services/security.py`), 15-minute JWTs with required claims and an
-  algorithm allowlist (`services/token_service.py`), server-side sessions
-  stored as SHA-256 hashes, per-IP rate limiting, account lockout with
-  automatic unlock, timing-equalised unknown-account handling, and
-  token-version revocation on password change (`services/auth_service.py`).
-  OIDC/PKCE remains the target for the next increment.
-- **Test:** invalid credentials, token expiry, refresh rotation, logout
-  invalidation, recovery abuse, brute-force limits, and second-factor
-  enforcement for sensitive actions. Automated in
-  `backend/tests/test_security_flows.py` (generic 401s, lockout lifecycle,
-  JWT replay after password change, token-type confusion).
-- **Limitation:** account recovery and compromised devices remain difficult;
-  recovery must not silently bypass location protections. Refresh-token
-  rotation and MFA are not yet implemented.
+- **Problem:** account takeover through stolen, guessed or brute-forced credentials.
+- **Relevance:** an attacker controlling an account could add trusted
+  contacts, start sharing the victim's location or read others' locations.
+- **Implementation:**
+  - Registration requires a unique, normalised username and email. The
+    password policy follows NIST SP 800-63B: minimum 10 characters, maximum
+    128, a common-password deny-list, not containing the username or email,
+    not trivially repetitive. There are no composition rules.
+  - Passwords are hashed with **Argon2id** (RFC 9106 parameters: t=3,
+    m=64 MiB, p=4) and rehashed transparently when parameters change.
+    Plain passwords are never stored or logged.
+  - Login accepts a username or email and always returns the same generic
+    error. Unknown accounts run a dummy hash verification, so their timing
+    matches real accounts.
+  - **Lockout:** 5 failed attempts lock the account for 15 minutes, and the
+    lock expires on its own. Failed current-password checks during a
+    password change count too. Admins can unlock accounts.
+  - **Rate limits:** login 10/min/IP, registration 5/hour/IP, refresh
+    30/min/IP, password change 5/15 min/account. Exceeding one returns 429
+    with `Retry-After`.
+  - Password change requires the current password and revokes every session.
+  - A CLI creates admin accounts; it reads the password from the
+    environment or a prompt, never from argv.
+- **Tests:** `test_auth.py` (registration, duplicates, weak passwords,
+  Argon2id storage, generic errors, lockout and expiry, counter reset,
+  password change), `test_rate_limit.py`, `test_security_attacks.py::test_sc01_*`
+  (secrets never in logs), `test_sc04_sql_injection_in_login_is_inert`.
+- **Result:** all pass (see report).
+- **Limitations:**
+  - No MFA or passkeys yet.
+  - Registration reveals whether a username or email is taken. This is
+    accepted, because users must be able to find each other by username,
+    and registration is rate limited.
+  - Lockout can be abused to lock a known account for 15 minutes. The
+    per-IP limit slows this down, and admins can unlock.
+  - There is no account recovery (password reset) flow yet.
 
 ## SC-02 Directional authorization
 
-- **Problem:** a user sees another person's location without current
-  consent.
-- **Relevance:** friendship is mutual, but location sharing is one-way.
-- **Implementation target:** backend policy checks on every location
-  read/write; a share record includes owner, recipient, precision, purpose,
-  expiry, and revocation.
-- **Implemented (MVP):** `LocationAccessPolicy`
-  (`services/authorization.py`) runs per friend on every read — accepted
-  friendship, owner→viewer direction, active/unrevoked/unexpired share, no
-  block. Consent records carry owner, precision, purpose and a mandatory
-  ≤24 h expiry; only the owner can revoke; blocking revokes every share
-  between the pair. Precision is reduced server-side (exact / ~1 km / ~11 km)
-  before coordinates leave the API. See
-  [Sequence — Authorized Location Read](../architecture/diagrams/sequence-authorized-location-read.md).
-- **Test:** owner-only access, recipient access, non-friend denial,
-  revoked-share denial, expired-share denial, IDOR attempts, and cross-account
-  tests. Automated: `test_directional_location_sharing_and_idor`,
-  `test_approximate_precision_is_reduced_server_side`,
-  `test_block_revokes_shares_and_hides_locations`.
-- **Limitation:** a trusted recipient can still photograph or misuse
-  information outside the app. `mutual` consent currently requires each side
-  to create their own record (no server-mediated accept flow yet).
+- **Problem:** a user sees another person's location without their current consent.
+- **Relevance:** friendship is mutual, but location sharing must be one-way
+  and revocable at any time.
+- **Implementation:**
+  - A `location_shares` row records owner, recipient, precision, purpose,
+    expiry and revocation.
+  - A share can only be created with an **accepted** friend who is not
+    blocked in either direction. Only the owner can change precision or
+    expiry, so a recipient cannot upgrade their own access. Either party
+    can end the share.
+  - `GET /locations/visible` re-checks, on **every request**, that the
+    share is active and unexpired, that the two users are still friends,
+    and that there is no block.
+  - **No endpoint accepts another user's id to read a location**, which
+    removes that IDOR surface by design.
+  - Unfriending and blocking revoke shares in both directions.
+  - Records belonging to others return the same 404 as missing records,
+    and the attempt is audited (`authz.denied`).
+  - Record ids are random UUIDs, not sequential numbers.
+  - Admin endpoints require the `admin` role, read from the database on
+    each request. Admins have no location endpoints (least privilege).
+- **Tests:** `test_location_shares.py`, `test_locations.py` (one-way, no
+  share = no access, revoked, expired, block with a surviving share row),
+  `test_security_attacks.py::test_sc02_idor_matrix_every_foreign_id_is_denied`,
+  `test_sc02_no_endpoint_accepts_a_user_id_for_location_reads`,
+  `test_authz_audit.py`, `test_admin.py`.
+- **Result:** all pass.
+- **Limitations:** a trusted recipient can still screenshot or retell what
+  they see. Location reads themselves are not audited (only share changes
+  and denials are); per-read access logs are planned together with search
+  corridors.
 
 ## SC-03 Private-by-default profiles
 
-- **Problem:** public profile data helps stalking, impersonation, and social
-  engineering.
-- **Relevance:** non-friends should see no image, status, updates, location,
-  friend list, or activity.
-- **Implementation target:** response filtering on the backend, not only
-  client-side hiding; immutable internal IDs and username cooldowns.
-- **Implemented (MVP):** `ProfileVisibilityPolicy`
-  (`services/authorization.py`) filters every profile response on the
-  backend: self → full, accepted friend → display name only, anyone else
-  (pending/blocked/stranger) → a redacted shell **identical** to the response
-  for a non-existent account, so user IDs cannot be probed. Profile views by
-  non-friends are audit-logged.
-- **Test:** profile views from self, friend, group member, non-friend, and
-  blocked user contexts. Automated: `test_profile_visibility_filtering`
-  (stranger response == non-existent response).
-- **Limitation:** a username may still be voluntarily shared outside the
-  platform. Group-member visibility is deferred with the groups feature.
+- **Problem:** public profile data helps stalking, impersonation and social engineering.
+- **Relevance:** non-friends should learn nothing beyond the username needed
+  to send a friend request.
+- **Implementation:**
+  - `GET /users/{username}` filters on the server: self and accepted
+    friends see the display name and bio; everyone else, including blocked
+    users in either direction, gets `{username, relationship: "none"}`.
+  - Email, role and security fields are never returned to other users.
+  - Blocked users are indistinguishable from non-existent ones in friend
+    requests.
+- **Tests:** `test_social.py::test_profile_visibility_by_relationship`,
+  `test_blocked_user_sees_empty_profile`,
+  `test_profile_never_exposes_email_or_internal_fields`,
+  `test_block_removes_friendship_and_hides_user`.
+- **Result:** all pass.
+- **Limitations:**
+  - Usernames can be confirmed to exist (lookups are rate limited to
+    60/min per account).
+  - Group-member visibility is not relevant yet, because groups are deferred.
 
 ## SC-04 Input and API security
 
-- **Problem:** injection, malformed data, abusive requests, and information
-  leakage.
-- **Relevance:** location, profiles, check-ins, statuses, and group inputs
-  are attacker-controlled.
-- **Implementation target:** schema validation, parameterized queries/ORM,
-  bounded payloads, safe error responses, API rate limits, and structured
-  audit events.
-- **Implemented (MVP):** Pydantic v2 request schemas bound every field
-  (coordinates, battery, timestamps, string patterns); SQLAlchemy ORM with
-  parameterised queries only; per-endpoint rate limits with `429` +
-  `Retry-After` (`services/rate_limit.py`); RFC 7807 error envelopes with no
-  stack traces or internal messages (`app/api/errors.py`, `app/main.py`);
-  future-timestamp rejection on location updates; password policy chain
-  (length, character classes, deny-list) in `services/password_policy.py`.
-- **Test:** malformed coordinates, oversized content, invalid identifiers,
-  injection payloads, rate-limit tests, and error-response review.
-  Automated: `test_login_rate_limit_returns_429_with_retry_after`,
-  `test_health_and_validation_error_shape`.
-- **Limitation:** dependency and infrastructure vulnerabilities require
-  continuing maintenance; the common-password deny-list is small until a
-  breached-password corpus is loaded.
+- **Problem:** injection, mass assignment, malformed or oversized data, and information leakage in errors.
+- **Relevance:** coordinates, names, notes and identifiers are all attacker-controlled.
+- **Implementation:**
+  - Pydantic schemas that **reject unknown fields** (`extra="forbid"`)
+    and bound every field: coordinate ranges, NaN/Infinity rejected,
+    battery 0–100, text lengths, no control characters, username
+    `^[a-z0-9_]{3,30}$`, share duration 5 minutes to 7 days, pagination
+    limits.
+  - Timestamps must be within 2 minutes in the future and at most 24 hours
+    in the past.
+  - SQLAlchemy ORM only, so every query is parameterised; there is no raw
+    SQL with user input.
+  - Request bodies are capped at 64 KB, whether the size is declared or
+    streamed (413).
+  - One RFC 9457 Problem Details format for all errors, with a stable
+    `code`, no stack traces, no exception text and no echoed input.
+  - Rate limits on sensitive endpoints; bandit and pip-audit in CI.
+- **Tests:** `test_security_attacks.py` (SQL injection payloads,
+  mass-assignment matrix, 500 leak test, validation without echo, 405,
+  malformed JSON), `test_locations.py::test_invalid_coordinates_and_timestamps_rejected`,
+  `test_location_shares.py::test_input_validation`,
+  `test_core.py::test_oversized_body_rejected`.
+- **Result:** all pass; bandit reports no findings and pip-audit reports no
+  known vulnerabilities.
+- **Limitations:**
+  - The rate limiter fails open if Redis is unavailable. This is a
+    deliberate availability trade-off; lockout still applies.
+  - Dependency and infrastructure vulnerabilities need continuous
+    maintenance.
 
 ## SC-05 Session and transport security
 
-- **Problem:** session theft, replay, CSRF, and network interception.
+- **Problem:** session theft, token replay, CSRF, XSS and network interception.
 - **Relevance:** a stolen session can reveal or change safety permissions.
-- **Implementation target:** TLS, secure mobile token storage, token expiry
-  and invalidation, device binding where practical, and for any web
-  companion: HttpOnly, Secure, SameSite cookies, CSRF protection, CSP, and
-  output escaping.
-- **Implemented (MVP):** session cookie is `HttpOnly` + `SameSite=Lax` +
-  `Secure` (over TLS); double-submit CSRF token required for every
-  cookie-authenticated mutation (`api/deps.py: csrf_protect`); server-side
-  session revocation on logout and password change, 3-hour absolute and
-  30-minute idle expiry checked on every request; JWTs carry a token version
-  that password changes bump, killing replayed tokens; security-headers
-  middleware (HSTS over TLS, CSP `default-src 'none'`, nosniff, frame DENY,
-  no-referrer) plus `TrustedHost` allowlisting; interactive API docs disabled
-  in production.
-- **Test:** token replay after logout, expiry, device removal, CSRF
-  attempts, XSS payloads, and TLS/configuration checks. Automated:
-  `test_logout_invalidates_cookie_session`,
-  `test_cookie_authenticated_mutation_requires_csrf`,
-  `test_password_change_revokes_outstanding_jwts`,
-  `test_refresh_token_rejected_as_access_token`, `test_security_headers_present`.
-- **Limitation:** mobile malware or a fully compromised device is outside
-  normal application controls. TLS is terminated by the (planned) reverse
-  proxy — deployment risk R1.
+- **Implementation:**
+  - **Access tokens:** 15-minute JWTs, with the algorithm pinned
+    server-side (`none` and other keys rejected) and issuer, audience,
+    `type=access` and required claims all checked. Each token carries a
+    session id and is valid only while that server-side session is. So
+    logout, password change, admin deactivation and idle (30 min) or
+    absolute (12 h) timeouts take effect immediately.
+  - **Refresh tokens:** opaque 256-bit random values, stored only as
+    SHA-256 hashes and rotated on every use. **Reuse of an old refresh
+    token revokes the whole session** (theft detection). There is a limit
+    on sessions per user; users can list and revoke their sessions.
+  - **Web client:** the refresh token lives in an `HttpOnly; Secure;
+    SameSite=Strict` cookie scoped to `/api/v1/auth`. Refreshing needs a
+    **CSRF token bound to the session** (stored hashed, compared in
+    constant time). The access token is kept only in memory. Bearer tokens
+    are never accepted from cookies or query strings.
+  - **Headers:** strict CSP (`script-src 'self'`, no inline or eval; the
+    Leaflet library is served locally), `nosniff`, `X-Frame-Options: DENY`,
+    `frame-ancestors 'none'`, `Referrer-Policy: no-referrer`,
+    `Cache-Control: no-store` on the API, and HSTS in production. No CORS
+    unless origins are explicitly configured.
+  - **XSS:** the client renders all user text with `textContent`, and a
+    test forbids HTML sinks in the client code.
+  - **Transport:** optional Caddy HTTPS proxy; Uvicorn trusts forwarded
+    headers only from the proxy's address.
+- **Tests:** `test_auth.py` (tampered, `alg=none`, wrong key, expired,
+  refresh-as-access, rotation, reuse revocation, CSRF on cookie refresh,
+  logout, logout-all, idle/absolute timeout, session limit),
+  `test_web_client.py`, `test_security_attacks.py::test_sc05_*`, and the
+  [browser run](../evidence/web-client-e2e.md).
+- **Result:** all pass; the browser run showed no CSP violations and the
+  XSS payload rendered as text.
+- **Limitations:**
+  - A compromised device or malicious browser extension is out of scope.
+  - JWTs are signed with HS256 and a shared secret (asymmetric keys and
+    key rotation are planned).
+  - The demo HTTPS setup uses Caddy's internal CA.
 
 ## SC-06 Data protection
 
-- **Problem:** database, backup, or storage compromise exposes location
-  data.
+- **Problem:** a database or backup compromise exposes location data.
 - **Relevance:** precise current location is highly sensitive.
-- **Implementation target:** TLS in transit, encryption at rest, separated
-  key management, minimum retention, latest-location separation, access
-  controls, and encrypted backups.
-- **Test:** backup access, database-role tests, deletion/expiry, key-access
-  audit, and restoration tests.
-- **Limitation:** authorized recipients can still disclose what they see;
-  encryption does not solve bad authorization.
+- **Implementation:**
+  - Only the **latest** location per user is stored (no history), and
+    users can erase it.
+  - Approximate shares never return the exact point: coordinates snap to a
+    fixed grid of about 1.1 km.
+  - The API uses a **least-privilege PostgreSQL role** (row DML only).
+    Migrations run as the owner, and the audit table is append-only for
+    the API role.
+  - Secrets come from the environment. Production refuses to start with
+    the default or a short secret, debug mode, or non-secure cookies.
+  - Refresh and CSRF tokens are stored only as hashes.
+- **Tests:** `test_core.py::test_production_refuses_insecure_settings`,
+  `test_locations.py::test_approximate_share_hides_exact_position`,
+  `test_approximation_is_stable_for_nearby_points`,
+  [database least-privilege evidence](../evidence/database-least-privilege.md).
+- **Result:** pass; the runtime role cannot alter the schema or audit rows.
+- **Limitations:**
+  - Encryption at rest and encrypted backups depend on the hosting
+    provider and are not configured locally.
+  - There is no separate key-management service yet.
+  - Grid snapping can still leak movement across cell boundaries over time.
 
 ## SC-07 Battery and stale-state safety
 
-- **Problem:** tracking drains the battery or a stale point is mistaken for
-  a live point.
-- **Relevance:** the app's safety value depends on both availability and
-  honest freshness.
-- **Implementation target:** sampling presets, advanced interval control,
-  adaptive precision, low-battery behavior, last-update timestamps,
-  last-known battery, and stale/dead state transitions.
-- **Test:** battery profiles, offline periods, OS-paused updates,
-  low-battery states, clock differences, and stale UI behavior.
-- **Limitation:** operating systems may suspend background work and GPS can
-  be inaccurate indoors.
+- **Problem:** tracking drains the battery, or a stale point is mistaken for a live one.
+- **Relevance:** the app's safety value depends on honest freshness.
+- **Implementation:**
+  - The server labels every location `live` (≤ 5 min), `stale`
+    (≤ 60 min), `dead` or `unknown`, based on the device timestamp.
+  - A skewed clock can never make data look fresher, and out-of-order
+    updates are ignored.
+  - Battery is reported as last-known with its time; a dead device does
+    not claim a current charging state; a low-battery flag is set at ≤ 15%.
+  - The web client offers high, balanced and saver presets, switches to
+    saver automatically below 20% when not charging, and draws stale or
+    dead markers dashed and faded.
+  - Check-ins derive `pending → due_soon → overdue → missed` from the clock.
+- **Tests:** `test_locations.py::test_freshness_transitions`,
+  `test_low_battery_flag`, `test_out_of_order_updates_do_not_overwrite_newer_data`,
+  `test_checkins.py::test_state_transitions_follow_the_clock`.
+- **Result:** all pass.
+- **Limitations:**
+  - Background location on mobile operating systems and native battery
+    sampling need the planned mobile app.
+  - There are no push notifications yet; reminders appear in the client.
 
 ## SC-08 Abuse reporting and monitoring
 
-- **Problem:** stalking, harassment, malicious content, coordinated false
-  reports, or operational compromise.
-- **Relevance:** later groups, caches, prompts, and media increase the abuse
-  surface.
-- **Implementation target:** report categories, evidence selection,
-  restricted moderation access, audit logs, alerts, appeals, and rate
-  limits. AI can triage; humans decide ambiguous or serious cases.
-- **Implemented (MVP):** `AuditLogger` (Observer) writes structured events
-  to the application log and to the `audit_events` table. Events reference
-  users by immutable ID and store whitelisted, PII-free context only —
-  login attempts persist a **keyed hash** of the email, never the address
-  (`services/security.py: pseudonymize_email`). Recorded events include
-  login success/failure, lockout, password change, logout, friendship
-  request/accept/reject/revoke, block (with share-revocation counts), share
-  create/revoke, profile views by non-friends, and location list reads.
-- **Test:** report submission, evidence retention window, moderator RBAC,
-  false-report scenarios, alert delivery, and deletion behavior. Audit
-  coverage is asserted indirectly by the flow tests; a dedicated audit-table
-  test is planned.
-- **Limitation:** ephemeral data may expire before a report; reported
-  evidence requires a clearly documented preservation exception. Retention
-  periods for `audit_events` are not yet enforced automatically.
+- **Problem:** stalking, harassment and operational compromise go unnoticed.
+- **Implementation (MVP subset):**
+  - A structured `audit_events` table records logins, failures, lockouts,
+    refresh reuse, CSRF rejections, rate-limit hits (once per window),
+    authorization denials (IDOR probes), relationship and share changes,
+    and admin actions. It never stores secrets or coordinates.
+  - Admins read the audit log through a bounded, validated API. Blocking
+    is available to every user.
+- **Tests:** `test_authz_audit.py`, `test_admin.py`, `test_rate_limit.py::test_rate_limit_exceeded_is_audited_once_per_window`,
+  `test_auth.py::test_login_is_audited`.
+- **Limitations:** report categories, moderation workflow, alerting and
+  appeals are deferred (October to December).
 
 ## SC-09 Incident response
 
-- **Problem:** slow or confused response to account takeover, location
-  breach, outage, or abuse.
-- **Relevance:** safety incidents can cause immediate physical and privacy
-  harm.
-- **Implementation target:** incident severity levels, owners, containment
-  steps, user notification criteria, evidence handling, recovery,
-  post-incident review, and mentor escalation.
-- **Test:** tabletop exercises and at least one simulated incident during
-  the project.
-- **Limitation:** response quality depends on staffing, provider access, and
-  regional legal duties.
-
----
-*Referenced from [Security Architecture and Data Protection](../architecture/security-architecture-and-data-protection.md),
-[Security Threats and Controls](../architecture/security-threats-and-controls.md),
-and [Incident Response Plan](../architecture/incident-response-plan.md) (SC-09).*
+- **Problem:** slow or confused response to account takeover, location breach or outage.
+- **Implementation:** the [Incident Response Plan](../architecture/incident-response-plan.md)
+  (severity levels, owners, containment and notification). The system
+  supports containment directly:
+  - revoke a user's sessions (deactivate or logout-all),
+  - unlock or deactivate accounts,
+  - users can stop sharing and erase their location immediately,
+  - the audit trail supports investigation.
+- **Test:** tabletop exercise planned; see the development plan.
+- **Limitations:** response quality depends on staffing and provider access.

@@ -1,5 +1,11 @@
 # API Contract Reference
 
+> **Status: target design.** This page describes the planned OIDC/PKCE and
+> WebSocket API. The implemented MVP API is documented in
+> [API Contract (as built)](./api-contract.md); see
+> [ADR 0003](../adr/password-auth-with-rotating-refresh-tokens.md) for why
+> authentication differs in the MVP.
+
 **Version:** `api/v1`  
 **Base URL:** `https://api.always-together.local/api/v1`  
 **WebSocket URL:** `wss://api.always-together.local/ws`  

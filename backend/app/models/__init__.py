@@ -1,29 +1,25 @@
-"""Models module initialization."""
+"""ORM models. Importing this package registers every table on ``Base.metadata``."""
 
-from app.models.user import (
-    Base,
-    User,
-    Session,
-    Friendship,
-    LocationShare,
-    LoginAttempt,
-    UserRole,
-    FriendshipStatus,
-    LocationShareDirection
-)
-from app.models.location import LocationUpdate
 from app.models.audit import AuditEvent
+from app.models.auth_session import AuthSession, RefreshToken
+from app.models.checkin import CheckIn, CheckInStatus
+from app.models.location import LatestLocation, LocationShare, SharePrecision
+from app.models.social import Block, Friendship, FriendshipStatus, pair_key
+from app.models.user import User, UserRole
 
 __all__ = [
-    "Base",
-    "User",
-    "Session",
-    "Friendship",
-    "LocationShare",
-    "LoginAttempt",
-    "LocationUpdate",
     "AuditEvent",
-    "UserRole",
+    "AuthSession",
+    "Block",
+    "CheckIn",
+    "CheckInStatus",
+    "Friendship",
     "FriendshipStatus",
-    "LocationShareDirection"
+    "LatestLocation",
+    "LocationShare",
+    "RefreshToken",
+    "SharePrecision",
+    "User",
+    "UserRole",
+    "pair_key",
 ]

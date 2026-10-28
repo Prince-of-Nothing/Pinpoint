@@ -1,228 +1,436 @@
-"""
-Authentication API endpoints.
-Implements login, logout, password management, and session handling.
+"""Registration, login, token refresh, logout, session and password management."""
 
-Security behaviour (see docs/reference/design-patterns.md):
-- Login is rate limited per IP and answers every credential failure with the
-  same generic 401 (no account enumeration, no lockout-state disclosure).
-- The session cookie is HttpOnly + SameSite=Lax (+ Secure over TLS) and is now
-  correctly attached to the real response object.
-- A readable CSRF cookie is issued for the web companion; mutations that
-  authenticate via cookie must echo it (double-submit).
-- Password changes bump the token version, revoking all outstanding JWTs.
-"""
+from datetime import timedelta
 
-from typing import Optional
+from fastapi import APIRouter, Request, Response, status
+from sqlalchemy import or_, select
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-
-from app.api.deps import (
-    client_ip,
-    csrf_protect,
-    get_auth_context,
-    get_auth_service,
-    get_current_user,
-    rate_limit,
-    AuthContext,
-)
+from app.api.deps import CurrentSession, CurrentUser, DbSession, deny_foreign, unauthorized
 from app.core.config import get_settings
+from app.core.errors import ProblemError, not_found
+from app.core.timeutils import utcnow
+from app.models import AuthSession, RefreshToken, User
 from app.schemas.auth import (
-    ForcePasswordChangeRequest,
     LoginRequest,
-    LoginResponse,
     PasswordChangeRequest,
-    UserResponse,
+    RefreshRequest,
+    RegisterRequest,
+    SessionInfo,
+    TokenResponse,
+    UserSelf,
 )
-from app.services.auth_service import AuthErrorCode, AuthenticationError, AuthService
+from app.services import audit, ratelimit
+from app.services.passwords import (
+    burn_verification_time,
+    hash_password,
+    needs_rehash,
+    password_policy_violations,
+    verify_password,
+)
+from app.services.sessions import (
+    RefreshError,
+    create_session,
+    revoke,
+    revoke_all_for_user,
+    rotate_refresh_token,
+)
+from app.services.tokens import hash_secret, secret_matches
 
-settings = get_settings()
 router = APIRouter()
 
+INVALID_CREDENTIALS = "Invalid username/email or password."
 
-def _set_auth_cookies(response: Response, request: Request, session_token: str) -> None:
-    """Attach the session cookie (HttpOnly) and CSRF cookie (readable by JS)."""
-    secure = settings.is_production or request.url.scheme == "https"
 
+# ---------------------------------------------------------------- cookies
+
+
+def _set_auth_cookies(response: Response, refresh_token: str, csrf_token: str | None) -> None:
+    settings = get_settings()
+    max_age = settings.session_absolute_timeout_hours * 3600
     response.set_cookie(
-        key=settings.session_cookie_name,
-        value=session_token,
-        max_age=settings.session_max_age_seconds,
+        settings.refresh_cookie_name,
+        refresh_token,
+        max_age=max_age,
+        httponly=True,  # not readable by JavaScript (XSS cannot steal it)
+        secure=settings.cookie_secure,
+        samesite="strict",  # never sent on cross-site requests
+        path="/api/v1/auth",  # only sent to the auth endpoints
+    )
+    if csrf_token:
+        response.set_cookie(
+            settings.csrf_cookie_name,
+            csrf_token,
+            max_age=max_age,
+            httponly=False,  # the web client must read it and echo it in a header
+            secure=settings.cookie_secure,
+            samesite="strict",
+            path="/",
+        )
+
+
+def _clear_auth_cookies(response: Response) -> None:
+    settings = get_settings()
+    response.delete_cookie(
+        settings.refresh_cookie_name,
+        path="/api/v1/auth",
+        secure=settings.cookie_secure,
         httponly=True,
-        secure=secure,
-        samesite="lax",
-        path="/",
+        samesite="strict",
     )
-    # CSRF token: deliberately not HttpOnly — the client must echo it in the
-    # X-CSRF-Token header (double-submit pattern).
-    import secrets as _secrets
-
-    response.set_cookie(
-        key=settings.csrf_cookie_name,
-        value=_secrets.token_urlsafe(32),
-        max_age=settings.session_max_age_seconds,
-        httponly=False,
-        secure=secure,
-        samesite="lax",
-        path="/",
+    response.delete_cookie(
+        settings.csrf_cookie_name, path="/", secure=settings.cookie_secure, samesite="strict"
     )
 
 
-def _clear_auth_cookies(response: Response, request: Request) -> None:
-    secure = settings.is_production or request.url.scheme == "https"
-    response.delete_cookie(settings.session_cookie_name, path="/", secure=secure, samesite="lax")
-    response.delete_cookie(settings.csrf_cookie_name, path="/", secure=secure, samesite="lax")
+# ------------------------------------------------------------ registration
 
 
-@router.post("/login", response_model=LoginResponse)
-async def login(
-    request: Request,
-    credentials: LoginRequest,
-    response: Response,
-    auth: AuthService = Depends(get_auth_service),
-    _rate: None = Depends(rate_limit("login", settings.rate_limit_requests, settings.rate_limit_window_seconds)),
-):
+@router.post(
+    "/register",
+    response_model=UserSelf,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[ratelimit.rate_limit(ratelimit.REGISTER)],
+)
+def register(body: RegisterRequest, request: Request, db: DbSession) -> User:
+    problems = password_policy_violations(body.password, username=body.username, email=body.email)
+    if problems:
+        raise ProblemError(
+            422,
+            "WEAK_PASSWORD",
+            "The password does not meet the policy.",
+            errors={"password": problems},
+        )
+
+    exists = db.scalar(
+        select(User.id).where(or_(User.username == body.username, User.email == body.email))
+    )
+    if exists:
+        audit.record(db, "auth.register", outcome="failure", request=request, reason="duplicate")
+        db.commit()
+        raise ProblemError(409, "ACCOUNT_EXISTS", "Username or email is already registered.")
+
+    user = User(
+        username=body.username,
+        email=body.email,
+        password_hash=hash_password(body.password),
+        display_name=body.display_name,
+    )
+    db.add(user)
+    db.flush()
+    audit.record(
+        db,
+        "auth.register",
+        actor_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        request=request,
+    )
+    db.commit()
+    return user
+
+
+# ------------------------------------------------------------------ login
+
+
+@router.post(
+    "/login", response_model=TokenResponse, dependencies=[ratelimit.rate_limit(ratelimit.LOGIN)]
+)
+def login(body: LoginRequest, request: Request, response: Response, db: DbSession) -> TokenResponse:
+    settings = get_settings()
+    identifier = body.login.strip().lower()
+    user = db.scalar(select(User).where(or_(User.username == identifier, User.email == identifier)))
+    now = utcnow()
+
+    if user is None or not user.is_active:
+        burn_verification_time(body.password)  # same timing as a real account
+        audit.record(
+            db, "auth.login", outcome="failure", request=request, reason="unknown_or_inactive"
+        )
+        db.commit()
+        raise unauthorized(INVALID_CREDENTIALS)
+
+    locked = user.locked_until is not None and user.locked_until > now
+    password_ok = verify_password(user.password_hash, body.password)
+
+    if locked:
+        # Same generic answer as a wrong password: lockout state is not disclosed
+        audit.record(
+            db, "auth.login", outcome="failure", actor_id=user.id, request=request, reason="locked"
+        )
+        db.commit()
+        raise unauthorized(INVALID_CREDENTIALS)
+
+    if not password_ok:
+        user.failed_login_attempts += 1
+        reason = "bad_password"
+        if user.failed_login_attempts >= settings.lockout_threshold:
+            user.locked_until = now + timedelta(minutes=settings.lockout_duration_minutes)
+            user.failed_login_attempts = 0
+            reason = "bad_password_lockout"
+            audit.record(
+                db,
+                "auth.lockout",
+                outcome="failure",
+                actor_id=user.id,
+                target_type="user",
+                target_id=user.id,
+                request=request,
+                minutes=settings.lockout_duration_minutes,
+            )
+        audit.record(
+            db, "auth.login", outcome="failure", actor_id=user.id, request=request, reason=reason
+        )
+        db.commit()
+        raise unauthorized(INVALID_CREDENTIALS)
+
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_login_at = now
+    if needs_rehash(user.password_hash):
+        user.password_hash = hash_password(body.password)
+
+    cookie_mode = body.token_delivery == "cookie"  # noqa: S105  # nosec B105
+    issued = create_session(db, user, request, with_csrf=cookie_mode)
+    audit.record(
+        db,
+        "auth.login",
+        actor_id=user.id,
+        target_type="session",
+        target_id=issued.session.id,
+        request=request,
+        delivery=body.token_delivery,
+    )
+    db.commit()
+
+    if cookie_mode:
+        _set_auth_cookies(response, issued.refresh_token, issued.csrf_token)
+    return TokenResponse(
+        access_token=issued.access_token,
+        expires_in=issued.expires_in,
+        refresh_token=None if cookie_mode else issued.refresh_token,
+        csrf_token=issued.csrf_token,
+        user=UserSelf.model_validate(user),
+    )
+
+
+# ---------------------------------------------------------------- refresh
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    dependencies=[ratelimit.rate_limit(ratelimit.REFRESH)],
+)
+def refresh(
+    request: Request, response: Response, db: DbSession, body: RefreshRequest | None = None
+) -> TokenResponse:
     """
-    Authenticate user and create a new session.
-
-    Security features: per-IP rate limiting, account lockout with automatic
-    unlock, timing-equalised unknown-account handling, generic error messages,
-    secure session + CSRF cookies.
+    Rotate the refresh token. Native clients send it in the body; the web
+    client relies on the HttpOnly cookie and must prove same-origin intent
+    with the CSRF token bound to its session (synchronizer token).
     """
+    settings = get_settings()
+    cookie_mode = body is None or body.refresh_token is None
+    raw = request.cookies.get(settings.refresh_cookie_name) if cookie_mode else body.refresh_token
+    if not raw:
+        raise unauthorized("No refresh token was provided.")
+
+    if cookie_mode:
+        stored = db.scalar(select(RefreshToken).where(RefreshToken.token_hash == hash_secret(raw)))
+        csrf_header = request.headers.get(settings.csrf_header_name)
+        if stored is None or not secret_matches(csrf_header, stored.session.csrf_token_hash):
+            audit.record(
+                db, "auth.csrf_rejected", outcome="denied", request=request, endpoint="refresh"
+            )
+            db.commit()
+            raise ProblemError(403, "CSRF_FAILED", "Missing or invalid CSRF token.")
+
     try:
-        result = auth.login(
-            email=credentials.email,
-            password=credentials.password,
-            ip_address=client_ip(request),
-            user_agent=request.headers.get("user-agent"),
+        session, new_raw, access, expires_in = rotate_refresh_token(db, raw)
+    except RefreshError as exc:
+        session = exc.session
+        audit.record(
+            db,
+            "auth.refresh_reuse" if exc.reason == "reuse_detected" else "auth.refresh",
+            outcome="failure",
+            actor_id=session.user_id if session else None,
+            target_type="session" if session else None,
+            target_id=session.id if session else None,
+            request=request,
+            reason=exc.reason,
         )
-    except AuthenticationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": exc.code.value, "message": exc.message},
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        db.commit()
+        if cookie_mode:
+            _clear_auth_cookies(response)
+        raise unauthorized("The refresh token is invalid or expired.") from None
 
-    _set_auth_cookies(response, request, result.session_token)
-
-    return LoginResponse(
-        access_token=result.access_token,
-        token_type="bearer",
-        expires_in=result.expires_in,
-        user=UserResponse(
-            id=result.user.id,
-            email=result.user.email,
-            full_name=result.user.full_name,
-            role=result.user.role,
-            is_active=result.user.is_active,
-            must_change_password=result.user.must_change_password,
-            created_at=result.user.created_at,
-            last_login_at=result.user.last_login_at,
-        ),
+    audit.record(
+        db,
+        "auth.refresh",
+        actor_id=session.user_id,
+        target_type="session",
+        target_id=session.id,
+        request=request,
+    )
+    db.commit()
+    if cookie_mode:
+        _set_auth_cookies(response, new_raw, None)
+    return TokenResponse(
+        access_token=access,
+        expires_in=expires_in,
+        refresh_token=None if cookie_mode else new_raw,
+        user=UserSelf.model_validate(session.user),
     )
 
 
-@router.post("/logout")
-async def logout(
-    request: Request,
-    response: Response,
-    auth: AuthService = Depends(get_auth_service),
-    _csrf: None = Depends(csrf_protect),
-):
-    """
-    Logout user and invalidate the presented credential.
-
-    Idempotent: revokes the session behind the cookie or the JWT's `sid`
-    claim, then clears both cookies. Unknown/expired credentials still
-    receive 200 (no state disclosure).
-    """
-    session_token: Optional[str] = request.cookies.get(settings.session_cookie_name)
-    if session_token:
-        auth.logout_by_session_token(session_token)
-    else:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            claims = auth.decode_access_token(auth_header.removeprefix("Bearer ").strip())
-            if claims is not None:
-                auth.logout_by_session_id(claims.session_id, claims.user_id)
-
-    _clear_auth_cookies(response, request)
-    return {"message": "Successfully logged out"}
+# ---------------------------------------------------------- logout/sessions
 
 
-@router.post("/password/change")
-async def change_password(
-    payload: PasswordChangeRequest,
-    context: AuthContext = Depends(get_auth_context),
-    auth: AuthService = Depends(get_auth_service),
-    _csrf: None = Depends(csrf_protect),
-):
-    """
-    Change user password.
-
-    Requires the current password, enforces the password policy, bumps the
-    token version (revoking all outstanding JWTs) and revokes every other
-    session.
-    """
-    try:
-        auth.change_password(
-            user=context.user,
-            current_password=payload.current_password,
-            new_password=payload.new_password,
-            keep_session_id=context.session.id,
-        )
-    except AuthenticationError as exc:
-        status_code = status.HTTP_400_BAD_REQUEST
-        fields = None
-        if exc.code == AuthErrorCode.WEAK_PASSWORD:
-            from app.services.password_policy import DEFAULT_PASSWORD_POLICY
-
-            fields = {"new_password": DEFAULT_PASSWORD_POLICY.validate(payload.new_password)}
-        raise HTTPException(
-            status_code=status_code,
-            detail={"code": exc.code.value, "message": exc.message, "fields": fields},
-        )
-
-    return {"message": "Password changed successfully."}
-
-
-@router.post("/password/force-change")
-async def force_change_password(
-    payload: ForcePasswordChangeRequest,
-    context: AuthContext = Depends(get_auth_context),
-    auth: AuthService = Depends(get_auth_service),
-    _csrf: None = Depends(csrf_protect),
-):
-    """First-login flow: replace the temporary password before anything else."""
-    try:
-        auth.force_change_password(
-            user=context.user,
-            new_password=payload.new_password,
-            keep_session_id=context.session.id,
-        )
-    except AuthenticationError as exc:
-        status_code = (
-            status.HTTP_400_BAD_REQUEST
-            if exc.code in (AuthErrorCode.WEAK_PASSWORD, AuthErrorCode.PASSWORD_CHANGE_REQUIRED)
-            else status.HTTP_401_UNAUTHORIZED
-        )
-        raise HTTPException(
-            status_code=status_code,
-            detail={"code": exc.code.value, "message": exc.message},
-        )
-
-    return {"message": "Password changed successfully."}
-
-
-@router.get("/me", response_model=UserResponse)
-async def get_me(user=Depends(get_current_user)):
-    """Get current authenticated user information (kept for compatibility)."""
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        role=user.role,
-        is_active=user.is_active,
-        must_change_password=user.must_change_password,
-        created_at=user.created_at,
-        last_login_at=user.last_login_at,
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    request: Request, response: Response, session: CurrentSession, db: DbSession
+) -> Response:
+    revoke(db, session, "logout")
+    audit.record(
+        db,
+        "auth.logout",
+        actor_id=session.user_id,
+        target_type="session",
+        target_id=session.id,
+        request=request,
     )
+    db.commit()
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    _clear_auth_cookies(response)
+    return response
+
+
+@router.post("/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+def logout_all(request: Request, user: CurrentUser, db: DbSession) -> Response:
+    revoke_all_for_user(db, user.id, "logout_all")
+    audit.record(
+        db,
+        "auth.logout_all",
+        actor_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        request=request,
+    )
+    db.commit()
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    _clear_auth_cookies(response)
+    return response
+
+
+@router.get("/sessions", response_model=list[SessionInfo])
+def list_sessions(session: CurrentSession, db: DbSession) -> list[SessionInfo]:
+    now = utcnow()
+    rows = db.scalars(
+        select(AuthSession)
+        .where(
+            AuthSession.user_id == session.user_id,
+            AuthSession.revoked_at.is_(None),
+            AuthSession.expires_at > now,
+        )
+        .order_by(AuthSession.last_seen_at.desc())
+    ).all()
+    result = []
+    for row in rows:
+        info = SessionInfo.model_validate(row)
+        info.current = row.id == session.id
+        result.append(info)
+    return result
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_session(
+    session_id: str, request: Request, current: CurrentSession, db: DbSession
+) -> Response:
+    target = db.get(AuthSession, session_id)
+    # Another user's session is indistinguishable from a missing one (no IDOR oracle)
+    if target is not None and target.user_id != current.user_id:
+        raise deny_foreign(db, request, current.user_id, "session", session_id, "Session")
+    if target is None or target.revoked_at is not None:
+        raise not_found("Session")
+    revoke(db, target, "user_revoked")
+    audit.record(
+        db,
+        "auth.session_revoked",
+        actor_id=current.user_id,
+        target_type="session",
+        target_id=target.id,
+        request=request,
+    )
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# --------------------------------------------------------------- password
+
+
+@router.post(
+    "/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[ratelimit.rate_limit(ratelimit.PASSWORD_CHANGE)],
+)
+def change_password(
+    body: PasswordChangeRequest, request: Request, user: CurrentUser, db: DbSession
+) -> Response:
+    settings = get_settings()
+    if not verify_password(user.password_hash, body.current_password):
+        # Counts toward lockout so a stolen access token cannot brute-force the password
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= settings.lockout_threshold:
+            user.locked_until = utcnow() + timedelta(minutes=settings.lockout_duration_minutes)
+            user.failed_login_attempts = 0
+            revoke_all_for_user(db, user.id, "lockout")
+            audit.record(
+                db,
+                "auth.lockout",
+                outcome="failure",
+                actor_id=user.id,
+                target_type="user",
+                target_id=user.id,
+                request=request,
+            )
+        audit.record(
+            db,
+            "auth.password_change",
+            outcome="failure",
+            actor_id=user.id,
+            request=request,
+            reason="bad_current_password",
+        )
+        db.commit()
+        raise ProblemError(400, "INVALID_CREDENTIALS", "The current password is incorrect.")
+
+    problems = password_policy_violations(
+        body.new_password, username=user.username, email=user.email
+    )
+    if body.new_password == body.current_password:
+        problems.append("The new password must differ from the current one.")
+    if problems:
+        raise ProblemError(
+            422,
+            "WEAK_PASSWORD",
+            "The password does not meet the policy.",
+            errors={"new_password": problems},
+        )
+
+    user.password_hash = hash_password(body.new_password)
+    user.password_changed_at = utcnow()
+    user.failed_login_attempts = 0
+    # Every session (including this one) must log in again with the new password
+    revoke_all_for_user(db, user.id, "password_changed")
+    audit.record(
+        db,
+        "auth.password_change",
+        actor_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        request=request,
+    )
+    db.commit()
+    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    _clear_auth_cookies(response)
+    return response

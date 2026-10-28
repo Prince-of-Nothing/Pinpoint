@@ -1,85 +1,77 @@
-"""
-User/profile API endpoints.
+"""Own account and viewer-filtered profiles (private by default)."""
 
-SC-03 (private by default): every profile read goes through
-ProfileVisibilityPolicy — non-friends receive a redacted, indistinguishable
-projection, and the response is filtered by the backend, never the client.
-"""
+from fastapi import APIRouter, Request
 
-from fastapi import APIRouter, Depends, HTTPException, status
-
-from app.api.deps import (
-    get_audit_logger,
-    get_current_user,
-    get_relationship_service,
-    get_user_repository,
-    rate_limit,
+from app.api.deps import CurrentUser, DbSession
+from app.core.errors import not_found
+from app.models import FriendshipStatus, User
+from app.schemas.auth import UserSelf
+from app.schemas.social import ProfileUpdate, ProfileView
+from app.services import audit, ratelimit
+from app.services.relationships import (
+    active_user_by_username,
+    friendship_between,
+    is_blocked_either_way,
 )
-from app.db.session import get_db
-from app.models.user import User
-from app.repositories import UserRepository
-from app.schemas.auth import ProfileResponse, UserResponse
-from app.services.audit import AuditLogger
-from app.services.authorization import ProfileVisibilityPolicy, RelationshipService
 
 router = APIRouter()
 
 
-def _user_response(user: User) -> UserResponse:
-    return UserResponse(
-        id=user.id,
-        email=user.email,
-        full_name=user.full_name,
-        role=user.role,
-        is_active=user.is_active,
-        must_change_password=user.must_change_password,
-        created_at=user.created_at,
-        last_login_at=user.last_login_at,
+@router.get("/me", response_model=UserSelf)
+def get_me(user: CurrentUser) -> User:
+    return user
+
+
+@router.patch("/me", response_model=UserSelf)
+def update_me(body: ProfileUpdate, request: Request, user: CurrentUser, db: DbSession) -> User:
+    changes = body.model_dump(exclude_unset=True)
+    for field, value in changes.items():
+        setattr(user, field, value)
+    audit.record(
+        db,
+        "profile.updated",
+        actor_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        request=request,
+        fields=sorted(changes),
     )
+    db.commit()
+    return user
 
 
-@router.get("/me", response_model=UserResponse)
-async def get_me(user: User = Depends(get_current_user)):
-    """Get the authenticated user's own profile."""
-    return _user_response(user)
-
-
-@router.get("/{user_id}", response_model=ProfileResponse)
-async def get_profile(
-    user_id: int,
-    viewer: User = Depends(get_current_user),
-    users: UserRepository = Depends(get_user_repository),
-    relationships: RelationshipService = Depends(get_relationship_service),
-    audit: AuditLogger = Depends(get_audit_logger),
-    db=Depends(get_db),
-    _rate: None = Depends(rate_limit("profile_view", 100, 60)),
-):
+@router.get(
+    "/{username}",
+    response_model=ProfileView,
+    dependencies=[ratelimit.rate_limit(ratelimit.USER_LOOKUP)],
+)
+def get_profile(username: str, viewer: CurrentUser, db: DbSession) -> ProfileView:
     """
-    Get a user profile filtered by the viewer relationship.
-
-    - self: full profile
-    - friend: display name only
-    - anyone else (pending/blocked/stranger): redacted shell — identical to
-      the response for a non-existent account, so user IDs cannot be probed.
+    Response filtering happens here on the server, not in the client:
+    self -> full profile, accepted friend -> profile, anyone else -> empty.
+    A block (either direction) is indistinguishable from "not a friend".
     """
-    target = users.get_by_id(user_id)
-    relationship = relationships.resolve(viewer.id, user_id)
-    visible = ProfileVisibilityPolicy().visible_profile(viewer.id, target, relationship)
-
-    if viewer.id != user_id:
-        # Privacy-preserving audit: ids and relationship only, no PII.
-        audit.record(
-            "profile.viewed",
-            actor_id=viewer.id,
-            target_type="user",
-            target_id=user_id,
-            relationship=relationship.value,
-            revealed=visible.is_full,
+    target = active_user_by_username(db, username)
+    if target is None:
+        raise not_found("User")
+    if target.id == viewer.id:
+        return ProfileView(
+            username=target.username,
+            relationship="self",
+            display_name=target.display_name,
+            bio=target.bio,
         )
-        db.commit()
-
-    return ProfileResponse(
-        id=visible.user_id,
-        display_name=visible.display_name,
-        is_full_profile=visible.is_full,
-    )
+    friendship = friendship_between(db, viewer.id, target.id)
+    if (
+        friendship is not None
+        and friendship.status == FriendshipStatus.ACCEPTED.value
+        and not is_blocked_either_way(db, viewer.id, target.id)
+    ):
+        return ProfileView(
+            username=target.username,
+            relationship="friend",
+            display_name=target.display_name,
+            bio=target.bio,
+            friends_since=friendship.responded_at,
+        )
+    return ProfileView(username=target.username, relationship="none")

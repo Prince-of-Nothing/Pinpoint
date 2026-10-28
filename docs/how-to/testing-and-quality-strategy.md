@@ -1,5 +1,32 @@
 # Testing and Quality Strategy
 
+## As built: how to run the checks
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest                                   # 140 tests, in-memory SQLite, ~7 s
+pytest --cov=app --cov-report=term-missing
+ruff check . && ruff format --check .    # lint and formatting
+bandit -c pyproject.toml -r app          # static security analysis
+pip-audit -r requirements.txt            # known-vulnerable dependencies
+python scripts/security_evidence.py      # regenerates docs/evidence/security-test-report.md
+node ../e2e/web-client-flow.js           # browser run (needs Playwright and a running API)
+```
+
+| Layer | What is covered | Where |
+|---|---|---|
+| Unit/integration (API) | Every endpoint through FastAPI's test client, including authorization boundaries | `backend/tests/test_*.py` |
+| Security scenarios | Injection, mass assignment, IDOR matrix, CSRF, CORS, token forgery, error leakage, secrets in logs | `backend/tests/test_security_attacks.py` |
+| Migrations | Upgrade, model/migration drift check, downgrade on PostgreSQL | CI job |
+| Browser end-to-end | Two-user flow, session resume, revoke, logout, XSS payload, CSP | `e2e/web-client-flow.js` |
+| Static and supply chain | ruff, bandit, pip-audit | CI job |
+
+Tests use cheap Argon2 parameters and an in-memory rate limiter for speed;
+the Redis limiter has its own test when Redis is available.
+
+## Original strategy (full product)
+
 - Unit-test consent, expiry, access checks, retention, and navigation-link
   generation.
 - Integration-test background updates, offline recovery, notifications,

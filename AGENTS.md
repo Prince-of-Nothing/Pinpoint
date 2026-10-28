@@ -2,35 +2,55 @@
 
 ## Repo shape
 
-- `backend/` — FastAPI (Python 3.11+, verified on 3.12) API. Layers: `app/api` (routers + DI deps) → `app/services` (facades, policies) → `app/repositories` (queries) → `app/db` + `app/models`. Cross-cutting: `app/core` (settings), `app/middleware`, `app/schemas` (Pydantic).
-- `docs/` — arc42 architecture + Diátaxis (tutorials/how-to/reference/explanation) + ADRs. Diagrams are Mermaid text under `docs/architecture/diagrams/`.
-- No CI, no lockfile, no `pyproject.toml`. There is no project-wide code CONTRIBUTING; docs rules live in `docs/CONTRIBUTING.md`.
+Two backend implementations of the same API, per the root `README.md`:
 
-## Commands (run from `backend/`)
+- **Go API** (default Docker stack): `backend/cmd/server` + `backend/internal/`.
+- **Python/FastAPI API** (alternate): `backend/app`, migrations in `backend/alembic/`, tests in `backend/tests/`.
+- Web clients: `web/` (Go stack, nginx) and `backend/web/` (Python-served).
+- Docs in `docs/` (arc42 + Diátaxis + ADRs); full-stack demo via `docker compose`.
+
+Contribution rules live in root `CONTRIBUTING.md` (Go) and `docs/CONTRIBUTING.md` (docs): small PRs, Conventional Commits, docs in the same PR, security changes need a regression test *and* a fail-closed test.
+
+## Commands
+
+Go (run from `backend/`; must pass before pushing):
 
 ```bash
-pip install -r requirements.txt
-uvicorn app.main:app --reload          # needs .env (see below)
-pytest tests/ -q                       # full suite: 23 tests, all should pass
-pytest tests/test_security_flows.py::test_name -q   # single test
+go build ./... && go vet ./...   # go test ./...   # gofmt -l .  (must print nothing)
+go run ./cmd/server              # port 8000 (PORT to override)
 ```
 
-- Tests need **no external services**: `tests/conftest.py` sets env vars (SQLite DB in a temp dir, `RATE_LIMIT_BACKEND=memory`) *before* any `app` import. Never import `app.main` in a script without setting those env vars first — `Settings` and the DB engine are created at import time.
-- The `app` fixture drops/recreates all tables per test and clears the settings + rate-limiter caches; don't rely on state leaking between tests.
+Python (run from `backend/`):
 
-## Backend gotchas
+```bash
+pip install -r requirements-dev.txt
+pytest                                   # addopts from pyproject: -q, testpaths=tests
+pytest --cov=app --cov-report=term-missing   # what CI runs
+ruff check . && ruff format --check .    # line-length 100, py311
+bandit -q -c pyproject.toml -r app
+pip-audit -r requirements.txt
+alembic upgrade head && alembic check   # needs DATABASE_URL (PostgreSQL)
+```
 
-- `.env` is not committed: `copy .env.example .env` and set `SECRET_KEY` (≥ 32 chars; production rejects placeholders and `DEBUG=true`). `ALLOWED_ORIGINS`/`TRUSTED_HOSTS` are comma-separated strings, not JSON.
-- `bcrypt==4.0.1` is **pinned on purpose**: passlib 1.7.4 breaks with bcrypt ≥ 4.1. Don't bump.
-- Signup/recovery/MFA are NOT implemented (tracked as risk R12). Tests create users via the `create_user` fixture or direct DB inserts.
-- Errors are RFC 7807 Problem Details with an `error_code` field — never return raw `HTTPException` detail shapes from new endpoints; follow `app/api/errors.py` + `main.py` handlers.
-- Layering rules (enforced by review, see `docs/reference/design-patterns.md`): routers never touch the ORM directly; services never import FastAPI types; repositories never `commit()` (services own the transaction); `get_auth_context()` in `app/api/deps.py` is the **only** place credentials are accepted; visibility/authorization decisions belong in `app/services/authorization.py` policies, not inline in endpoints.
-- Password changes bump `token_version`, intentionally killing outstanding bearer JWTs — bearer clients must re-login (asserted by tests).
-- Schema is created with `create_all` at startup; Alembic isn't wired (risk R9).
+Full stack: `docker compose up --build` → http://localhost:8080 (seeds demo accounts; local-only credentials). Python API on :8001 via `docker compose --profile python up --build python-api`.
 
-## Docs rules
+CI (`.github/workflows/ci.yml`) runs all of the above plus migrations against a Postgres 16 service; `DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/always_together`.
 
-- Follow the Diátaxis placement table in `docs/CONTRIBUTING.md`; one page = one purpose; relative links only.
-- Diagrams are Mermaid text ("diagrams as code"), never binary images. If you add one, update the table in `docs/architecture/diagrams/README.md`.
-- ADRs: immutable once accepted; filename `NNNN-kebab-title.md`; add a row to `docs/adr/README.md` AND `docs/architecture/architecture-decisions-link.md`. Architecture-significant code changes need an ADR in the same PR.
-- Code and its docs change in the same PR (docs-as-code). Security controls must stay mapped in `docs/reference/security-control-register.md` (status + test names) when touched.
+## Gotchas
+
+- Known pre-existing flake: `tests/test_auth.py::test_session_limit_revokes_oldest` passes alone but fails in a full local run (verified on pristine `origin/main`). Don't chase it as your regression.
+- `backend/dump.rdb` is a stray committed Redis dump — leave it unless asked.
+- Security is thesis-mandated: server-side enforcement only, no secrets or real user data anywhere including tests (root `CONTRIBUTING.md`).
+- Password/session/token logic differs between the Go and Python implementations — mirror changes deliberately, and check which stack a doc describes before editing.
+
+## Docs conventions
+
+- Diagrams are Mermaid text, never binary images; keep the table in `docs/architecture/diagrams/README.md` in sync with files that exist.
+- ADRs are immutable once accepted, named `NNNN-kebab-title.md`, indexed in `docs/adr/README.md`; architecture-significant changes need an ADR in the same PR.
+
+## Ported artifacts (not yet integrated)
+
+These came from a separate Python-hardening port and are **not imported** by the current `backend/app` — don't assume they're wired in, and beware near-duplicate module names (`services/rate_limit.py` vs main's `services/ratelimit.py`, `token_service.py` vs `tokens.py`):
+
+- `backend/app/services/{auth_service,authorization,password_policy,rate_limit,token_service,audit}.py`, `backend/app/repositories/`, `backend/app/middleware/`
+- `docs/reference/design-patterns.md`, `docs/architecture/diagrams/` (9 C4/UML files), `docs/adr/0003-structure-backend-around-design-patterns.md`, root `AGENTS.md` (this file)

@@ -30,6 +30,17 @@ technology/model choices underlying these building blocks, and
 
 ## 5.2 Level 2: Component Breakdown
 
+### Backend API service (implemented)
+
+The API service is implemented in [`backend/app/`](../../backend/app) and
+documented structurally in
+[Component View — Backend API](./diagrams/component-backend-api.md). Its
+layers — middleware, routers, dependencies, services (facades + policies),
+repositories — and the design patterns each layer applies are catalogued in
+[Design Patterns and Principles](../reference/design-patterns.md). Runtime
+behaviour is shown in the [diagrams](./diagrams/README.md) for login,
+authorized location reads, and the consent lifecycle.
+
 ### Location service and movement/discovery service
 
 The most safety-critical building blocks. See:
@@ -37,6 +48,10 @@ The most safety-critical building blocks. See:
 - [Movement Trails and Search Corridors](./movement-trails-and-search-corridors.md)
 - [Friend Mosaic Maps](./friend-mosaic-maps.md)
 - [Cache and Permission Model](./cache-and-permission-model.md)
+
+The MVP implements the location service's consent and read-mediation core
+(`LocationAccessPolicy`, directional shares, precision reduction); trails,
+mosaics, and caches remain deferred.
 
 ### Identity and relationship service
 

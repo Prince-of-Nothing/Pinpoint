@@ -6,27 +6,30 @@ from app.schemas.auth import (
     LoginResponse,
     PasswordChangeRequest,
     ForcePasswordChangeRequest,
-    
+
     # User schemas
     UserCreate,
     UserResponse,
     UserUpdate,
-    
+    ProfileResponse,
+
     # Friendship schemas
     FriendshipRequest,
     FriendshipResponse,
     FriendshipAction,
-    
+
     # Location schemas
     LocationShareCreate,
     LocationShareResponse,
     LocationUpdate,
-    LocationResponse,
-    
+    LocationUpdateRequest,
+    FriendLocationResponse,
+    LatestLocationsResponse,
+
     # Error schemas
     ErrorResponse,
     ErrorDetail,
-    
+
     # Enums
     UserRole,
     FriendshipStatus
@@ -40,13 +43,16 @@ __all__ = [
     "UserCreate",
     "UserResponse",
     "UserUpdate",
+    "ProfileResponse",
     "FriendshipRequest",
     "FriendshipResponse",
     "FriendshipAction",
     "LocationShareCreate",
     "LocationShareResponse",
     "LocationUpdate",
-    "LocationResponse",
+    "LocationUpdateRequest",
+    "FriendLocationResponse",
+    "LatestLocationsResponse",
     "ErrorResponse",
     "ErrorDetail",
     "UserRole",

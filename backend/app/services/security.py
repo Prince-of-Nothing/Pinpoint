@@ -1,89 +1,102 @@
 """
-Security utilities for authentication and authorization.
-Implements password hashing, JWT token handling, and session management.
+Low-level security primitives: password hashing, token/session generation,
+email normalisation, and PII pseudonymisation helpers.
+
+Higher-level flows (login, password change) live in AuthService; token
+issuance/validation lives in TokenService. This module stays a leaf so it can
+be reused without dragging in business logic (Single Responsibility).
 """
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
-import secrets
 import hashlib
+import hmac
+import secrets
+from functools import lru_cache
+from typing import List, Tuple
 
 from passlib.context import CryptContext
-from jose import jwt, JWTError
 
 from app.core.config import get_settings
+from app.services.password_policy import DEFAULT_PASSWORD_POLICY
 
 settings = get_settings()
 
-# Password hashing context with bcrypt
+# Password hashing context with bcrypt (slow hash + per-password salt).
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# bcrypt silently truncates inputs at 72 bytes; reject longer material early
+# (also enforced by the password policy's MaxLengthRule).
+MAX_PASSWORD_BYTES = 72
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     Verify a plain password against a hash.
-    Uses constant-time comparison to prevent timing attacks.
+    Uses constant-time comparison internally to prevent timing attacks.
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password[:MAX_PASSWORD_BYTES], hashed_password)
+    except (ValueError, TypeError):
+        # Malformed hash in the DB must fail closed, not crash the request.
+        return False
 
 
 def get_password_hash(password: str) -> str:
     """
     Generate a secure password hash.
-    Each call produces a different hash due to random salt.
+    Each call produces a different hash due to a random salt.
     """
-    return pwd_context.hash(password)
+    return pwd_context.hash(password[:MAX_PASSWORD_BYTES])
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create a JWT access token."""
-    to_encode = data.copy()
-    
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.now(timezone.utc),
-        "type": "access"
-    })
-    
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
-    return encoded_jwt
-
-
-def create_refresh_token(data: dict) -> str:
-    """Create a JWT refresh token with longer expiration."""
-    to_encode = data.copy()
-    
-    expire = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.now(timezone.utc),
-        "type": "refresh"
-    })
-    
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
-    return encoded_jwt
-
-
-def decode_token(token: str) -> Optional[dict]:
+@lru_cache()
+def get_dummy_password_hash() -> str:
     """
-    Decode and validate a JWT token.
-    Returns None if token is invalid or expired.
+    Null Object for anti-enumeration (timing equalisation).
+
+    When a login references an unknown or inactive account, the verifier still
+    performs one bcrypt comparison against this throwaway hash so the response
+    timing does not reveal whether the account exists.
     """
-    try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        return payload
-    except (JWTError, Exception):
-        return None
+    return pwd_context.hash(secrets.token_urlsafe(32))
 
 
 def generate_session_token() -> str:
-    """Generate a cryptographically secure session token."""
+    """Generate a cryptographically secure session token (256 bits)."""
     return secrets.token_urlsafe(32)
+
+
+def hash_token(raw_token: str) -> str:
+    """
+    One-way hash for tokens stored at rest (sessions).
+
+    A plain SHA-256 is correct here: session tokens carry 256 bits of entropy,
+    so they are not vulnerable to dictionary attacks (unlike passwords).
+    """
+    return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+
+
+def pseudonymize_email(email: str) -> str:
+    """
+    Keyed pseudonym of an email for audit/forensics storage.
+
+    Keyed (not plain SHA-256) so a leaked table cannot be reversed with a
+    precomputed dictionary of email addresses.
+    """
+    normalized = normalize_email(email)
+    return hmac.new(
+        settings.secret_key.encode("utf-8"),
+        normalized.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def hash_ip(ip_address: str) -> str:
+    """Keyed hash of an IP address for privacy-preserving rate-limit/audit keys."""
+    return hmac.new(
+        settings.secret_key.encode("utf-8"),
+        ip_address.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()[:32]
 
 
 def generate_csrf_token() -> str:
@@ -95,12 +108,7 @@ def verify_csrf_token(token: str, expected: str) -> bool:
     """Verify CSRF token using constant-time comparison."""
     if not token or not expected:
         return False
-    
-    # Constant-time comparison
-    token_bytes = token.encode('utf-8')
-    expected_bytes = expected.encode('utf-8')
-    
-    return secrets.compare_digest(token_bytes, expected_bytes)
+    return secrets.compare_digest(token.encode("utf-8"), expected.encode("utf-8"))
 
 
 def normalize_email(email: str) -> str:
@@ -111,38 +119,11 @@ def normalize_email(email: str) -> str:
     return email.strip().lower()
 
 
-def is_weak_password(password: str) -> tuple[bool, list[str]]:
+def is_weak_password(password: str) -> Tuple[bool, List[str]]:
     """
-    Check if password meets minimum security requirements.
+    Check if password meets the configured policy.
+    Back-compatible wrapper over the PasswordPolicy chain (Strategy).
     Returns (is_weak, list_of_issues).
     """
-    issues = []
-    
-    if len(password) < 8:
-        issues.append("Password must be at least 8 characters long")
-    
-    if len(password) > 128:
-        issues.append("Password must not exceed 128 characters")
-    
-    if not any(c.isupper() for c in password):
-        issues.append("Password must contain at least one uppercase letter")
-    
-    if not any(c.islower() for c in password):
-        issues.append("Password must contain at least one lowercase letter")
-    
-    if not any(c.isdigit() for c in password):
-        issues.append("Password must contain at least one digit")
-    
-    if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
-        issues.append("Password must contain at least one special character")
-    
-    # Check for common weak passwords
-    common_passwords = [
-        "password", "123456", "12345678", "qwerty", "abc123",
-        "password123", "admin", "letmein", "welcome"
-    ]
-    
-    if password.lower() in common_passwords:
-        issues.append("Password is too common")
-    
+    issues = DEFAULT_PASSWORD_POLICY.validate(password)
     return len(issues) > 0, issues

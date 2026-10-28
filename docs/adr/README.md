@@ -26,8 +26,9 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 
 | # | Title | Status |
 |---|-------|--------|
-| 0001 | [Record Architecture Decisions](./record-architecture-decisions.md) | Accepted |
-| 0002 | [Adopt Always Together Product Direction](./adopt-always-together-product-direction.md) | Accepted |
+| 0001 | [Record Architecture Decisions](./0001-record-architecture-decisions.md) | Accepted |
+| 0002 | [Adopt Always Together Product Direction](./0002-adopt-always-together-product-direction.md) | Accepted |
+| 0003 | [Structure the Backend Around Design Patterns](./0003-structure-backend-around-design-patterns.md) | Accepted |
 
 See [`architecture/architecture-decisions-link.md`](../architecture/architecture-decisions-link.md) for the complete list.
 

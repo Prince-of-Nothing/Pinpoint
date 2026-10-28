@@ -19,6 +19,54 @@ git clone https://github.com/your-org/always-together.git
 cd always-together
 ```
 
+## Backend-only quickstart (no Docker)
+
+If you only need the API — to run the security test suite or poke at the
+endpoints with curl/HTTPie — you can skip Docker, PostgreSQL, Redis, and
+Flutter entirely:
+
+```bash
+cd backend
+python -m venv .venv
+.venv\Scripts\activate              # Windows — or: source .venv/bin/activate (macOS/Linux)
+pip install -r requirements.txt
+copy .env.example .env              # Windows — or: cp .env.example .env
+```
+
+Edit `.env` before first run:
+
+- `SECRET_KEY` — set a random value of at least 32 characters (production
+  mode refuses placeholders; development mode still requires ≥ 32 chars).
+- `DATABASE_URL` — use `sqlite:///./dev.db` for a zero-dependency local run
+  (PostgreSQL otherwise).
+- `ENVIRONMENT=development`, `TRUSTED_HOSTS=localhost,127.0.0.1`.
+
+Then start the API and create the schema (tables are created at startup for
+now — Alembic migrations are tracked as [risk R9](../architecture/risks-and-technical-debt.md)):
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Verify and experiment:
+
+- Health: `curl http://localhost:8000/health`
+- Interactive docs: http://localhost:8000/docs (disabled automatically when
+  `ENVIRONMENT=production`)
+
+Run the security regression suite (uses its own SQLite database and
+in-memory rate limiter, configured in `tests/conftest.py` — no services
+needed):
+
+```bash
+pytest tests/ -v
+```
+
+> **Note:** signup is not implemented in the MVP (see [risk R12](../architecture/risks-and-technical-debt.md)).
+> Create a user directly in the database to test login, e.g. with a small
+> Python snippet using `app.services.security.get_password_hash` and
+> `app.models.user.User`, as the test fixtures do.
+
 ## Step 2: Start Backend Services with Docker
 
 The backend requires PostgreSQL, Redis, and FastAPI. Use Docker Compose to start all services:

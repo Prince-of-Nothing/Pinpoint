@@ -1,177 +1,123 @@
 """
 Authentication API endpoints.
 Implements login, logout, password management, and session handling.
+
+Security behaviour (see docs/reference/design-patterns.md):
+- Login is rate limited per IP and answers every credential failure with the
+  same generic 401 (no account enumeration, no lockout-state disclosure).
+- The session cookie is HttpOnly + SameSite=Lax (+ Secure over TLS) and is now
+  correctly attached to the real response object.
+- A readable CSRF cookie is issued for the web companion; mutations that
+  authenticate via cookie must echo it (double-submit).
+- Password changes bump the token version, revoking all outstanding JWTs.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone, timedelta
+from typing import Optional
 
-from app.db.session import get_db
-from app.models.user import User, Session as SessionModel, LoginAttempt, UserRole
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+
+from app.api.deps import (
+    client_ip,
+    csrf_protect,
+    get_auth_context,
+    get_auth_service,
+    get_current_user,
+    rate_limit,
+    AuthContext,
+)
+from app.core.config import get_settings
 from app.schemas.auth import (
+    ForcePasswordChangeRequest,
     LoginRequest,
     LoginResponse,
     PasswordChangeRequest,
-    ForcePasswordChangeRequest,
-    UserResponse
+    UserResponse,
 )
-from app.services.security import (
-    verify_password,
-    get_password_hash,
-    create_access_token,
-    generate_session_token,
-    normalize_email,
-    is_weak_password
-)
-from app.core.config import get_settings
+from app.services.auth_service import AuthErrorCode, AuthenticationError, AuthService
 
 settings = get_settings()
 router = APIRouter()
-security = HTTPBearer(auto_error=False)
 
 
-def get_rate_limit_key(ip: str) -> str:
-    """Generate rate limit key for Redis."""
-    return f"rate_limit:login:{ip}"
+def _set_auth_cookies(response: Response, request: Request, session_token: str) -> None:
+    """Attach the session cookie (HttpOnly) and CSRF cookie (readable by JS)."""
+    secure = settings.is_production or request.url.scheme == "https"
+
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=session_token,
+        max_age=settings.session_max_age_seconds,
+        httponly=True,
+        secure=secure,
+        samesite="lax",
+        path="/",
+    )
+    # CSRF token: deliberately not HttpOnly — the client must echo it in the
+    # X-CSRF-Token header (double-submit pattern).
+    import secrets as _secrets
+
+    response.set_cookie(
+        key=settings.csrf_cookie_name,
+        value=_secrets.token_urlsafe(32),
+        max_age=settings.session_max_age_seconds,
+        httponly=False,
+        secure=secure,
+        samesite="lax",
+        path="/",
+    )
 
 
-def get_lockout_key(email: str) -> str:
-    """Generate lockout key for Redis."""
-    return f"lockout:{email}"
+def _clear_auth_cookies(response: Response, request: Request) -> None:
+    secure = settings.is_production or request.url.scheme == "https"
+    response.delete_cookie(settings.session_cookie_name, path="/", secure=secure, samesite="lax")
+    response.delete_cookie(settings.csrf_cookie_name, path="/", secure=secure, samesite="lax")
 
 
 @router.post("/login", response_model=LoginResponse)
 async def login(
     request: Request,
     credentials: LoginRequest,
-    db: Session = Depends(get_db)
+    response: Response,
+    auth: AuthService = Depends(get_auth_service),
+    _rate: None = Depends(rate_limit("login", settings.rate_limit_requests, settings.rate_limit_window_seconds)),
 ):
     """
     Authenticate user and create a new session.
-    
-    Security features:
-    - Rate limiting by IP
-    - Account lockout after failed attempts
-    - Generic error messages
-    - Secure session cookies
+
+    Security features: per-IP rate limiting, account lockout with automatic
+    unlock, timing-equalised unknown-account handling, generic error messages,
+    secure session + CSRF cookies.
     """
-    client_ip = request.client.host if request.client else "unknown"
-    normalized_email = normalize_email(credentials.email)
-    
-    # Check account lockout
-    lockout_key = get_lockout_key(normalized_email)
-    # In production, use Redis for this
-    # For now, check database
-    
-    user = db.query(User).filter(
-        User.email_normalized == normalized_email,
-        User.is_active == True
-    ).first()
-    
-    # Generic error for unknown/inactive/locked users
-    if not user or user.is_locked:
-        # Log failed attempt
-        attempt = LoginAttempt(
-            email=normalized_email,
-            ip_address=client_ip,
-            success=False
+    try:
+        result = auth.login(
+            email=credentials.email,
+            password=credentials.password,
+            ip_address=client_ip(request),
+            user_agent=request.headers.get("user-agent"),
         )
-        db.add(attempt)
-        db.commit()
-        
+    except AuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "code": "AUTHENTICATION_FAILED",
-                "message": "Invalid credentials."
-            }
+            detail={"code": exc.code.value, "message": exc.message},
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    
-    # Verify password
-    if not verify_password(credentials.password, user.password_hash):
-        # Increment failed attempts
-        user.failed_login_attempts += 1
-        
-        # Check if should lock account
-        if user.failed_login_attempts >= settings.lockout_threshold:
-            user.is_locked = True
-            user.locked_at = datetime.now(timezone.utc)
-        
-        # Log failed attempt
-        attempt = LoginAttempt(
-            email=normalized_email,
-            ip_address=client_ip,
-            success=False
-        )
-        db.add(attempt)
-        db.commit()
-        
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                "code": "AUTHENTICATION_FAILED",
-                "message": "Invalid credentials."
-            }
-        )
-    
-    # Successful login - reset failed attempts
-    user.failed_login_attempts = 0
-    user.last_login_at = datetime.now(timezone.utc)
-    
-    # Check if password must be changed
-    if user.must_change_password:
-        # Allow login but flag in response
-        pass
-    
-    # Create session
-    session_token = generate_session_token()
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.session_max_age_seconds)
-    
-    session = SessionModel(
-        session_token=session_token,
-        user_id=user.id,
-        ip_address=client_ip,
-        user_agent=request.headers.get("user-agent"),
-        expires_at=expires_at
-    )
-    
-    db.add(session)
-    db.commit()
-    db.refresh(session)
-    
-    # Create JWT access token
-    access_token = create_access_token(
-        data={"sub": str(user.id), "email": user.email, "role": user.role.value}
-    )
-    
-    # Set secure session cookie
-    response = Response()
-    response.set_cookie(
-        key=settings.session_cookie_name,
-        value=session_token,
-        max_age=settings.session_max_age_seconds,
-        httponly=True,
-        secure=True,  # Only over HTTPS in production
-        samesite="lax",
-        path="/"
-    )
-    
+
+    _set_auth_cookies(response, request, result.session_token)
+
     return LoginResponse(
-        access_token=access_token,
+        access_token=result.access_token,
         token_type="bearer",
-        expires_in=settings.access_token_expire_minutes * 60,
+        expires_in=result.expires_in,
         user=UserResponse(
-            id=user.id,
-            email=user.email,
-            full_name=user.full_name,
-            role=user.role,
-            is_active=user.is_active,
-            must_change_password=user.must_change_password,
-            created_at=user.created_at,
-            last_login_at=user.last_login_at
-        )
+            id=result.user.id,
+            email=result.user.email,
+            full_name=result.user.full_name,
+            role=result.user.role,
+            is_active=result.user.is_active,
+            must_change_password=result.user.must_change_password,
+            created_at=result.user.created_at,
+            last_login_at=result.user.last_login_at,
+        ),
     )
 
 
@@ -179,202 +125,97 @@ async def login(
 async def logout(
     request: Request,
     response: Response,
-    db: Session = Depends(get_db)
+    auth: AuthService = Depends(get_auth_service),
+    _csrf: None = Depends(csrf_protect),
 ):
     """
-    Logout user and invalidate session.
-    
-    Security features:
-    - Server-side session invalidation
-    - Cookie clearing
+    Logout user and invalidate the presented credential.
+
+    Idempotent: revokes the session behind the cookie or the JWT's `sid`
+    claim, then clears both cookies. Unknown/expired credentials still
+    receive 200 (no state disclosure).
     """
-    # Get session token from cookie or header
-    session_token = request.cookies.get(settings.session_cookie_name)
-    
-    if not session_token:
-        # Try from Authorization header
-        auth_header = request.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            # This is JWT, not session token
-            pass
-    
-    # Invalidate session in database
+    session_token: Optional[str] = request.cookies.get(settings.session_cookie_name)
     if session_token:
-        session = db.query(SessionModel).filter(
-            SessionModel.session_token == session_token
-        ).first()
-        
-        if session:
-            session.revoked_at = datetime.now(timezone.utc)
-            db.commit()
-    
-    # Clear cookie
-    response.delete_cookie(
-        settings.session_cookie_name,
-        path="/",
-        secure=True,
-        samesite="lax"
-    )
-    
+        auth.logout_by_session_token(session_token)
+    else:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            claims = auth.decode_access_token(auth_header.removeprefix("Bearer ").strip())
+            if claims is not None:
+                auth.logout_by_session_id(claims.session_id, claims.user_id)
+
+    _clear_auth_cookies(response, request)
     return {"message": "Successfully logged out"}
 
 
 @router.post("/password/change")
 async def change_password(
-    request: Request,
-    password_data: PasswordChangeRequest,
-    db: Session = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    payload: PasswordChangeRequest,
+    context: AuthContext = Depends(get_auth_context),
+    auth: AuthService = Depends(get_auth_service),
+    _csrf: None = Depends(csrf_protect),
 ):
     """
     Change user password.
-    
-    Security features:
-    - Requires current password verification
-    - Password strength validation
-    - Invalidates all sessions on password change
+
+    Requires the current password, enforces the password policy, bumps the
+    token version (revoking all outstanding JWTs) and revokes every other
+    session.
     """
-    # Decode token to get user ID
-    from app.services.security import decode_token
-    
-    payload = decode_token(credentials.credentials)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "INVALID_TOKEN", "message": "Invalid or expired token."}
+    try:
+        auth.change_password(
+            user=context.user,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+            keep_session_id=context.session.id,
         )
-    
-    user_id = int(payload.get("sub"))
-    user = db.query(User).filter(User.id == user_id).first()
-    
-    if not user:
+    except AuthenticationError as exc:
+        status_code = status.HTTP_400_BAD_REQUEST
+        fields = None
+        if exc.code == AuthErrorCode.WEAK_PASSWORD:
+            from app.services.password_policy import DEFAULT_PASSWORD_POLICY
+
+            fields = {"new_password": DEFAULT_PASSWORD_POLICY.validate(payload.new_password)}
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "USER_NOT_FOUND", "message": "User not found."}
+            status_code=status_code,
+            detail={"code": exc.code.value, "message": exc.message, "fields": fields},
         )
-    
-    # Verify current password
-    if not verify_password(password_data.current_password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "INVALID_PASSWORD",
-                "message": "Current password is incorrect."
-            }
-        )
-    
-    # Check password strength
-    is_weak, issues = is_weak_password(password_data.new_password)
-    if is_weak:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "WEAK_PASSWORD",
-                "message": "Password does not meet security requirements.",
-                "fields": {"new_password": issues}
-            }
-        )
-    
-    # Update password
-    user.password_hash = get_password_hash(password_data.new_password)
-    user.must_change_password = False
-    
-    # Invalidate all sessions
-    db.query(SessionModel).filter(SessionModel.user_id == user.id).update(
-        {"revoked_at": datetime.now(timezone.utc)}
-    )
-    
-    db.commit()
-    
-    return {"message": "Password changed successfully. Please log in again."}
+
+    return {"message": "Password changed successfully."}
 
 
 @router.post("/password/force-change")
 async def force_change_password(
-    request: Request,
-    password_data: ForcePasswordChangeRequest,
-    db: Session = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    payload: ForcePasswordChangeRequest,
+    context: AuthContext = Depends(get_auth_context),
+    auth: AuthService = Depends(get_auth_service),
+    _csrf: None = Depends(csrf_protect),
 ):
-    """
-    Force password change for temporary password accounts.
-    
-    Required for first-time login with temporary password.
-    """
-    # Decode token
-    from app.services.security import decode_token
-    
-    payload = decode_token(credentials.credentials)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "INVALID_TOKEN", "message": "Invalid or expired token."}
+    """First-login flow: replace the temporary password before anything else."""
+    try:
+        auth.force_change_password(
+            user=context.user,
+            new_password=payload.new_password,
+            keep_session_id=context.session.id,
         )
-    
-    user_id = int(payload.get("sub"))
-    user = db.query(User).filter(User.id == user_id).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "USER_NOT_FOUND", "message": "User not found."}
+    except AuthenticationError as exc:
+        status_code = (
+            status.HTTP_400_BAD_REQUEST
+            if exc.code in (AuthErrorCode.WEAK_PASSWORD, AuthErrorCode.PASSWORD_CHANGE_REQUIRED)
+            else status.HTTP_401_UNAUTHORIZED
         )
-    
-    if not user.must_change_password:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "NOT_REQUIRED",
-                "message": "Password change is not required."
-            }
+            status_code=status_code,
+            detail={"code": exc.code.value, "message": exc.message},
         )
-    
-    # Check password strength
-    is_weak, issues = is_weak_password(password_data.new_password)
-    if is_weak:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "code": "WEAK_PASSWORD",
-                "message": "Password does not meet security requirements.",
-                "fields": {"new_password": issues}
-            }
-        )
-    
-    # Update password
-    user.password_hash = get_password_hash(password_data.new_password)
-    user.must_change_password = False
-    
-    # Invalidate all sessions except current
-    db.commit()
-    
+
     return {"message": "Password changed successfully."}
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user(
-    db: Session = Depends(get_db),
-    credentials: HTTPAuthorizationCredentials = Depends(security)
-):
-    """Get current authenticated user information."""
-    from app.services.security import decode_token
-    
-    payload = decode_token(credentials.credentials)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "INVALID_TOKEN", "message": "Invalid or expired token."}
-        )
-    
-    user_id = int(payload.get("sub"))
-    user = db.query(User).filter(User.id == user_id).first()
-    
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "USER_NOT_FOUND", "message": "User not found."}
-        )
-    
+async def get_me(user=Depends(get_current_user)):
+    """Get current authenticated user information (kept for compatibility)."""
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -383,5 +224,5 @@ async def get_current_user(
         is_active=user.is_active,
         must_change_password=user.must_change_password,
         created_at=user.created_at,
-        last_login_at=user.last_login_at
+        last_login_at=user.last_login_at,
     )

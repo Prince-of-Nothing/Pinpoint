@@ -67,6 +67,7 @@ Compare to Bluesky's informal docs: their approach works for protocol experiment
 | **Security Engineering** | [Security Architecture](./architecture/security-architecture-and-data-protection.md), [Threat Controls](./architecture/security-threats-and-controls.md), [Security Control Register](./reference/security-control-register.md) |
 | **Data Protection** | [Privacy & Data Handling](./architecture/privacy-and-data-handling.md), [Domain Data Model](./reference/domain-data-model.md) |
 | **API Design** | [API Contract](./reference/api-contract.md), [API Security Implementation](./reference/api-security-implementation.md) |
+| **Design & Code Structure** | [Design Patterns and Principles](./reference/design-patterns.md), [ADR-0003](./adr/0003-structure-backend-around-design-patterns.md), [Diagrams](./architecture/diagrams/README.md) |
 | **Research & Validation** | [Pre-Implementation Validation](./explanation/pre-implementation-validation.md), [Research Notes](./explanation/research-notes-and-references.md) |
 | **Decision History** | [ADR Index](./architecture/architecture-decisions-link.md) |
 | **Project Planning** | [Development Roadmap](./explanation/development-roadmap-and-evidence.md) |
@@ -128,12 +129,22 @@ docs/
 │   ├── quality-requirements.md
 │   ├── risks-and-technical-debt.md
 │   ├── glossary.md
-│   └── diagrams/             # C4 model diagrams (Mermaid)
+│   └── diagrams/             # C4 + UML diagrams (Mermaid)
+│       ├── context-diagram.md
+│       ├── container-diagram.md
+│       ├── component-backend-api.md
+│       ├── deployment-diagram.md
+│       ├── class-domain-model.md
+│       ├── class-security-components.md
+│       ├── sequence-login.md
+│       ├── sequence-authorized-location-read.md
+│       └── sequence-friendship-consent.md
 │
 └── adr/                      # Architecture Decision Records
     ├── template.md
-    ├── record-architecture-decisions.md
-    └── adopt-always-together-product-direction.md
+    ├── 0001-record-architecture-decisions.md
+    ├── 0002-adopt-always-together-product-direction.md
+    └── 0003-structure-backend-around-design-patterns.md
 ```
 
 ## Maintaining Documentation Quality

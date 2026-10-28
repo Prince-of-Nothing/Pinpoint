@@ -11,6 +11,8 @@ from app.models.user import (
     FriendshipStatus,
     LocationShareDirection
 )
+from app.models.location import LocationUpdate
+from app.models.audit import AuditEvent
 
 __all__ = [
     "Base",
@@ -19,6 +21,8 @@ __all__ = [
     "Friendship",
     "LocationShare",
     "LoginAttempt",
+    "LocationUpdate",
+    "AuditEvent",
     "UserRole",
     "FriendshipStatus",
     "LocationShareDirection"

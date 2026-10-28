@@ -8,6 +8,7 @@ source of truth for *why* a decision was made.
 |-----|-------|--------|
 | [0001](../adr/0001-record-architecture-decisions.md) | Record architecture decisions | Accepted |
 | [0002](../adr/0002-adopt-always-together-product-direction.md) | Adopt Always Together as the product direction | Accepted |
+| [0003](../adr/0003-structure-backend-around-design-patterns.md) | Structure the backend around design patterns | Accepted |
 
 Add a row here whenever a new ADR is created. See [`adr/template.md`](../adr/template.md)
 for the format used to write new ADRs, and [`adr/README.md`](../adr/README.md) for the

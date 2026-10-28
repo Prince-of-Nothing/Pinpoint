@@ -1,12 +1,16 @@
 """
 Pydantic schemas for request/response validation.
 Defines data transfer objects for API endpoints.
+
+Validation is the first security control (SC-04): every field is bounded and
+typed before business logic runs; error responses never echo internals.
 """
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
-from typing import Optional, List
 from datetime import datetime
 from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 class UserRole(str, Enum):
@@ -23,13 +27,19 @@ class FriendshipStatus(str, Enum):
     BLOCKED = "blocked"
 
 
+VALID_PURPOSES = ("safety", "meetup", "navigation", "check_in")
+PRECISION_LEVELS = ("exact", "approximate", "city_only")
+
+
 # ============ Authentication Schemas ============
 
 class LoginRequest(BaseModel):
     """Login request schema."""
     email: EmailStr = Field(..., max_length=255, description="User email address")
-    password: str = Field(..., min_length=8, max_length=128, description="User password")
-    
+    # Length policy is enforced at password *creation*; login must accept any
+    # previously stored credential (including temporary passwords).
+    password: str = Field(..., min_length=1, max_length=128, description="User password")
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -49,11 +59,11 @@ class LoginResponse(BaseModel):
 
 
 class PasswordChangeRequest(BaseModel):
-    """Password change request schema."""
-    current_password: str = Field(..., min_length=8, max_length=128)
-    new_password: str = Field(..., min_length=8, max_length=128)
-    confirm_password: str = Field(..., min_length=8, max_length=128)
-    
+    """Change user password schema."""
+    current_password: str = Field(..., min_length=1, max_length=128)
+    new_password: str = Field(..., min_length=10, max_length=128)
+    confirm_password: str = Field(..., min_length=10, max_length=128)
+
     @field_validator('confirm_password')
     @classmethod
     def passwords_match(cls, v, info):
@@ -63,10 +73,10 @@ class PasswordChangeRequest(BaseModel):
 
 
 class ForcePasswordChangeRequest(BaseModel):
-    """Force password change request (first login)."""
-    new_password: str = Field(..., min_length=8, max_length=128)
-    confirm_password: str = Field(..., min_length=8, max_length=128)
-    
+    """Force password change request schema (first login)."""
+    new_password: str = Field(..., min_length=10, max_length=128)
+    confirm_password: str = Field(..., min_length=10, max_length=128)
+
     @field_validator('confirm_password')
     @classmethod
     def passwords_match(cls, v, info):
@@ -82,8 +92,8 @@ class UserCreate(BaseModel):
     email: EmailStr = Field(..., max_length=255)
     full_name: str = Field(..., min_length=1, max_length=100)
     role: UserRole = Field(default=UserRole.RESIDENT)
-    temporary_password: Optional[str] = Field(None, min_length=8, max_length=128)
-    
+    temporary_password: Optional[str] = Field(None, min_length=10, max_length=128)
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -105,7 +115,7 @@ class UserResponse(BaseModel):
     must_change_password: bool
     created_at: datetime
     last_login_at: Optional[datetime] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -114,12 +124,24 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, min_length=1, max_length=100)
 
 
+class ProfileResponse(BaseModel):
+    """
+    Viewer-filtered profile projection (SC-03).
+
+    Fields are null/redacted for viewers without a friendship — the backend
+    filters, the client only renders.
+    """
+    id: Optional[int] = None
+    display_name: Optional[str] = None
+    is_full_profile: bool = False
+
+
 # ============ Friendship Schemas ============
 
 class FriendshipRequest(BaseModel):
     """Schema for sending a friend request."""
     receiver_email: EmailStr = Field(..., max_length=255)
-    
+
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -139,7 +161,7 @@ class FriendshipResponse(BaseModel):
     status: FriendshipStatus
     created_at: datetime
     responded_at: Optional[datetime] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -151,10 +173,24 @@ class FriendshipAction(BaseModel):
 # ============ Location Share Schemas ============
 
 class LocationShareCreate(BaseModel):
-    """Schema for creating location share permission."""
+    """Schema for creating a directional location-share consent record."""
     friendship_id: int
-    direction: str = Field(..., pattern="^(to_friend|from_friend|mutual)$")
+    direction: str = Field("to_friend", pattern="^(to_friend|from_friend|mutual)$")
     precision_level: Optional[str] = Field("exact", pattern="^(exact|approximate|city_only)$")
+    purpose: str = Field("safety", pattern="^(safety|meetup|navigation|check_in)$")
+    expires_at: Optional[datetime] = None
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "friendship_id": 1,
+                "direction": "to_friend",
+                "precision_level": "approximate",
+                "purpose": "safety",
+                "expires_at": "2026-01-01T22:00:00Z"
+            }
+        }
+    )
 
 
 class LocationShareResponse(BaseModel):
@@ -165,35 +201,50 @@ class LocationShareResponse(BaseModel):
     direction: str
     is_active: bool
     precision_level: str
+    purpose: str
+    expires_at: Optional[datetime] = None
     created_at: datetime
+    revoked_at: Optional[datetime] = None
     last_location_update_at: Optional[datetime] = None
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
-class LocationUpdate(BaseModel):
-    """Schema for updating current location."""
+class LocationUpdateRequest(BaseModel):
+    """Schema for updating the caller's current location."""
     latitude: float = Field(..., ge=-90, le=90)
     longitude: float = Field(..., ge=-180, le=180)
-    accuracy: Optional[float] = Field(None, ge=0)
+    accuracy: Optional[float] = Field(None, ge=0, le=100_000)
+    battery_level: Optional[int] = Field(None, ge=0, le=100)
     timestamp: Optional[datetime] = None
 
 
-class LocationResponse(BaseModel):
-    """Location response schema."""
-    user_id: int
-    user_name: str
+class FriendLocationResponse(BaseModel):
+    """One friend's authorized, precision-filtered latest location."""
+    friend_id: int
+    friend_name: str
     latitude: float
     longitude: float
-    accuracy: Optional[float]
-    updated_at: datetime
+    accuracy: Optional[float] = None
     precision_level: str
+    recorded_at: datetime
+    is_stale: bool
+    battery_level: Optional[int] = None
+
+
+class LatestLocationsResponse(BaseModel):
+    """Collection of authorized friend locations."""
+    friends_locations: List[FriendLocationResponse]
+
+
+# Back-compatible alias (older code referenced LocationUpdate).
+LocationUpdate = LocationUpdateRequest
 
 
 # ============ Error Response Schema ============
 
 class ErrorResponse(BaseModel):
-    """Standard error response schema."""
+    """Standard error response schema (RFC 7807 Problem Details)."""
     error: dict
 
 
@@ -207,3 +258,4 @@ class ErrorDetail(BaseModel):
 # Update forward references
 UserResponse.model_rebuild()
 FriendshipResponse.model_rebuild()
+LoginResponse.model_rebuild()

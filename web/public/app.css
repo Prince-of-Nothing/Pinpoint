@@ -39,7 +39,10 @@ main { padding: 1.2rem; max-width: 1100px; margin: 0 auto; }
 .row.end { justify-content: flex-end; }
 .row input, .row select { width: auto; min-width: 140px; }
 
-#map { height: 420px; border-radius: 12px; border: 1px solid var(--border); background: url('https://tile.openstreetmap.org/12/2048/1360.png') center/64px; }
+/* Placeholder before tiles load: plain pattern (no third-party request —
+   the previous CSS pulled a tile from tile.openstreetmap.org here). */
+#map { height: 420px; border-radius: 12px; border: 1px solid var(--border);
+  background: repeating-conic-gradient(#1e293b 0% 25%, #162032 0% 50%) 50% / 64px 64px; }
 .friend-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .8rem; margin-top: 1rem; }
 .friend-list li, .cards li { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: .9rem 1rem; }
 .cards { list-style: none; padding: 0; display: grid; gap: .8rem; }
@@ -60,3 +63,12 @@ dialog::backdrop { background: rgba(0,0,0,.6); }
 
 .toast { position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--primary); color: var(--text); padding: .7rem 1.1rem; border-radius: 10px; z-index: 100; }
 .toast.err { border-color: var(--danger); }
+
+/* ODbL attribution line under the map — legally required to stay visible. */
+.attribution { font-size: .7rem; color: var(--muted); text-align: right; margin: .25rem 0 0; }
+.attribution a { color: var(--muted); }
+
+/* Offline banner: shell works offline; live data does not. */
+.offline-banner { position: fixed; top: .4rem; left: 50%; transform: translateX(-50%);
+  background: #78350f; color: #fde68a; padding: .45rem 1rem; border-radius: 999px;
+  font-size: .85rem; z-index: 100; }

@@ -17,7 +17,7 @@ import (
 // App bundles the dependencies shared by all HTTP handlers.
 type App struct {
 	Settings    *config.Settings
-	Store       *store.Store
+	Store       store.Repository
 	RateLimiter *RateLimiter
 
 	// Per-email lockout expiry (Redis in production).

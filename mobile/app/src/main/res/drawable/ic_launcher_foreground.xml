@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Two location pins joined by a link — "always together". -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Left pin -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M42,30 C34.3,30 28,36.3 28,44 C28,54.5 42,70 42,70 C42,70 56,54.5 56,44 C56,36.3 49.7,30 42,30 Z M42,49 C40.3,49 39,47.7 39,46 C39,44.3 40.3,43 42,43 C43.7,43 45,44.3 45,46 C45,47.7 43.7,49 42,49 Z" />
+    <!-- Right pin -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66,38 C58.3,38 52,44.3 52,52 C52,62.5 66,78 66,78 C66,78 80,62.5 80,52 C80,44.3 73.7,38 66,38 Z M66,57 C64.3,57 63,55.7 63,54 C63,52.3 64.3,51 66,51 C67.7,51 69,52.3 69,54 C69,55.7 67.7,57 66,57 Z" />
+</vector>

@@ -379,21 +379,24 @@ func (p *Postgres) TouchSession(token string) {
 // Login attempts
 // ---------------------------------------------------------------------------
 
-// RecordLoginAttempt stores an authentication attempt for auditing.
+// RecordLoginAttempt stores an authentication attempt for auditing. The email
+// is normalized (lowercased) so case-insensitive lookups work, mirroring the
+// in-memory driver.
 func (p *Postgres) RecordLoginAttempt(email, ip string, success bool) {
 	_, _ = p.db.Exec(`
 		INSERT INTO login_attempts (email, ip_address, success, attempted_at)
-		VALUES ($1, $2, $3, $4)`, email, ip, success, nowUTC())
+		VALUES ($1, $2, $3, $4)`,
+		strings.ToLower(strings.TrimSpace(email)), ip, success, nowUTC())
 }
 
 // RecentFailedAttempts counts failed login attempts for an email within the
-// given window.
+// given window. Matching is case-insensitive.
 func (p *Postgres) RecentFailedAttempts(email string, window time.Duration) int {
 	var n int
 	err := p.db.QueryRow(`
 		SELECT COUNT(*) FROM login_attempts
 		WHERE success=FALSE AND email=$1 AND attempted_at > $2`,
-		email, nowUTC().Add(-window)).Scan(&n)
+		strings.ToLower(strings.TrimSpace(email)), nowUTC().Add(-window)).Scan(&n)
 	if err != nil {
 		return 0
 	}
@@ -527,15 +530,11 @@ func (p *Postgres) CreateLocationShare(ls *models.LocationShare) error {
 
 // GetLocationShare returns a share by id.
 func (p *Postgres) GetLocationShare(id int64) (*models.LocationShare, error) {
-	ls := &models.LocationShare{}
-	err := p.db.QueryRow(`
+	ls, err := scanShareRow(p.db.QueryRow(`
 		SELECT id, friendship_id, owner_id, direction, is_active,
 			precision_level, created_at, updated_at, last_location_update,
 			has_location, latitude, longitude, accuracy
-		FROM location_shares WHERE id=$1`, id,
-	).Scan(&ls.ID, &ls.FriendshipID, &ls.OwnerID, &ls.Direction, &ls.IsActive,
-		&ls.PrecisionLevel, &ls.CreatedAt, &ls.UpdatedAt, &ls.LastLocationUpdate,
-		&ls.HasLocation, &ls.Latitude, &ls.Longitude, &ls.Accuracy)
+		FROM location_shares WHERE id=$1`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -605,16 +604,40 @@ func (p *Postgres) ListActiveSharesVisibleTo(ownerID, viewerID int64) []models.L
 func scanShares(rows *sql.Rows) []models.LocationShare {
 	out := []models.LocationShare{}
 	for rows.Next() {
-		var ls models.LocationShare
-		if err := rows.Scan(&ls.ID, &ls.FriendshipID, &ls.OwnerID, &ls.Direction,
-			&ls.IsActive, &ls.PrecisionLevel, &ls.CreatedAt, &ls.UpdatedAt,
-			&ls.LastLocationUpdate, &ls.HasLocation, &ls.Latitude, &ls.Longitude,
-			&ls.Accuracy); err != nil {
+		ls, err := scanShareRow(rows)
+		if err != nil {
 			return out
 		}
-		out = append(out, ls)
+		out = append(out, *ls)
 	}
 	return out
+}
+
+// scanShareRow reads one location_share row. latitude/longitude are nullable
+// in the schema (a share can exist before any location arrives) but the model
+// uses plain float64, so NULL maps to the zero value, matching the in-memory
+// driver.
+func scanShareRow(sc rowScanner) (*models.LocationShare, error) {
+	ls := &models.LocationShare{}
+	var lat, lon sql.NullFloat64
+	if err := sc.Scan(&ls.ID, &ls.FriendshipID, &ls.OwnerID, &ls.Direction,
+		&ls.IsActive, &ls.PrecisionLevel, &ls.CreatedAt, &ls.UpdatedAt,
+		&ls.LastLocationUpdate, &ls.HasLocation, &lat, &lon, &ls.Accuracy,
+	); err != nil {
+		return nil, err
+	}
+	if lat.Valid {
+		ls.Latitude = lat.Float64
+	}
+	if lon.Valid {
+		ls.Longitude = lon.Float64
+	}
+	return ls, nil
+}
+
+// rowScanner abstracts *sql.Row and *sql.Rows for the share scanner.
+type rowScanner interface {
+	Scan(dest ...any) error
 }
 
 // ---------------------------------------------------------------------------

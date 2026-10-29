@@ -47,7 +47,10 @@ func New() *Store {
 	}
 }
 
-func nowUTC() time.Time { return time.Now().UTC() }
+// nowUTC returns the current UTC time truncated to microsecond precision.
+// PostgreSQL TIMESTAMPTZ stores microseconds, so truncating here keeps
+// round-tripped timestamps Equal to freshly created ones on both drivers.
+func nowUTC() time.Time { return time.Now().UTC().Truncate(time.Microsecond) }
 
 // ---------------------------------------------------------------------------
 // Users

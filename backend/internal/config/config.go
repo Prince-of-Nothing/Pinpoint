@@ -9,6 +9,9 @@ import (
 	"sync"
 )
 
+// DefaultSecretKey is the insecure development fallback for SECRET_KEY.
+const DefaultSecretKey = "change-this-secret-key-in-production-min-32-characters-long"
+
 // Settings holds all tunable application configuration. Values are loaded
 // from environment variables (e.g. DATABASE_URL, SECRET_KEY) with defaults
 // matching .env.example.
@@ -20,6 +23,10 @@ type Settings struct {
 	// or postgres. Postgres falls back to memory with a warning when the
 	// database is unreachable (local development).
 	DBDriver string
+
+	// DBRequired makes an unreachable postgres fatal instead of falling back
+	// to memory (set in production).
+	DBRequired bool
 
 	// Redis
 	RedisURL string
@@ -116,11 +123,11 @@ func load() *Settings {
 	return &Settings{
 		DatabaseURL: envStr("DATABASE_URL",
 			"postgresql://postgres:postgres@localhost:5432/always_together"),
-		DBDriver:    envStr("DB_DRIVER", "memory"),
-		RedisURL:    envStr("REDIS_URL", "redis://localhost:6379/0"),
+		DBDriver:   envStr("DB_DRIVER", "memory"),
+		DBRequired: envBool("DB_REQUIRED", false),
+		RedisURL:   envStr("REDIS_URL", "redis://localhost:6379/0"),
 
-		SecretKey: envStr("SECRET_KEY",
-			"change-this-secret-key-in-production-min-32-characters-long"),
+		SecretKey:              envStr("SECRET_KEY", DefaultSecretKey),
 		Algorithm:              envStr("ALGORITHM", "HS256"),
 		AccessTokenExpireMins:  envInt("ACCESS_TOKEN_EXPIRE_MINUTES", 30),
 		RefreshTokenExpireDays: envInt("REFRESH_TOKEN_EXPIRE_DAYS", 7),

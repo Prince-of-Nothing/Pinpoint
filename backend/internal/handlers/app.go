@@ -30,7 +30,7 @@ type App struct {
 // (memory by default; postgres with graceful fallback to memory).
 func NewApp() *App {
 	settings := config.Get()
-	repo, err := store.Open(settings.DBDriver, settings.DatabaseURL)
+	repo, err := store.Open(settings.DBDriver, settings.DatabaseURL, settings.DBRequired)
 	if err != nil {
 		log.Fatalf("store: %v", err) // unknown driver: fail closed on typos
 	}

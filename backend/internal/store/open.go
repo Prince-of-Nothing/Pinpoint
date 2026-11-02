@@ -19,13 +19,17 @@ const (
 
 // Open constructs the Repository for the given driver. Unknown drivers are an
 // error (fail closed on typos); an unreachable postgres falls back to memory.
-func Open(driver, databaseURL string) (Repository, error) {
+// With required=true an unreachable postgres is an error instead (production).
+func Open(driver, databaseURL string, required bool) (Repository, error) {
 	switch strings.ToLower(strings.TrimSpace(driver)) {
 	case "", DriverMemory:
 		return New(), nil
 	case DriverPostgres, "postgresql":
 		pg, err := OpenPostgres(databaseURL)
 		if err != nil {
+			if required {
+				return nil, fmt.Errorf("store: postgres required but unavailable: %w", err)
+			}
 			log.Printf("store: postgres unavailable (%v); falling back to in-memory store", err)
 			return New(), nil
 		}

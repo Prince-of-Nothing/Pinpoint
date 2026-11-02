@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: always-together-api
+    runtime: docker
+    plan: free
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: DB_DRIVER
+        value: postgres
+      - key: DB_REQUIRED
+        value: "true"
+      - key: DEBUG
+        value: "false"
+      - key: SEED_DEMO_DATA
+        value: "false"
+      - key: COOKIE_INSECURE
+        value: "false"
+      # Supabase session-pooler URL, e.g. postgresql://user:pass@host:5432/postgres?sslmode=require
+      - key: DATABASE_URL
+        sync: false
+      # Public Vercel origin, e.g. https://always-together.vercel.app
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true

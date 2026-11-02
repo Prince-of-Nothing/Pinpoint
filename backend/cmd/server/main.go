@@ -23,6 +23,10 @@ import (
 func main() {
 	settings := config.Get()
 
+	if settings.DBRequired && settings.SecretKey == config.DefaultSecretKey {
+		log.Fatal("SECRET_KEY must be set when DB_REQUIRED=true")
+	}
+
 	app := handlers.NewApp()
 	if app.SeedIfEmpty() {
 		log.Println("seeded demo accounts: alice@example.com/DemoPass123!, bob@example.com/DemoPass456!, admin@example.com/ChangeMe123!")

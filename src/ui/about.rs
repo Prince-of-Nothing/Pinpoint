@@ -193,8 +193,8 @@ impl PinpointAppUI {
                 #[cfg(target_os = "android")]
                 ui.label(
                     RichText::new(
-                        "Sharing into Pinpoint is handled when the app launches. If Pinpoint \
-                         is already running, close it before sharing a location.",
+                        "Pinpoint is not registered as a text-share target until an Android \
+                         onNewIntent bridge can handle repeat shares.",
                     )
                     .size(10.0)
                     .color(muted),

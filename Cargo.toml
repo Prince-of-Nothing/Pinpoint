@@ -1,4 +1,4 @@
-[package]
+﻿[package]
 name = "pinpoint-desktop"
 version = "1.3.5"
 edition = "2021"
@@ -152,13 +152,13 @@ tower = { version = "0.4", features = ["util"] }
 # Multiplatform targets (see docs/sdlc/06-technical-requirements.md):
 # - Desktop: `cargo build --locked` (Windows/Linux/macOS)
 # - Android: `cargo apk build --lib --target x86_64-linux-android`
-#   (eframe/winit → NativeActivity; see android/README.md)
-# - iOS:     `cargo xcodebuild` (eframe/winit → aarch64-apple-ios)
+#   (eframe/winit â†’ NativeActivity; see android/README.md)
+# - iOS:     `cargo xcodebuild` (eframe/winit â†’ aarch64-apple-ios)
 # The same `crate-type` serves all targets; `src/platform.rs` holds every
 # `cfg(target_os)` branch so the UI core stays portable.
 # - Web:     `trunk build` with `src/bin/pinpoint-web.rs` (wasm32, see `web/`)
 
-# Linux .deb packaging (cargo-deb, optional — see packaging/linux/README).
+# Linux .deb packaging (cargo-deb, optional â€” see packaging/linux/README).
 [package.metadata.deb]
 name = "pinpoint"
 maintainer = "Pinpoint Team"
@@ -170,14 +170,14 @@ assets = [
 ]
 description = "Privacy-first location-sharing client (offline map-first, OSM ODbL)."
 
-# macOS .app bundle (cargo-bundle, optional — see packaging/macos/README).
+# macOS .app bundle (cargo-bundle, optional â€” see packaging/macos/README).
 [package.metadata.bundle]
 name = "Pinpoint"
 identifier = "com.pinpoint.desktop"
 resources = []
 category = "Social Networking"
 short_description = "Privacy-first location sharing (map-first, OSM)."
-copyright = "MIT © 2026 Pinpoint"
+copyright = "MIT Â© 2026 Pinpoint"
 # NSLocationWhenInUseUsageDescription etc. are optional: publish/share is
 # manual lat/lon today; GPS requires the same entitlements as Android/iOS
 # (see ios/Info.plist NSLocation* keys).
@@ -226,10 +226,3 @@ categories = ["android.intent.category.DEFAULT", "android.intent.category.BROWSA
 scheme = "pinpoint"
 [[package.metadata.android.application.activity.intent_filter.data]]
 scheme = "geo"
-
-# Receive a location or Pinpoint link shared from Maps, a chat app, etc.
-[[package.metadata.android.application.activity.intent_filter]]
-actions = ["android.intent.action.SEND"]
-categories = ["android.intent.category.DEFAULT"]
-[[package.metadata.android.application.activity.intent_filter.data]]
-mime_type = "text/plain"

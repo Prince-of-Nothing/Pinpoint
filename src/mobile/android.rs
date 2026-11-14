@@ -34,18 +34,6 @@ pub fn launch_android_ui(
             app.apply_deep_link(link);
         }
     }
-    if let Some(text) = crate::platform::android_shared_text() {
-        match crate::mobile::MobileDeepLink::parse_shared(&text) {
-            Some(link) => {
-                tracing::info!("android: applied shared text link");
-                app.apply_deep_link(link);
-            }
-            None => {
-                tracing::warn!("android: shared text has no location link");
-                app.show_notice("Shared text did not contain a location link.");
-            }
-        }
-    }
 
     let options = eframe::NativeOptions {
         android_app: Some(app_handle),

@@ -410,11 +410,6 @@ impl PinpointAppUI {
         self.app.set_offline_mode(offline);
     }
 
-    /// Show a short user-facing notice from platform startup code.
-    pub fn show_notice(&self, message: impl Into<String>) {
-        self.app.set_notice(Some(message.into()));
-    }
-
     /// Share plain text: the Android system share sheet, or the clipboard on
     /// desktop. Used for `geo:` links and kiosk deep links.
     pub(crate) fn share_text(&mut self, ctx: &egui::Context, text: &str) {

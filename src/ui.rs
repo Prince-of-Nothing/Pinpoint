@@ -1103,6 +1103,7 @@ impl PinpointAppUI {
                 self.pin_input.clear();
                 self.pin_error = None;
                 self.pin_focus_requested = true;
+                tracing::info!("app lock: re-locked after returning to the foreground");
             }
         }
     }
@@ -1176,6 +1177,7 @@ impl PinpointAppUI {
             self.pin_error = None;
             self.pin_failures = 0;
             self.pin_retry_at = None;
+            tracing::info!("app lock: unlocked");
             return;
         }
         self.pin_failures = self.pin_failures.saturating_add(1);

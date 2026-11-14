@@ -353,6 +353,17 @@ impl PinpointAppUI {
                             );
                             let _ = webbrowser::open(&url);
                         }
+                        if ui.button("Share").clicked() {
+                            self.share_text(
+                                ctx,
+                                &format!(
+                                    "geo:{:.5},{:.5}?q={}",
+                                    place.latitude,
+                                    place.longitude,
+                                    encode_component(&place.short_name)
+                                ),
+                            );
+                        }
                     });
                 }
             }

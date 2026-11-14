@@ -150,6 +150,14 @@ impl PinpointAppUI {
                     .size(10.0)
                     .color(egui::Color32::from_rgb(148, 163, 184)),
             );
+            ui.label(
+                RichText::new(
+                    "Casual privacy lock only: it does not encrypt app data, and the retry \
+                     delay resets when the app restarts.",
+                )
+                .size(10.0)
+                .color(egui::Color32::from_rgb(148, 163, 184)),
+            );
         });
         ui.add_space(8.0);
         ui.group(|ui| {

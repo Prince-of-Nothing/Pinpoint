@@ -1,18 +1,37 @@
-# Pinpoint 1.3.2 — Release Notes
+# Pinpoint 1.3.3 — Release Notes
 
-**Released:** 2026-11-14 · **Version:** `1.3.2` (from `1.3.1`) ·
-**Status:** Android startup fix + local crash reporting and diagnostics.
+**Released:** 2026-11-14 · **Version:** `1.3.3` (from `1.3.2`) ·
+**Status:** Android deep links, privacy hardening and crash-report polish.
 
-**Artifacts:** `pinpoint-android-1.3.2.apk` (arm64-v8a) and
-`pinpoint-android-1.3.2-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.2` tag.
+**Artifacts:** `pinpoint-android-1.3.3.apk` (arm64-v8a) and
+`pinpoint-android-1.3.3-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.3` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.2 patch
+## 0. 1.3.3 patch
+
+- **Deep links:** `pinpoint://` and `geo:` are registered and routed on launch,
+  including kiosk tokens and map-centre hand-off.
+- **Kiosk QR:** the Kiosk screen renders a scannable
+  `pinpoint://kiosk?token=...` QR.
+- **FLAG_SECURE:** screenshots and screen recording of location data are blocked.
+- **No-email fallback:** report and log copies use Android's system
+  `ClipboardManager`, so the full report survives when no mail app exists.
+- **Fallback safety:** a release with no configured backend disables session
+  restore and sign-in instead of sending credentials or a stored session to the
+  shared loopback port.
+- **Diagnostics:** stronger redaction for Authorization/Bearer headers, JSON
+  values and suffixed tokens; log clearing keeps the open writer usable.
+- **Android 15:** the mobile tab bar reserves a bottom inset for the edge-to-edge
+  gesture bar.
+- **Crash prompt:** reports are marked seen after Email or Close, so the prompt
+  does not repeat.
+
+## 1. 1.3.2 patch
 
 - **Android release startup:** a rejected default backend URL now falls back to
   the loopback offline client instead of panicking. The app opens with an

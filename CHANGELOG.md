@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.3.3] - 2026-11-14
 ### Added
 - [FEATURE] Android: register and route `pinpoint://` and `geo:` launch intents, including kiosk token links and map-centre hand-off.
 - [FEATURE] Kiosk: render a scannable QR for `pinpoint://kiosk?token=...` links.
@@ -24,6 +26,7 @@ The per-item flagged list for this release is in
 - [FIX] Android: reserve a bottom inset so the edge-to-edge gesture bar does not cover the mobile tab bar.
 - [FIX] Diagnostics: redact Authorization/Bearer headers, JSON values, suffixed tokens and quoted coordinates; mailto re-redacts before encoding.
 - [FIX] Logs: Clear log truncates the open writer, so subsequent events remain visible.
+- [FIX] Crash prompt is marked seen after Email or Close, so it does not repeat on every launch.
 
 ## [1.3.2] - 2026-11-14
 ### Added

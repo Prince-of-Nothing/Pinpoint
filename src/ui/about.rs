@@ -20,9 +20,10 @@ impl PinpointAppUI {
         let warn = Color32::from_rgb(250, 204, 21);
         let danger = Color32::from_rgb(248, 113, 113);
 
-        ui.vertical(|ui| {
-            ui.painter().rect_filled(ui.max_rect(), 0.0, bg);
-            ui.add_space(if compact { 8.0 } else { 16.0 });
+        ui.painter().rect_filled(ui.max_rect(), 0.0, bg);
+        egui::ScrollArea::vertical().show(ui, |ui| {
+            ui.vertical(|ui| {
+                ui.add_space(if compact { 8.0 } else { 16.0 });
             ui.horizontal(|ui| {
                 if ui.button("< Back").clicked() {
                     self.app.set_screen(CurrentScreen::Profile);
@@ -158,12 +159,57 @@ impl PinpointAppUI {
                 }
             });
 
+            let pending = crate::crash::pending_report();
+            let has_pending = pending.is_some();
+            let pending_for_button = pending;
+            let device = crate::crash::device_summary();
+            let log_path = crate::logging::log_path();
+
+            ui.add_space(10.0);
+            card(ui, &mut |ui| {
+                ui.label(RichText::new("Troubleshooting").size(17.0).strong());
+                ui.add_space(4.0);
+                ui.label(
+                    RichText::new(
+                        "Crash reports and logs stay on this device until you choose to email them.",
+                    )
+                    .size(11.0)
+                    .color(muted),
+                );
+                ui.add_space(4.0);
+                if ui.button("Report a problem").clicked() {
+                    self.open_manual_report();
+                }
+                if has_pending && ui.button("View last crash report").clicked() {
+                    if let Some(stored) = pending_for_button.clone() {
+                        self.crash_dialog =
+                            Some(crate::ui::crash_dialog::CrashDialog::from_pending(stored));
+                    }
+                }
+                if ui.button("Copy recent log").clicked() {
+                    ctx.copy_text(crate::logging::tail(200));
+                }
+                if ui.button("Clear log").clicked() {
+                    crate::logging::clear();
+                }
+                ui.add_space(4.0);
+                ui.label(RichText::new(device.as_str()).size(10.0).color(muted));
+                if let Some(path) = &log_path {
+                    ui.label(
+                        RichText::new(format!("Log: {}", path.display()))
+                            .size(10.0)
+                            .color(muted),
+                    );
+                }
+            });
+
             ui.add_space(10.0);
             ui.label(
                 RichText::new("Map data © OpenStreetMap contributors (ODbL)")
                     .size(10.0)
                     .color(muted),
             );
+            });
         });
     }
 }

@@ -12,6 +12,7 @@ pub(crate) mod about;
 pub(crate) mod admin;
 pub(crate) mod auth;
 pub(crate) mod bookmarks;
+pub(crate) mod crash_dialog;
 pub(crate) mod emergency;
 pub(crate) mod friends;
 pub(crate) mod kiosk;
@@ -27,6 +28,7 @@ use crate::app::{CurrentScreen, PinpointApp};
 use crate::backend::DynBackend;
 use crate::i18n::{self, key, Lang};
 use crate::osm::OsmClient;
+use crash_dialog::CrashDialog;
 use eframe::egui::{self, Align, Color32, Direction, RichText};
 use route::RoutePlan;
 use std::sync::Arc;
@@ -238,6 +240,9 @@ pub struct PinpointAppUI {
     change_password_confirm: String,
     // About / updates
     about_check_started: bool,
+    // Crash reporting
+    crash_dialog: Option<CrashDialog>,
+    crash_checked: bool,
     // Admin screen
     pub(crate) admin_search_query: String,
     admin_tab: String,
@@ -308,6 +313,8 @@ impl PinpointAppUI {
             change_password_new: String::new(),
             change_password_confirm: String::new(),
             about_check_started: false,
+            crash_dialog: None,
+            crash_checked: false,
             admin_search_query: String::new(),
             admin_tab: "overview".to_string(),
             admin_loaded: false,
@@ -1000,6 +1007,12 @@ impl PinpointAppUI {
 
 impl eframe::App for PinpointAppUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if !self.crash_checked {
+            self.crash_checked = true;
+            if let Some(stored) = crate::crash::pending_report() {
+                self.crash_dialog = Some(CrashDialog::from_pending(stored));
+            }
+        }
         self.sync_route_results();
         self.tick_navigation();
         if !self.session_restore_attempted {
@@ -1399,6 +1412,7 @@ impl eframe::App for PinpointAppUI {
 
         self.draw_share_sheet(ctx);
         self.draw_recovery_code(ctx);
+        self.draw_crash_dialog(ctx);
 
         // Request repaint for animation/screenshot
         if self.app.screenshot_mode() && !self.app.screenshot_taken() {

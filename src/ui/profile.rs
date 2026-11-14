@@ -200,6 +200,21 @@ impl PinpointAppUI {
                     ctx,
                 );
             }
+            let email_ready = !self.diagnostic_message.trim().is_empty();
+            if ui
+                .add_enabled(email_ready, egui::Button::new("Email report"))
+                .clicked()
+            {
+                let summary = format!("User report: {}", self.diagnostic_category);
+                let note = self.diagnostic_message.trim().to_string();
+                self.open_manual_report_with_note(&summary, &note);
+            }
+            ui.label(
+                RichText::new(
+                    "Send report uses the backend; Email report opens your mail app and works without a server.",
+                )
+                .size(10.0),
+            );
         });
         ui.add_space(8.0);
 

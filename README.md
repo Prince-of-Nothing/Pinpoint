@@ -31,9 +31,10 @@ production-hardened. See the functional-state matrix and per-item
 - **Desktop client** — map, Nominatim search, OSRM routing (drive/walk/bike),
   Overpass POIs, bookmarks, check-ins, emergency, offline tile packs.
 - **Android client** — same Rust core packaged with cargo-apk 0.10; responsive
-  map-first shell, live OSM tiles via the backend, kiosk check-in and admin
-  screens, drawer navigation. Builds and runs on the API 37 x86_64 emulator;
-  AArch64 device/CI and release signing are follow-ups.
+  map-first shell, live OSM tiles via the backend, kiosk check-in, admin and
+  tool screens, and the About/update checker. Builds and runs on the API 37
+  x86_64 emulator; tag-driven signed arm64/armv7 APKs come from the release
+  workflow, and a physical AArch64 device run is still pending.
 - **Consent model** — directional, precision-scoped (`exact` / `approximate` /
   `city_only`), purpose-bound, expiring, revocable; enforced server-side.
 - **Privacy** — no trackers, no analytics, no raw IP storage, no IP/WebRTC
@@ -46,9 +47,9 @@ production-hardened. See the functional-state matrix and per-item
   `PINPOINT_OSRM_URL`, `PINPOINT_OVERPASS_URL`; public providers are demo
   fallbacks only.
 
-**Still pending:** OAuth/passkeys/magic links, iOS build, Android release
-signing/CI, and physical AArch64 device validation. See
-[`ROADMAP.md`](./ROADMAP.md) and [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
+**Still pending:** OAuth/passkeys/magic links, iOS build, and physical AArch64
+device validation. See [`ROADMAP.md`](./ROADMAP.md) and
+[`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ---
 
@@ -84,6 +85,13 @@ The Android emulator reaches the host at `http://10.0.2.2:8080`; run
 `BIND_ADDR=0.0.0.0:8080 cargo run --bin pinpoint-server`. Use Android Studio
 for the emulator/logcat; the APK itself is built by cargo-apk, not Gradle. See
 [`android/README.md`](./android/README.md) for prerequisites and caveats.
+
+Pushing a `vX.Y.Z` tag that matches `Cargo.toml` runs
+[`.github/workflows/release.yml`](./.github/workflows/release.yml): it builds
+signed `arm64-v8a` and `armeabi-v7a` APKs, verifies the release certificate and
+creates a draft GitHub release. Publish the draft so the in-app About → Updates
+checker can see it. Manual workflow runs are dry runs. See
+[`android/README.md`](./android/README.md) for the key secrets and caveats.
 
 ### Docker
 

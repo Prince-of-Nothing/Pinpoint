@@ -6,8 +6,9 @@ with **cargo-apk 0.10** using an `android.app.NativeActivity` entry
 
 **Status:** builds, installs and runs on the API 37 x86_64 emulator (tested on
 Windows with Android Studio's SDK). The map uses live OSM tiles through the
-Pinpoint backend and caches them on-device. Release signing/CI and a physical
-AArch64 device run are follow-ups.
+Pinpoint backend and caches them on-device. Release signing is handled by
+`.github/workflows/release.yml`; a physical AArch64 device run is still a
+follow-up.
 
 ## Prerequisites
 
@@ -39,6 +40,48 @@ adb shell am start -n com.pinpoint.desktop/android.app.NativeActivity
 
 `cargo apk build --lib` is required because the package also exposes desktop
 binaries; without `--lib`, cargo-apk tries to package the `bin` artifact.
+
+## Releases (GitHub Actions)
+
+`.github/workflows/release.yml` is adapted from the ArtCraft release pattern:
+
+- **Push a `v*` tag** whose version matches `Cargo.toml` (for example
+  `v1.3.0`). The workflow builds one APK for `arm64-v8a` and one for
+  `armeabi-v7a`, re-signs both with the release key, verifies the certificate
+  and creates a **draft** GitHub release named after the tag with an empty
+  "What's Changed" section.
+- **Publish the draft** on GitHub. It becomes the latest release, and the
+  in-app About → Updates checker will detect it.
+- **Manual run** (Actions → Release → Run workflow) is a dry run: it builds
+  the version in `Cargo.toml`, keeps the APKs as the run artifact and releases
+  nothing. Without release secrets it uses a throwaway key and warns.
+
+Create the release keystore once (JKS supports separate store/key passwords):
+
+```bash
+keytool -genkeypair -v -storetype JKS \
+  -keystore pinpoint-release.jks \
+  -alias pinpoint \
+  -keyalg RSA -keysize 4096 -validity 10000 \
+  -storepass "$PINPOINT_KEYSTORE_PASSWORD" \
+  -keypass "$PINPOINT_KEY_PASSWORD" \
+  -dname "CN=Pinpoint, O=Pinpoint, C=MD"
+base64 -w0 pinpoint-release.jks > pinpoint-release.jks.b64
+```
+
+Add these repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `PINPOINT_KEYSTORE_BASE64` | contents of `pinpoint-release.jks.b64` |
+| `PINPOINT_KEYSTORE_PASSWORD` | keystore store password |
+| `PINPOINT_KEY_ALIAS` | key alias (`pinpoint` in the example) |
+| `PINPOINT_KEY_PASSWORD` | key password; optional when it equals the store password |
+
+Tagged releases **fail** without `PINPOINT_KEYSTORE_BASE64`,
+`PINPOINT_KEYSTORE_PASSWORD` and `PINPOINT_KEY_ALIAS`; a release is never
+signed with the temporary key. The temporary key and decoded release keystore
+are deleted in an `always()` step.
 
 ## Manifest and resources
 
@@ -75,8 +118,9 @@ and the admin console are reachable from the drawer and deep links
 
 ## Known limitations
 
-- Debug APK is ~185 MB (debug symbols, x86_64). Use `--release` with a
-  keystore for a smaller build; release signing is not configured yet.
+- Debug APK is ~185 MB (debug symbols, x86_64); the signed release APKs are
+  ~5 MB per ABI.
+- A physical AArch64 device run is still pending.
 - Headless emulators with SwiftShader can show Android's "System UI isn't
   responding" dialog under low memory; use Android Studio's emulator with host
   GPU for the demo.

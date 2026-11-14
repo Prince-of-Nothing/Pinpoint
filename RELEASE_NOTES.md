@@ -1,19 +1,44 @@
-# Pinpoint 1.2.1 — Release Notes
+# Pinpoint 1.3.0 — Release Notes
 
-**Released:** 2026-11-14 · **Version:** `1.2.1` (from `1.2.0`) ·
-**Status:** thesis demo — navigation, identity privacy, diagnostics, demo
-clients and ZAP baseline hardening are in place.
+**Released:** 2026-11-14 · **Version:** `1.3.0` (from `1.2.1`) ·
+**Status:** thesis demo — Android/eframe parity, native map app, sharing,
+account tools, admin console and GitHub update checker.
 
-**Artifact:** `dist/pinpoint-1.2.1-windows-x64.zip` — combined server, desktop,
-auth/users/locations/map/diag/admin services, the headless demo client, web
-assets and docs. SHA-256 in `dist/SHA256SUMS.txt` and inside the archive.
+**Artifacts:** `pinpoint-android-1.3.0.apk` (arm64-v8a) and
+`pinpoint-android-1.3.0-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.0` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.2.1 patch
+## 0. 1.3.0 native parity
+
+- **Native map proxy**: search/reverse/routing go through the Pinpoint backend
+  with map-centre bias, stops, avoid classes, alternatives and capability
+  gating.
+- **Route planner**: place-based A/B, up to six stops, swap, car/walk/bike,
+  alternatives, steps, route share, GPX/KML/GeoJSON export and follow mode.
+- **Place sheet**: map tap → reverse geocode, selected marker, Directions,
+  Set as origin, Save, Copy, distance and external map hand-off.
+- **Sharing**: per-friend sheet with existing-share lookup, enable/pause,
+  precision, duration, incoming status and revoke.
+- **Account**: MFA TOTP login, anonymous sign-in + recovery code, keychain
+  session resume, active sessions/revoke and sign out everywhere.
+- **Admin**: overview, users/roles/active/delete, audit log and diagnostics
+  triage; correct `admin`/`administrator` gating.
+- **Mobile UI**: ArtCraft-inspired Tools tile sheet, light/dark OSM map,
+  category chips, bottom tabs, route sheet above the tab bar, About/updates.
+- **Update checker**: user-initiated GitHub `releases.atom` check with semver
+  comparison, release notes and release-page hand-off.
+- **CI/security**: sqlx is Postgres-only, the lockfile is refreshed (mio
+  1.2.5), wasm stubs exclude axum/sqlx/tokio, and `cargo audit` reports zero
+  vulnerabilities (unmaintained-only warnings remain).
+- **Repository**: archived MSVC/SDKs, installers, Go toolchain and build output
+  are untracked; 7,810 → 796 tracked files.
+
+## 1. 1.2.1 patch
 
 - **ZAP baseline hardening:** every web response now sets
   `Permissions-Policy`, `Cross-Origin-Embedder-Policy`,
@@ -47,7 +72,7 @@ Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening �
 | **Desktop client** | ✅ | Map, OSM search/routing/POIs, bookmarks, check-ins, emergency, offline packs; shows the user's public handle and accepts handles or emails for friend requests |
 | **Storage** | ✅ | Schema/migrations 1–15 applied against live Postgres 16; new users and locations persisted across a server restart; split ports share sessions/reports/audit |
 | **OSM self-host** | ⚠️ Config | `PINPOINT_*_URL` overrides wired; public providers are demo fallbacks |
-| **Mobile / WASM** | ⚠️ Scaffold | Android/iOS/WASM not built in this release |
+| **Mobile / WASM** | ⚠️ Scaffold | Signed Android APKs (arm64 + armv7); iOS/WASM remain scaffolds |
 | **Privacy** | ✅ | No trackers/IPs, local assets, explicit consent, self-host-first OSM, user-initiated diagnostics |
 | **Verification** | ✅ | fmt/clippy/build/test green; browser checks for identity, report → triage → audit; 8005/8006 ports; demo-client login/publish |
 

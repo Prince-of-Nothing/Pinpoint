@@ -331,6 +331,30 @@ impl PinpointAppUI {
         }
     }
 
+    /// Apply an Android `pinpoint://` or `geo:` launch URI.
+    pub fn apply_deep_link(&mut self, link: crate::mobile::MobileDeepLink) {
+        match link {
+            crate::mobile::MobileDeepLink::Geo {
+                latitude,
+                longitude,
+                ..
+            } => {
+                self.app.set_screen(CurrentScreen::Map);
+                let data = self.app.data();
+                let mut data = data.lock().unwrap();
+                data.map_center_lat = latitude;
+                data.map_center_lon = longitude;
+            }
+            crate::mobile::MobileDeepLink::Screen(screen) => self.app.set_screen(screen),
+            crate::mobile::MobileDeepLink::Kiosk { token } => {
+                self.app.set_screen(CurrentScreen::Kiosk);
+                if let Some(token) = token {
+                    self.kiosk_token_input = token;
+                }
+            }
+        }
+    }
+
     /// Compatibility constructor for the concrete REST client.
     pub fn new_rest(
         api_client: Arc<crate::api::ApiClient>,

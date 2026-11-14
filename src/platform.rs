@@ -271,6 +271,17 @@ pub fn open_url(url: &str) -> Result<(), String> {
     }
 }
 
+/// URI from the Activity launch intent (`pinpoint://...` or `geo:...`).
+#[cfg(target_os = "android")]
+pub fn android_launch_uri() -> Option<String> {
+    android_intent::launch_uri()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn android_launch_uri() -> Option<String> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::{backend_url_from_env_or_default, default_backend_url, Platform};
@@ -355,7 +366,10 @@ mod android_intent {
             #[allow(non_snake_case)]
             static FLAG_ACTIVITY_NEW_TASK: jint
         },
-        methods { fn add_flags(flags: jint) -> AIntent }
+        methods {
+            fn add_flags(flags: jint) -> AIntent,
+            fn get_data_string() -> JString
+        }
     }
 
     jni::bind_java_type! {
@@ -366,8 +380,12 @@ mod android_intent {
 
     jni::bind_java_type! {
         AActivity => "android.app.Activity",
-        type_map { AContext => "android.content.Context" },
-        is_instance_of { activity: AContext }
+        type_map {
+            AContext => "android.content.Context",
+            AIntent => "android.content.Intent"
+        },
+        is_instance_of { activity: AContext },
+        methods { fn get_intent() -> AIntent }
     }
 
     pub(super) fn open(url: &str) -> Result<(), String> {
@@ -404,5 +422,34 @@ mod android_intent {
             Ok(())
         })
         .map_err(|error| format!("Android Intent failed: {error}"))
+    }
+
+    pub(super) fn launch_uri() -> Option<String> {
+        let ctx = ndk_context::android_context();
+        if ctx.vm().is_null() || ctx.context().is_null() {
+            return None;
+        }
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
+        vm.attach_current_thread(|env| -> anyhow::Result<Option<String>> {
+            let context: jni::sys::jobject = ctx.context() as _;
+            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
+                .map_err(|error| anyhow!("context: {error}"))?;
+            let context: &AContext = &context;
+            let activity = env
+                .as_cast::<AActivity>(&context)
+                .map_err(|error| anyhow!("activity: {error}"))?;
+            let intent = activity
+                .get_intent(env)
+                .map_err(|error| anyhow!("getIntent: {error}"))?;
+            let Ok(data) = intent.get_data_string(env) else {
+                return Ok(None);
+            };
+            if data.is_null() {
+                return Ok(None);
+            }
+            Ok(Some(data.to_string()))
+        })
+        .ok()
+        .flatten()
     }
 }

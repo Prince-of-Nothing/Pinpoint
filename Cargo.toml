@@ -217,3 +217,11 @@ uses_cleartext_traffic = true
 config_changes = "orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|uiMode"
 launch_mode = "singleTop"
 exported = true
+
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["android.intent.action.VIEW"]
+categories = ["android.intent.category.DEFAULT", "android.intent.category.BROWSABLE"]
+[[package.metadata.android.application.activity.intent_filter.data]]
+scheme = "pinpoint"
+[[package.metadata.android.application.activity.intent_filter.data]]
+scheme = "geo"

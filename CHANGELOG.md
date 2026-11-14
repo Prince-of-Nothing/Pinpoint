@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Added
+- [FEATURE] Android: register and route `pinpoint://` and `geo:` launch intents, including kiosk token links and map-centre hand-off.
 
 ## [1.3.2] - 2026-11-14
 ### Added

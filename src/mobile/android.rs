@@ -27,6 +27,12 @@ pub fn launch_android_ui(
         crate::webapp::WebAppKind::Web => {}
     }
 
+    if let Some(uri) = crate::platform::android_launch_uri() {
+        if let Some(link) = crate::mobile::MobileDeepLink::parse(&uri) {
+            app.apply_deep_link(link);
+        }
+    }
+
     let options = eframe::NativeOptions {
         android_app: Some(app_handle),
         viewport: eframe::egui::ViewportBuilder::default().with_title("Pinpoint"),

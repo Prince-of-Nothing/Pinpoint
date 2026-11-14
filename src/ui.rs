@@ -708,15 +708,9 @@ impl PinpointAppUI {
                 } => {
                     let delta = 0.02;
                     let z = zoom.clamp(10, 15);
-                    let xy = crate::tilepacks::bbox_tiles(
-                        center_lat - delta,
-                        center_lon - delta,
-                        center_lat + delta,
-                        center_lon + delta,
-                        z,
+                    let triples = crate::tilepacks::area_pack_tiles(
+                        center_lat, center_lon, zoom, delta,
                     );
-                    let triples: Vec<(u32, u32, u32)> =
-                        xy.into_iter().map(|(x, y)| (z as u32, x, y)).collect();
                     let backend_url = app.backend().backend_url().to_string();
                     let (ok, skipped, failed) = crate::tilepacks::download_pack(
                         &triples,
@@ -725,7 +719,9 @@ impl PinpointAppUI {
                     )
                     .await;
                     app.set_notice(Some(format!(
-                        "Offline tile pack (z{z}): {ok} downloaded, {skipped} cached, {failed} failed."
+                        "Offline tile pack (z{}–z{}): {ok} downloaded, {skipped} cached, {failed} failed.",
+                        z.saturating_sub(1),
+                        (z + 1).min(18)
                     )));
                 }
                 PendingAction::RefreshAll => {

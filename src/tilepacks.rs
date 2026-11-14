@@ -88,6 +88,34 @@ pub fn bbox_tiles(
 }
 
 pub const PACK_TILE_CAP: usize = 4096;
+
+/// Tiles for an offline pack around `(center_lat, center_lon)`: the current
+/// zoom level plus one level out and one level in, deduplicated. The wider
+/// span keeps the map usable while pinching or pressing +/- offline.
+pub fn area_pack_tiles(
+    center_lat: f64,
+    center_lon: f64,
+    zoom: u8,
+    delta: f64,
+) -> Vec<(u32, u32, u32)> {
+    let z = zoom.clamp(10, 15);
+    let mut triples = Vec::new();
+    for level in [z.saturating_sub(1), z, (z + 1).min(18)] {
+        for (x, y) in bbox_tiles(
+            center_lat - delta,
+            center_lon - delta,
+            center_lat + delta,
+            center_lon + delta,
+            level,
+        ) {
+            let triple = (level as u32, x, y);
+            if !triples.contains(&triple) {
+                triples.push(triple);
+            }
+        }
+    }
+    triples
+}
 /// Demo OSM raster fallbacks (ODbL, no API key). Production self-hosts via
 /// `PINPOINT_TILE_URL` / the backend proxy; never use tile.openstreetmap.org.
 pub const OSM_DE_BASE: &str = "https://tile.openstreetmap.de";
@@ -238,7 +266,7 @@ fn walk_files(dir: &std::path::Path) -> Result<Vec<PathBuf>, std::io::Error> {
 #[cfg(test)]
 mod tests {
     use super::{
-        bbox_tiles, latlon_to_tile, latlon_to_world_px, tile_candidate_urls,
+        area_pack_tiles, bbox_tiles, latlon_to_tile, latlon_to_world_px, tile_candidate_urls,
         tile_candidate_urls_via, tile_to_latlon, world_px_to_latlon,
     };
 
@@ -261,6 +289,17 @@ mod tests {
         let a = bbox_tiles(41.88, -87.63, 41.89, -87.62, 12);
         let b = bbox_tiles(41.89, -87.62, 41.88, -87.63, 12);
         assert_eq!(a.len(), b.len());
+    }
+
+    #[test]
+    fn area_pack_spans_three_zoom_levels_without_duplicates() {
+        let tiles = area_pack_tiles(47.0105, 28.8638, 14, 0.02);
+        let levels: std::collections::HashSet<u32> = tiles.iter().map(|t| t.0).collect();
+        assert_eq!(levels.len(), 3, "levels were {levels:?}");
+        assert!(levels.contains(&13) && levels.contains(&14) && levels.contains(&15));
+        let unique: std::collections::HashSet<_> = tiles.iter().copied().collect();
+        assert_eq!(unique.len(), tiles.len());
+        assert!(tiles.len() <= super::PACK_TILE_CAP);
     }
 
     #[test]

@@ -1,18 +1,34 @@
-# Pinpoint 1.3.4 — Release Notes
+# Pinpoint 1.3.5 — Release Notes
 
-**Released:** 2026-11-14 · **Version:** `1.3.4` (from `1.3.3`) ·
-**Status:** Android GPS, share sheet, PIN app lock and the native-activity JNI fix.
+**Released:** 2026-11-14 · **Version:** `1.3.5` (from `1.3.4`) ·
+**Status:** Active GPS acquisition and a publish deep link, verified against a local backend.
 
-**Artifacts:** `pinpoint-android-1.3.4.apk` (arm64-v8a) and
-`pinpoint-android-1.3.4-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.4` tag.
+**Artifacts:** `pinpoint-android-1.3.5.apk` (arm64-v8a) and
+`pinpoint-android-1.3.5-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.5` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.4 features
+## 0. 1.3.5 features
+
+- **Active GPS:** when no provider has a recent last-known fix, **Use GPS**
+  requests location updates for up to 8 seconds (GPS → fused → network) and
+  removes them afterwards. The fix still has to be recent and reasonably
+  accurate before it is published.
+- **`pinpoint://publish`:** publishes the current location on launch. It waits
+  up to 12 seconds for the persisted session to restore, so a cold-start deep
+  link does not race the login.
+- **Verified publish path:** on the API 37 emulator with a local backend, the
+  app logged `applied launch deep link`, then `location published`, and the
+  server recorded `POST /api/v1/locations/me`.
+- **Debug UI automation:** a debug-only marker (`files/allow_screenshots`)
+  allows screenshots for testing; release builds ignore it and keep
+  FLAG_SECURE.
+
+## 1. 1.3.4 features
 
 - **One-shot GPS:** **Use GPS** requests the runtime location permission through
   the live activity, then reads the last known fix from every LocationManager

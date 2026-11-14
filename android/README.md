@@ -13,8 +13,11 @@ follow-up.
 ## Device features
 
 - **One-shot GPS:** `Use GPS` asks for the runtime location permission, then
-  reads the last known fix from every LocationManager provider. If no fix
-  exists yet, open a maps app once or wait for the device to acquire one.
+  reads the last known fix from every LocationManager provider. If none is
+  recent, it actively requests a fix for up to 8 seconds (GPS → fused →
+  network) and removes the request afterwards.
+- **Publish deep link:** `pinpoint://publish` publishes the current location on
+  launch; it waits for a restored session before firing.
 - **Share in:** share a `geo:` link, a Google/OSM/Apple Maps link or plain
   `lat, lon` from another app and Pinpoint opens the map there
   (`ACTION_SEND`, `text/plain`). Android delivers repeat shares to
@@ -32,6 +35,9 @@ follow-up.
   background.
 - **Android 15:** the mobile tab bar reserves the gesture-navigation inset.
 - **Pinch-to-zoom** works on the map.
+- **Debug UI automation:** debug builds skip FLAG_SECURE when
+  `files/allow_screenshots` exists (`adb shell run-as com.pinpoint.desktop touch
+  files/allow_screenshots`). Release builds ignore the marker.
 
 ## Prerequisites
 

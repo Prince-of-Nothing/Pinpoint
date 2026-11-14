@@ -12,6 +12,15 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.3.5] - 2026-11-14
+### Added
+- [FEATURE] Android: `pinpoint://publish` (also `publish-gps`/`share-location`) publishes the current location on launch, waiting for a restored session before it does.
+- [FEATURE] Android: `Use GPS` now actively requests a location when no provider has a recent last-known fix (8 s window, GPS → fused → network), then removes the request.
+
+### Fixed
+- [FIX] GPS: the publish action re-checks the fix after the active request and reports success in the device log; verified on the API 37 emulator against a local backend (`POST /api/v1/locations/me`).
+- [FIX] Android debug builds can opt into screenshots for UI automation via `files/allow_screenshots`; release builds ignore the marker and keep FLAG_SECURE.
+
 ## [1.3.4] - 2026-11-14
 ### Added
 - [FEATURE] Android: one-shot GPS. **Use GPS** checks the runtime location permission, asks for it when missing, then publishes the last known GPS or network fix (approximate grants included).

@@ -16,8 +16,11 @@
 //! - Never leak secrets/tokens in error messages or logs.
 //! - Server-side enforcement only; clients are untrusted.
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod failover;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod health;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod rest;
 
 use crate::models::{
@@ -328,7 +331,9 @@ impl BackendConfig {
 }
 
 /// Build a backend from config. This is the single extension point for changed
-/// backend architectures.
+/// backend architectures. Native only: wasm web stubs use their host's fetch
+/// adapter instead of the cookie/CSRF REST client.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn build_backend(config: &BackendConfig) -> anyhow::Result<DynBackend> {
     use crate::backend::failover::FailoverBackend;
     match config.kind {
@@ -354,6 +359,7 @@ pub fn build_backend(config: &BackendConfig) -> anyhow::Result<DynBackend> {
 }
 
 /// Convenience: build the default REST backend from a base URL.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn build_default_backend(base_url: impl Into<String>) -> anyhow::Result<DynBackend> {
     build_backend(&BackendConfig::rest_v1(base_url))
 }

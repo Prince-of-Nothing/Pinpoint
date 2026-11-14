@@ -6,6 +6,7 @@
 //! and reads the public Atom feed, so it needs no token and sends no account
 //! data. It is intentionally a direct GitHub request; the UI says so.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
 
 /// Public repository whose releases are checked.
@@ -77,6 +78,7 @@ fn parse_version(value: &str) -> (u64, u64, u64) {
 
 /// Fetch the newest published GitHub release. `Ok(None)` means the repo has
 /// no releases yet (a valid state for a young project).
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn check_latest() -> anyhow::Result<Option<ReleaseInfo>> {
     let client = reqwest::Client::builder()
         // This environment's IPv6 path is broken; the tile proxy uses the
@@ -101,6 +103,12 @@ pub async fn check_latest() -> anyhow::Result<Option<ReleaseInfo>> {
     }
     let body = response.text().await?;
     Ok(parse_feed(&body))
+}
+
+/// WASM stubs do not make external update requests; the native UI owns this.
+#[cfg(target_arch = "wasm32")]
+pub async fn check_latest() -> anyhow::Result<Option<ReleaseInfo>> {
+    anyhow::bail!("update checks are unavailable in the wasm stub")
 }
 
 /// Parse the first entry of GitHub's releases Atom feed. Kept pure so the

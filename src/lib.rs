@@ -10,17 +10,25 @@
 //! so client apps (desktop/mobile/webk/weba) can adapt to changed backend
 //! architectures by swapping adapters, not app logic.
 
+// Native client + server modules. The wasm web stubs only need the portable
+// core (`backend` trait, `webapp`, `models`, `osm`, `security`) so they do not
+// pull axum/sqlx/tokio/mio into the wasm build.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod api;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod app;
 pub mod backend;
 pub mod bookmarks;
 pub mod i18n;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod mobile;
 pub mod models;
 pub mod osm;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod patterns;
 pub mod platform;
 pub mod security;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod server;
 pub mod update;
 pub mod webapp;

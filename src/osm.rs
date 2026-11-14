@@ -280,11 +280,13 @@ struct OverpassElement {
 
 /// Thin OSM client. `reqwest::Client` is already in `Cargo.toml`, so this
 /// adds zero dependencies while matching the archived web/Kotlin behaviour.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct OsmClient {
     http: reqwest::Client,
     last_search: std::sync::Mutex<Option<Instant>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl OsmClient {
     pub fn new() -> anyhow::Result<Self> {
         Ok(Self {
@@ -509,6 +511,7 @@ impl OsmClient {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for OsmClient {
     fn default() -> Self {
         Self::new().expect("OsmClient default requires a reqwest client")

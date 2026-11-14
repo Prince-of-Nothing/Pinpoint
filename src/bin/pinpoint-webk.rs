@@ -25,6 +25,9 @@ fn main() {
 // ── WASM implementation ──────────────────────────────────────────────────────
 
 #[cfg(target_arch = "wasm32")]
+fn main() {}
+
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
@@ -40,7 +43,7 @@ pub fn start() {
         app.state.token_input = token;
     }
     if let Err(e) = wire_dom(app) {
-        set_text("status", &format!("UI wiring error: {e}"));
+        set_text("status", &format!("UI wiring error: {e:?}"));
     }
 }
 
@@ -69,31 +72,17 @@ fn wire_dom(mut app: KioskApp) -> Result<(), JsValue> {
                 let mut a = app_for_click.borrow_mut();
                 a.state.token_input = get_input_value(&doc, "token").unwrap_or_default();
                 match a.prepare_resolve() {
-                    Ok(token) => {
-                        set_text("status", "Resolving token…");
+                    Ok(_token) => {
+                        // The wasm kiosk stub does not ship the native REST
+                        // adapter; token resolution stays in the native client.
+                        a.state.set_error(
+                            "Token resolution is not wired in the wasm stub.".to_string(),
+                        );
+                        set_text(
+                            "status",
+                            "WASM stub: use the native kiosk client to resolve a token.",
+                        );
                         set_text("app-info", &a.snapshot_json());
-                        let base = a.config.backend.base_url.clone();
-                        let routes = a.routes.clone();
-                        let app_async = app_for_click.clone();
-                        wasm_bindgen_futures::spawn_local(async move {
-                            let result = async {
-                                let adapter = RestKioskAdapter::new(base, routes)?;
-                                adapter.resolve_share_token(&token).await
-                            }
-                            .await;
-                            let mut a = app_async.borrow_mut();
-                            match result {
-                                Ok(view) => {
-                                    a.apply_resolved(view);
-                                    render_resolved(&a);
-                                }
-                                Err(e) => {
-                                    a.state.set_error(format!("{e}"));
-                                    set_text("status", &format!("Error: {e}"));
-                                }
-                            }
-                            set_text("app-info", &a.snapshot_json());
-                        });
                     }
                     Err(e) => {
                         a.state.set_error(e.clone());

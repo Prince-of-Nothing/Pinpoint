@@ -33,6 +33,7 @@ The per-item flagged list for this release is in
 - [FIX] Admin navigation is hidden for residents and shown for `admin`/`administrator` only.
 - [FIX] Mobile route sheet sits above the bottom tab bar and no longer clips its actions.
 - [FIX] GitHub update check forces IPv4, matching the tile proxy, so it works on Android emulators with a broken IPv6 path.
+- [FIX] CI: scope sqlx to Postgres-only (removing unused SQLite/MySQL advisories), refresh the lockfile to mio 1.2.5, and keep axum/sqlx/tokio out of the wasm stub build.
 - [FIX] Tiles: force IPv4 for proxy/download requests and avoid the Docker gateway on 8000 by using `10.0.2.2:8080` for Android debug builds.
 
 ## [1.2.1] - 2026-11-14

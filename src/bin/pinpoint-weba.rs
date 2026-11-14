@@ -22,6 +22,9 @@ fn main() {
 // ── WASM implementation ──────────────────────────────────────────────────────
 
 #[cfg(target_arch = "wasm32")]
+fn main() {}
+
+#[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::JsCast;
@@ -41,7 +44,7 @@ pub fn start() {
     let app = pinpoint_desktop::webapp::admin::AdminApp::new(cfg);
     set_text("app-info", &app.snapshot_json());
     if let Err(e) = wire_dom() {
-        set_text("status", &format!("UI wiring error: {e}"));
+        set_text("status", &format!("UI wiring error: {e:?}"));
     }
 }
 

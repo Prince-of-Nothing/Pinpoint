@@ -33,6 +33,11 @@ pub fn launch_android_ui(
             app.apply_deep_link(link);
         }
     }
+    if let Some(text) = crate::platform::android_shared_text() {
+        if let Some(link) = crate::mobile::MobileDeepLink::parse_shared(&text) {
+            app.apply_deep_link(link);
+        }
+    }
 
     let options = eframe::NativeOptions {
         android_app: Some(app_handle),

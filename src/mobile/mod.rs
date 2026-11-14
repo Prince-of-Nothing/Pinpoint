@@ -168,6 +168,115 @@ impl MobileDeepLink {
         }
         None
     }
+
+    /// Parse text shared from another app (`ACTION_SEND`). Accepts a
+    /// `geo:`/`pinpoint://` link, common Google/OSM/Apple map links, or a
+    /// plain `lat, lon` pair. Anything else fails closed.
+    pub fn parse_shared(text: &str) -> Option<Self> {
+        let trimmed = text.trim();
+        if let Some(link) = Self::parse(trimmed) {
+            return Some(link);
+        }
+        for raw in trimmed.split_whitespace() {
+            let token = raw.trim_matches(|c: char| {
+                matches!(
+                    c,
+                    '"' | '\'' | '(' | ')' | '[' | ']' | '<' | '>' | ',' | ';' | '!'
+                )
+            });
+            if let Some(link) = Self::parse(token) {
+                return Some(link);
+            }
+        }
+        parse_map_link(trimmed)
+            .or_else(|| parse_coord_pair(trimmed).and_then(|(lat, lon)| geo_link(lat, lon, None)))
+    }
+}
+
+fn geo_link(lat: f64, lon: f64, label: Option<String>) -> Option<MobileDeepLink> {
+    if crate::security::validation::validate_location(lat, lon, None).is_valid() {
+        Some(MobileDeepLink::Geo {
+            latitude: lat,
+            longitude: lon,
+            label,
+        })
+    } else {
+        None
+    }
+}
+
+fn parse_coord_pair(value: &str) -> Option<(f64, f64)> {
+    let cleaned = value.replace("%2C", ",").replace("%2c", ",");
+    let mut parts = cleaned.split(',');
+    let lat = parts.next()?.trim().parse::<f64>().ok()?;
+    let lon = parts.next()?.trim().parse::<f64>().ok()?;
+    if parts.next().is_some_and(|rest| !rest.trim().is_empty()) {
+        return None;
+    }
+    Some((lat, lon))
+}
+
+/// First two comma fields, used for map URLs that append zoom and labels.
+fn parse_first_pair(value: &str) -> Option<(f64, f64)> {
+    let cleaned = value.replace("%2C", ",").replace("%2c", ",");
+    let cleaned = cleaned.strip_prefix("loc:").unwrap_or(&cleaned);
+    let mut parts = cleaned.split(',');
+    let lat = parts.next()?.trim().parse::<f64>().ok()?;
+    let lon = parts.next()?.trim().parse::<f64>().ok()?;
+    Some((lat, lon))
+}
+
+fn query_value<'a>(url: &'a str, key: &str) -> Option<&'a str> {
+    url.split(['?', '&', '#'])
+        .find_map(|part| part.strip_prefix(key)?.strip_prefix('='))
+}
+
+fn after_marker<'a>(value: &'a str, marker: &str) -> Option<&'a str> {
+    value
+        .find(marker)
+        .map(|index| &value[index + marker.len()..])
+}
+
+fn parse_map_link(text: &str) -> Option<MobileDeepLink> {
+    // OpenStreetMap: #map=15/47.0105/28.8638 or ?mlat=..&mlon=..
+    if let Some(rest) = after_marker(text, "#map=") {
+        let mut parts = rest.split('/');
+        let _zoom = parts.next()?;
+        let lat = parts.next()?.trim().parse::<f64>().ok()?;
+        let lon = parts.next()?.trim().parse::<f64>().ok()?;
+        if let Some(link) = geo_link(lat, lon, None) {
+            return Some(link);
+        }
+    }
+    if let (Some(lat), Some(lon)) = (query_value(text, "mlat"), query_value(text, "mlon")) {
+        if let (Ok(lat), Ok(lon)) = (lat.parse::<f64>(), lon.parse::<f64>()) {
+            if let Some(link) = geo_link(lat, lon, None) {
+                return Some(link);
+            }
+        }
+    }
+    // Google Maps: /@47.0105,28.8638,15z
+    if let Some(rest) = after_marker(text, "/@") {
+        if let Some(link) = rest
+            .split('/')
+            .next()
+            .and_then(parse_first_pair)
+            .and_then(|(lat, lon)| geo_link(lat, lon, None))
+        {
+            return Some(link);
+        }
+    }
+    // Google/Apple: ?q=47.01,28.86 or ?ll=47.01,28.86
+    for key in ["q", "ll", "query"] {
+        if let Some(value) = query_value(text, key) {
+            if let Some((lat, lon)) = parse_first_pair(value) {
+                if let Some(link) = geo_link(lat, lon, None) {
+                    return Some(link);
+                }
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -201,6 +310,45 @@ mod tests {
         // Invalid coordinates fail closed.
         assert!(MobileDeepLink::parse("geo:147.0,28.8").is_none());
         assert!(MobileDeepLink::parse("geo:not,numbers").is_none());
+    }
+
+    #[test]
+    fn shared_text_accepts_links_and_coordinates() {
+        let expected = MobileDeepLink::Geo {
+            latitude: 47.0105,
+            longitude: 28.8638,
+            label: None,
+        };
+        assert_eq!(
+            MobileDeepLink::parse_shared(
+                "Meet me https://www.openstreetmap.org/#map=15/47.0105/28.8638"
+            ),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            MobileDeepLink::parse_shared("https://www.google.com/maps/@47.0105,28.8638,15z"),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            MobileDeepLink::parse_shared("https://maps.google.com/?q=47.0105,28.8638"),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            MobileDeepLink::parse_shared("https://maps.apple.com/?ll=47.0105,28.8638"),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            MobileDeepLink::parse_shared("pinpoint://kiosk?token=abc12345"),
+            Some(MobileDeepLink::Kiosk {
+                token: Some("abc12345".to_string())
+            })
+        );
+        assert_eq!(
+            MobileDeepLink::parse_shared("47.0105, 28.8638"),
+            Some(expected)
+        );
+        assert!(MobileDeepLink::parse_shared("https://example.com/no-coordinates").is_none());
+        assert!(MobileDeepLink::parse_shared("geo:147.0,28.8").is_none());
     }
 
     #[test]

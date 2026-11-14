@@ -226,3 +226,10 @@ categories = ["android.intent.category.DEFAULT", "android.intent.category.BROWSA
 scheme = "pinpoint"
 [[package.metadata.android.application.activity.intent_filter.data]]
 scheme = "geo"
+
+# Receive a location or Pinpoint link shared from Maps, a chat app, etc.
+[[package.metadata.android.application.activity.intent_filter]]
+actions = ["android.intent.action.SEND"]
+categories = ["android.intent.category.DEFAULT"]
+[[package.metadata.android.application.activity.intent_filter.data]]
+mime_type = "text/plain"

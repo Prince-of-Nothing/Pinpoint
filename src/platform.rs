@@ -332,6 +332,28 @@ pub fn android_launch_uri() -> Option<String> {
     None
 }
 
+/// Text shared into the app with Android's `ACTION_SEND` chooser.
+#[cfg(target_os = "android")]
+pub fn android_shared_text() -> Option<String> {
+    android_intent::shared_text()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn android_shared_text() -> Option<String> {
+    None
+}
+
+/// Open the system share sheet for plain text.
+#[cfg(target_os = "android")]
+pub fn share_text(text: &str) -> Result<(), String> {
+    android_intent::share_text(text)
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn share_text(_text: &str) -> Result<(), String> {
+    Err("sharing is handled by the UI on desktop".to_string())
+}
+
 /// Prevent Android screenshots/screen recording of location data.
 #[cfg(target_os = "android")]
 pub fn enable_secure_window() -> Result<(), String> {
@@ -441,7 +463,10 @@ mod android_intent {
     jni::bind_java_type! {
         AIntent => "android.content.Intent",
         type_map { AUri => "android.net.Uri" },
-        constructors { fn new_with_url(action: JString, uri: AUri) },
+        constructors {
+            fn new_with_url(action: JString, uri: AUri),
+            fn new_with_action(action: JString)
+        },
         fields {
             #[allow(non_snake_case)]
             static ACTION_VIEW: JString,
@@ -450,7 +475,10 @@ mod android_intent {
         },
         methods {
             fn add_flags(flags: jint) -> AIntent,
-            fn get_data_string() -> JString
+            fn get_data_string() -> JString,
+            fn get_action() -> JString,
+            fn get_string_extra(name: JString) -> JString,
+            fn set_type(mime: JString) -> AIntent
         }
     }
 
@@ -546,6 +574,95 @@ mod android_intent {
         })
         .ok()
         .flatten()
+    }
+
+    pub(super) fn shared_text() -> Option<String> {
+        let ctx = ndk_context::android_context();
+        if ctx.vm().is_null() || ctx.context().is_null() {
+            return None;
+        }
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
+        vm.attach_current_thread(|env| -> anyhow::Result<Option<String>> {
+            let context: jni::sys::jobject = ctx.context() as _;
+            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
+                .map_err(|error| anyhow!("context: {error}"))?;
+            let context: &AContext = &context;
+            let activity = env
+                .as_cast::<AActivity>(&context)
+                .map_err(|error| anyhow!("activity: {error}"))?;
+            let intent = activity
+                .get_intent(env)
+                .map_err(|error| anyhow!("getIntent: {error}"))?;
+            let action = intent
+                .get_action(env)
+                .map_err(|error| anyhow!("getAction: {error}"))?;
+            if action.is_null() || action.to_string() != "android.intent.action.SEND" {
+                return Ok(None);
+            }
+            let key = JString::new(env, "android.intent.extra.TEXT")?;
+            let text = intent
+                .get_string_extra(env, &key)
+                .map_err(|error| anyhow!("getStringExtra: {error}"))?;
+            if text.is_null() {
+                return Ok(None);
+            }
+            Ok(Some(text.to_string()))
+        })
+        .ok()
+        .flatten()
+    }
+
+    pub(super) fn share_text(text: &str) -> Result<(), String> {
+        let ctx = ndk_context::android_context();
+        if ctx.vm().is_null() || ctx.context().is_null() {
+            return Err("Android JVM/context is not available".to_string());
+        }
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
+        vm.attach_current_thread(|env| -> anyhow::Result<()> {
+            let context: jni::sys::jobject = ctx.context() as _;
+            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
+                .map_err(|error| anyhow!("context: {error}"))?;
+            let context: &AContext = &context;
+            let action = JString::new(env, "android.intent.action.SEND")?;
+            let intent = AIntent::new_with_action(env, &action)
+                .map_err(|error| anyhow!("Intent: {error}"))?;
+            let mime = JString::new(env, "text/plain")?;
+            let intent = intent
+                .set_type(env, &mime)
+                .map_err(|error| anyhow!("setType: {error}"))?;
+            let key = JString::new(env, "android.intent.extra.TEXT")?;
+            let value = JString::new(env, text)?;
+            let name = jni::strings::JNIString::from("putExtra");
+            let runtime = jni::signature::RuntimeMethodSignature::from_str(
+                "(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;",
+            )
+            .map_err(|error| anyhow!("putExtra signature: {error}"))?;
+            let signature = jni::signature::MethodSignature::from(&runtime);
+            let intent_obj: &JObject = intent.as_ref();
+            env.call_method(
+                intent_obj,
+                name,
+                signature,
+                &[JValue::Object(key.as_ref()), JValue::Object(value.as_ref())],
+            )
+            .map_err(|error| anyhow!("putExtra: {error}"))?;
+            if env.as_cast::<AActivity>(&context).is_ok() {
+                context
+                    .start_activity(env, &intent)
+                    .map_err(|error| anyhow!("startActivity: {error}"))?;
+            } else {
+                let flag = AIntent::FLAG_ACTIVITY_NEW_TASK(env)
+                    .map_err(|error| anyhow!("FLAG_ACTIVITY_NEW_TASK: {error}"))?;
+                let intent = intent
+                    .add_flags(env, flag)
+                    .map_err(|error| anyhow!("addFlags: {error}"))?;
+                context
+                    .start_activity(env, &intent)
+                    .map_err(|error| anyhow!("startActivity: {error}"))?;
+            }
+            Ok(())
+        })
+        .map_err(|error| format!("Android share failed: {error}"))
     }
 
     pub(super) fn enable_secure_window() -> Result<(), String> {

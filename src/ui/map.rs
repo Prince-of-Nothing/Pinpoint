@@ -712,6 +712,7 @@ impl PinpointAppUI {
             let mut directions = false;
             let mut set_origin = false;
             let mut copy = false;
+            let mut share = false;
             let mut open_url: Option<String> = None;
             let name = encode_component(&place.short_name);
             let distance_m = {
@@ -777,6 +778,9 @@ impl PinpointAppUI {
                                 if ui.button("Copy").clicked() {
                                     copy = true;
                                 }
+                                if ui.button("Share").clicked() {
+                                    share = true;
+                                }
                                 if ui.button("OSM").clicked() {
                                     open_url = Some(format!(
                                         "https://www.openstreetmap.org/?mlat={:.4}&mlon={:.4}#map=15/{:.4}/{:.4}",
@@ -823,6 +827,12 @@ impl PinpointAppUI {
                     place.short_name, place.latitude, place.longitude
                 ));
                 self.app.set_notice(Some("Place copied.".to_string()));
+            }
+            if share {
+                self.share_text(
+                    ctx,
+                    &format!("geo:{:.6},{:.6}?q={name}", place.latitude, place.longitude),
+                );
             }
             if directions {
                 self.route_plan.open_with_destination(&place);

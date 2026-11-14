@@ -49,6 +49,9 @@ impl PinpointAppUI {
                 let link = format!("pinpoint://kiosk?token={qr_token}");
                 super::qr::draw_qr(ui, &link, 180.0);
                 ui.label(RichText::new(link).size(10.0));
+                if ui.button("Share link").clicked() {
+                    self.share_text(ctx, &format!("pinpoint://kiosk?token={qr_token}"));
+                }
             });
         }
 

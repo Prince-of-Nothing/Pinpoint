@@ -374,6 +374,30 @@ impl PinpointAppUI {
         self.app.set_offline_mode(offline);
     }
 
+    /// Share plain text: the Android system share sheet, or the clipboard on
+    /// desktop. Used for `geo:` links and kiosk deep links.
+    pub(crate) fn share_text(&mut self, ctx: &egui::Context, text: &str) {
+        #[cfg(target_os = "android")]
+        {
+            let _ = ctx;
+            if let Err(error) = crate::platform::share_text(text) {
+                self.app
+                    .set_error(Some(format!("Could not open the share sheet: {error}")));
+            }
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            match crash_dialog::copy_to_clipboard(ctx, text) {
+                Ok(()) => self
+                    .app
+                    .set_notice(Some("Link copied to the clipboard.".to_string())),
+                Err(error) => self
+                    .app
+                    .set_error(Some(format!("Could not copy the link: {error}"))),
+            }
+        }
+    }
+
     pub fn set_screen(&mut self, screen: CurrentScreen) {
         self.app.set_screen(screen);
     }

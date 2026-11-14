@@ -92,12 +92,7 @@ impl PinpointAppUI {
                         ui.label(format!("Precision: {}", loc.precision_level));
                         ui.label(format!("Updated: {}", loc.updated_at));
                         if ui.button("Show on Map").clicked() {
-                            let data_handle = self.app.data();
-                            let mut data = data_handle.lock().unwrap();
-                            data.map_center_lat = loc.latitude;
-                            data.map_center_lon = loc.longitude;
-                            drop(data);
-                            self.app.set_screen(crate::app::CurrentScreen::Map);
+                            self.focus_map_at(loc.latitude, loc.longitude);
                         }
                     } else {
                         ui.label("No active location payload associated with this token.");

@@ -360,6 +360,17 @@ impl PinpointAppUI {
         self.app.set_backend_unavailable(unavailable);
     }
 
+    /// Focus the map on a coordinate, marking the viewport initialized so the
+    /// first render does not overwrite it with the default/demo centre.
+    pub(crate) fn focus_map_at(&mut self, latitude: f64, longitude: f64) {
+        self.app.set_screen(CurrentScreen::Map);
+        let data = self.app.data();
+        let mut data = data.lock().unwrap();
+        data.map_center_lat = latitude;
+        data.map_center_lon = longitude;
+        data.map_zoom = 15;
+    }
+
     /// Apply an Android `pinpoint://` or `geo:` launch URI.
     pub fn apply_deep_link(&mut self, link: crate::mobile::MobileDeepLink) {
         match link {
@@ -368,11 +379,7 @@ impl PinpointAppUI {
                 longitude,
                 ..
             } => {
-                self.app.set_screen(CurrentScreen::Map);
-                let data = self.app.data();
-                let mut data = data.lock().unwrap();
-                data.map_center_lat = latitude;
-                data.map_center_lon = longitude;
+                self.focus_map_at(latitude, longitude);
             }
             crate::mobile::MobileDeepLink::Screen(screen) => self.app.set_screen(screen),
             crate::mobile::MobileDeepLink::Kiosk { token } => {
@@ -394,6 +401,11 @@ impl PinpointAppUI {
 
     pub fn set_offline_mode(&mut self, offline: bool) {
         self.app.set_offline_mode(offline);
+    }
+
+    /// Show a short user-facing notice from platform startup code.
+    pub fn show_notice(&self, message: impl Into<String>) {
+        self.app.set_notice(Some(message.into()));
     }
 
     /// Share plain text: the Android system share sheet, or the clipboard on

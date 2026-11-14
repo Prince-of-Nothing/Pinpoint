@@ -674,6 +674,14 @@ impl PinpointAppUI {
                                 if ui.button("◎ Use GPS").clicked() {
                                     gps = true;
                                 }
+                                #[cfg(target_os = "android")]
+                                if ui.button("Settings").clicked() {
+                                    if let Err(error) = crate::platform::open_app_settings() {
+                                        self.app.set_error(Some(format!(
+                                            "Could not open app settings: {error}"
+                                        )));
+                                    }
+                                }
                             });
                         });
                 });
@@ -860,7 +868,8 @@ impl PinpointAppUI {
             }
             crate::platform::LocationPermission::Requested => {
                 self.app.set_notice(Some(
-                    "Location permission requested. Tap Use GPS again after granting it."
+                    "Location permission requested. Allow it, then tap Use GPS again. \
+                     If no dialog appears, open Settings → Permissions."
                         .to_string(),
                 ));
             }

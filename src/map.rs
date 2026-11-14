@@ -19,12 +19,16 @@ pub const DEFAULT_ZOOM: u8 = 13;
 pub fn ensure_viewport(state: &mut AppData) {
     if state.map_zoom == 0 {
         state.map_zoom = DEFAULT_ZOOM;
-        if let Some(first) = state.locations.first() {
-            state.map_center_lat = first.latitude;
-            state.map_center_lon = first.longitude;
-        } else {
-            state.map_center_lat = DEFAULT_CENTER_LAT;
-            state.map_center_lon = DEFAULT_CENTER_LON;
+        // Keep an explicitly set centre (deep link, kiosk, bookmark). Only
+        // seed demo/default coordinates when the centre is still unset.
+        if state.map_center_lat == 0.0 && state.map_center_lon == 0.0 {
+            if let Some(first) = state.locations.first() {
+                state.map_center_lat = first.latitude;
+                state.map_center_lon = first.longitude;
+            } else {
+                state.map_center_lat = DEFAULT_CENTER_LAT;
+                state.map_center_lon = DEFAULT_CENTER_LON;
+            }
         }
     }
     state.map_zoom = state.map_zoom.clamp(2, 18);
@@ -147,7 +151,15 @@ pub fn apply_pinch_zoom(zoom: u8, accum: f32, delta: f32) -> (u8, f32) {
         zoom -= 1;
         accum += step;
     }
-    (zoom, accum)
+    // Drop zoom requests that cannot be applied at the current bound, so a
+    // long pinch at z18 does not need to be unwound before zooming out.
+    if zoom == 18 {
+        accum = accum.min(0.0);
+    }
+    if zoom == 2 {
+        accum = accum.max(0.0);
+    }
+    (zoom, accum.clamp(-step, step))
 }
 
 /// Render an interactive Slippy tile canvas showing friend locations and
@@ -239,7 +251,7 @@ pub fn render_map_with(
         let canvas_size = Vec2::new(avail_width, height.max(220.0));
         let (map_rect, response) = ui.allocate_exact_size(canvas_size, Sense::click_and_drag());
 
-        if response.clicked() {
+        if response.clicked() && ui.input(|i| i.multi_touch()).is_none() {
             if let Some(pos) = response.interact_pointer_pos() {
                 state.map_click = Some(screen_to_latlon(
                     map_rect,
@@ -251,8 +263,10 @@ pub fn render_map_with(
             }
         }
 
-        // Drag-to-pan in Web Mercator pixel space
-        if response.dragged() {
+        // Drag-to-pan in Web Mercator pixel space. Skip it during a pinch:
+        // winit maps the first finger to the pointer, which would otherwise
+        // pan the map while the user is only zooming.
+        if response.dragged() && ui.input(|i| i.multi_touch()).is_none() {
             let delta = response.drag_delta();
             let (cx, cy) =
                 latlon_to_world_px(state.map_center_lat, state.map_center_lon, state.map_zoom);
@@ -670,6 +684,19 @@ mod tests {
     }
 
     #[test]
+    fn ensure_viewport_keeps_an_explicitly_set_centre() {
+        let mut data = AppData {
+            map_center_lat: 51.5074,
+            map_center_lon: -0.1278,
+            ..Default::default()
+        };
+        ensure_viewport(&mut data);
+        assert_eq!(data.map_zoom, DEFAULT_ZOOM);
+        assert!((data.map_center_lat - 51.5074).abs() < 1e-6);
+        assert!((data.map_center_lon - -0.1278).abs() < 1e-6);
+    }
+
+    #[test]
     fn project_center_maps_to_rect_center() {
         let rect = Rect::from_min_size(Pos2::new(10.0, 20.0), Vec2::new(400.0, 300.0));
         let p = project_to_rect(47.0105, 28.8638, 47.0105, 28.8638, 13, rect);
@@ -706,5 +733,12 @@ mod tests {
         assert_eq!(zoom, 18);
         let (zoom, _) = apply_pinch_zoom(2, -0.9, 0.25);
         assert_eq!(zoom, 2);
+        // A long pinch at a bound must not build a backlog.
+        let (zoom, accum) = apply_pinch_zoom(18, 0.0, 8.0);
+        assert_eq!(zoom, 18);
+        assert_eq!(accum, 0.0);
+        let (zoom, accum) = apply_pinch_zoom(2, 0.0, 0.05);
+        assert_eq!(zoom, 2);
+        assert_eq!(accum, 0.0);
     }
 }

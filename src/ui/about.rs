@@ -190,6 +190,15 @@ impl PinpointAppUI {
                             .set_error(Some(format!("Could not copy the log: {error}")));
                     }
                 }
+                #[cfg(target_os = "android")]
+                ui.label(
+                    RichText::new(
+                        "Sharing into Pinpoint is handled when the app launches. If Pinpoint \
+                         is already running, close it before sharing a location.",
+                    )
+                    .size(10.0)
+                    .color(muted),
+                );
                 if ui.button("Clear log").clicked() {
                     crate::logging::clear();
                 }

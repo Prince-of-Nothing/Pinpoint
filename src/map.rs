@@ -133,6 +133,23 @@ fn prefetch_tile(ctx: &egui::Context, backend_url: &str, z: u8, x: u32, y: u32) 
     });
 }
 
+/// Apply a pinch frame to the integer zoom level, returning the new level and
+/// the leftover logarithmic accumulator (one level = ln 2).
+pub fn apply_pinch_zoom(zoom: u8, accum: f32, delta: f32) -> (u8, f32) {
+    let step = std::f32::consts::LN_2;
+    let mut zoom = zoom;
+    let mut accum = accum + delta.max(0.01).ln();
+    while accum >= step && zoom < 18 {
+        zoom += 1;
+        accum -= step;
+    }
+    while accum <= -step && zoom > 2 {
+        zoom -= 1;
+        accum += step;
+    }
+    (zoom, accum)
+}
+
 /// Render an interactive Slippy tile canvas showing friend locations and
 /// cached tiles at the default 320 pt height.
 pub fn render_map(ui: &mut Ui, state: &mut AppData) {
@@ -253,6 +270,18 @@ pub fn render_map_with(
             } else if scroll_y < -12.0 && state.map_zoom > 2 {
                 state.map_zoom -= 1;
             }
+        }
+
+        // Pinch-to-zoom on touch screens. egui reports the per-frame pinch
+        // factor; accumulate it so a pinch crosses zoom levels smoothly.
+        match ui.input(|i| i.multi_touch()) {
+            Some(touch) if map_rect.contains(touch.center_pos) => {
+                let (next, accum) =
+                    apply_pinch_zoom(state.map_zoom, state.map_pinch_accum, touch.zoom_delta);
+                state.map_zoom = next;
+                state.map_pinch_accum = accum;
+            }
+            _ => state.map_pinch_accum = 0.0,
         }
 
         let painter = ui.painter_at(map_rect);
@@ -662,5 +691,20 @@ mod tests {
         let back = screen_to_latlon(rect, center.0, center.1, 13, p);
         assert!((back.0 - point.0).abs() < 1e-6);
         assert!((back.1 - point.1).abs() < 1e-6);
+    }
+
+    #[test]
+    fn pinch_accumulates_into_zoom_levels_and_clamps() {
+        let (zoom, accum) = apply_pinch_zoom(13, 0.0, 1.5);
+        assert_eq!(zoom, 13);
+        let (zoom, accum) = apply_pinch_zoom(zoom, accum, 1.5);
+        assert_eq!(zoom, 14);
+        assert!(accum > 0.0 && accum < std::f32::consts::LN_2);
+        let (zoom, _) = apply_pinch_zoom(14, 0.0, 0.4);
+        assert_eq!(zoom, 13);
+        let (zoom, _) = apply_pinch_zoom(18, 0.9, 4.0);
+        assert_eq!(zoom, 18);
+        let (zoom, _) = apply_pinch_zoom(2, -0.9, 0.25);
+        assert_eq!(zoom, 2);
     }
 }

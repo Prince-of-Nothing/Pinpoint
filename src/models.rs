@@ -382,6 +382,9 @@ pub struct AppData {
     pub map_center_lat: f64,
     /// Interactive map center longitude (defaults to Chișinău 28.8638 when 0.0).
     pub map_center_lon: f64,
+    /// Accumulated pinch zoom (natural log of the gesture factor) so a
+    /// multi-finger pinch steps through zoom levels proportionally.
+    pub map_pinch_accum: f32,
     /// Most recent E2E-encrypted location payload produced on this device.
     pub last_e2e_location_ciphertext: Option<String>,
     /// Resolved kiosk/share-link view model (Kiosk screen).

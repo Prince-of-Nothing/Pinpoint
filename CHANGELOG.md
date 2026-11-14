@@ -15,6 +15,7 @@ The per-item flagged list for this release is in
 - [FEATURE] Android: one-shot GPS. **Use GPS** checks the runtime location permission, asks for it when missing, then publishes the last known GPS or network fix (approximate grants included).
 - [FEATURE] Android: share intents. Map links and coordinates shared from Maps, OSM, Apple Maps or chat apps open in Pinpoint; place and kiosk links gain a **Share** action that opens the system share sheet (desktop copies the link).
 - [FEATURE] Privacy: optional on-device PIN app lock (Argon2id hash only). It locks on launch and on returning from the background, with a lockout after repeated wrong PINs.
+- [FEATURE] Map: pinch-to-zoom on touch screens, accumulated into whole zoom levels.
 
 ### Fixed
 - [FIX] Android: JNI now targets the live `NativeActivity`, not the Application context, so FLAG_SECURE, launch deep links, runtime permission requests and the share sheet actually run. Shared `ACTION_SEND` text opens the linked location.

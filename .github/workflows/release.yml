@@ -1,0 +1,206 @@
+﻿# Release pipeline adapted from the ArtCraft/lightcraft-android pattern.
+#
+# Pushing a version tag (v1.2.1, v1.3.0-beta, ΓÇª) builds two APKs, re-signs them
+# with the release key and creates a DRAFT GitHub release named after the tag
+# with an empty "What's Changed" section. Fill that in on GitHub and publish
+# the draft; it becomes the latest release and the in-app checker sees it.
+#
+# A manual run (Actions ΓÇ║ Release ΓÇ║ Run workflow) is a dry run: it builds the
+# APKs at the version in Cargo.toml and keeps them as the run artifact. It
+# signs with a throwaway key when release secrets are absent and releases
+# nothing.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  ANDROID_NDK_VERSION: 27.2.12479018
+  ANDROID_PLATFORM: android-35
+  ANDROID_BUILD_TOOLS: 35.0.0
+
+jobs:
+  apk:
+    name: APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: v
+        name: Resolve version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            v="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          fi
+          if ! printf '%s' "$v" | grep -Eq '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'; then
+            echo "::error::'$v' is not a version like 1.2.3 or 1.2.3-beta"
+            exit 1
+          fi
+          listed="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          if [ "$v" != "$listed" ]; then
+            echo "::error::the tag is v$v but Cargo.toml says version = \"$listed\": bump Cargo.toml before tagging"
+            exit 1
+          fi
+          echo "version=$v" >>"$GITHUB_OUTPUT"
+          echo "### v$v (\`${GITHUB_SHA::9}\`)" >>"$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Rust toolchain and Android targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-android
+
+      - name: Install cargo-apk and the Android NDK
+        run: |
+          cargo install cargo-apk --version 0.10.0 --locked
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "ndk;$ANDROID_NDK_VERSION" \
+            "platforms;$ANDROID_PLATFORM" \
+            "build-tools;$ANDROID_BUILD_TOOLS" >/dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >>"$GITHUB_ENV"
+
+      - name: Prepare signing keys
+        id: keys
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PINPOINT_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.PINPOINT_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PINPOINT_KEY_ALIAS }}
+        run: |
+          # cargo-apk 0.10 always signs a release build. Give it a throwaway
+          # key first; the real release key re-signs the APK afterwards.
+          keytool -genkeypair \
+            -storetype PKCS12 \
+            -keystore "$RUNNER_TEMP/build.p12" \
+            -alias pinpoint-build \
+            -storepass build-pass \
+            -keypass build-pass \
+            -keyalg RSA -keysize 2048 -validity 1 \
+            -dname "CN=Pinpoint Build, O=Pinpoint, C=MD"
+          echo "CARGO_APK_RELEASE_KEYSTORE=$RUNNER_TEMP/build.p12" >>"$GITHUB_ENV"
+          echo "CARGO_APK_RELEASE_KEYSTORE_PASSWORD=build-pass" >>"$GITHUB_ENV"
+
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d >"$RUNNER_TEMP/release.jks"
+            if [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
+              echo "::error::Set PINPOINT_KEYSTORE_PASSWORD and PINPOINT_KEY_ALIAS alongside PINPOINT_KEYSTORE_BASE64."
+              exit 1
+            fi
+            echo "PINPOINT_RELEASE_KEYSTORE=$RUNNER_TEMP/release.jks" >>"$GITHUB_ENV"
+            echo "has_release_key=true" >>"$GITHUB_OUTPUT"
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "::error::No release key: add PINPOINT_KEYSTORE_BASE64, PINPOINT_KEYSTORE_PASSWORD and PINPOINT_KEY_ALIAS. A tagged release is never signed with a throwaway key."
+            exit 1
+          else
+            echo "::warning::No release key: this dry run is signed with a throwaway key and releases nothing."
+            echo "has_release_key=false" >>"$GITHUB_OUTPUT"
+          fi
+
+      - name: Build APKs
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          mkdir -p dist
+          # One APK per ABI, like the ArtCraft releases: 64-bit ARM for most
+          # phones and 32-bit ARM for older/low-end ones.
+          for abi in arm64-v8a armeabi-v7a; do
+            case "$abi" in
+              arm64-v8a) target=aarch64-linux-android; suffix="" ;;
+              armeabi-v7a) target=armv7-linux-androideabi; suffix="-armeabi-v7a" ;;
+            esac
+            cargo apk build --release --lib --target "$target"
+            cp target/release/apk/pinpoint.apk \
+              "dist/pinpoint-android-${VERSION}${suffix}.apk"
+          done
+
+      - name: Re-sign with the release key
+        if: steps.keys.outputs.has_release_key == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.PINPOINT_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PINPOINT_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PINPOINT_KEY_PASSWORD }}
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          for apk in dist/*.apk; do
+            args=(
+              --ks "$PINPOINT_RELEASE_KEYSTORE"
+              --ks-key-alias "$KEY_ALIAS"
+              --ks-pass "pass:$KEYSTORE_PASSWORD"
+            )
+            if [ -n "$KEY_PASSWORD" ]; then
+              args+=(--key-pass "pass:$KEY_PASSWORD")
+            fi
+            "$apksigner" sign "${args[@]}" "$apk"
+          done
+
+      - name: Verify APKs
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          echo >>"$GITHUB_STEP_SUMMARY"
+          for apk in dist/*.apk; do
+            certs="$("$apksigner" verify --print-certs "$apk")"
+            if [ "$GITHUB_REF_TYPE" = tag ] && grep -q "CN=Pinpoint Build" <<<"$certs"; then
+              echo "::error::$apk is still signed with the throwaway build key"
+              exit 1
+            fi
+            {
+              echo "    $(basename "$apk")"
+              grep "certificate SHA-256" <<<"$certs" | sed 's/^/      /'
+            } >>"$GITHUB_STEP_SUMMARY"
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Remove signing keys
+        if: always()
+        run: rm -f "$RUNNER_TEMP/build.p12" "$RUNNER_TEMP/release.jks"
+
+  release:
+    name: GitHub Release
+    needs: apk
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-apk
+          path: dist
+
+      - name: Draft the release
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --draft --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --notes "## What's Changed" \
+            -- dist/*
+          echo "Draft **$GITHUB_REF_NAME** is ready: fill in What's Changed and publish it." >>"$GITHUB_STEP_SUMMARY"

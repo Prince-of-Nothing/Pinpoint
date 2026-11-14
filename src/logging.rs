@@ -5,14 +5,15 @@
 //! include the last useful lines. wasm is a no-op.
 
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{Arc, Mutex, Once, OnceLock};
 use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::prelude::*;
 
 const MAX_LOG_BYTES: u64 = 1_048_576;
 static INIT: Once = Once::new();
+static LOG_FILE: OnceLock<Arc<Mutex<File>>> = OnceLock::new();
 
 #[derive(Clone)]
 struct SharedFile(Arc<Mutex<File>>);
@@ -60,6 +61,7 @@ pub fn init() {
             return;
         };
         let file = Arc::new(Mutex::new(file));
+        let _ = LOG_FILE.set(file.clone());
         let file_layer = tracing_subscriber::fmt::layer()
             .with_ansi(false)
             .with_writer(FileMakeWriter(file));
@@ -85,10 +87,22 @@ pub fn tail(max_lines: usize) -> String {
 }
 
 pub fn clear() {
-    if let Some(path) = log_path() {
+    if let Some(file) = LOG_FILE.get() {
+        if let Ok(mut file) = file.lock() {
+            let _ = truncate_open(&mut file);
+        }
+    } else if let Some(path) = log_path() {
         let _ = fs::remove_file(&path);
+    }
+    if let Some(path) = log_path() {
         let _ = fs::remove_file(path.with_extension("log.1"));
     }
+}
+
+fn truncate_open(file: &mut File) -> io::Result<()> {
+    file.set_len(0)?;
+    file.seek(SeekFrom::Start(0))?;
+    Ok(())
 }
 
 fn rotate_if_needed(path: &Path) {
@@ -153,5 +167,34 @@ mod tests {
         assert!(dir.join("pinpoint.log.1").exists());
         assert!(!path.exists() || std::fs::metadata(&path).unwrap().len() == 0);
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn clear_truncates_the_open_writer() {
+        use std::io::Write;
+
+        let dir = std::env::temp_dir().join(format!(
+            "pinpoint-log-clear-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("pinpoint.log");
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .truncate(false)
+            .open(&path)
+            .unwrap();
+        file.write_all(b"before\n").unwrap();
+        super::truncate_open(&mut file).unwrap();
+        file.write_all(b"after\n").unwrap();
+        drop(file);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "after\n");
+        std::fs::remove_dir_all(dir).ok();
     }
 }

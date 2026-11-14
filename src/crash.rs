@@ -171,28 +171,34 @@ fn prune_reports(dir: &Path, keep: usize) {
 pub fn redact(text: &str) -> String {
     static EMAIL_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?i)[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}").unwrap());
+    static AUTH_RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"(?i)\b(authorization|proxy-authorization)\b\s*[:=]\s*[^\r\n]+").unwrap()
+    });
     static SECRET_RE: LazyLock<Regex> = LazyLock::new(|| {
         Regex::new(
-            r"(?i)\b(bearer|token|password|passwd|secret|session|csrf|cookie|authorization)\b\s*[:=]\s*[^\s&]+",
+            r#"(?i)\b([a-z0-9_-]*(?:token|secret|password|passwd|api_key|apikey|session|cookie|csrf)[a-z0-9_-]*)\b\s*["']?\s*[:=]\s*["']?[^\s&"',}]+"#,
         )
         .unwrap()
     });
     static COORD_RE: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(r"(?i)\b(lat|lon|latitude|longitude)\b\s*[:=]\s*-?\d+(?:\.\d+)?").unwrap()
+        Regex::new(r#"(?i)\b(lat|lon|latitude|longitude)\b\s*["']?\s*[:=]\s*["']?-?\d+(?:\.\d+)?"#)
+            .unwrap()
     });
     static QUERY_RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?i)\b(q|query)\s*=\s*[^\s&]+").unwrap());
+        LazyLock::new(|| Regex::new(r#"(?i)\b(q|query)\s*["']?\s*=\s*["']?[^\s&"',}]+"#).unwrap());
 
     let text = EMAIL_RE.replace_all(text, "<email>");
-    let text = SECRET_RE.replace_all(&text, "${1}=<redacted>");
-    let text = COORD_RE.replace_all(&text, "${1}=<redacted>");
-    QUERY_RE.replace_all(&text, "${1}=<redacted>").into_owned()
+    let text = AUTH_RE.replace_all(&text, "$1=<redacted>");
+    let text = SECRET_RE.replace_all(&text, "$1=<redacted>");
+    let text = COORD_RE.replace_all(&text, "$1=<redacted>");
+    QUERY_RE.replace_all(&text, "$1=<redacted>").into_owned()
 }
 
 /// Build a mailto URL with a body short enough for Android/desktop mail apps.
 pub fn mailto_url(report: &str) -> String {
     let subject = format!("Pinpoint {} crash report", env!("CARGO_PKG_VERSION"));
-    let body = truncate_chars(report, MAX_EMAIL_BODY);
+    let report = redact(report);
+    let body = truncate_chars(&report, MAX_EMAIL_BODY);
     format!(
         "mailto:{}?subject={}&body={}",
         REPORT_EMAIL,
@@ -343,6 +349,25 @@ mod tests {
         assert!(!redacted.contains("secret%20place"));
         assert!(redacted.contains("<email>"));
         assert!(redacted.contains("token=<redacted>"));
+    }
+
+    #[test]
+    fn redaction_handles_headers_json_and_suffixed_tokens() {
+        let text = "Authorization: Bearer bearer123\nX-CSRF-Token: csrf123 access_token=tok123\n{\"token\":\"json123\"}\n{\"lat\":47.01,\"lon\":28.86}";
+        let redacted = redact(text);
+        assert!(!redacted.contains("bearer123"));
+        assert!(!redacted.contains("csrf123"));
+        assert!(!redacted.contains("tok123"));
+        assert!(!redacted.contains("json123"));
+        assert!(!redacted.contains("47.01"));
+        assert!(!redacted.contains("28.86"));
+    }
+
+    #[test]
+    fn mailto_redacts_before_encoding() {
+        let url = mailto_url("token=secret123");
+        assert!(!url.contains("secret123"));
+        assert!(url.contains("redacted"));
     }
 
     #[test]

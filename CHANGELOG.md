@@ -22,6 +22,8 @@ The per-item flagged list for this release is in
 ### Fixed
 - [FIX] Android: report and log copies use the system `ClipboardManager`, so the no-email fallback leaves the full report on the real clipboard.
 - [FIX] Android: reserve a bottom inset so the edge-to-edge gesture bar does not cover the mobile tab bar.
+- [FIX] Diagnostics: redact Authorization/Bearer headers, JSON values, suffixed tokens and quoted coordinates; mailto re-redacts before encoding.
+- [FIX] Logs: Clear log truncates the open writer, so subsequent events remain visible.
 
 ## [1.3.2] - 2026-11-14
 ### Added

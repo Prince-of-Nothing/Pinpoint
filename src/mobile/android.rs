@@ -49,6 +49,7 @@ pub fn launch_android_ui(
 pub extern "C" fn android_main(app_handle: winit::platform::android::activity::AndroidApp) {
     crate::logging::init();
     crate::crash::install_panic_hook();
+    let _ = crate::platform::enable_secure_window();
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         "Android launch starting"

@@ -14,6 +14,9 @@ The per-item flagged list for this release is in
 ### Added
 - [FEATURE] Android: register and route `pinpoint://` and `geo:` launch intents, including kiosk token links and map-centre hand-off.
 
+### Security
+- [SECURITY] Android: FLAG_SECURE blocks screenshots and screen recording of location data.
+
 ## [1.3.2] - 2026-11-14
 ### Added
 - [FEATURE] Crash reporting: Rust panics and `eframe::run_native` startup errors write a redacted app-private report; the next launch shows an editable dialog with Email/Copy/Discard/Close, and About/Profile expose a manual Report a problem flow.

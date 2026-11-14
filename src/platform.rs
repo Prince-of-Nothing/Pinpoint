@@ -282,6 +282,17 @@ pub fn android_launch_uri() -> Option<String> {
     None
 }
 
+/// Prevent Android screenshots/screen recording of location data.
+#[cfg(target_os = "android")]
+pub fn enable_secure_window() -> Result<(), String> {
+    android_intent::enable_secure_window()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn enable_secure_window() -> Result<(), String> {
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{backend_url_from_env_or_default, default_backend_url, Platform};
@@ -379,13 +390,22 @@ mod android_intent {
     }
 
     jni::bind_java_type! {
+        AWindow => "android.view.Window",
+        methods { fn set_flags(flags: jint, mask: jint) }
+    }
+
+    jni::bind_java_type! {
         AActivity => "android.app.Activity",
         type_map {
             AContext => "android.content.Context",
-            AIntent => "android.content.Intent"
+            AIntent => "android.content.Intent",
+            AWindow => "android.view.Window"
         },
         is_instance_of { activity: AContext },
-        methods { fn get_intent() -> AIntent }
+        methods {
+            fn get_intent() -> AIntent,
+            fn get_window() -> AWindow
+        }
     }
 
     pub(super) fn open(url: &str) -> Result<(), String> {
@@ -451,5 +471,31 @@ mod android_intent {
         })
         .ok()
         .flatten()
+    }
+
+    pub(super) fn enable_secure_window() -> Result<(), String> {
+        let ctx = ndk_context::android_context();
+        if ctx.vm().is_null() || ctx.context().is_null() {
+            return Err("Android JVM/context is not available".to_string());
+        }
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
+        vm.attach_current_thread(|env| -> anyhow::Result<()> {
+            let context: jni::sys::jobject = ctx.context() as _;
+            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
+                .map_err(|error| anyhow!("context: {error}"))?;
+            let context: &AContext = &context;
+            let activity = env
+                .as_cast::<AActivity>(&context)
+                .map_err(|error| anyhow!("activity: {error}"))?;
+            let window = activity
+                .get_window(env)
+                .map_err(|error| anyhow!("getWindow: {error}"))?;
+            // WindowManager.LayoutParams.FLAG_SECURE
+            window
+                .set_flags(env, 0x0000_2000, 0x0000_2000)
+                .map_err(|error| anyhow!("setFlags: {error}"))?;
+            Ok(())
+        })
+        .map_err(|error| format!("FLAG_SECURE failed: {error}"))
     }
 }

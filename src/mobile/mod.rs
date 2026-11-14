@@ -174,23 +174,36 @@ impl MobileDeepLink {
     /// plain `lat, lon` pair. Anything else fails closed.
     pub fn parse_shared(text: &str) -> Option<Self> {
         let trimmed = text.trim();
-        if let Some(link) = Self::parse(trimmed) {
+        if let Some(link) = Self::parse(trimmed).filter(is_shared_target) {
             return Some(link);
         }
         for raw in trimmed.split_whitespace() {
             let token = raw.trim_matches(|c: char| {
                 matches!(
                     c,
-                    '"' | '\'' | '(' | ')' | '[' | ']' | '<' | '>' | ',' | ';' | '!'
+                    '"' | '\'' | '(' | ')' | '[' | ']' | '<' | '>' | ',' | ';' | '!' | '.'
                 )
             });
-            if let Some(link) = Self::parse(token) {
+            if let Some(link) = Self::parse(token)
+                .or_else(|| parse_map_link(token))
+                .filter(is_shared_target)
+            {
                 return Some(link);
             }
         }
         parse_map_link(trimmed)
+            .filter(is_shared_target)
             .or_else(|| parse_coord_pair(trimmed).and_then(|(lat, lon)| geo_link(lat, lon, None)))
     }
+}
+
+/// Shared text may only open a location or a kiosk link, never arbitrary app
+/// routes such as `pinpoint://admin` chosen by another app.
+fn is_shared_target(link: &MobileDeepLink) -> bool {
+    matches!(
+        link,
+        MobileDeepLink::Geo { .. } | MobileDeepLink::Kiosk { .. }
+    )
 }
 
 fn geo_link(lat: f64, lon: f64, label: Option<String>) -> Option<MobileDeepLink> {
@@ -267,7 +280,7 @@ fn parse_map_link(text: &str) -> Option<MobileDeepLink> {
         }
     }
     // Google/Apple: ?q=47.01,28.86 or ?ll=47.01,28.86
-    for key in ["q", "ll", "query"] {
+    for key in ["q", "ll", "query", "destination"] {
         if let Some(value) = query_value(text, key) {
             if let Some((lat, lon)) = parse_first_pair(value) {
                 if let Some(link) = geo_link(lat, lon, None) {
@@ -345,10 +358,20 @@ mod tests {
         );
         assert_eq!(
             MobileDeepLink::parse_shared("47.0105, 28.8638"),
-            Some(expected)
+            Some(expected.clone())
         );
         assert!(MobileDeepLink::parse_shared("https://example.com/no-coordinates").is_none());
         assert!(MobileDeepLink::parse_shared("geo:147.0,28.8").is_none());
+        assert_eq!(
+            MobileDeepLink::parse_shared("Location: https://maps.google.com/?q=47.0105,28.8638."),
+            Some(expected.clone())
+        );
+        assert_eq!(
+            MobileDeepLink::parse_shared("https://maps.google.com/?destination=47.0105,28.8638"),
+            Some(expected)
+        );
+        // Shared text may not steer the app to an arbitrary internal route.
+        assert!(MobileDeepLink::parse_shared("pinpoint://admin").is_none());
     }
 
     #[test]

@@ -70,6 +70,90 @@ impl PinpointAppUI {
         ui.add_space(8.0);
         ui.group(|ui| {
             ui.label(
+                RichText::new("App lock (on-device PIN)")
+                    .size(14.0)
+                    .strong(),
+            );
+            if self.lock_enabled {
+                ui.label(
+                    "Locations stay hidden until the PIN is entered after launch or \
+                     returning to the app.",
+                );
+                ui.horizontal(|ui| {
+                    if ui.button("Lock now").clicked() {
+                        self.locked = true;
+                        self.pin_input.clear();
+                        self.pin_error = None;
+                        self.pin_retry_at = None;
+                        self.pin_focus_requested = true;
+                    }
+                    if ui.button("Remove PIN").clicked() {
+                        match crate::app_lock::LockStore::default_location().remove() {
+                            Ok(()) => {
+                                self.lock_enabled = false;
+                                self.locked = false;
+                                self.app.set_notice(Some("App lock removed.".to_string()));
+                            }
+                            Err(error) => self
+                                .app
+                                .set_error(Some(format!("Could not remove the PIN: {error}"))),
+                        }
+                    }
+                });
+            } else {
+                ui.label(
+                    "Set a 4-12 digit PIN so cached locations stay hidden when the \
+                     app is reopened.",
+                );
+            }
+            ui.add_space(4.0);
+            ui.add(
+                egui::TextEdit::singleline(&mut self.pin_setup)
+                    .password(true)
+                    .char_limit(12)
+                    .hint_text("New PIN")
+                    .desired_width(140.0),
+            );
+            ui.add(
+                egui::TextEdit::singleline(&mut self.pin_setup_confirm)
+                    .password(true)
+                    .char_limit(12)
+                    .hint_text("Confirm PIN")
+                    .desired_width(140.0),
+            );
+            let action = if self.lock_enabled {
+                "Change PIN"
+            } else {
+                "Set PIN"
+            };
+            if ui.button(action).clicked() {
+                if self.pin_setup != self.pin_setup_confirm {
+                    self.app
+                        .set_error(Some("The PIN entries do not match.".to_string()));
+                } else {
+                    let pin = self.pin_setup.clone();
+                    match crate::app_lock::LockStore::default_location().set_pin(&pin) {
+                        Ok(()) => {
+                            self.lock_enabled = true;
+                            self.pin_setup.clear();
+                            self.pin_setup_confirm.clear();
+                            self.app.set_notice(Some("App lock PIN saved.".to_string()));
+                        }
+                        Err(error) => self
+                            .app
+                            .set_error(Some(format!("Could not save the PIN: {error}"))),
+                    }
+                }
+            }
+            ui.label(
+                RichText::new("The PIN is stored only as an Argon2id hash on this device.")
+                    .size(10.0)
+                    .color(egui::Color32::from_rgb(148, 163, 184)),
+            );
+        });
+        ui.add_space(8.0);
+        ui.group(|ui| {
+            ui.label(
                 RichText::new("Two-factor authentication (TOTP)")
                     .size(14.0)
                     .strong(),

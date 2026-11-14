@@ -263,6 +263,17 @@ pub struct PinpointAppUI {
     mobile_nav_open: bool,
     mobile_publish_open: bool,
     mobile_selected_place: Option<crate::osm::SearchPlace>,
+    // On-device PIN app lock
+    lock_enabled: bool,
+    locked: bool,
+    lock_armed: bool,
+    pin_input: String,
+    pin_error: Option<String>,
+    pin_failures: u32,
+    pin_retry_at: Option<std::time::Instant>,
+    pin_focus_requested: bool,
+    pin_setup: String,
+    pin_setup_confirm: String,
 }
 
 impl PinpointAppUI {
@@ -271,6 +282,7 @@ impl PinpointAppUI {
     pub fn new(backend: DynBackend, screenshot_path: Option<String>) -> Self {
         let app = Arc::new(PinpointApp::new(backend, screenshot_path));
         PinpointApp::start_auto_refresh(Arc::clone(&app));
+        let lock_enabled = crate::app_lock::LockStore::default_location().is_configured();
         Self {
             app,
             rt: Runtime::new().expect("Failed to create tokio runtime"),
@@ -329,6 +341,16 @@ impl PinpointAppUI {
             mobile_nav_open: false,
             mobile_publish_open: false,
             mobile_selected_place: None,
+            lock_enabled,
+            locked: lock_enabled,
+            lock_armed: false,
+            pin_input: String::new(),
+            pin_error: None,
+            pin_failures: 0,
+            pin_retry_at: None,
+            pin_focus_requested: lock_enabled,
+            pin_setup: String::new(),
+            pin_setup_confirm: String::new(),
         }
     }
 
@@ -1057,8 +1079,119 @@ impl PinpointAppUI {
     }
 }
 
+impl PinpointAppUI {
+    /// Re-lock when the app comes back from the background, so a borrowed or
+    /// unlocked phone cannot see cached locations.
+    fn update_focus_lock(&mut self, ctx: &egui::Context) {
+        if !self.lock_enabled {
+            return;
+        }
+        if !ctx.input(|i| i.focused) {
+            self.lock_armed = true;
+        } else if self.lock_armed {
+            self.lock_armed = false;
+            if !self.locked {
+                self.locked = true;
+                self.pin_input.clear();
+                self.pin_error = None;
+                self.pin_focus_requested = true;
+            }
+        }
+    }
+
+    fn draw_lock_screen(&mut self, ctx: &egui::Context) {
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::NONE
+                    .fill(Color32::from_rgb(11, 16, 32))
+                    .inner_margin(egui::Margin::same(24)),
+            )
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(80.0);
+                    ui.label(RichText::new("Pinpoint is locked").size(24.0).strong());
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new("Enter your on-device PIN to view locations.")
+                            .size(13.0)
+                            .color(Color32::from_rgb(148, 163, 184)),
+                    );
+                    ui.add_space(20.0);
+                    let response = ui.add(
+                        egui::TextEdit::singleline(&mut self.pin_input)
+                            .password(true)
+                            .char_limit(12)
+                            .hint_text("PIN")
+                            .desired_width(160.0),
+                    );
+                    if self.pin_focus_requested {
+                        response.request_focus();
+                        self.pin_focus_requested = false;
+                    }
+                    let submitted =
+                        response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    ui.add_space(10.0);
+                    let retry_secs = self
+                        .pin_retry_at
+                        .and_then(|at| at.checked_duration_since(std::time::Instant::now()))
+                        .map(|d| d.as_secs() + 1)
+                        .unwrap_or(0);
+                    let can_try = retry_secs == 0 && !self.pin_input.is_empty();
+                    if ui
+                        .add_enabled(can_try, egui::Button::new("Unlock"))
+                        .clicked()
+                        || (submitted && can_try)
+                    {
+                        self.attempt_unlock();
+                    }
+                    if retry_secs > 0 {
+                        ui.label(
+                            RichText::new(format!("Try again in {retry_secs}s."))
+                                .size(12.0)
+                                .color(Color32::from_rgb(250, 204, 21)),
+                        );
+                    } else if let Some(error) = &self.pin_error {
+                        ui.label(
+                            RichText::new(error)
+                                .size(12.0)
+                                .color(Color32::from_rgb(248, 113, 113)),
+                        );
+                    }
+                });
+            });
+    }
+
+    fn attempt_unlock(&mut self) {
+        if crate::app_lock::LockStore::default_location().verify(&self.pin_input) {
+            self.locked = false;
+            self.pin_input.clear();
+            self.pin_error = None;
+            self.pin_failures = 0;
+            self.pin_retry_at = None;
+            return;
+        }
+        self.pin_failures = self.pin_failures.saturating_add(1);
+        let delay = 1u64 << self.pin_failures.min(5);
+        self.pin_retry_at = Some(std::time::Instant::now() + std::time::Duration::from_secs(delay));
+        self.pin_error = Some(if self.pin_failures >= 3 {
+            format!("Wrong PIN ({delay}s lockout).")
+        } else {
+            "Wrong PIN.".to_string()
+        });
+        self.pin_input.clear();
+        self.pin_focus_requested = true;
+    }
+}
+
 impl eframe::App for PinpointAppUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.lock_enabled {
+            self.update_focus_lock(ctx);
+            if self.locked {
+                self.draw_lock_screen(ctx);
+                return;
+            }
+        }
         if !self.crash_checked {
             self.crash_checked = true;
             if let Some(stored) = crate::crash::pending_report() {

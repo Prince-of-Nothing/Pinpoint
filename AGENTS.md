@@ -78,6 +78,7 @@ All platform code lives in `src/platform.rs`; all OS branches are there.
 - `src/ui.rs` + `src/ui/` — egui shell + 10 per-screen modules.
 - `src/osm.rs` — Nominatim/OSRM/Overpass; friend coords never sent.
 - `src/map.rs`, `src/tilepacks.rs`, `src/bookmarks.rs` — map pins, offline tiles, bookmarks.
+- `src/app_lock.rs` — optional on-device Argon2id PIN lock (launch/foreground lock).
 - `src/models.rs` — serde domain models + pure math.
 - `src/i18n.rs` — 79-language registry + `t()` + auto-detect.
 - `src/security/` — one mechanism per file (validation, rate_limit, encryption, audit, session, signing, mfa, password).

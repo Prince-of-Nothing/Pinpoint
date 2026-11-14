@@ -38,6 +38,7 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0010 | [Normalized, Encrypted, Modular Database Schema](./0010-normalized-encrypted-database.md) | Accepted (design target) |
 | 0011 | [Self-Hosted OpenStreetMap Services](./0011-self-hosted-osm-services.md) | Accepted (config + docs) |
 | 0012 | [Opaque Server-Side Sessions Instead of JWT + Rotating Refresh Tokens](./0012-opaque-server-side-sessions.md) | Accepted |
+| 0013 | [Use the Live Android Activity for JNI and Accept Cold-Start Share/Deep-Link Delivery](./0013-android-native-activity-jni.md) | Accepted |
 
 See [`architecture/architecture-decisions-link.md`](../architecture/architecture-decisions-link.md) for the complete list.
 

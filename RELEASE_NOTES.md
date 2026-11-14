@@ -1,18 +1,45 @@
-# Pinpoint 1.3.3 — Release Notes
+# Pinpoint 1.3.4 — Release Notes
 
-**Released:** 2026-11-14 · **Version:** `1.3.3` (from `1.3.2`) ·
-**Status:** Android deep links, privacy hardening and crash-report polish.
+**Released:** 2026-11-14 · **Version:** `1.3.4` (from `1.3.3`) ·
+**Status:** Android GPS, share sheet, PIN app lock and the native-activity JNI fix.
 
-**Artifacts:** `pinpoint-android-1.3.3.apk` (arm64-v8a) and
-`pinpoint-android-1.3.3-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.3` tag.
+**Artifacts:** `pinpoint-android-1.3.4.apk` (arm64-v8a) and
+`pinpoint-android-1.3.4-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.4` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.3 patch
+## 0. 1.3.4 features
+
+- **One-shot GPS:** **Use GPS** requests the runtime location permission through
+  the live activity, then reads the last known fix from every LocationManager
+  provider. Approximate-only grants are accepted; coordinates are validated
+  before publishing.
+- **Share in/out:** Android accepts shared `geo:`/map links and plain
+  coordinates (`ACTION_SEND`, `text/plain`) and opens the map there on launch.
+  Repeat shares while Pinpoint is already running need a cold start because
+  the Rust-only `NativeActivity` cannot observe Android's `onNewIntent`.
+  Place sheets share a `geo:` link and the kiosk QR card shares its
+  `pinpoint://kiosk?token=...` link through the system share sheet. Desktop
+  copies the link instead.
+- **PIN app lock:** Profile → App lock stores an Argon2id hash only and locks on
+  launch and when returning to the foreground, with an exponential lockout
+  after wrong PINs.
+- **JNI fix:** android-activity exposes the Application context, not the
+  Activity, so FLAG_SECURE, deep links, permission dialogs and sharing were
+  silently failing in 1.3.3. The live `NativeActivity` is now registered and
+  every JNI helper uses it.
+- **Pinch-to-zoom:** multi-touch pinch steps the map zoom proportionally,
+  clamped to zoom 2–18.
+- **Verification:** FLAG_SECURE confirmed by a black app-window `screencap`;
+  `ACTION_SEND` confirmed in logcat (`action=android.intent.action.SEND`,
+  `text_present=true`); location permission and provider enumeration confirmed
+  on the API 37 emulator.
+
+## 1. 1.3.3 patch
 
 - **Deep links:** `pinpoint://` and `geo:` are registered and routed on launch,
   including kiosk tokens and map-centre hand-off.

@@ -11,14 +11,22 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.3.4] - 2026-11-14
 ### Added
 - [FEATURE] Android: one-shot GPS. **Use GPS** checks the runtime location permission, asks for it when missing, then publishes the last known GPS or network fix (approximate grants included).
 - [FEATURE] Android: share intents. Map links and coordinates shared from Maps, OSM, Apple Maps or chat apps open in Pinpoint; place and kiosk links gain a **Share** action that opens the system share sheet (desktop copies the link).
 - [FEATURE] Privacy: optional on-device PIN app lock (Argon2id hash only). It locks on launch and on returning from the background, with a lockout after repeated wrong PINs.
 - [FEATURE] Map: pinch-to-zoom on touch screens, accumulated into whole zoom levels.
+- [FEATURE] Offline: the current-area pack now caches three zoom levels (out, current, in) instead of one, so the map stays usable when zooming offline.
 
 ### Fixed
 - [FIX] Android: JNI now targets the live `NativeActivity`, not the Application context, so FLAG_SECURE, launch deep links, runtime permission requests and the share sheet actually run. Shared `ACTION_SEND` text opens the linked location.
+- [FIX] Share/deep links: a linked coordinate now survives the first map render (zoom is initialized), so the map actually opens at the shared place. Repeat shares while Pinpoint is already running remain a documented Rust-only limitation.
+- [FIX] GPS: only fixes newer than 10 minutes and with accuracy ≤5 km are published; providers are tried gps → fused → network → passive and one failing provider no longer hides the rest.
+- [FIX] Lock: an unreadable `lock.json` fails closed, PIN changes use an atomic temp-file write with fsync, and existing Unix lock files are tightened to 0600.
+- [FIX] Share parser: accepts map URLs surrounded by prose/trailing punctuation and `destination=` links; shared text can only open locations/kiosks, never `pinpoint://admin`.
+- [FIX] Pinch zoom no longer pans with the first finger and no longer builds a zoom backlog at the 2/18 limits.
 
 ## [1.3.3] - 2026-11-14
 ### Added

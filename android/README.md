@@ -10,6 +10,29 @@ Pinpoint backend and caches them on-device. Release signing is handled by
 `.github/workflows/release.yml`; a physical AArch64 device run is still a
 follow-up.
 
+## Device features
+
+- **One-shot GPS:** `Use GPS` asks for the runtime location permission, then
+  reads the last known fix from every LocationManager provider. If no fix
+  exists yet, open a maps app once or wait for the device to acquire one.
+- **Share in:** share a `geo:` link, a Google/OSM/Apple Maps link or plain
+  `lat, lon` from another app and Pinpoint opens the map there
+  (`ACTION_SEND`, `text/plain`). Android delivers repeat shares to
+  `onNewIntent`, which the Rust-only `NativeActivity` cannot observe; close
+  Pinpoint before sharing if it is already running.
+- **Share out:** place sheets have **Share** (`geo:lat,lon?q=name`) and the Kiosk
+  QR card has **Share link** (`pinpoint://kiosk?token=...`), both opening the
+  system share sheet.
+- **Deep links:** `pinpoint://map`, `pinpoint://kiosk?token=...`, `pinpoint://admin`
+  and `geo:` are routed on launch.
+- **FLAG_SECURE:** screenshots and screen recording of the app window are
+  blocked. Verified on the emulator: `screencap` returns a black app window.
+- **On-device PIN lock:** Profile → App lock stores only an Argon2id hash in
+  `files/lock.json`; the app locks on launch and when returning from the
+  background.
+- **Android 15:** the mobile tab bar reserves the gesture-navigation inset.
+- **Pinch-to-zoom** works on the map.
+
 ## Prerequisites
 
 - Android Studio with SDK **platform 35** (`platforms/android-35`),
@@ -46,7 +69,7 @@ binaries; without `--lib`, cargo-apk tries to package the `bin` artifact.
 `.github/workflows/release.yml` is adapted from the ArtCraft release pattern:
 
 - **Push a `v*` tag** whose version matches `Cargo.toml` (for example
-  `v1.3.2`). The workflow builds one APK for `arm64-v8a` and one for
+  `v1.3.4`). The workflow builds one APK for `arm64-v8a` and one for
   `armeabi-v7a`, re-signs both with the release key, verifies the certificate
   and creates a **draft** GitHub release named after the tag with an empty
   "What's Changed" section.
@@ -96,8 +119,8 @@ are deleted in an `always()` step.
 
 ## Connecting a real phone to a local backend
 
-The release fallback is `http://localhost:8080` (loopback, accepted by the URL
-policy). With USB debugging:
+A **debug** build defaults to `http://10.0.2.2:8080` and accepts the loopback
+fallback, so a USB phone can reach a laptop server:
 
 ```powershell
 adb reverse tcp:8080 tcp:8080
@@ -108,6 +131,11 @@ cargo run --bin pinpoint-server
 Open Pinpoint and sign in; the reverse tunnel reaches the laptop server and
 clears the Offline badge. A remote backend must use HTTPS; non-loopback plain
 HTTP is rejected by the transport policy.
+
+A **release** build with no configured backend now marks the backend
+unavailable: it does not restore a session and disables sign-in, because any
+app on the phone can bind the shared loopback port and impersonate the server.
+Use an explicit HTTPS `PINPOINT_BACKEND` for release installs.
 
 ## Manifest and resources
 

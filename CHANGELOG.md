@@ -12,6 +12,10 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-11-14
+### Removed
+- [FIX] Android: remove the `ACTION_SEND` text-share target. Repeat shares were silently ignored while Pinpoint was alive because Android delivers them to `onNewIntent`, which the Rust-only `NativeActivity` cannot observe. Share-out (places/kiosk), `pinpoint://` and `geo:` deep links remain. `launchMode` stays `singleTop`; `standard` caused android-activity lifecycle errors and elevated threads. See ADR-0014.
+
 ## [1.3.5] - 2026-11-14
 ### Added
 - [FEATURE] Android: `pinpoint://publish` (also `publish-gps`/`share-location`) publishes the current location on launch, waiting for a restored session before it does.

@@ -1,18 +1,35 @@
-# Pinpoint 1.3.5 — Release Notes
+# Pinpoint 1.3.6 — Release Notes
 
-**Released:** 2026-11-14 · **Version:** `1.3.5` (from `1.3.4`) ·
-**Status:** Active GPS acquisition and a publish deep link, verified against a local backend.
+**Released:** 2026-11-14 · **Version:** `1.3.6` (from `1.3.5`) ·
+**Status:** Remove the share-in target that silently did nothing while the app was alive.
 
-**Artifacts:** `pinpoint-android-1.3.5.apk` (arm64-v8a) and
-`pinpoint-android-1.3.5-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.5` tag.
+**Artifacts:** `pinpoint-android-1.3.6.apk` (arm64-v8a) and
+`pinpoint-android-1.3.6-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.6` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.5 features
+## 0. 1.3.6 fix
+
+- **Removed the Android text-share target.** Android delivers a second
+  `ACTION_SEND` to `onNewIntent`; `NativeActivity` does not update
+  `getIntent`, so Pinpoint appeared in the share sheet but silently ignored
+  every share while an instance was alive.
+- **Why not `launchMode=standard`:** live testing handled three consecutive
+  shares, but Android Activity lifecycle callbacks then logged
+  `Ignoring spurious JVM callback after last activity reference was dropped`
+  and thread counts stayed elevated. Not safe to ship.
+- **What remains:** share-out from place sheets and the kiosk QR card,
+  `pinpoint://` and `geo:` deep links, `pinpoint://publish`, GPS, PIN lock and
+  offline packs.
+- **Re-enabling share-in** needs a minimal Java `onNewIntent` bridge (prebuilt
+  DEX + manifest component). That breaks the Rust-only packaging rule and
+  requires an explicit product decision; see ADR-0014.
+
+## 1. 1.3.5 features
 
 - **Active GPS:** when no provider has a recent last-known fix, **Use GPS**
   requests location updates for up to 8 seconds (GPS → fused → network) and

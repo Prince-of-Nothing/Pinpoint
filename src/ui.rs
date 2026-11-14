@@ -1309,11 +1309,18 @@ impl eframe::App for PinpointAppUI {
             let mut chosen: Option<CurrentScreen> = None;
             egui::TopBottomPanel::bottom("mobile_tabbar")
                 .resizable(false)
-                .exact_height(58.0)
+                // Android 15 draws edge-to-edge; reserve room for the gesture
+                // navigation bar so the tabs are not under it.
+                .exact_height(74.0)
                 .frame(
                     egui::Frame::NONE
                         .fill(Color32::from_rgb(15, 23, 42))
-                        .inner_margin(egui::Margin::symmetric(4, 4)),
+                        .inner_margin(egui::Margin {
+                            left: 4,
+                            right: 4,
+                            top: 4,
+                            bottom: 20,
+                        }),
                 )
                 .show(ctx, |ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;

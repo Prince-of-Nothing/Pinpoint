@@ -354,6 +354,17 @@ pub fn share_text(_text: &str) -> Result<(), String> {
     Err("sharing is handled by the UI on desktop".to_string())
 }
 
+/// Register the live `NativeActivity` for JNI calls. `ndk_context` exposes the
+/// Application context, which cannot start activities, request permissions or
+/// read the launch intent.
+#[cfg(target_os = "android")]
+pub fn set_android_activity(ptr: *mut std::ffi::c_void) {
+    android_intent::set_activity(ptr);
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn set_android_activity(_ptr: *mut std::ffi::c_void) {}
+
 /// Prevent Android screenshots/screen recording of location data.
 #[cfg(target_os = "android")]
 pub fn enable_secure_window() -> Result<(), String> {
@@ -454,6 +465,13 @@ mod android_intent {
     use jni::objects::{JObject, JString};
     use jni::refs::Global;
     use jni::JValue;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static ACTIVITY_PTR: AtomicUsize = AtomicUsize::new(0);
+
+    pub(super) fn set_activity(ptr: *mut std::ffi::c_void) {
+        ACTIVITY_PTR.store(ptr as usize, Ordering::Relaxed);
+    }
 
     jni::bind_java_type! {
         AUri => "android.net.Uri",
@@ -512,55 +530,24 @@ mod android_intent {
     }
 
     pub(super) fn open(url: &str) -> Result<(), String> {
-        let ctx = ndk_context::android_context();
-        if ctx.vm().is_null() || ctx.context().is_null() {
-            return Err("Android JVM/context is not available".to_string());
-        }
-        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
-        vm.attach_current_thread(|env| -> anyhow::Result<()> {
-            let context: jni::sys::jobject = ctx.context() as _;
-            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
-                .map_err(|error| anyhow!("context: {error}"))?;
-            let context: &AContext = &context;
+        with_activity(|env, activity| {
             let action =
                 AIntent::ACTION_VIEW(env).map_err(|error| anyhow!("ACTION_VIEW: {error}"))?;
             let url = JString::new(env, url).map_err(|error| anyhow!("URL string: {error}"))?;
             let uri = AUri::parse(env, url).map_err(|error| anyhow!("URI parse: {error}"))?;
             let intent = AIntent::new_with_url(env, &action, &uri)
                 .map_err(|error| anyhow!("Intent: {error}"))?;
-            if env.as_cast::<AActivity>(&context).is_ok() {
-                context
-                    .start_activity(env, &intent)
-                    .map_err(|error| anyhow!("startActivity: {error}"))?;
-            } else {
-                let flag = AIntent::FLAG_ACTIVITY_NEW_TASK(env)
-                    .map_err(|error| anyhow!("FLAG_ACTIVITY_NEW_TASK: {error}"))?;
-                let intent = intent
-                    .add_flags(env, flag)
-                    .map_err(|error| anyhow!("addFlags: {error}"))?;
-                context
-                    .start_activity(env, &intent)
-                    .map_err(|error| anyhow!("startActivity: {error}"))?;
-            }
+            let context: &AContext = activity.as_ref();
+            context
+                .start_activity(env, &intent)
+                .map_err(|error| anyhow!("startActivity: {error}"))?;
             Ok(())
         })
         .map_err(|error| format!("Android Intent failed: {error}"))
     }
 
     pub(super) fn launch_uri() -> Option<String> {
-        let ctx = ndk_context::android_context();
-        if ctx.vm().is_null() || ctx.context().is_null() {
-            return None;
-        }
-        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
-        vm.attach_current_thread(|env| -> anyhow::Result<Option<String>> {
-            let context: jni::sys::jobject = ctx.context() as _;
-            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
-                .map_err(|error| anyhow!("context: {error}"))?;
-            let context: &AContext = &context;
-            let activity = env
-                .as_cast::<AActivity>(&context)
-                .map_err(|error| anyhow!("activity: {error}"))?;
+        with_activity(|env, activity| -> anyhow::Result<Option<String>> {
             let intent = activity
                 .get_intent(env)
                 .map_err(|error| anyhow!("getIntent: {error}"))?;
@@ -577,25 +564,19 @@ mod android_intent {
     }
 
     pub(super) fn shared_text() -> Option<String> {
-        let ctx = ndk_context::android_context();
-        if ctx.vm().is_null() || ctx.context().is_null() {
-            return None;
-        }
-        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
-        vm.attach_current_thread(|env| -> anyhow::Result<Option<String>> {
-            let context: jni::sys::jobject = ctx.context() as _;
-            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
-                .map_err(|error| anyhow!("context: {error}"))?;
-            let context: &AContext = &context;
-            let activity = env
-                .as_cast::<AActivity>(&context)
-                .map_err(|error| anyhow!("activity: {error}"))?;
+        tracing::info!("android share: reading intent");
+        let result = with_activity(|env, activity| -> anyhow::Result<Option<String>> {
             let intent = activity
                 .get_intent(env)
                 .map_err(|error| anyhow!("getIntent: {error}"))?;
+            if intent.is_null() {
+                tracing::info!("android share: no launch intent");
+                return Ok(None);
+            }
             let action = intent
                 .get_action(env)
                 .map_err(|error| anyhow!("getAction: {error}"))?;
+            tracing::info!("android share: action={action}");
             if action.is_null() || action.to_string() != "android.intent.action.SEND" {
                 return Ok(None);
             }
@@ -603,26 +584,23 @@ mod android_intent {
             let text = intent
                 .get_string_extra(env, &key)
                 .map_err(|error| anyhow!("getStringExtra: {error}"))?;
+            tracing::info!("android share: text_present={}", !text.is_null());
             if text.is_null() {
                 return Ok(None);
             }
             Ok(Some(text.to_string()))
-        })
-        .ok()
-        .flatten()
+        });
+        match result {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::warn!("android share: {error}");
+                None
+            }
+        }
     }
 
     pub(super) fn share_text(text: &str) -> Result<(), String> {
-        let ctx = ndk_context::android_context();
-        if ctx.vm().is_null() || ctx.context().is_null() {
-            return Err("Android JVM/context is not available".to_string());
-        }
-        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
-        vm.attach_current_thread(|env| -> anyhow::Result<()> {
-            let context: jni::sys::jobject = ctx.context() as _;
-            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
-                .map_err(|error| anyhow!("context: {error}"))?;
-            let context: &AContext = &context;
+        with_activity(|env, activity| {
             let action = JString::new(env, "android.intent.action.SEND")?;
             let intent = AIntent::new_with_action(env, &action)
                 .map_err(|error| anyhow!("Intent: {error}"))?;
@@ -646,39 +624,17 @@ mod android_intent {
                 &[JValue::Object(key.as_ref()), JValue::Object(value.as_ref())],
             )
             .map_err(|error| anyhow!("putExtra: {error}"))?;
-            if env.as_cast::<AActivity>(&context).is_ok() {
-                context
-                    .start_activity(env, &intent)
-                    .map_err(|error| anyhow!("startActivity: {error}"))?;
-            } else {
-                let flag = AIntent::FLAG_ACTIVITY_NEW_TASK(env)
-                    .map_err(|error| anyhow!("FLAG_ACTIVITY_NEW_TASK: {error}"))?;
-                let intent = intent
-                    .add_flags(env, flag)
-                    .map_err(|error| anyhow!("addFlags: {error}"))?;
-                context
-                    .start_activity(env, &intent)
-                    .map_err(|error| anyhow!("startActivity: {error}"))?;
-            }
+            let context: &AContext = activity.as_ref();
+            context
+                .start_activity(env, &intent)
+                .map_err(|error| anyhow!("startActivity: {error}"))?;
             Ok(())
         })
         .map_err(|error| format!("Android share failed: {error}"))
     }
 
     pub(super) fn enable_secure_window() -> Result<(), String> {
-        let ctx = ndk_context::android_context();
-        if ctx.vm().is_null() || ctx.context().is_null() {
-            return Err("Android JVM/context is not available".to_string());
-        }
-        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
-        vm.attach_current_thread(|env| -> anyhow::Result<()> {
-            let context: jni::sys::jobject = ctx.context() as _;
-            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
-                .map_err(|error| anyhow!("context: {error}"))?;
-            let context: &AContext = &context;
-            let activity = env
-                .as_cast::<AActivity>(&context)
-                .map_err(|error| anyhow!("activity: {error}"))?;
+        with_activity(|env, activity| {
             let window = activity
                 .get_window(env)
                 .map_err(|error| anyhow!("getWindow: {error}"))?;
@@ -692,16 +648,8 @@ mod android_intent {
     }
 
     pub(super) fn copy_text(text: &str) -> Result<(), String> {
-        let ctx = ndk_context::android_context();
-        if ctx.vm().is_null() || ctx.context().is_null() {
-            return Err("Android JVM/context is not available".to_string());
-        }
-        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
-        vm.attach_current_thread(|env| -> anyhow::Result<()> {
-            let context: jni::sys::jobject = ctx.context() as _;
-            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
-                .map_err(|error| anyhow!("context: {error}"))?;
-            let context: &AContext = &context;
+        with_activity(|env, activity| {
+            let context: &AContext = activity.as_ref();
             let service_name = JString::new(env, "clipboard")?;
             let service = context
                 .get_system_service(env, service_name)
@@ -722,24 +670,29 @@ mod android_intent {
         .map_err(|error| format!("Clipboard failed: {error}"))
     }
 
-    fn with_context<T>(
-        f: impl FnOnce(&mut jni::Env, &AContext) -> anyhow::Result<T>,
+    fn with_activity<T>(
+        f: impl FnOnce(&mut jni::Env, &AActivity) -> anyhow::Result<T>,
     ) -> anyhow::Result<T> {
         let ctx = ndk_context::android_context();
-        if ctx.vm().is_null() || ctx.context().is_null() {
-            anyhow::bail!("Android JVM/context is not available");
+        if ctx.vm().is_null() {
+            anyhow::bail!("Android JVM is not available");
         }
         let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
-        vm.attach_current_thread(|env| {
-            let context: jni::sys::jobject = ctx.context() as _;
-            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
-                .map_err(|error| anyhow!("context: {error}"))?;
-            let context: &AContext = &context;
-            f(env, context)
+        vm.attach_current_thread(|env| -> anyhow::Result<T> {
+            let ptr = ACTIVITY_PTR.load(Ordering::Relaxed);
+            if ptr == 0 {
+                anyhow::bail!("Android Activity is not registered");
+            }
+            let raw = ptr as jni::sys::jobject;
+            let activity = unsafe { env.as_cast_raw::<Global<AActivity>>(&raw) }
+                .map_err(|error| anyhow!("activity: {error}"))?;
+            let activity: &AActivity = &activity;
+            f(env, activity)
         })
     }
 
-    fn has_location_permission(env: &mut jni::Env, context: &AContext) -> anyhow::Result<bool> {
+    fn has_location_permission(env: &mut jni::Env, activity: &AActivity) -> anyhow::Result<bool> {
+        let context: &AContext = activity.as_ref();
         for name in [
             "android.permission.ACCESS_FINE_LOCATION",
             "android.permission.ACCESS_COARSE_LOCATION",
@@ -753,15 +706,14 @@ mod android_intent {
     }
 
     pub(super) fn ensure_permission() -> super::LocationPermission {
-        let granted = with_context(|env, context| -> anyhow::Result<bool> {
-            has_location_permission(env, context)
+        let granted = with_activity(|env, activity| -> anyhow::Result<bool> {
+            has_location_permission(env, activity)
         })
         .unwrap_or(false);
         if granted {
             return super::LocationPermission::Granted;
         }
-        let requested = with_context(|env, context| -> anyhow::Result<()> {
-            let activity = env.as_cast::<AActivity>(context)?;
+        let requested = with_activity(|env, activity| -> anyhow::Result<()> {
             let permission = JString::new(env, "android.permission.ACCESS_FINE_LOCATION")?;
             let class_name = jni::strings::JNIString::from("java/lang/String");
             let class = env.find_class(class_name)?;
@@ -771,8 +723,9 @@ mod android_intent {
             let runtime =
                 jni::signature::RuntimeMethodSignature::from_str("([Ljava/lang/String;I)V")?;
             let signature = jni::signature::MethodSignature::from(&runtime);
+            let activity_obj: &JObject = activity.as_ref();
             env.call_method(
-                activity.as_ref(),
+                activity_obj,
                 name,
                 signature,
                 &[JValue::Object(array.as_ref()), JValue::Int(1)],
@@ -787,10 +740,11 @@ mod android_intent {
     }
 
     pub(super) fn last_known() -> Option<(f64, f64, f64)> {
-        with_context(|env, context| -> anyhow::Result<Option<(f64, f64, f64)>> {
-            if !has_location_permission(env, context)? {
+        with_activity(|env, activity| -> anyhow::Result<Option<(f64, f64, f64)>> {
+            if !has_location_permission(env, activity)? {
                 return Ok(None);
             }
+            let context: &AContext = activity.as_ref();
             let service_name = JString::new(env, "location")?;
             let service = context.get_system_service(env, service_name)?;
             if service.is_null() {

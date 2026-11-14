@@ -16,6 +16,9 @@ The per-item flagged list for this release is in
 - [FEATURE] Android: share intents. Map links and coordinates shared from Maps, OSM, Apple Maps or chat apps open in Pinpoint; place and kiosk links gain a **Share** action that opens the system share sheet (desktop copies the link).
 - [FEATURE] Privacy: optional on-device PIN app lock (Argon2id hash only). It locks on launch and on returning from the background, with a lockout after repeated wrong PINs.
 
+### Fixed
+- [FIX] Android: JNI now targets the live `NativeActivity`, not the Application context, so FLAG_SECURE, launch deep links, runtime permission requests and the share sheet actually run. Shared `ACTION_SEND` text opens the linked location.
+
 ## [1.3.3] - 2026-11-14
 ### Added
 - [FEATURE] Android: register and route `pinpoint://` and `geo:` launch intents, including kiosk token links and map-centre hand-off.

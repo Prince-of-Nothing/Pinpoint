@@ -12,8 +12,11 @@
 //!   else must be HTTPS (fail closed â€” see ADR-0006).
 
 use crate::models::{
-    CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, LoginResponse, User,
+    AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
+    LocationShare, LoginResponse, SessionInfo, User,
 };
+use crate::osm::{MapCapabilities, Route, SearchPlace};
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use url::Url;
@@ -52,7 +55,11 @@ fn validate_backend_url_with_allowlist(raw: &str, allowed: &[String]) -> anyhow:
                 Some(url::Host::Ipv6(ip)) => ip.is_loopback(),
                 None => false,
             };
-            if loopback || allowed.iter().any(|h| h == &host) {
+            // Android emulator host loopback. Debug-only: release APKs must
+            // use HTTPS (the manifest also disables cleartext in release).
+            let android_emulator =
+                cfg!(all(target_os = "android", debug_assertions)) && host == "10.0.2.2";
+            if loopback || android_emulator || allowed.iter().any(|h| h == &host) {
                 Ok(url)
             } else {
                 Err(anyhow::anyhow!(
@@ -74,6 +81,29 @@ struct Session {
     cookies: Vec<String>,
     /// Double-submit token from the login body or `X-CSRF-Token` header.
     csrf_token: Option<String>,
+}
+
+/// Serialisable session material persisted in the OS keychain. It contains
+/// only the opaque cookie and CSRF token — never a password or email.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionSnapshot {
+    pub cookies: Vec<String>,
+    #[serde(default)]
+    pub csrf_token: Option<String>,
+}
+
+impl SessionSnapshot {
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap_or_default()
+    }
+
+    pub fn from_json(raw: &str) -> anyhow::Result<Self> {
+        let snapshot: Self = serde_json::from_str(raw)?;
+        if snapshot.cookies.is_empty() {
+            anyhow::bail!("session snapshot has no cookies");
+        }
+        Ok(snapshot)
+    }
 }
 
 pub struct ApiClient {
@@ -117,6 +147,29 @@ impl ApiClient {
 
     fn session_snapshot(&self) -> Option<Session> {
         self.session.lock().unwrap().clone()
+    }
+
+    /// Export opaque session material for keychain persistence.
+    pub fn export_session(&self) -> Option<String> {
+        let session = self.session_snapshot()?;
+        Some(
+            SessionSnapshot {
+                cookies: session.cookies,
+                csrf_token: session.csrf_token,
+            }
+            .to_json(),
+        )
+    }
+
+    /// Import a previously persisted session snapshot. Fails closed when the
+    /// blob is malformed or contains no cookies.
+    pub fn import_session(&self, raw: &str) -> anyhow::Result<()> {
+        let snapshot = SessionSnapshot::from_json(raw)?;
+        self.store_session(Some(Session {
+            cookies: snapshot.cookies,
+            csrf_token: snapshot.csrf_token,
+        }));
+        Ok(())
     }
 
     /// Issues a request, attaching the session cookie on every request and
@@ -208,11 +261,22 @@ impl ApiClient {
     }
 
     pub async fn login(&self, email: &str, password: &str) -> anyhow::Result<User> {
+        self.login_with_totp(email, password, None).await
+    }
+
+    /// Login with an optional TOTP code. MFA-enabled accounts need the
+    /// 6-digit code in the request body; non-MFA accounts ignore it.
+    pub async fn login_with_totp(
+        &self,
+        email: &str,
+        password: &str,
+        totp: Option<&str>,
+    ) -> anyhow::Result<User> {
         let response = self
             .request(
                 reqwest::Method::POST,
                 "/api/v1/auth/login",
-                Some(serde_json::json!({ "email": email, "password": password })),
+                Some(login_body(email, password, totp)),
             )
             .await?;
         let response = Self::check(response, "Login failed").await?;
@@ -265,6 +329,113 @@ impl ApiClient {
         let _ = response;
         self.store_session(None);
         Ok(())
+    }
+
+    /// `GET /api/v1/auth/me` — current user for session resume.
+    pub async fn me(&self) -> anyhow::Result<User> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/auth/me", None)
+            .await?;
+        let response = Self::check(response, "Session expired").await?;
+        Ok(response.json().await?)
+    }
+
+    /// `POST /api/v1/auth/anonymous` — device-bound account plus recovery code.
+    pub async fn anonymous(&self, device_name: &str) -> anyhow::Result<(User, String)> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/auth/anonymous",
+                Some(serde_json::json!({ "device_name": device_name })),
+            )
+            .await?;
+        let response = Self::check(response, "Anonymous sign-in failed").await?;
+        let headers = response.headers().clone();
+        let body: AnonymousResponse = response.json().await?;
+        let login = LoginResponse {
+            access_token: String::new(),
+            csrf_token: body.csrf_token.clone(),
+            user: body.user.clone(),
+        };
+        self.capture_session(&headers, &login)?;
+        Ok((body.user, body.recovery_code))
+    }
+
+    /// `POST /api/v1/auth/anonymous/recover` — rotate and restore via code.
+    pub async fn recover_account(&self, recovery_code: &str) -> anyhow::Result<(User, String)> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/auth/anonymous/recover",
+                Some(serde_json::json!({ "recovery_code": recovery_code })),
+            )
+            .await?;
+        let response = Self::check(response, "Recovery failed").await?;
+        let headers = response.headers().clone();
+        let body: AnonymousResponse = response.json().await?;
+        let login = LoginResponse {
+            access_token: String::new(),
+            csrf_token: body.csrf_token.clone(),
+            user: body.user.clone(),
+        };
+        self.capture_session(&headers, &login)?;
+        Ok((body.user, body.recovery_code))
+    }
+
+    /// `GET /api/v1/auth/sessions` — active sessions for the current user.
+    pub async fn list_sessions(&self) -> anyhow::Result<Vec<SessionInfo>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/auth/sessions", None)
+            .await?;
+        let response = Self::check(response, "Failed to load sessions").await?;
+        let body: SessionsResponse = response.json().await?;
+        Ok(body.sessions)
+    }
+
+    /// `DELETE /api/v1/auth/sessions/:id` — revoke a session by id prefix.
+    pub async fn revoke_session(&self, id: &str) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::DELETE,
+                &format!("/api/v1/auth/sessions/{}", urlencoding(id)),
+                None,
+            )
+            .await?;
+        Self::check(response, "Failed to revoke session").await?;
+        Ok(())
+    }
+
+    /// `POST /api/v1/auth/logout-all` — revoke every session and clear local.
+    pub async fn logout_all(&self) -> anyhow::Result<()> {
+        let response = self
+            .request(reqwest::Method::POST, "/api/v1/auth/logout-all", None)
+            .await?;
+        let result = Self::check(response, "Sign out everywhere failed").await;
+        self.store_session(None);
+        result.map(|_| ())
+    }
+
+    /// `POST /api/v1/diagnostics/report` — PII-free user-initiated report.
+    pub async fn submit_diagnostic(
+        &self,
+        category: &str,
+        message: &str,
+        platform: &str,
+    ) -> anyhow::Result<i64> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/diagnostics/report",
+                Some(serde_json::json!({
+                    "category": category,
+                    "message": message,
+                    "platform": platform,
+                })),
+            )
+            .await?;
+        let response = Self::check(response, "Diagnostic report failed").await?;
+        let body: serde_json::Value = response.json().await?;
+        Ok(body["id"].as_i64().unwrap_or(0))
     }
 
     /// MFA: start enrolment; returns (secret, otpauth_uri).
@@ -425,15 +596,9 @@ impl ApiClient {
         share_id: i64,
         is_active: Option<bool>,
         precision: Option<String>,
+        duration_hours: Option<i64>,
     ) -> anyhow::Result<()> {
-        let mut body = serde_json::json!({});
-        if let Some(active) = is_active {
-            body["is_active"] = serde_json::Value::Bool(active);
-        }
-        if let Some(p) = precision {
-            body["precision_level"] = serde_json::Value::String(p);
-        }
-
+        let body = update_share_body(is_active, precision.as_deref(), duration_hours);
         let response = self
             .request(
                 reqwest::Method::PATCH,
@@ -580,6 +745,82 @@ impl ApiClient {
         Ok(())
     }
 
+    pub async fn admin_overview(&self) -> anyhow::Result<serde_json::Value> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/admin/overview", None)
+            .await?;
+        let response = Self::check(response, "Failed to load admin overview").await?;
+        Ok(response.json().await?)
+    }
+
+    pub async fn admin_users(&self) -> anyhow::Result<Vec<serde_json::Value>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/admin/users", None)
+            .await?;
+        let response = Self::check(response, "Failed to load admin users").await?;
+        let body: AdminUsersResponse = response.json().await?;
+        Ok(body.users)
+    }
+
+    pub async fn admin_update_user(&self, id: i64, body: serde_json::Value) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::PATCH,
+                &format!("/api/v1/admin/users/{id}"),
+                Some(body),
+            )
+            .await?;
+        Self::check(response, "Failed to update admin user").await?;
+        Ok(())
+    }
+
+    pub async fn admin_delete_user(&self, id: i64) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::DELETE,
+                &format!("/api/v1/admin/users/{id}"),
+                None,
+            )
+            .await?;
+        Self::check(response, "Failed to delete admin user").await?;
+        Ok(())
+    }
+
+    pub async fn admin_diagnostics(
+        &self,
+        status: Option<&str>,
+    ) -> anyhow::Result<(Vec<DiagnosticReport>, i64, i64)> {
+        let path = match status.filter(|s| !s.is_empty()) {
+            Some(status) => format!("/api/v1/admin/diagnostics?status={}", urlencoding(status)),
+            None => "/api/v1/admin/diagnostics".to_string(),
+        };
+        let response = self.request(reqwest::Method::GET, &path, None).await?;
+        let response = Self::check(response, "Failed to load diagnostics").await?;
+        let body: AdminDiagnosticsResponse = response.json().await?;
+        Ok((body.reports, body.total, body.open))
+    }
+
+    pub async fn admin_update_report(&self, id: i64, status: &str) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::PATCH,
+                &format!("/api/v1/admin/diagnostics/{id}"),
+                Some(serde_json::json!({ "status": status })),
+            )
+            .await?;
+        Self::check(response, "Failed to triage diagnostic").await?;
+        Ok(())
+    }
+
+    pub async fn admin_audit(&self) -> anyhow::Result<Vec<AdminAuditEntry>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/admin/audit", None)
+            .await?;
+        let response = Self::check(response, "Failed to load audit log").await?;
+        let body: AdminAuditResponse = response.json().await?;
+        Ok(body.entries)
+    }
+
     pub async fn create_check_in(
         &self,
         lat: f64,
@@ -627,6 +868,182 @@ impl ApiClient {
         let response = Self::check(response, "Failed to fetch emergencies").await?;
         Ok(response.json().await?)
     }
+
+    /// `GET /map/capabilities` — which routing modes/avoid options the
+    /// server-side OSRM deployment supports.
+    pub async fn map_capabilities(&self) -> anyhow::Result<MapCapabilities> {
+        let response = self
+            .request(reqwest::Method::GET, "/map/capabilities", None)
+            .await?;
+        let response = Self::check(response, "Failed to load map capabilities").await?;
+        Ok(response.json().await?)
+    }
+
+    /// `GET /map/search?q=&lat=&lon=&limit=` — backend-proxied Nominatim.
+    pub async fn map_search(
+        &self,
+        q: &str,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<SearchPlace>> {
+        if q.trim().chars().count() < 3 {
+            anyhow::bail!("Search needs at least 3 characters.");
+        }
+        if lat.is_some() != lon.is_some() {
+            anyhow::bail!("lat and lon must be supplied together.");
+        }
+        let mut path = format!(
+            "/map/search?q={}&limit={}",
+            urlencoding(q.trim()),
+            limit.clamp(1, 10)
+        );
+        if let (Some(lat), Some(lon)) = (lat, lon) {
+            path.push_str(&format!("&lat={lat:.6}&lon={lon:.6}"));
+        }
+        let response = self.request(reqwest::Method::GET, &path, None).await?;
+        let response = Self::check(response, "Search failed").await?;
+        let body: SearchResponse = response.json().await?;
+        Ok(body.results)
+    }
+
+    /// `GET /map/reverse?lat=&lon=` — backend-proxied reverse geocoding.
+    pub async fn map_reverse(&self, lat: f64, lon: f64) -> anyhow::Result<SearchPlace> {
+        if !lat.is_finite() || !lon.is_finite() {
+            anyhow::bail!("Coordinates must be finite.");
+        }
+        let path = format!("/map/reverse?lat={lat:.6}&lon={lon:.6}");
+        let response = self.request(reqwest::Method::GET, &path, None).await?;
+        let response = Self::check(response, "Reverse geocoding failed").await?;
+        Ok(response.json().await?)
+    }
+
+    /// `GET /map/route` — backend-proxied OSRM with stops and exclusions.
+    pub async fn map_route(
+        &self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: &str,
+        via: &[(f64, f64)],
+        avoid: &[String],
+        alternatives: bool,
+    ) -> anyhow::Result<Vec<Route>> {
+        if via.len() > 6 {
+            anyhow::bail!("A route can have at most 6 stops.");
+        }
+        if avoid.len() > 3 {
+            anyhow::bail!("At most 3 avoid classes are supported.");
+        }
+        let path = map_route_path(from, to, mode, via, avoid, alternatives);
+        let response = self.request(reqwest::Method::GET, &path, None).await?;
+        let response = Self::check(response, "Routing failed").await?;
+        let body: RouteResponse = response.json().await?;
+        Ok(body.routes)
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct SearchResponse {
+    results: Vec<SearchPlace>,
+}
+
+#[derive(serde::Deserialize)]
+struct RouteResponse {
+    routes: Vec<Route>,
+}
+
+#[derive(serde::Deserialize)]
+struct SessionsResponse {
+    sessions: Vec<SessionInfo>,
+}
+
+#[derive(serde::Deserialize)]
+struct AnonymousResponse {
+    user: User,
+    recovery_code: String,
+    #[serde(default)]
+    csrf_token: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct AdminUsersResponse {
+    users: Vec<serde_json::Value>,
+}
+
+#[derive(serde::Deserialize)]
+struct AdminDiagnosticsResponse {
+    #[serde(default)]
+    reports: Vec<DiagnosticReport>,
+    #[serde(default)]
+    total: i64,
+    #[serde(default)]
+    open: i64,
+}
+
+#[derive(serde::Deserialize)]
+struct AdminAuditResponse {
+    #[serde(default)]
+    entries: Vec<AdminAuditEntry>,
+}
+
+fn update_share_body(
+    is_active: Option<bool>,
+    precision: Option<&str>,
+    duration_hours: Option<i64>,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({});
+    if let Some(active) = is_active {
+        body["is_active"] = serde_json::Value::Bool(active);
+    }
+    if let Some(p) = precision {
+        body["precision_level"] = serde_json::Value::String(p.to_string());
+    }
+    if let Some(hours) = duration_hours {
+        body["duration_hours"] = serde_json::Value::Number(hours.into());
+    }
+    body
+}
+
+fn login_body(email: &str, password: &str, totp: Option<&str>) -> serde_json::Value {
+    match totp.map(str::trim).filter(|code| !code.is_empty()) {
+        Some(code) => {
+            serde_json::json!({ "email": email, "password": password, "totp": code })
+        }
+        None => serde_json::json!({ "email": email, "password": password }),
+    }
+}
+
+/// Build the `/map/route` query string. Kept pure so the encoding is
+/// testable without a network call; commas/semicolons are legal in a query.
+fn map_route_path(
+    from: (f64, f64),
+    to: (f64, f64),
+    mode: &str,
+    via: &[(f64, f64)],
+    avoid: &[String],
+    alternatives: bool,
+) -> String {
+    let mut path = format!(
+        "/map/route?from_lat={:.6}&from_lon={:.6}&to_lat={:.6}&to_lon={:.6}&mode={}&alternatives={}",
+        from.0,
+        from.1,
+        to.0,
+        to.1,
+        urlencoding(mode),
+        alternatives
+    );
+    if !via.is_empty() {
+        let encoded = via
+            .iter()
+            .map(|(lat, lon)| format!("{lat:.6},{lon:.6}"))
+            .collect::<Vec<_>>()
+            .join(";");
+        path.push_str(&format!("&via={encoded}"));
+    }
+    if !avoid.is_empty() {
+        path.push_str(&format!("&avoid={}", avoid.join(",")));
+    }
+    path
 }
 
 fn urlencoding(s: &str) -> String {
@@ -716,12 +1133,26 @@ impl crate::backend::Backend for ApiClient {
     fn session_active(&self) -> bool {
         ApiClient::session_active(self)
     }
+    fn export_session(&self) -> Option<String> {
+        ApiClient::export_session(self)
+    }
+    fn import_session(&self, raw: &str) -> anyhow::Result<()> {
+        ApiClient::import_session(self, raw)
+    }
     fn login<'a>(
         &'a self,
         email: &'a str,
         password: &'a str,
     ) -> crate::backend::BackendFuture<'a, crate::models::User> {
         Box::pin(async move { ApiClient::login(self, email, password).await })
+    }
+    fn login_with_totp<'a>(
+        &'a self,
+        email: &'a str,
+        password: &'a str,
+        totp: Option<&'a str>,
+    ) -> crate::backend::BackendFuture<'a, crate::models::User> {
+        Box::pin(async move { ApiClient::login_with_totp(self, email, password, totp).await })
     }
     fn register<'a>(
         &'a self,
@@ -733,6 +1164,40 @@ impl crate::backend::Backend for ApiClient {
     }
     fn logout<'a>(&'a self) -> crate::backend::BackendFuture<'a, ()> {
         Box::pin(async move { ApiClient::logout(self).await })
+    }
+    fn me(&self) -> crate::backend::BackendFuture<'_, crate::models::User> {
+        Box::pin(async move { ApiClient::me(self).await })
+    }
+    fn anonymous<'a>(
+        &'a self,
+        device_name: &'a str,
+    ) -> crate::backend::BackendFuture<'a, (crate::models::User, String)> {
+        Box::pin(async move { ApiClient::anonymous(self, device_name).await })
+    }
+    fn recover_account<'a>(
+        &'a self,
+        code: &'a str,
+    ) -> crate::backend::BackendFuture<'a, (crate::models::User, String)> {
+        Box::pin(async move { ApiClient::recover_account(self, code).await })
+    }
+    fn list_sessions(&self) -> crate::backend::BackendFuture<'_, Vec<crate::models::SessionInfo>> {
+        Box::pin(async move { ApiClient::list_sessions(self).await })
+    }
+    fn revoke_session<'a>(&'a self, id: &'a str) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::revoke_session(self, id).await })
+    }
+    fn logout_all(&self) -> crate::backend::BackendFuture<'_, ()> {
+        Box::pin(async move { ApiClient::logout_all(self).await })
+    }
+    fn submit_diagnostic<'a>(
+        &'a self,
+        category: &'a str,
+        message: &'a str,
+        platform: &'a str,
+    ) -> crate::backend::BackendFuture<'a, i64> {
+        Box::pin(
+            async move { ApiClient::submit_diagnostic(self, category, message, platform).await },
+        )
     }
     fn mfa_enroll<'a>(&'a self) -> crate::backend::BackendFuture<'a, (String, String)> {
         Box::pin(async move { ApiClient::mfa_enroll(self).await })
@@ -814,9 +1279,11 @@ impl crate::backend::Backend for ApiClient {
         share_id: i64,
         is_active: Option<bool>,
         precision: Option<String>,
+        duration_hours: Option<i64>,
     ) -> crate::backend::BackendFuture<'a, ()> {
         Box::pin(async move {
-            ApiClient::update_location_share(self, share_id, is_active, precision).await
+            ApiClient::update_location_share(self, share_id, is_active, precision, duration_hours)
+                .await
         })
     }
     fn delete_share<'a>(&'a self, share_id: i64) -> crate::backend::BackendFuture<'a, ()> {
@@ -842,6 +1309,38 @@ impl crate::backend::Backend for ApiClient {
     ) -> crate::backend::BackendFuture<'a, crate::models::FriendLocation> {
         Box::pin(async move { ApiClient::get_my_location(self).await })
     }
+    fn map_capabilities(&self) -> crate::backend::BackendFuture<'_, crate::osm::MapCapabilities> {
+        Box::pin(async move { ApiClient::map_capabilities(self).await })
+    }
+    fn map_search<'a>(
+        &'a self,
+        q: &'a str,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: usize,
+    ) -> crate::backend::BackendFuture<'a, Vec<crate::osm::SearchPlace>> {
+        Box::pin(async move { ApiClient::map_search(self, q, lat, lon, limit).await })
+    }
+    fn map_reverse(
+        &self,
+        lat: f64,
+        lon: f64,
+    ) -> crate::backend::BackendFuture<'_, crate::osm::SearchPlace> {
+        Box::pin(async move { ApiClient::map_reverse(self, lat, lon).await })
+    }
+    fn map_route<'a>(
+        &'a self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: &'a str,
+        via: &'a [(f64, f64)],
+        avoid: &'a [String],
+        alternatives: bool,
+    ) -> crate::backend::BackendFuture<'a, Vec<crate::osm::Route>> {
+        Box::pin(async move {
+            ApiClient::map_route(self, from, to, mode, via, avoid, alternatives).await
+        })
+    }
     fn list_users<'a>(&'a self) -> crate::backend::BackendFuture<'a, Vec<crate::models::User>> {
         Box::pin(async move { ApiClient::list_users(self).await })
     }
@@ -860,6 +1359,40 @@ impl crate::backend::Backend for ApiClient {
     }
     fn delete_user<'a>(&'a self, id: i64) -> crate::backend::BackendFuture<'a, ()> {
         Box::pin(async move { ApiClient::delete_user(self, id).await })
+    }
+    fn admin_overview(&self) -> crate::backend::BackendFuture<'_, serde_json::Value> {
+        Box::pin(async move { ApiClient::admin_overview(self).await })
+    }
+    fn admin_users(&self) -> crate::backend::BackendFuture<'_, Vec<serde_json::Value>> {
+        Box::pin(async move { ApiClient::admin_users(self).await })
+    }
+    fn admin_update_user<'a>(
+        &'a self,
+        id: i64,
+        body: serde_json::Value,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::admin_update_user(self, id, body).await })
+    }
+    fn admin_delete_user<'a>(&'a self, id: i64) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::admin_delete_user(self, id).await })
+    }
+    fn admin_diagnostics<'a>(
+        &'a self,
+        status: Option<&'a str>,
+    ) -> crate::backend::BackendFuture<'a, (Vec<crate::models::DiagnosticReport>, i64, i64)> {
+        Box::pin(async move { ApiClient::admin_diagnostics(self, status).await })
+    }
+    fn admin_update_report<'a>(
+        &'a self,
+        id: i64,
+        status: &'a str,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::admin_update_report(self, id, status).await })
+    }
+    fn admin_audit(
+        &self,
+    ) -> crate::backend::BackendFuture<'_, Vec<crate::models::AdminAuditEntry>> {
+        Box::pin(async move { ApiClient::admin_audit(self).await })
     }
     fn create_check_in<'a>(
         &'a self,
@@ -891,7 +1424,10 @@ impl crate::backend::Backend for ApiClient {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_backend_url_with_allowlist;
+    use super::{
+        login_body, map_route_path, update_share_body, validate_backend_url_with_allowlist,
+        SessionSnapshot,
+    };
 
     #[test]
     fn accepts_loopback_http_development_urls() {
@@ -956,5 +1492,102 @@ mod tests {
                 "{url} must be rejected"
             );
         }
+    }
+
+    #[test]
+    fn search_place_deserializes_distance() {
+        let value = serde_json::json!({
+            "display_name": "Cafe",
+            "short_name": "Cafe",
+            "latitude": 47.0,
+            "longitude": 28.8,
+            "category": "cafe",
+            "place_type": "cafe",
+            "distance_m": 12.5
+        });
+        let place: crate::osm::SearchPlace = serde_json::from_value(value).unwrap();
+        assert_eq!(place.distance_m, Some(12.5));
+    }
+
+    #[test]
+    fn route_deserializes_points_and_steps() {
+        let value = serde_json::json!({
+            "distance_m": 4200.0,
+            "duration_s": 540.0,
+            "summary": "Main",
+            "points": [[47.0, 28.8], [47.1, 28.9]],
+            "steps": [{"text": "Turn right", "distance_m": 120.0, "duration_s": 18.0}],
+            "legs": [{"distance_m": 4200.0, "duration_s": 540.0}]
+        });
+        let route: crate::osm::Route = serde_json::from_value(value).unwrap();
+        assert_eq!(route.points.len(), 2);
+        assert_eq!(route.steps[0].distance_m, Some(120.0));
+    }
+
+    #[test]
+    fn session_snapshot_round_trips_without_identity_fields() {
+        let snapshot = SessionSnapshot {
+            cookies: vec!["session_id=abc".into()],
+            csrf_token: Some("csrf".into()),
+        };
+        let json = snapshot.to_json();
+        assert!(json.contains("session_id=abc"));
+        assert!(!json.contains("password"));
+        assert!(!json.contains("email"));
+        let back = SessionSnapshot::from_json(&json).unwrap();
+        assert_eq!(back, snapshot);
+    }
+
+    #[test]
+    fn session_info_deserializes_current_flag() {
+        let value = serde_json::json!({
+            "id": "abcd1234",
+            "current": true,
+            "auth_method": "email",
+            "mfa_pending": false,
+            "created_at": "2026-11-14T00:00:00Z",
+            "last_activity": "2026-11-14T00:00:00Z"
+        });
+        let session: crate::models::SessionInfo = serde_json::from_value(value).unwrap();
+        assert!(session.current);
+        assert_eq!(session.id, "abcd1234");
+    }
+
+    #[test]
+    fn update_share_body_includes_duration_and_precision() {
+        let body = update_share_body(Some(false), Some("city_only"), Some(24));
+        assert_eq!(body["is_active"], false);
+        assert_eq!(body["precision_level"], "city_only");
+        assert_eq!(body["duration_hours"], 24);
+        let unchanged = update_share_body(None, None, None);
+        assert!(unchanged.as_object().unwrap().is_empty());
+    }
+
+    #[test]
+    fn login_body_includes_totp_only_when_present() {
+        let with = login_body("a@b.c", "pw", Some("123456"));
+        assert_eq!(with["totp"], "123456");
+        let without = login_body("a@b.c", "pw", None);
+        assert!(without.get("totp").is_none());
+        assert!(without.get("password").is_some());
+    }
+
+    #[test]
+    fn map_route_path_encodes_via_avoid_and_mode() {
+        let path = map_route_path(
+            (47.0, 28.8),
+            (47.1, 28.9),
+            "foot",
+            &[(47.05, 28.85)],
+            &["toll".to_string(), "ferry".to_string()],
+            true,
+        );
+        assert!(path.starts_with("/map/route?"));
+        assert!(path.contains("from_lat=47.000000"));
+        assert!(path.contains("mode=foot"));
+        assert!(path.contains("via=47.050000,28.850000"));
+        assert!(path.contains("avoid=toll,ferry"));
+        assert!(path.contains("alternatives=true"));
+        assert!(!path.contains("email"));
     }
 }

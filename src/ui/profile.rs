@@ -6,6 +6,10 @@ use std::sync::Arc;
 impl PinpointAppUI {
     pub fn draw_profile_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         self.draw_main_toolbar(ui);
+        if !self.sessions_requested {
+            self.sessions_requested = true;
+            self.spawn_action(PendingAction::RefreshSessions, ctx);
+        }
         ui.heading("Profile & settings");
         ui.add_space(8.0);
         let binding = self.app.data();
@@ -110,6 +114,127 @@ impl PinpointAppUI {
                         let _ = app.mfa_enroll().await;
                     });
                 }
+            }
+        });
+        ui.add_space(8.0);
+
+        ui.group(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Active sessions").size(14.0).strong());
+                if ui.small_button("Refresh").clicked() {
+                    self.spawn_action(PendingAction::RefreshSessions, ctx);
+                }
+            });
+            let sessions = {
+                let d = self.app.data();
+                let d = d.lock().unwrap();
+                d.sessions.clone()
+            };
+            if sessions.is_empty() {
+                ui.label("No sessions loaded.");
+            } else {
+                for session in &sessions {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(format!(
+                            "{} · {} · {}",
+                            session.auth_method, session.id, session.last_activity
+                        ));
+                        if session.current {
+                            ui.label(
+                                RichText::new("this device")
+                                    .color(egui::Color32::from_rgb(52, 211, 153)),
+                            );
+                        }
+                        if ui
+                            .button(if session.current {
+                                "Sign out"
+                            } else {
+                                "Revoke"
+                            })
+                            .clicked()
+                        {
+                            self.spawn_action(
+                                PendingAction::RevokeSession {
+                                    id: session.id.clone(),
+                                    current: session.current,
+                                },
+                                ctx,
+                            );
+                        }
+                    });
+                }
+            }
+            if ui.button("Sign out everywhere").clicked() {
+                self.spawn_action(PendingAction::LogoutAll, ctx);
+            }
+        });
+        ui.add_space(8.0);
+
+        ui.group(|ui| {
+            ui.label(RichText::new("Help & diagnostics").size(14.0).strong());
+            ui.label("Sends only the category and message — no location, IP address or device ID.");
+            egui::ComboBox::from_id_salt("diagnostic_category")
+                .selected_text(&self.diagnostic_category)
+                .show_ui(ui, |ui| {
+                    for category in ["map", "routing", "connectivity", "crash", "other"] {
+                        ui.selectable_value(
+                            &mut self.diagnostic_category,
+                            category.to_string(),
+                            category,
+                        );
+                    }
+                });
+            ui.add(
+                egui::TextEdit::multiline(&mut self.diagnostic_message)
+                    .hint_text("What happened?")
+                    .desired_rows(3)
+                    .desired_width(f32::INFINITY)
+                    .char_limit(2000),
+            );
+            if ui.button("Send report").clicked() && !self.diagnostic_message.trim().is_empty() {
+                self.spawn_action(
+                    PendingAction::SubmitDiagnostic {
+                        category: self.diagnostic_category.clone(),
+                        message: self.diagnostic_message.trim().to_string(),
+                    },
+                    ctx,
+                );
+            }
+        });
+        ui.add_space(8.0);
+
+        if ui.button("About & updates").clicked() {
+            self.app.set_screen(crate::app::CurrentScreen::About);
+        }
+        ui.add_space(8.0);
+
+        ui.group(|ui| {
+            ui.label(RichText::new("Map appearance").size(14.0).strong());
+            let (mut label, mut icon) = {
+                let d = self.app.data();
+                let d = d.lock().unwrap();
+                (
+                    d.map_label_size.unwrap_or(12.0),
+                    d.map_icon_size.unwrap_or(26.0),
+                )
+            };
+            if ui
+                .add(egui::Slider::new(&mut label, 10.0..=18.0).text("Label size"))
+                .changed()
+            {
+                self.app.data().lock().unwrap().map_label_size = Some(label);
+            }
+            if ui
+                .add(egui::Slider::new(&mut icon, 18.0..=40.0).text("Icon size"))
+                .changed()
+            {
+                self.app.data().lock().unwrap().map_icon_size = Some(icon);
+            }
+            if ui.button("Reset").clicked() {
+                let data = self.app.data();
+                let mut d = data.lock().unwrap();
+                d.map_label_size = None;
+                d.map_icon_size = None;
             }
         });
     }

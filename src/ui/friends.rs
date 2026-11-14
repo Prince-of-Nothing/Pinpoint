@@ -1,5 +1,7 @@
 //! Friends screen
-use super::{FriendshipRef, PendingAction, PinpointAppUI};
+use super::{PendingAction, PinpointAppUI};
+use crate::models::Friendship;
+use crate::ui::share_sheet::ShareSheet;
 use eframe::egui::{self, Direction, RichText};
 
 impl PinpointAppUI {
@@ -14,35 +16,35 @@ impl PinpointAppUI {
             );
         });
 
-        let binding = self.app.data();
-        let data = binding.lock().unwrap();
-        let my_id = data.user.as_ref().map(|u| u.id);
+        let (my_id, friendships, shares) = {
+            let binding = self.app.data();
+            let data = binding.lock().unwrap();
+            (
+                data.user.as_ref().map(|u| u.id),
+                data.friendships.clone(),
+                data.shares.clone(),
+            )
+        };
 
         // Incoming requests (I am the receiver) — the only ones I can answer.
         ui.group(|ui| {
             ui.label(RichText::new("Received Requests").size(14.0).strong());
             ui.add_space(4.0);
 
-            let received: Vec<FriendshipRef> = data
-                .friendships
+            let received: Vec<Friendship> = friendships
                 .iter()
                 .filter(|f| f.status == "pending" && Some(f.receiver_id) == my_id)
-                .map(|f| {
-                    // Small adapter so the rows below stay readable.
-                    FriendshipRef {
-                        id: f.id,
-                        requester_name: f.requester_name.clone(),
-                    }
-                })
+                .cloned()
                 .collect();
 
             if received.is_empty() {
                 ui.label("No pending friend requests");
             } else {
-                for req in received {
+                for req in &received {
                     let id = req.id;
+                    let name = req.requester_name.clone();
                     ui.horizontal(|ui| {
-                        ui.label(&req.requester_name);
+                        ui.label(name);
                         ui.add_space(4.0);
                         if ui.button("Accept").clicked() {
                             self.spawn_action(
@@ -74,22 +76,53 @@ impl PinpointAppUI {
             ui.label(RichText::new("Sent Requests").size(14.0).strong());
             ui.add_space(4.0);
 
-            let sent: Vec<FriendshipRef> = data
-                .friendships
+            let sent: Vec<Friendship> = friendships
                 .iter()
                 .filter(|f| f.status == "pending" && Some(f.requester_id) == my_id)
-                .map(|f| FriendshipRef {
-                    id: f.id,
-                    requester_name: f.receiver_name.clone(),
-                })
+                .cloned()
                 .collect();
 
             if sent.is_empty() {
                 ui.label("No sent requests");
             } else {
-                for req in sent {
+                for req in &sent {
+                    ui.label(format!("{} (awaiting response)", req.receiver_name));
+                }
+            }
+        });
+
+        ui.add_space(8.0);
+
+        // Accepted friends, with per-friend sharing and removal.
+        ui.group(|ui| {
+            ui.label(RichText::new("Friends").size(14.0).strong());
+            ui.add_space(4.0);
+            let accepted: Vec<Friendship> = friendships
+                .iter()
+                .filter(|f| f.status == "accepted")
+                .cloned()
+                .collect();
+            if accepted.is_empty() {
+                ui.label("No accepted friends yet.");
+            } else {
+                for friend in &accepted {
+                    let name = if Some(friend.requester_id) == my_id {
+                        friend.receiver_name.clone()
+                    } else {
+                        friend.requester_name.clone()
+                    };
                     ui.horizontal(|ui| {
-                        ui.label(format!("{} (awaiting response)", req.requester_name));
+                        ui.label(&name);
+                        if ui.button("Sharing").clicked() {
+                            self.share_sheet =
+                                Some(ShareSheet::for_friendship(friend, my_id, &shares));
+                        }
+                        if ui.button("Remove").clicked() {
+                            self.spawn_action(
+                                PendingAction::DeleteFriendship { id: friend.id },
+                                ctx,
+                            );
+                        }
                     });
                 }
             }

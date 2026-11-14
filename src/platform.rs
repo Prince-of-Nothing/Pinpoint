@@ -83,7 +83,8 @@ pub fn default_backend_url() -> String {
     match Platform::current() {
         Platform::Android => {
             // Android emulator routes host loopback through 10.0.2.2.
-            "http://10.0.2.2:8000".to_string()
+            // 8080 avoids the Docker gateway that often owns 8000.
+            "http://10.0.2.2:8080".to_string()
         }
         _ => "http://localhost:8000".to_string(),
     }
@@ -112,7 +113,12 @@ pub fn backend_url_from_env_or_default() -> String {
 /// (wasm / iOS app sandboxes) — callers must degrade gracefully.
 pub fn app_data_dir() -> Option<std::path::PathBuf> {
     match Platform::current() {
-        Platform::Android | Platform::Ios | Platform::Web => None,
+        // Native Android runs inside the app sandbox; this is the
+        // standard per-app files dir (no JNI needed for tile cache).
+        Platform::Android => Some(std::path::PathBuf::from(
+            "/data/data/com.pinpoint.desktop/files",
+        )),
+        Platform::Ios | Platform::Web => None,
         _ => home_dir().map(|h| h.join(".pinpoint")),
     }
 }

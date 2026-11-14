@@ -8,43 +8,31 @@ impl PinpointAppUI {
         ui.heading("Places — route, nearby POIs & address lookup");
         ui.add_space(8.0);
 
-        // Route form
+        // Route planner entry point (shared sheet on desktop and mobile).
         ui.group(|ui| {
-            ui.label(RichText::new("Route (OSRM)").size(14.0).strong());
-            ui.horizontal(|ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.route_from_lat)
-                        .hint_text("From lat")
-                        .desired_width(90.0),
-                );
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.route_from_lon)
-                        .hint_text("From lon")
-                        .desired_width(90.0),
-                );
-                for m in ["foot", "bike", "driving"] {
-                    ui.selectable_value(&mut self.route_mode, m.to_string(), m);
+            ui.label(RichText::new("Route planner").size(14.0).strong());
+            ui.label(
+                "Search for a place, then use Directions or Set as origin. The route sheet \
+                 supports stops, avoid options, alternatives and exports.",
+            );
+            if ui.button("Open route planner").clicked() {
+                self.route_plan.open = true;
+                if self.route_plan.origin.is_none() {
+                    let (lat, lon, name) = {
+                        let d = self.app.data();
+                        let d = d.lock().unwrap();
+                        d.my_location
+                            .as_ref()
+                            .map(|l| (l.latitude, l.longitude, "My location".to_string()))
+                            .unwrap_or((
+                                d.map_center_lat,
+                                d.map_center_lon,
+                                "Map centre".to_string(),
+                            ))
+                    };
+                    self.route_plan.origin =
+                        Some(crate::ui::route::RoutePoint::new(lat, lon, name));
                 }
-            });
-            if ui
-                .button("Route to selected friend / first demo point")
-                .clicked()
-            {
-                let flat = self.route_from_lat.trim().parse::<f64>().unwrap_or(41.8902);
-                let flon = self
-                    .route_from_lon
-                    .trim()
-                    .parse::<f64>()
-                    .unwrap_or(-87.6323);
-                let to = (41.8781, -87.6298);
-                self.spawn_action(
-                    PendingAction::Route {
-                        from: (flat, flon),
-                        to,
-                        mode: self.route_mode.clone(),
-                    },
-                    ctx,
-                );
             }
         });
         ui.add_space(8.0);
@@ -169,5 +157,6 @@ impl PinpointAppUI {
                 }
             });
         }
+        self.draw_route_sheet(ui, ctx, false, ctx.screen_rect().top() + 64.0);
     }
 }

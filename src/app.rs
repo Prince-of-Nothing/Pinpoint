@@ -1,5 +1,6 @@
 use crate::backend::DynBackend;
 use crate::models::*;
+use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::patterns::state::StateContext;
 use crate::security::{AuditLogger, KeyManager, RateLimiter};
 use std::sync::{Arc, Mutex};
@@ -22,6 +23,7 @@ pub enum PendingMutation {
         share_id: i64,
         is_active: Option<bool>,
         precision: Option<String>,
+        duration_hours: Option<i64>,
     },
     DeleteShare {
         share_id: i64,
@@ -95,6 +97,9 @@ impl PendingMutation {
 /// Depends on [`DynBackend`] (the modular backend abstraction) rather than a
 /// concrete HTTP client, so changed backend architectures only require a new
 /// adapter implementation.
+/// Keychain entry for the opaque session cookie + CSRF snapshot.
+const SESSION_SECRET: &str = "session_snapshot";
+
 pub struct PinpointApp {
     data: Arc<Mutex<AppData>>,
     backend: DynBackend,
@@ -132,8 +137,10 @@ pub enum CurrentScreen {
     Trips,
     Emergency,
     Profile,
+    About,
     Admin,
     ChangePassword,
+    Kiosk,
 }
 
 impl PinpointApp {
@@ -442,9 +449,15 @@ impl PinpointApp {
                 share_id,
                 is_active,
                 precision,
+                duration_hours,
             } => {
                 self.backend
-                    .update_location_share(*share_id, *is_active, precision.clone())
+                    .update_location_share(
+                        *share_id,
+                        *is_active,
+                        precision.clone(),
+                        *duration_hours,
+                    )
                     .await?;
                 self.refresh_shares().await?;
             }
@@ -575,6 +588,7 @@ impl PinpointApp {
             data.must_change_password = forced_change;
             data.user = Some(user);
         }
+        self.persist_session();
         if forced_change {
             self.set_screen(CurrentScreen::ChangePassword);
         } else {
@@ -582,7 +596,12 @@ impl PinpointApp {
         }
     }
 
-    pub async fn login(&self, email: String, password: String) -> anyhow::Result<()> {
+    pub async fn login(
+        &self,
+        email: String,
+        password: String,
+        totp: Option<String>,
+    ) -> anyhow::Result<()> {
         let email_valid = crate::security::validation::validate_email(&email);
         if !email_valid.is_valid() {
             self.set_error(Some(email_valid.errors.join("; ")));
@@ -601,7 +620,10 @@ impl PinpointApp {
         self.set_loading(true);
         self.set_error(None);
 
-        let result = self.backend.login(&email, &password).await;
+        let result = self
+            .backend
+            .login_with_totp(&email, &password, totp.as_deref())
+            .await;
 
         self.set_loading(false);
 
@@ -684,6 +706,7 @@ impl PinpointApp {
                     .log_event("auth", "logout", None, "success");
                 *self.e2e_location_key.lock().unwrap() = None;
                 self.key_manager.delete_secret("e2e_location_key");
+                self.clear_persisted_session();
                 let fresh = AppData {
                     locations: Self::demo_locations(),
                     ..Default::default()
@@ -701,6 +724,156 @@ impl PinpointApp {
                 Err(e)
             }
         }
+    }
+
+    pub fn has_persisted_session(&self) -> bool {
+        self.key_manager.load_secret(SESSION_SECRET).is_some()
+    }
+
+    fn persist_session(&self) {
+        if let Some(raw) = self.backend.export_session() {
+            self.key_manager
+                .persist_secret(SESSION_SECRET, raw.as_bytes());
+        }
+    }
+
+    fn clear_persisted_session(&self) {
+        self.key_manager.delete_secret(SESSION_SECRET);
+    }
+
+    /// Restore the opaque cookie snapshot and validate it with `/auth/me`.
+    pub async fn restore_persisted_session(&self) -> anyhow::Result<()> {
+        let raw = self
+            .key_manager
+            .load_secret(SESSION_SECRET)
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .ok_or_else(|| anyhow::anyhow!("no persisted session"))?;
+        self.backend.import_session(&raw)?;
+        match self.restore_session().await {
+            Ok(()) => {
+                self.persist_session();
+                Ok(())
+            }
+            Err(e) => {
+                self.clear_persisted_session();
+                self.set_screen(CurrentScreen::Login);
+                Err(e)
+            }
+        }
+    }
+
+    /// Restore a persisted session by asking `/auth/me`; the caller decides
+    /// whether to show the login screen on failure.
+    pub async fn restore_session(&self) -> anyhow::Result<()> {
+        self.set_loading(true);
+        let result = self.backend.me().await;
+        self.set_loading(false);
+        match result {
+            Ok(user) => {
+                self.set_offline_mode(false);
+                self.apply_signed_in(user);
+                if self.current_screen() == CurrentScreen::Map {
+                    self.refresh_all().await;
+                }
+                Ok(())
+            }
+            Err(e) => {
+                self.set_error(Some(e.to_string()));
+                Err(e)
+            }
+        }
+    }
+
+    /// Create a device-bound anonymous account and return its one-time
+    /// recovery code. The code is never logged.
+    pub async fn sign_in_anonymous(&self, device_name: String) -> anyhow::Result<String> {
+        self.set_loading(true);
+        self.set_error(None);
+        let result = self.backend.anonymous(&device_name).await;
+        self.set_loading(false);
+        match result {
+            Ok((user, code)) => {
+                self.set_offline_mode(false);
+                self.apply_signed_in(user);
+                self.refresh_all().await;
+                Ok(code)
+            }
+            Err(e) => {
+                self.set_error(Some(e.to_string()));
+                Err(e)
+            }
+        }
+    }
+
+    /// Restore an anonymous account with a recovery code; the server rotates
+    /// the code and returns the new one.
+    pub async fn recover_anonymous(&self, code: String) -> anyhow::Result<String> {
+        self.set_loading(true);
+        self.set_error(None);
+        let result = self.backend.recover_account(&code).await;
+        self.set_loading(false);
+        match result {
+            Ok((user, new_code)) => {
+                self.set_offline_mode(false);
+                self.apply_signed_in(user);
+                self.refresh_all().await;
+                Ok(new_code)
+            }
+            Err(e) => {
+                self.set_error(Some(e.to_string()));
+                Err(e)
+            }
+        }
+    }
+
+    pub async fn refresh_sessions(&self) -> anyhow::Result<()> {
+        let sessions = self.backend.list_sessions().await?;
+        self.data.lock().unwrap().sessions = sessions;
+        Ok(())
+    }
+
+    pub async fn revoke_session(&self, id: String) -> anyhow::Result<()> {
+        self.backend.revoke_session(&id).await?;
+        self.refresh_sessions().await
+    }
+
+    /// Revoke every server session. Local state is cleared even when the
+    /// network call fails, matching the web client's fail-safe behavior.
+    pub async fn logout_all(&self) -> anyhow::Result<()> {
+        let result = self.backend.logout_all().await;
+        *self.e2e_location_key.lock().unwrap() = None;
+        self.key_manager.delete_secret("e2e_location_key");
+        self.clear_persisted_session();
+        let fresh = AppData {
+            locations: Self::demo_locations(),
+            ..Default::default()
+        };
+        *self.data.lock().unwrap() = fresh;
+        self.set_screen(CurrentScreen::Map);
+        self.set_offline_mode(true);
+        match result {
+            Ok(()) => {
+                self.set_notice(Some("Signed out on every device.".to_string()));
+                Ok(())
+            }
+            Err(e) => {
+                self.set_error(Some(format!(
+                    "Signed out locally; server revoke failed: {e}"
+                )));
+                Err(e)
+            }
+        }
+    }
+
+    pub async fn submit_diagnostic(
+        &self,
+        category: String,
+        message: String,
+    ) -> anyhow::Result<i64> {
+        let platform = crate::platform::Platform::current().label().to_lowercase();
+        self.backend
+            .submit_diagnostic(&category, &message, &platform)
+            .await
     }
 
     /// Changes the password; returns the user to the login screen when the
@@ -729,6 +902,7 @@ impl PinpointApp {
         match result {
             Ok(sessions_revoked) => {
                 if sessions_revoked {
+                    self.clear_persisted_session();
                     let fresh = AppData {
                         locations: Self::demo_locations(),
                         ..Default::default()
@@ -911,11 +1085,12 @@ impl PinpointApp {
         share_id: i64,
         is_active: Option<bool>,
         precision: Option<String>,
+        duration_hours: Option<i64>,
     ) -> anyhow::Result<()> {
         self.set_loading(true);
         let result = self
             .backend
-            .update_location_share(share_id, is_active, precision.clone())
+            .update_location_share(share_id, is_active, precision.clone(), duration_hours)
             .await;
         self.set_loading(false);
         match &result {
@@ -929,6 +1104,7 @@ impl PinpointApp {
                     share_id,
                     is_active,
                     precision,
+                    duration_hours,
                 });
                 self.set_error(Some(format!(
                     "All backends unavailable — queued for sync ({} pending)",
@@ -937,6 +1113,12 @@ impl PinpointApp {
             }
         }
         result
+    }
+
+    /// Read the current device fix without publishing it. The caller decides
+    /// whether to show a self marker, centre the map, or publish.
+    pub fn locate(&self) -> Option<(f64, f64, f64)> {
+        crate::platform::default_gps_provider().current_position()
     }
 
     /// Publish the device's current GPS fix (if any). Returns an error
@@ -1010,6 +1192,49 @@ impl PinpointApp {
         Ok(())
     }
 
+    pub async fn admin_load_overview(&self) -> anyhow::Result<()> {
+        let overview = self.backend.admin_overview().await?;
+        self.data.lock().unwrap().admin_overview = Some(overview);
+        Ok(())
+    }
+
+    pub async fn admin_load_users(&self) -> anyhow::Result<()> {
+        let users = self.backend.admin_users().await?;
+        self.data.lock().unwrap().admin_users = users;
+        Ok(())
+    }
+
+    pub async fn admin_update_user(&self, id: i64, body: serde_json::Value) -> anyhow::Result<()> {
+        self.backend.admin_update_user(id, body).await?;
+        self.admin_load_users().await
+    }
+
+    pub async fn admin_delete_user(&self, id: i64) -> anyhow::Result<()> {
+        self.backend.admin_delete_user(id).await?;
+        self.admin_load_users().await
+    }
+
+    pub async fn admin_load_diagnostics(&self, status: Option<String>) -> anyhow::Result<()> {
+        let (reports, total, open) = self.backend.admin_diagnostics(status.as_deref()).await?;
+        let data = self.data();
+        let mut d = data.lock().unwrap();
+        d.admin_reports = reports;
+        d.admin_report_total = total;
+        d.admin_report_open = open;
+        Ok(())
+    }
+
+    pub async fn admin_update_report(&self, id: i64, status: String) -> anyhow::Result<()> {
+        self.backend.admin_update_report(id, &status).await?;
+        self.admin_load_diagnostics(None).await
+    }
+
+    pub async fn admin_load_audit(&self) -> anyhow::Result<()> {
+        let entries = self.backend.admin_audit().await?;
+        self.data.lock().unwrap().admin_audit = entries;
+        Ok(())
+    }
+
     pub async fn refresh_my_location(&self) -> anyhow::Result<()> {
         match self.backend.get_my_location().await {
             Ok(loc) => {
@@ -1018,6 +1243,38 @@ impl PinpointApp {
             }
             Err(_) => Ok(()), // 404 when never published — not an error
         }
+    }
+
+    pub async fn map_capabilities(&self) -> anyhow::Result<MapCapabilities> {
+        self.backend.map_capabilities().await
+    }
+
+    pub async fn map_search(
+        &self,
+        query: &str,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: usize,
+    ) -> anyhow::Result<Vec<SearchPlace>> {
+        self.backend.map_search(query, lat, lon, limit).await
+    }
+
+    pub async fn map_reverse(&self, lat: f64, lon: f64) -> anyhow::Result<SearchPlace> {
+        self.backend.map_reverse(lat, lon).await
+    }
+
+    pub async fn map_route(
+        &self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: &str,
+        via: &[(f64, f64)],
+        avoid: &[String],
+        alternatives: bool,
+    ) -> anyhow::Result<Vec<Route>> {
+        self.backend
+            .map_route(from, to, mode, via, avoid, alternatives)
+            .await
     }
 
     pub async fn refresh_check_ins(&self) -> anyhow::Result<()> {

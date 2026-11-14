@@ -2,7 +2,8 @@
 //! (`backend/internal/handlers`: `userResponse`, `loginResponse`,
 //! `friendshipResponse`, `locationShareResponse`, `locationResponse`).
 
-use crate::osm::SearchPlace;
+use crate::osm::{Route, SearchPlace};
+use crate::update::UpdateStatus;
 use serde::{Deserialize, Serialize};
 
 /// Authenticated user as returned in the `user` field of login/register.
@@ -99,6 +100,22 @@ pub struct LoginResponse {
     #[serde(default)]
     pub csrf_token: Option<String>,
     pub user: User,
+}
+
+/// One active server-side session as shown by the account/session manager.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionInfo {
+    pub id: String,
+    #[serde(default)]
+    pub current: bool,
+    #[serde(default)]
+    pub auth_method: String,
+    #[serde(default)]
+    pub mfa_pending: bool,
+    #[serde(default)]
+    pub created_at: String,
+    #[serde(default)]
+    pub last_activity: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -320,10 +337,34 @@ pub struct AppData {
     pub must_change_password: bool,
     pub search_results: Vec<SearchPlace>,
     pub search_error: Option<String>,
+    /// Place selected from search, reverse geocode or a map tap.
+    pub selected_place: Option<SearchPlace>,
+    /// One-shot map tap coordinate consumed by the UI.
+    pub map_click: Option<(f64, f64)>,
     /// Nearby POI results from the last Overpass query (Places screen).
     pub poi_results: Vec<crate::osm::Poi>,
     /// Last calculated route (summary/steps/GPX export).
     pub last_route: Option<crate::osm::Route>,
+    /// Latest backend route alternatives and their request generation.
+    pub route_results: Vec<Route>,
+    pub route_error: Option<String>,
+    pub route_result_seq: u64,
+    /// Active server-side sessions shown in the account screen.
+    pub sessions: Vec<SessionInfo>,
+    /// One-time anonymous recovery code; cleared after the user dismisses it.
+    pub recovery_code: Option<String>,
+    /// Map appearance overrides (web appearance.js parity).
+    pub map_label_size: Option<f32>,
+    pub map_icon_size: Option<f32>,
+    /// Latest GitHub release check result (user-initiated).
+    pub update_status: UpdateStatus,
+    /// Admin console payloads (web `admin/*.js` parity).
+    pub admin_overview: Option<serde_json::Value>,
+    pub admin_users: Vec<serde_json::Value>,
+    pub admin_audit: Vec<AdminAuditEntry>,
+    pub admin_reports: Vec<DiagnosticReport>,
+    pub admin_report_total: i64,
+    pub admin_report_open: i64,
     // New feature state (populated by the server where applicable).
     pub my_location: Option<FriendLocation>,
     pub check_ins: Vec<CheckIn>,
@@ -343,6 +384,11 @@ pub struct AppData {
     pub map_center_lon: f64,
     /// Most recent E2E-encrypted location payload produced on this device.
     pub last_e2e_location_ciphertext: Option<String>,
+    /// Resolved kiosk/share-link view model (Kiosk screen).
+    pub kiosk_resolved: Option<crate::webapp::kiosk::KioskShareView>,
+    /// Map raster style: false = clean light OSM (Organic/Magic-Earth-like),
+    /// true = the web client's dark treatment.
+    pub map_dark: bool,
 }
 
 #[cfg(test)]

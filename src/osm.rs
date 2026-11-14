@@ -13,7 +13,7 @@
 //! https://wiki.openstreetmap.org/wiki/Main_Page
 //! Friend/shared locations are NEVER sent to any of these services.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
 /// Public demo endpoints (defaults only). Production must point the
@@ -80,7 +80,7 @@ const USER_AGENT: &str = "PinpointRust/0.1.0 (privacy-first OSM client)";
 // Types
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SearchPlace {
     pub display_name: String,
     pub short_name: String,
@@ -88,6 +88,21 @@ pub struct SearchPlace {
     pub longitude: f64,
     pub category: String,
     pub place_type: String,
+    /// Backend-computed distance from the search map centre, when supplied.
+    #[serde(default)]
+    pub distance_m: Option<f64>,
+}
+
+/// Server-advertised map capabilities. The client uses these to hide
+/// walk/bike modes or avoid options the server cannot serve.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct MapCapabilities {
+    #[serde(default)]
+    pub autocomplete: bool,
+    #[serde(default)]
+    pub modes: Vec<String>,
+    #[serde(default)]
+    pub avoid: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,20 +122,20 @@ impl TravelMode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RouteStep {
     pub text: String,
     pub distance_m: Option<f64>,
     pub duration_s: Option<f64>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RouteLeg {
     pub distance_m: f64,
     pub duration_s: f64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Route {
     pub points: Vec<(f64, f64)>,
     pub distance_m: f64,
@@ -179,6 +194,7 @@ impl NominatimItem {
             longitude: self.lon.parse().unwrap_or(0.0),
             category: self.class_,
             place_type: self.type_,
+            distance_m: None,
         }
     }
 }
@@ -264,11 +280,13 @@ struct OverpassElement {
 
 /// Thin OSM client. `reqwest::Client` is already in `Cargo.toml`, so this
 /// adds zero dependencies while matching the archived web/Kotlin behaviour.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct OsmClient {
     http: reqwest::Client,
     last_search: std::sync::Mutex<Option<Instant>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl OsmClient {
     pub fn new() -> anyhow::Result<Self> {
         Ok(Self {
@@ -493,6 +511,7 @@ impl OsmClient {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for OsmClient {
     fn default() -> Self {
         Self::new().expect("OsmClient default requires a reqwest client")
@@ -657,6 +676,45 @@ pub fn export_route_gpx(route: &Route, name: &str) -> anyhow::Result<std::path::
     Ok(path)
 }
 
+/// KML LineString for a route. Coordinates are `lon,lat,0` per KML.
+pub fn route_to_kml(route: &Route, name: &str) -> String {
+    let safe = xml_escape(name);
+    let coords = route
+        .points
+        .iter()
+        .map(|(lat, lon)| format!("{lon:.6},{lat:.6},0"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <kml xmlns=\"http://www.opengis.net/kml/2.2\">\n\
+         <Document><name>{safe}</name><Placemark><name>{safe}</name><LineString>\
+         <tessellate>1</tessellate><coordinates>{coords}</coordinates>\
+         </LineString></Placemark></Document></kml>\n"
+    )
+}
+
+/// GeoJSON FeatureCollection with one LineString feature for a route.
+pub fn route_to_geojson(route: &Route, name: &str) -> String {
+    let coordinates: Vec<[f64; 2]> = route.points.iter().map(|(lat, lon)| [*lon, *lat]).collect();
+    serde_json::json!({
+        "type": "FeatureCollection",
+        "features": [{
+            "type": "Feature",
+            "properties": {
+                "name": name,
+                "distance_m": route.distance_m,
+                "duration_s": route.duration_s,
+            },
+            "geometry": {
+                "type": "LineString",
+                "coordinates": coordinates,
+            }
+        }]
+    })
+    .to_string()
+}
+
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -752,5 +810,24 @@ mod tests {
         assert!(gpx.contains("<trkpt lat=\"47.010500\" lon=\"28.863800\">"));
         assert!(gpx.contains("Cafe &amp; &lt;Bar&gt;"));
         assert!(gpx.contains("OpenStreetMap contributors"));
+    }
+
+    #[test]
+    fn route_kml_and_geojson_have_lon_lat_coordinates() {
+        use super::{route_to_geojson, route_to_kml, Route};
+        let route = Route {
+            points: vec![(47.0105, 28.8638), (47.0205, 28.8738)],
+            distance_m: 1200.0,
+            duration_s: 900.0,
+            steps: vec![],
+            summary: "Main".into(),
+            legs: vec![],
+        };
+        let kml = route_to_kml(&route, "Cafe & <Bar>");
+        assert!(kml.contains("28.863800,47.010500,0"));
+        assert!(kml.contains("Cafe &amp; &lt;Bar&gt;"));
+        let geojson = route_to_geojson(&route, "Cafe");
+        assert!(geojson.contains("\"type\":\"LineString\""));
+        assert!(geojson.contains("28.8638"));
     }
 }

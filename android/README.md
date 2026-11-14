@@ -1,40 +1,83 @@
-# android/ — Android client (Rust, `cargo-apk`, modular)
+# android/ — Android client (Rust, `cargo-apk`)
 
-Same `pinpoint_desktop` crate as desktop/web, packaged as an APK via
-`cargo-apk` (`eframe`/`winit` → `aarch64-linux-android`).
+The Android app is the same `pinpoint_desktop` crate as desktop/web, packaged
+with **cargo-apk 0.10** using an `android.app.NativeActivity` entry
+(`android_main`) and the eframe/winit `android-native-activity` backend.
 
-```bash
-rustup target add aarch64-linux-android
-cargo install cargo-apk --locked
-cargo apk build --locked
-adb install target/aarch64-linux-android/debug/pinpoint-debug.apk
+**Status:** builds, installs and runs on the API 37 x86_64 emulator (tested on
+Windows with Android Studio's SDK). The map uses live OSM tiles through the
+Pinpoint backend and caches them on-device. Release signing/CI and a physical
+AArch64 device run are follow-ups.
+
+## Prerequisites
+
+- Android Studio with SDK **platform 35** (`platforms/android-35`),
+  build-tools 36, platform-tools and an emulator image.
+- **NDK 27.2.12479018** under `$ANDROID_HOME/ndk/27.2.12479018`.
+- Rustup stable with `x86_64-linux-android` (emulator) and/or
+  `aarch64-linux-android` (devices):
+  `rustup target add x86_64-linux-android aarch64-linux-android`.
+- `cargo install cargo-apk --locked`.
+- JDK 17+ (the JDK 25 used by Android Studio works) and the MSVC build tools
+  for the host-side build scripts.
+
+## Build and install
+
+```powershell
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+$env:ANDROID_NDK_HOME = "$env:ANDROID_HOME\ndk\27.2.12479018"
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25.0.5.8-hotspot"
+
+# Emulator (x86_64):
+cargo apk build --lib --target x86_64-linux-android
+adb install -r -t target/debug/apk/pinpoint.apk
+adb shell am start -n com.pinpoint.desktop/android.app.NativeActivity
+
+# Devices (AArch64): replace the target and build a fat APK if needed:
+# cargo apk build --lib --target aarch64-linux-android
 ```
 
-## Wiring
+`cargo apk build --lib` is required because the package also exposes desktop
+binaries; without `--lib`, cargo-apk tries to package the `bin` artifact.
 
-- `cargo-apk` reads `android/AndroidManifest.xml` (package
-  `com.pinpoint.desktop`, `INTERNET` + fine/coarse location). The Rust
-  entry/activity wiring is provided by the target stack; shared bootstrap logic
-  lives in `src/mobile/mod.rs` so Android/iOS don't fork app code.
-- `android/network_security_config.xml` allows cleartext only for the
-  emulator/dev hosts (`10.0.2.2`, `localhost`). Release builds must use
-  HTTPS (ADR-0006); plain HTTP to any other host is rejected client-side by
-  backend adapter transport policy (`api::validate_backend_url`) and blocked
-  here.
-- Backend URL/config: `PINPOINT_BACKEND` env > `10.0.2.2:8000` (emulator) >
-  platform default. Real devices need `PINPOINT_BACKEND=https://…`.
+## Manifest and resources
 
-## Modularity / backend changes
+cargo-apk 0.10 **generates** `AndroidManifest.xml` from
+`[package.metadata.android]` in `Cargo.toml`. It injects NativeActivity, the
+`android.app.lib_name` meta-data, the launcher intent and the debug flag
+automatically. The launcher icons live under `android/res/mipmap-*/`.
 
-- Mobile uses `crate::backend::{Backend, BackendConfig, DynBackend}` through
-  `src/mobile` and shared `app`/`ui` code. To adapt to changed backend
-  architecture, add/select a `BackendKind` adapter and keep mobile UI/platform
-  glue unchanged.
-- Platform-specific code belongs in `src/platform.rs` and `src/mobile/mod.rs`;
-  do not embed endpoint/auth assumptions in Android UI/activity code.
+The old hand-written `AndroidManifest.xml` / `network_security_config.xml`
+files were removed because cargo-apk 0.10 ignores them; keep manifest changes
+in `Cargo.toml`.
 
-## Status
+## Backend and tiles
 
-Scaffolding — cannot be built or run on this Windows host (no Android NDK/SDK;
-archived Kotlin stack is under `archive/`). Build on a Linux/macOS host with
-the NDK, or in CI (see `docs/client-platforms.md`).
+- Android emulator reaches the host at **`http://10.0.2.2:8080`** (the default;
+  8080 avoids the Docker gateway that often owns 8000).
+- The transport policy allows `10.0.2.2` in **debug** builds only. Release
+  builds must use HTTPS; remove `uses_cleartext_traffic = true` from the
+  release manifest/profile.
+- Map tiles are fetched through `{backend}/map/tiles/{z}/{x}/{y}` and cached
+  under `/data/data/com.pinpoint.desktop/files/tiles`. A self-hosted
+  `PINPOINT_TILE_URL` remains the production path (ADR-0011); never use
+  `tile.openstreetmap.org`.
+- The app no longer starts offline-first; it uses the live backend and falls
+  back to cached tiles. The `Demo:` pins remain visible without a session.
+
+## UI
+
+The mobile shell switches to a compact layout below 700 pt: a top bar with a
+drawer, a map-first screen (live tiles, locate, publish sheet, provider
+buttons), touch-sized controls and scrollable location lists. Kiosk check-in
+and the admin console are reachable from the drawer and deep links
+(`pinpoint://kiosk?token=...`, `pinpoint://admin`).
+
+## Known limitations
+
+- Debug APK is ~185 MB (debug symbols, x86_64). Use `--release` with a
+  keystore for a smaller build; release signing is not configured yet.
+- Headless emulators with SwiftShader can show Android's "System UI isn't
+  responding" dialog under low memory; use Android Studio's emulator with host
+  GPU for the demo.
+- iOS remains a separate `cargo-xcodebuild` target and needs macOS/Xcode.

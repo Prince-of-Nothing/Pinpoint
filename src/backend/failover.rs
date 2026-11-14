@@ -10,7 +10,11 @@
 //!   let user = failover.login("alice@example.com", "password").await?;
 
 use crate::backend::{Backend, BackendFuture, DynBackend};
-use crate::models::{CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, User};
+use crate::models::{
+    AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
+    LocationShare, SessionInfo, User,
+};
+use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::security::circuit_breaker::CircuitBreaker;
 use std::future::Future;
 use std::sync::Arc;
@@ -156,11 +160,44 @@ impl Backend for FailoverBackend {
         }
     }
 
+    fn export_session(&self) -> Option<String> {
+        let entries = self.backends.try_read().ok()?;
+        entries
+            .iter()
+            .find_map(|entry| entry.backend.export_session())
+    }
+
+    fn import_session(&self, raw: &str) -> anyhow::Result<()> {
+        let entries = self
+            .backends
+            .try_read()
+            .map_err(|_| anyhow::anyhow!("backend pool is busy; cannot restore session"))?;
+        for entry in entries.iter() {
+            let _ = entry.backend.import_session(raw);
+        }
+        Ok(())
+    }
+
     fn login<'a>(&'a self, email: &'a str, password: &'a str) -> BackendFuture<'a, User> {
         Box::pin(async move {
             self.try_all("login", |b| {
                 let b = b.clone();
                 async move { b.login(email, password).await }
+            })
+            .await
+        })
+    }
+
+    fn login_with_totp<'a>(
+        &'a self,
+        email: &'a str,
+        password: &'a str,
+        totp: Option<&'a str>,
+    ) -> BackendFuture<'a, User> {
+        Box::pin(async move {
+            self.try_all("login_with_totp", |b| {
+                let b = b.clone();
+                async move { b.login_with_totp(email, password, totp).await }
             })
             .await
         })
@@ -186,6 +223,81 @@ impl Backend for FailoverBackend {
             self.try_all("logout", |b| {
                 let b = b.clone();
                 async move { b.logout().await }
+            })
+            .await
+        })
+    }
+
+    fn me(&self) -> BackendFuture<'_, User> {
+        Box::pin(async move {
+            self.try_all("me", |b| {
+                let b = b.clone();
+                async move { b.me().await }
+            })
+            .await
+        })
+    }
+
+    fn anonymous<'a>(&'a self, device_name: &'a str) -> BackendFuture<'a, (User, String)> {
+        Box::pin(async move {
+            self.try_all("anonymous", |b| {
+                let b = b.clone();
+                async move { b.anonymous(device_name).await }
+            })
+            .await
+        })
+    }
+
+    fn recover_account<'a>(&'a self, code: &'a str) -> BackendFuture<'a, (User, String)> {
+        Box::pin(async move {
+            self.try_all("recover_account", |b| {
+                let b = b.clone();
+                async move { b.recover_account(code).await }
+            })
+            .await
+        })
+    }
+
+    fn list_sessions(&self) -> BackendFuture<'_, Vec<SessionInfo>> {
+        Box::pin(async move {
+            self.try_all("list_sessions", |b| {
+                let b = b.clone();
+                async move { b.list_sessions().await }
+            })
+            .await
+        })
+    }
+
+    fn revoke_session<'a>(&'a self, id: &'a str) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("revoke_session", |b| {
+                let b = b.clone();
+                async move { b.revoke_session(id).await }
+            })
+            .await
+        })
+    }
+
+    fn logout_all(&self) -> BackendFuture<'_, ()> {
+        Box::pin(async move {
+            self.try_all("logout_all", |b| {
+                let b = b.clone();
+                async move { b.logout_all().await }
+            })
+            .await
+        })
+    }
+
+    fn submit_diagnostic<'a>(
+        &'a self,
+        category: &'a str,
+        message: &'a str,
+        platform: &'a str,
+    ) -> BackendFuture<'a, i64> {
+        Box::pin(async move {
+            self.try_all("submit_diagnostic", |b| {
+                let b = b.clone();
+                async move { b.submit_diagnostic(category, message, platform).await }
             })
             .await
         })
@@ -348,13 +460,14 @@ impl Backend for FailoverBackend {
         share_id: i64,
         is_active: Option<bool>,
         precision: Option<String>,
+        duration_hours: Option<i64>,
     ) -> BackendFuture<'a, ()> {
         Box::pin(async move {
             self.try_all("update_location_share", |b| {
                 let b = b.clone();
                 let precision = precision.clone();
                 async move {
-                    b.update_location_share(share_id, is_active, precision)
+                    b.update_location_share(share_id, is_active, precision, duration_hours)
                         .await
                 }
             })
@@ -407,6 +520,60 @@ impl Backend for FailoverBackend {
         })
     }
 
+    fn map_capabilities(&self) -> BackendFuture<'_, MapCapabilities> {
+        Box::pin(async move {
+            self.try_all("map_capabilities", |b| {
+                let b = b.clone();
+                async move { b.map_capabilities().await }
+            })
+            .await
+        })
+    }
+
+    fn map_search<'a>(
+        &'a self,
+        q: &'a str,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: usize,
+    ) -> BackendFuture<'a, Vec<SearchPlace>> {
+        Box::pin(async move {
+            self.try_all("map_search", |b| {
+                let b = b.clone();
+                async move { b.map_search(q, lat, lon, limit).await }
+            })
+            .await
+        })
+    }
+
+    fn map_reverse(&self, lat: f64, lon: f64) -> BackendFuture<'_, SearchPlace> {
+        Box::pin(async move {
+            self.try_all("map_reverse", |b| {
+                let b = b.clone();
+                async move { b.map_reverse(lat, lon).await }
+            })
+            .await
+        })
+    }
+
+    fn map_route<'a>(
+        &'a self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: &'a str,
+        via: &'a [(f64, f64)],
+        avoid: &'a [String],
+        alternatives: bool,
+    ) -> BackendFuture<'a, Vec<Route>> {
+        Box::pin(async move {
+            self.try_all("map_route", |b| {
+                let b = b.clone();
+                async move { b.map_route(from, to, mode, via, avoid, alternatives).await }
+            })
+            .await
+        })
+    }
+
     fn list_users<'a>(&'a self) -> BackendFuture<'a, Vec<User>> {
         Box::pin(async move {
             self.try_all("list_users", |b| {
@@ -443,6 +610,80 @@ impl Backend for FailoverBackend {
             self.try_all("delete_user", |b| {
                 let b = b.clone();
                 async move { b.delete_user(id).await }
+            })
+            .await
+        })
+    }
+
+    fn admin_overview(&self) -> BackendFuture<'_, serde_json::Value> {
+        Box::pin(async move {
+            self.try_all("admin_overview", |b| {
+                let b = b.clone();
+                async move { b.admin_overview().await }
+            })
+            .await
+        })
+    }
+
+    fn admin_users(&self) -> BackendFuture<'_, Vec<serde_json::Value>> {
+        Box::pin(async move {
+            self.try_all("admin_users", |b| {
+                let b = b.clone();
+                async move { b.admin_users().await }
+            })
+            .await
+        })
+    }
+
+    fn admin_update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("admin_update_user", |b| {
+                let b = b.clone();
+                let body = body.clone();
+                async move { b.admin_update_user(id, body).await }
+            })
+            .await
+        })
+    }
+
+    fn admin_delete_user<'a>(&'a self, id: i64) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("admin_delete_user", |b| {
+                let b = b.clone();
+                async move { b.admin_delete_user(id).await }
+            })
+            .await
+        })
+    }
+
+    fn admin_diagnostics<'a>(
+        &'a self,
+        status: Option<&'a str>,
+    ) -> BackendFuture<'a, (Vec<DiagnosticReport>, i64, i64)> {
+        Box::pin(async move {
+            self.try_all("admin_diagnostics", |b| {
+                let b = b.clone();
+                async move { b.admin_diagnostics(status).await }
+            })
+            .await
+        })
+    }
+
+    fn admin_update_report<'a>(&'a self, id: i64, status: &'a str) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("admin_update_report", |b| {
+                let b = b.clone();
+                async move { b.admin_update_report(id, status).await }
+            })
+            .await
+        })
+    }
+
+    fn admin_audit(&self) -> BackendFuture<'_, Vec<AdminAuditEntry>> {
+        Box::pin(async move {
+            self.try_all("admin_audit", |b| {
+                let b = b.clone();
+                async move { b.admin_audit().await }
             })
             .await
         })

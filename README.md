@@ -30,6 +30,10 @@ production-hardened. See the functional-state matrix and per-item
   run on 8005 (diagnostics) and 8006 (admin API).
 - **Desktop client** — map, Nominatim search, OSRM routing (drive/walk/bike),
   Overpass POIs, bookmarks, check-ins, emergency, offline tile packs.
+- **Android client** — same Rust core packaged with cargo-apk 0.10; responsive
+  map-first shell, live OSM tiles via the backend, kiosk check-in and admin
+  screens, drawer navigation. Builds and runs on the API 37 x86_64 emulator;
+  AArch64 device/CI and release signing are follow-ups.
 - **Consent model** — directional, precision-scoped (`exact` / `approximate` /
   `city_only`), purpose-bound, expiring, revocable; enforced server-side.
 - **Privacy** — no trackers, no analytics, no raw IP storage, no IP/WebRTC
@@ -42,7 +46,8 @@ production-hardened. See the functional-state matrix and per-item
   `PINPOINT_OSRM_URL`, `PINPOINT_OVERPASS_URL`; public providers are demo
   fallbacks only.
 
-**Still pending:** OAuth/passkeys/magic links and Android/iOS builds. See
+**Still pending:** OAuth/passkeys/magic links, iOS build, Android release
+signing/CI, and physical AArch64 device validation. See
 [`ROADMAP.md`](./ROADMAP.md) and [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ---
@@ -64,6 +69,21 @@ If port 8000 is taken (Docker), use `BIND_ADDR=127.0.0.1:8080`.
 ```bash
 cargo run -- --backend http://127.0.0.1:8000
 ```
+
+### Android (Rust APK)
+
+```powershell
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+$env:ANDROID_NDK_HOME = "$env:ANDROID_HOME\ndk\27.2.12479018"
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25.0.5.8-hotspot"
+cargo apk build --lib --target x86_64-linux-android
+adb install -r -t target/debug/apk/pinpoint.apk
+```
+
+The Android emulator reaches the host at `http://10.0.2.2:8080`; run
+`BIND_ADDR=0.0.0.0:8080 cargo run --bin pinpoint-server`. Use Android Studio
+for the emulator/logcat; the APK itself is built by cargo-apk, not Gradle. See
+[`android/README.md`](./android/README.md) for prerequisites and caveats.
 
 ### Docker
 

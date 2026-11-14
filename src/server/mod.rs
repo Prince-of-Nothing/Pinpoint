@@ -360,26 +360,14 @@ pub mod map_handlers {
 
     /// Ordered list of tile sources tried in sequence on failure.
     /// All are ODbL-compliant (OSM-derived). Never uses tile.openstreetmap.org.
-    /// `tile.openstreetmap.de` (FOSSGIS) is the readable demo default; the
-    /// other two are fallbacks. Production self-hosts via `PINPOINT_TILE_URL`
-    /// (ADR-0011).
-    const TILE_SOURCES: &[TileSource] = &[
-        TileSource {
-            name: "osm-de",
-            url_pattern: "https://tile.openstreetmap.de/{z}/{x}/{y}.png",
-            attribution: "© OpenStreetMap contributors",
-        },
-        TileSource {
-            name: "wikimedia",
-            url_pattern: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png",
-            attribution: "© OpenStreetMap contributors",
-        },
-        TileSource {
-            name: "carto-dark",
-            url_pattern: "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
-            attribution: "© OpenStreetMap contributors",
-        },
-    ];
+    /// `tile.openstreetmap.de` (FOSSGIS) is the demo fallback; production
+    /// self-hosts via `PINPOINT_TILE_URL` (ADR-0011). CARTO is intentionally
+    /// not used keyless because it serves an "API KEY REQUIRED" watermark.
+    const TILE_SOURCES: &[TileSource] = &[TileSource {
+        name: "osm-de",
+        url_pattern: "https://tile.openstreetmap.de/{z}/{x}/{y}.png",
+        attribution: "© OpenStreetMap contributors",
+    }];
 
     struct TileSource {
         name: &'static str,
@@ -465,6 +453,7 @@ pub mod map_handlers {
         // Public providers are demo fallbacks only (ADR-0011); none needs a key.
         // Never uses tile.openstreetmap.org (OSMF policy).
         let client = match reqwest::Client::builder()
+            .local_address(Some(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)))
             .timeout(Duration::from_secs(10))
             .user_agent(concat!(
                 "Pinpoint/",
@@ -1044,6 +1033,7 @@ pub mod map_handlers {
                 longitude: 28.8,
                 category: "pharmacy".into(),
                 place_type: "chemist".into(),
+                distance_m: None,
             };
             let value = place_json(&place, Some((47.01, 28.81)));
             for key in [

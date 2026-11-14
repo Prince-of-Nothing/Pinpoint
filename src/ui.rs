@@ -8,14 +8,18 @@
 //! this file keeps the app shell, pending actions, header/toolbar and the
 //! `eframe::App` dispatcher.
 
+pub(crate) mod about;
 pub(crate) mod admin;
 pub(crate) mod auth;
 pub(crate) mod bookmarks;
 pub(crate) mod emergency;
 pub(crate) mod friends;
+pub(crate) mod kiosk;
 pub(crate) mod map;
 pub(crate) mod places;
 pub(crate) mod profile;
+pub(crate) mod route;
+pub(crate) mod share_sheet;
 pub(crate) mod sharing;
 pub(crate) mod trips;
 
@@ -23,7 +27,8 @@ use crate::app::{CurrentScreen, PinpointApp};
 use crate::backend::DynBackend;
 use crate::i18n::{self, key, Lang};
 use crate::osm::OsmClient;
-use eframe::egui::{self, Align, Color32, Direction};
+use eframe::egui::{self, Align, Color32, Direction, RichText};
+use route::RoutePlan;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
@@ -33,6 +38,7 @@ enum PendingAction {
     Login {
         email: String,
         password: String,
+        totp: Option<String>,
     },
     Register {
         email: String,
@@ -40,6 +46,11 @@ enum PendingAction {
         full_name: String,
     },
     Logout,
+    RestorePersistedSession,
+    AnonymousSignIn,
+    RecoverAnonymous {
+        code: String,
+    },
     SendFriendRequest {
         handle: String,
     },
@@ -78,6 +89,13 @@ enum PendingAction {
         precision: String,
         duration_hours: Option<i64>,
     },
+    SaveShare {
+        friendship_id: i64,
+        share_id: Option<i64>,
+        enabled: bool,
+        precision: String,
+        duration_hours: i64,
+    },
     DeleteFriendship {
         id: i64,
     },
@@ -96,6 +114,13 @@ enum PendingAction {
         to: (f64, f64),
         mode: String,
     },
+    PlanRoute {
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: String,
+        via: Vec<(f64, f64)>,
+        avoid: Vec<String>,
+    },
     Poi {
         lat: f64,
         lon: f64,
@@ -109,6 +134,7 @@ enum PendingAction {
         full_name: String,
     },
     PublishGpsLocation,
+    Locate,
     ExportGpx {
         name: String,
     },
@@ -118,6 +144,41 @@ enum PendingAction {
         zoom: u8,
     },
     RefreshAll,
+    CheckForUpdates,
+    RefreshSessions,
+    RevokeSession {
+        id: String,
+        current: bool,
+    },
+    LogoutAll,
+    SubmitDiagnostic {
+        category: String,
+        message: String,
+    },
+    KioskResolveToken {
+        token: String,
+    },
+    KioskSubmitCheckIn {
+        request: crate::webapp::kiosk::KioskCheckInRequest,
+    },
+    AdminLoadOverview,
+    AdminLoadUsers,
+    AdminLoadAudit,
+    AdminLoadDiagnostics {
+        status: Option<String>,
+    },
+    AdminUpdateUser {
+        id: i64,
+        role: Option<String>,
+        is_active: Option<bool>,
+    },
+    AdminDeleteUser {
+        id: i64,
+    },
+    AdminUpdateReport {
+        id: i64,
+        status: String,
+    },
 }
 
 pub struct PinpointAppUI {
@@ -128,6 +189,9 @@ pub struct PinpointAppUI {
     // Sign-in / sign-up form state
     login_email: String,
     login_password: String,
+    login_totp: String,
+    show_recover_form: bool,
+    recover_code_input: String,
     register_email: String,
     register_password: String,
     register_full_name: String,
@@ -145,9 +209,6 @@ pub struct PinpointAppUI {
     // Search query input (results live in AppData)
     search_query: String,
     // Places screen
-    route_mode: String,
-    route_from_lat: String,
-    route_from_lon: String,
     poi_category: String,
     reverse_label: String,
     #[allow(dead_code)]
@@ -163,6 +224,9 @@ pub struct PinpointAppUI {
     bookmark_lon: String,
     // Profile
     profile_name: String,
+    diagnostic_category: String,
+    diagnostic_message: String,
+    sessions_requested: bool,
     // MFA
     mfa_code: String,
     // Emergency
@@ -172,6 +236,29 @@ pub struct PinpointAppUI {
     change_password_current: String,
     change_password_new: String,
     change_password_confirm: String,
+    // About / updates
+    about_check_started: bool,
+    // Admin screen
+    pub(crate) admin_search_query: String,
+    admin_tab: String,
+    admin_loaded: bool,
+    admin_diag_filter: String,
+    // Kiosk screen state
+    pub(crate) kiosk_token_input: String,
+    pub(crate) kiosk_note_input: String,
+    pub(crate) kiosk_consent_accepted: bool,
+    // Route planner
+    route_plan: RoutePlan,
+    route_result_seq: u64,
+    route_nav_last_fix: Option<std::time::Instant>,
+    route_nav_gps_warned: bool,
+    session_restore_attempted: bool,
+    // Per-friend sharing sheet
+    share_sheet: Option<share_sheet::ShareSheet>,
+    // Mobile shell
+    mobile_nav_open: bool,
+    mobile_publish_open: bool,
+    mobile_selected_place: Option<crate::osm::SearchPlace>,
 }
 
 impl PinpointAppUI {
@@ -186,6 +273,9 @@ impl PinpointAppUI {
             lang: Lang::system(),
             login_email: String::new(),
             login_password: String::new(),
+            login_totp: String::new(),
+            show_recover_form: false,
+            recover_code_input: String::new(),
             register_email: String::new(),
             register_password: String::new(),
             register_full_name: String::new(),
@@ -197,9 +287,6 @@ impl PinpointAppUI {
             publish_lat: String::new(),
             publish_lon: String::new(),
             search_query: String::new(),
-            route_mode: "foot".to_string(),
-            route_from_lat: String::new(),
-            route_from_lon: String::new(),
             poi_category: "food".to_string(),
             reverse_label: String::new(),
             route_label: String::new(),
@@ -211,12 +298,32 @@ impl PinpointAppUI {
             bookmark_lat: String::new(),
             bookmark_lon: String::new(),
             profile_name: String::new(),
+            diagnostic_category: "map".to_string(),
+            diagnostic_message: String::new(),
+            sessions_requested: false,
             mfa_code: String::new(),
             emergency_lat: String::new(),
             emergency_lon: String::new(),
             change_password_current: String::new(),
             change_password_new: String::new(),
             change_password_confirm: String::new(),
+            about_check_started: false,
+            admin_search_query: String::new(),
+            admin_tab: "overview".to_string(),
+            admin_loaded: false,
+            admin_diag_filter: String::new(),
+            kiosk_token_input: String::new(),
+            kiosk_note_input: String::new(),
+            kiosk_consent_accepted: false,
+            route_plan: RoutePlan::default(),
+            route_result_seq: 0,
+            route_nav_last_fix: None,
+            route_nav_gps_warned: false,
+            session_restore_attempted: false,
+            share_sheet: None,
+            mobile_nav_open: false,
+            mobile_publish_open: false,
+            mobile_selected_place: None,
         }
     }
 
@@ -232,12 +339,25 @@ impl PinpointAppUI {
         self.app.set_offline_mode(offline);
     }
 
+    pub fn set_screen(&mut self, screen: CurrentScreen) {
+        self.app.set_screen(screen);
+    }
+
+    /// Touch/narrow layout: below ~700 pt the desktop tab strip cannot fit.
+    fn is_compact(ctx: &egui::Context) -> bool {
+        ctx.screen_rect().width() < 700.0
+    }
+
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
         let app = Arc::clone(&self.app);
         self.rt.spawn(async move {
             match action {
-                PendingAction::Login { email, password } => {
-                    let _ = app.login(email, password).await;
+                PendingAction::Login {
+                    email,
+                    password,
+                    totp,
+                } => {
+                    let _ = app.login(email, password, totp).await;
                 }
                 PendingAction::Register {
                     email,
@@ -248,6 +368,21 @@ impl PinpointAppUI {
                 }
                 PendingAction::Logout => {
                     let _ = app.logout().await;
+                }
+                PendingAction::RestorePersistedSession => {
+                    let _ = app.restore_persisted_session().await;
+                }
+                PendingAction::AnonymousSignIn => {
+                    let device =
+                        format!("Pinpoint {}", crate::platform::Platform::current().label());
+                    if let Ok(code) = app.sign_in_anonymous(device).await {
+                        app.data().lock().unwrap().recovery_code = Some(code);
+                    }
+                }
+                PendingAction::RecoverAnonymous { code } => {
+                    if let Ok(new_code) = app.recover_anonymous(code).await {
+                        app.data().lock().unwrap().recovery_code = Some(new_code);
+                    }
                 }
                 PendingAction::SendFriendRequest { handle } => {
                     let _ = app.send_friend_request(handle).await;
@@ -266,7 +401,9 @@ impl PinpointAppUI {
                     share_id,
                     is_active,
                 } => {
-                    let _ = app.update_share(share_id, Some(is_active), None).await;
+                    let _ = app
+                        .update_share(share_id, Some(is_active), None, None)
+                        .await;
                 }
                 PendingAction::ChangePassword {
                     current,
@@ -284,25 +421,23 @@ impl PinpointAppUI {
                         app.set_error(Some(v.errors.join("; ")));
                         return;
                     }
-                    if !app
-                        .rate_limiter()
-                        .lock()
-                        .unwrap()
-                        .check("nominatim")
-                        .is_allowed()
+                    let (lat, lon) = {
+                        let d = app.data();
+                        let d = d.lock().unwrap();
+                        (d.map_center_lat, d.map_center_lon)
+                    };
+                    match app
+                        .map_search(&query, Some(lat), Some(lon), 8)
+                        .await
                     {
-                        app.set_error(Some("Search rate limited — try again shortly.".to_string()));
-                        return;
-                    }
-                    let client = OsmClient::new().ok();
-                    if let Some(client) = client {
-                        match client.search(&query).await {
-                            Ok(results) => {
-                                app.data().lock().unwrap().search_results = results;
-                            }
-                            Err(e) => {
-                                app.data().lock().unwrap().search_error = Some(e.to_string());
-                            }
+                        Ok(results) => {
+                            let data = app.data();
+                            let mut d = data.lock().unwrap();
+                            d.search_results = results;
+                            d.search_error = None;
+                        }
+                        Err(e) => {
+                            app.data().lock().unwrap().search_error = Some(e.to_string());
                         }
                     }
                 }
@@ -328,6 +463,39 @@ impl PinpointAppUI {
                 PendingAction::DeleteFriendship { id } => {
                     let _ = app.delete_friendship(id).await;
                 }
+                PendingAction::SaveShare {
+                    friendship_id,
+                    share_id,
+                    enabled,
+                    precision,
+                    duration_hours,
+                } => {
+                    if let Some(share_id) = share_id {
+                        let _ = app
+                            .update_share(
+                                share_id,
+                                Some(enabled),
+                                Some(precision),
+                                Some(duration_hours),
+                            )
+                            .await;
+                    } else if enabled {
+                        let expiry = if duration_hours > 0 {
+                            Some(duration_hours)
+                        } else {
+                            None
+                        };
+                        let _ = app
+                            .create_share_with_expiry(
+                                friendship_id,
+                                "to_friend".to_string(),
+                                precision,
+                                expiry,
+                                None,
+                            )
+                            .await;
+                    }
+                }
                 PendingAction::CreateCheckIn {
                     lat,
                     lon,
@@ -340,25 +508,45 @@ impl PinpointAppUI {
                     let _ = app.trigger_emergency(lat, lon).await;
                 }
                 PendingAction::Route { from, to, mode } => {
-                    let travel_mode = match mode.as_str() {
-                        "driving" => crate::osm::TravelMode::Driving,
-                        "bike" => crate::osm::TravelMode::Bike,
-                        _ => crate::osm::TravelMode::Foot,
-                    };
-                    if let Ok(client) = OsmClient::new() {
-                        match client.route(from, to, travel_mode).await {
-                            Ok(r) => {
-                                let mins = (r.duration_s / 60.0) as i64;
+                    match app
+                        .map_route(from, to, &mode, &[], &[], true)
+                        .await
+                    {
+                        Ok(routes) => match routes.into_iter().next() {
+                            Some(route) => {
+                                let mins = (route.duration_s / 60.0) as i64;
                                 app.set_notice(Some(format!(
                                     "Route: {:.2} km, ~{} min.",
-                                    r.distance_m / 1000.0,
+                                    route.distance_m / 1000.0,
                                     mins
                                 )));
-                                app.data().lock().unwrap().last_route = Some(r);
+                                app.data().lock().unwrap().last_route = Some(route);
                             }
-                            Err(e) => app.set_error(Some(e.to_string())),
+                            None => app.set_error(Some("No route found.".to_string())),
+                        },
+                        Err(e) => app.set_error(Some(e.to_string())),
+                    }
+                }
+                PendingAction::PlanRoute {
+                    from,
+                    to,
+                    mode,
+                    via,
+                    avoid,
+                } => {
+                    let result = app.map_route(from, to, &mode, &via, &avoid, true).await;
+                    let data = app.data();
+                    let mut d = data.lock().unwrap();
+                    match result {
+                        Ok(routes) => {
+                            d.route_results = routes;
+                            d.route_error = None;
+                        }
+                        Err(e) => {
+                            d.route_error = Some(e.to_string());
                         }
                     }
+                    d.route_result_seq = d.route_result_seq.wrapping_add(1);
                 }
                 PendingAction::Poi { lat, lon, category } => {
                     if let Ok(client) = OsmClient::new() {
@@ -376,13 +564,12 @@ impl PinpointAppUI {
                     }
                 }
                 PendingAction::Reverse { lat, lon } => {
-                    if let Ok(client) = OsmClient::new() {
-                        match client.reverse(lat, lon).await {
-                            Ok(place) => {
-                                app.set_notice(Some(format!("Address: {}", place.display_name)));
-                            }
-                            Err(e) => app.set_error(Some(e.to_string())),
+                    match app.map_reverse(lat, lon).await {
+                        Ok(place) => {
+                            app.set_notice(Some(format!("Address: {}", place.display_name)));
+                            app.data().lock().unwrap().selected_place = Some(place);
                         }
+                        Err(e) => app.set_error(Some(e.to_string())),
                     }
                 }
                 PendingAction::UpdateProfile { full_name } => {
@@ -391,6 +578,35 @@ impl PinpointAppUI {
                 PendingAction::PublishGpsLocation => {
                     let _ = app.publish_my_location().await;
                 }
+                PendingAction::Locate => match app.locate() {
+                    Some((lat, lon, accuracy)) => {
+                        let data = app.data();
+                        let mut d = data.lock().unwrap();
+                        let (user_id, user_name) = d
+                            .user
+                            .as_ref()
+                            .map(|u| (u.id, u.full_name.clone()))
+                            .unwrap_or((0, "Me".to_string()));
+                        d.my_location = Some(crate::models::FriendLocation {
+                            user_id,
+                            user_name,
+                            latitude: lat,
+                            longitude: lon,
+                            precision_level: "exact".to_string(),
+                            updated_at: chrono::Utc::now().to_rfc3339(),
+                            accuracy: Some(accuracy),
+                        });
+                        d.map_center_lat = lat;
+                        d.map_center_lon = lon;
+                        d.map_zoom = d.map_zoom.max(14);
+                        drop(d);
+                        app.set_notice(Some(format!("Located: {lat:.5}, {lon:.5}")));
+                    }
+                    None => app.set_error(Some(
+                        "Location unavailable — no GPS fix. Set PINPOINT_GPS_FIX or publish manually."
+                            .to_string(),
+                    )),
+                },
                 PendingAction::ExportGpx { name } => {
                     let route = app.data().lock().unwrap().last_route.clone();
                     match route {
@@ -438,6 +654,110 @@ impl PinpointAppUI {
                     let _ = app.refresh_emergencies().await;
                     let _ = app.refresh_users().await;
                 }
+                PendingAction::CheckForUpdates => {
+                    {
+                        app.data().lock().unwrap().update_status =
+                            crate::update::UpdateStatus::Checking;
+                    }
+                    let next = match crate::update::check_latest().await {
+                        Ok(Some(latest)) => {
+                            let current = crate::update::current_version().to_string();
+                            if crate::update::is_newer(&current, &latest.tag) {
+                                crate::update::UpdateStatus::Available { current, latest }
+                            } else {
+                                crate::update::UpdateStatus::UpToDate { current }
+                            }
+                        }
+                        Ok(None) => crate::update::UpdateStatus::NoReleases,
+                        Err(_) => crate::update::UpdateStatus::Error(
+                            "Could not reach github.com. Check your connection and try again."
+                                .to_string(),
+                        ),
+                    };
+                    app.data().lock().unwrap().update_status = next;
+                }
+                PendingAction::RefreshSessions => {
+                    let _ = app.refresh_sessions().await;
+                }
+                PendingAction::RevokeSession { id, current } => {
+                    if current {
+                        let _ = app.logout().await;
+                    } else {
+                        let _ = app.revoke_session(id).await;
+                    }
+                }
+                PendingAction::LogoutAll => {
+                    let _ = app.logout_all().await;
+                }
+                PendingAction::SubmitDiagnostic { category, message } => {
+                    match app.submit_diagnostic(category, message).await {
+                        Ok(id) => app.set_notice(Some(format!("Report #{id} sent. Thank you."))),
+                        Err(e) => app.set_error(Some(e.to_string())),
+                    }
+                }
+                PendingAction::KioskResolveToken { token } => {
+                    let backend_url = app.backend().backend_url().to_string();
+                    let routes = crate::webapp::kiosk::KioskRestRoutes::default();
+                    if let Ok(adapter) =
+                        crate::webapp::kiosk_rest::RestKioskAdapter::new(&backend_url, routes)
+                    {
+                        use crate::webapp::kiosk::KioskBackend;
+                        match adapter.resolve_share_token(&token).await {
+                            Ok(view) => {
+                                app.set_notice(Some("Share token resolved.".into()));
+                                app.data().lock().unwrap().kiosk_resolved = Some(view);
+                            }
+                            Err(e) => app.set_error(Some(format!("Failed to resolve token: {e}"))),
+                        }
+                    }
+                }
+                PendingAction::KioskSubmitCheckIn { request } => {
+                    let backend_url = app.backend().backend_url().to_string();
+                    let routes = crate::webapp::kiosk::KioskRestRoutes::default();
+                    if let Ok(adapter) =
+                        crate::webapp::kiosk_rest::RestKioskAdapter::new(&backend_url, routes)
+                    {
+                        use crate::webapp::kiosk::KioskBackend;
+                        match adapter.submit_check_in(request).await {
+                            Ok(()) => {
+                                app.set_notice(Some("Check-in submitted successfully.".into()));
+                            }
+                            Err(e) => app.set_error(Some(format!("Check-in failed: {e}"))),
+                        }
+                    }
+                }
+                PendingAction::AdminLoadOverview => {
+                    let _ = app.admin_load_overview().await;
+                }
+                PendingAction::AdminLoadUsers => {
+                    let _ = app.admin_load_users().await;
+                }
+                PendingAction::AdminLoadAudit => {
+                    let _ = app.admin_load_audit().await;
+                }
+                PendingAction::AdminLoadDiagnostics { status } => {
+                    let _ = app.admin_load_diagnostics(status).await;
+                }
+                PendingAction::AdminUpdateUser {
+                    id,
+                    role,
+                    is_active,
+                } => {
+                    let mut body = serde_json::json!({});
+                    if let Some(role) = role {
+                        body["role"] = serde_json::Value::String(role);
+                    }
+                    if let Some(active) = is_active {
+                        body["is_active"] = serde_json::Value::Bool(active);
+                    }
+                    let _ = app.admin_update_user(id, body).await;
+                }
+                PendingAction::AdminDeleteUser { id } => {
+                    let _ = app.admin_delete_user(id).await;
+                }
+                PendingAction::AdminUpdateReport { id, status } => {
+                    let _ = app.admin_update_report(id, status).await;
+                }
             }
         });
         ctx.request_repaint();
@@ -446,6 +766,51 @@ impl PinpointAppUI {
     fn draw_header_bar(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         let signed_in = self.app.is_signed_in();
         let lang = self.lang;
+
+        if Self::is_compact(ctx) {
+            // Android/iOS status bar sits over the window; leave a safe inset.
+            ui.add_space(28.0);
+            let auth_screen = matches!(
+                self.app.current_screen(),
+                CurrentScreen::Login | CurrentScreen::Register
+            );
+            ui.horizontal(|ui| {
+                if auth_screen {
+                    if ui.button("←").clicked() {
+                        self.app.set_screen(CurrentScreen::Map);
+                    }
+                } else if ui.button("☰").clicked() {
+                    self.mobile_nav_open = !self.mobile_nav_open;
+                }
+                ui.label(
+                    RichText::new(i18n::t(lang, key::APP_TITLE))
+                        .size(20.0)
+                        .strong(),
+                );
+                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    if !auth_screen {
+                        if signed_in {
+                            if ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
+                                self.spawn_action(PendingAction::Logout, ctx);
+                            }
+                        } else if ui.button(i18n::t(lang, key::SIGN_IN)).clicked() {
+                            self.app.set_screen(CurrentScreen::Login);
+                        }
+                    }
+                    if self.app.is_loading() {
+                        ui.spinner();
+                    }
+                });
+            });
+            if let Some(err) = self.app.error_message() {
+                ui.colored_label(Color32::RED, err);
+            } else if let Some(notice) = self.app.notice_message() {
+                ui.colored_label(Color32::from_rgb(52, 211, 153), notice);
+            }
+            ui.separator();
+            ui.add_space(4.0);
+            return;
+        }
 
         ui.horizontal(|ui| {
             ui.with_layout(
@@ -500,7 +865,22 @@ impl PinpointAppUI {
     }
 
     fn draw_main_toolbar(&mut self, ui: &mut egui::Ui) {
+        if Self::is_compact(ui.ctx()) {
+            return;
+        }
         let lang = self.lang;
+        let is_admin = {
+            let data = self.app.data();
+            let data = data.lock().unwrap();
+            data.user
+                .as_ref()
+                .map(|u| {
+                    (u.role.eq_ignore_ascii_case("admin")
+                        || u.role.eq_ignore_ascii_case("administrator"))
+                        && u.is_active
+                })
+                .unwrap_or(false)
+        };
         let screens = [
             (CurrentScreen::Map, key::MAP),
             (CurrentScreen::Friends, key::FRIENDS),
@@ -511,10 +891,14 @@ impl PinpointAppUI {
             (CurrentScreen::Emergency, key::EMERGENCY),
             (CurrentScreen::Profile, key::PROFILE),
             (CurrentScreen::Admin, key::ADMIN),
+            (CurrentScreen::Kiosk, key::KIOSK),
             (CurrentScreen::ChangePassword, key::PASSWORD),
         ];
         ui.horizontal(|ui| {
             for (screen, key_str) in screens {
+                if screen == CurrentScreen::Admin && !is_admin {
+                    continue;
+                }
                 if ui
                     .selectable_label(self.app.current_screen() == screen, i18n::t(lang, key_str))
                     .clicked()
@@ -563,6 +947,12 @@ impl PinpointAppUI {
                         .hint_text("Password")
                         .desired_width(250.0),
                 );
+                ui.add_space(8.0);
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.login_totp)
+                        .hint_text("Authenticator code (if MFA is on)")
+                        .desired_width(250.0),
+                );
                 ui.add_space(16.0);
                 if ui.button(i18n::t(lang, key::SIGN_IN)).clicked()
                     && !self.login_email.is_empty()
@@ -570,7 +960,22 @@ impl PinpointAppUI {
                 {
                     let email = self.login_email.clone();
                     let password = self.login_password.clone();
-                    self.spawn_action(PendingAction::Login { email, password }, ctx);
+                    let totp = {
+                        let code = self.login_totp.trim();
+                        if code.is_empty() {
+                            None
+                        } else {
+                            Some(code.to_string())
+                        }
+                    };
+                    self.spawn_action(
+                        PendingAction::Login {
+                            email,
+                            password,
+                            totp,
+                        },
+                        ctx,
+                    );
                 }
                 ui.add_space(8.0);
                 ui.label(i18n::t(lang, key::OFFLINE_MAP_HINT));
@@ -584,15 +989,21 @@ impl PinpointAppUI {
     }
 }
 
-/// Row data for the friends screen (kept tiny to satisfy borrow rules
-/// inside the egui closures).
-struct FriendshipRef {
-    id: i64,
-    requester_name: String,
-}
-
 impl eframe::App for PinpointAppUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.sync_route_results();
+        self.tick_navigation();
+        if !self.session_restore_attempted {
+            self.session_restore_attempted = true;
+            if self.app.has_persisted_session() {
+                self.spawn_action(PendingAction::RestorePersistedSession, ctx);
+            }
+        }
+        if Self::is_compact(ctx) && self.mobile_selected_place.is_none() {
+            if let Some(place) = self.app.data().lock().unwrap().selected_place.clone() {
+                self.mobile_selected_place = Some(place);
+            }
+        }
         // Handle screenshot mode
         if self.app.screenshot_mode() && !self.app.screenshot_taken() {
             self.app.increment_screenshot_counter();
@@ -617,7 +1028,295 @@ impl eframe::App for PinpointAppUI {
             }
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        let compact = Self::is_compact(ctx);
+        let auth_screen = matches!(
+            self.app.current_screen(),
+            CurrentScreen::Login | CurrentScreen::Register
+        );
+        if compact && self.mobile_nav_open {
+            let lang = self.lang;
+            let current = self.app.current_screen();
+            let mut chosen: Option<CurrentScreen> = None;
+            let mut chosen_lang: Option<Lang> = None;
+            let mut publish_requested = false;
+            let mut refresh_requested = false;
+            let (is_admin, update_available) = {
+                let data = self.app.data();
+                let data = data.lock().unwrap();
+                let is_admin = data
+                    .user
+                    .as_ref()
+                    .map(|u| {
+                        (u.role.eq_ignore_ascii_case("admin")
+                            || u.role.eq_ignore_ascii_case("administrator"))
+                            && u.is_active
+                    })
+                    .unwrap_or(false);
+                (is_admin, data.update_status.is_available())
+            };
+            egui::TopBottomPanel::bottom("mobile_nav")
+                .resizable(false)
+                .exact_height(500.0)
+                .frame(
+                    egui::Frame::NONE
+                        .fill(Color32::from_rgb(8, 12, 24))
+                        .inner_margin(egui::Margin::symmetric(12, 6)),
+                )
+                .show(ctx, |ui| {
+                    let (handle, _) =
+                        ui.allocate_exact_size(egui::vec2(42.0, 4.0), egui::Sense::hover());
+                    ui.painter()
+                        .rect_filled(handle, 2.0, Color32::from_rgb(71, 85, 105));
+                    ui.add_space(6.0);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Tools").size(22.0).strong());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("×").clicked() {
+                                chosen = Some(current.clone());
+                            }
+                        });
+                    });
+                    ui.label(
+                        RichText::new("Everything Pinpoint can do, one tap away.")
+                            .size(11.0)
+                            .color(Color32::from_rgb(148, 163, 184)),
+                    );
+                    ui.add_space(8.0);
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        let tile_width = (ui.available_width() - 8.0) / 2.0;
+                        let accent = Color32::from_rgb(52, 211, 153);
+                        ui.horizontal(|ui| {
+                            for (label, icon, requested) in [
+                                ("Publish", "+", &mut publish_requested),
+                                ("Refresh", "↻", &mut refresh_requested),
+                            ] {
+                                let button = egui::Button::new(
+                                    RichText::new(format!("{icon}\n{label}"))
+                                        .size(14.0)
+                                        .strong()
+                                        .color(Color32::WHITE),
+                                )
+                                .fill(Color32::from_rgb(24, 72, 58))
+                                .stroke(egui::Stroke::new(1.0_f32, Color32::from_rgb(52, 211, 153)))
+                                .corner_radius(egui::CornerRadius::same(14))
+                                .min_size(egui::vec2(tile_width, 64.0));
+                                if ui.add(button).clicked() {
+                                    *requested = true;
+                                }
+                            }
+                        });
+                        ui.add_space(8.0);
+                        let mut tools: Vec<(CurrentScreen, &str, &str, Color32)> = vec![
+                            (
+                                CurrentScreen::Map,
+                                "Map",
+                                "⌖",
+                                Color32::from_rgb(26, 45, 74),
+                            ),
+                            (
+                                CurrentScreen::Friends,
+                                "Friends",
+                                "👥",
+                                Color32::from_rgb(55, 35, 70),
+                            ),
+                            (
+                                CurrentScreen::Sharing,
+                                "Share",
+                                "◎",
+                                Color32::from_rgb(24, 62, 54),
+                            ),
+                            (
+                                CurrentScreen::Places,
+                                "Places",
+                                "⌖",
+                                Color32::from_rgb(30, 58, 80),
+                            ),
+                            (
+                                CurrentScreen::Bookmarks,
+                                "Saved",
+                                "★",
+                                Color32::from_rgb(72, 56, 20),
+                            ),
+                            (
+                                CurrentScreen::Trips,
+                                "Trips",
+                                "T",
+                                Color32::from_rgb(38, 45, 82),
+                            ),
+                            (
+                                CurrentScreen::Emergency,
+                                "SOS",
+                                "!",
+                                Color32::from_rgb(86, 34, 34),
+                            ),
+                            (
+                                CurrentScreen::Profile,
+                                "Profile",
+                                "P",
+                                Color32::from_rgb(42, 48, 60),
+                            ),
+                            (
+                                CurrentScreen::About,
+                                if update_available {
+                                    "Update!"
+                                } else {
+                                    "Updates"
+                                },
+                                "U",
+                                if update_available {
+                                    Color32::from_rgb(98, 62, 20)
+                                } else {
+                                    Color32::from_rgb(62, 40, 62)
+                                },
+                            ),
+                            (
+                                CurrentScreen::Admin,
+                                "Admin",
+                                "A",
+                                Color32::from_rgb(70, 48, 24),
+                            ),
+                            (
+                                CurrentScreen::Kiosk,
+                                "Kiosk",
+                                "K",
+                                Color32::from_rgb(24, 58, 66),
+                            ),
+                            (
+                                CurrentScreen::ChangePassword,
+                                "Password",
+                                "PW",
+                                Color32::from_rgb(38, 42, 52),
+                            ),
+                        ];
+                        if !is_admin {
+                            tools.retain(|(screen, _, _, _)| *screen != CurrentScreen::Admin);
+                        }
+                        egui::Grid::new("mobile_tools_grid")
+                            .num_columns(2)
+                            .spacing([8.0, 8.0])
+                            .show(ui, |ui| {
+                                for (index, (screen, label, icon, fill)) in tools.iter().enumerate()
+                                {
+                                    let selected = current == *screen;
+                                    let button = egui::Button::new(
+                                        RichText::new(format!("{icon}\n{label}"))
+                                            .size(13.0)
+                                            .strong()
+                                            .color(Color32::WHITE),
+                                    )
+                                    .fill(if selected { accent } else { *fill })
+                                    .stroke(egui::Stroke::new(
+                                        1.0_f32,
+                                        if selected {
+                                            accent
+                                        } else {
+                                            Color32::from_rgb(31, 41, 55)
+                                        },
+                                    ))
+                                    .corner_radius(egui::CornerRadius::same(14))
+                                    .min_size(egui::vec2(tile_width, 66.0));
+                                    if ui.add(button).clicked() {
+                                        chosen = Some(screen.clone());
+                                    }
+                                    if index % 2 == 1 {
+                                        ui.end_row();
+                                    }
+                                }
+                            });
+                        ui.add_space(8.0);
+                        ui.separator();
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new("Language").size(12.0));
+                            egui::ComboBox::from_id_salt("mobile_lang")
+                                .selected_text(lang.native_name())
+                                .show_ui(ui, |ui| {
+                                    for l in Lang::all() {
+                                        if ui
+                                            .selectable_label(lang == *l, l.native_name())
+                                            .clicked()
+                                        {
+                                            chosen_lang = Some(*l);
+                                        }
+                                    }
+                                });
+                        });
+                    });
+                });
+            if let Some(screen) = chosen {
+                self.app.set_screen(screen);
+                self.mobile_nav_open = false;
+            }
+            if let Some(l) = chosen_lang {
+                self.lang = l;
+            }
+            if publish_requested {
+                self.app.set_screen(CurrentScreen::Map);
+                self.mobile_publish_open = true;
+                self.mobile_nav_open = false;
+            }
+            if refresh_requested {
+                self.spawn_action(PendingAction::RefreshAll, ctx);
+                self.mobile_nav_open = false;
+            }
+        }
+
+        if compact && !auth_screen && !self.mobile_nav_open {
+            let current = self.app.current_screen();
+            let mut chosen: Option<CurrentScreen> = None;
+            egui::TopBottomPanel::bottom("mobile_tabbar")
+                .resizable(false)
+                .exact_height(58.0)
+                .frame(
+                    egui::Frame::NONE
+                        .fill(Color32::from_rgb(15, 23, 42))
+                        .inner_margin(egui::Margin::symmetric(4, 4)),
+                )
+                .show(ctx, |ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    let tab_width = ui.available_width() / 5.0;
+                    ui.horizontal(|ui| {
+                        for (screen, label) in [
+                            (CurrentScreen::Map, "Map"),
+                            (CurrentScreen::Friends, "Friends"),
+                            (CurrentScreen::Sharing, "Share"),
+                            (CurrentScreen::Bookmarks, "Saved"),
+                            (CurrentScreen::Profile, "Me"),
+                        ] {
+                            let selected = current == screen;
+                            let fill = if selected {
+                                Color32::from_rgb(52, 211, 153)
+                            } else {
+                                Color32::from_rgb(15, 23, 42)
+                            };
+                            let text_color = if selected {
+                                Color32::from_rgb(5, 46, 27)
+                            } else {
+                                Color32::from_rgb(229, 231, 235)
+                            };
+                            let button = egui::Button::new(
+                                RichText::new(label).size(12.0).strong().color(text_color),
+                            )
+                            .fill(fill)
+                            .min_size(egui::vec2(tab_width, 46.0))
+                            .corner_radius(egui::CornerRadius::same(10));
+                            if ui.add(button).clicked() {
+                                chosen = Some(screen);
+                            }
+                        }
+                    });
+                });
+            if let Some(screen) = chosen {
+                self.app.set_screen(screen);
+            }
+        }
+
+        let panel = if compact {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE.fill(Color32::from_rgb(11, 16, 32)))
+        } else {
+            egui::CentralPanel::default()
+        };
+        panel.show(ctx, |ui| {
             self.draw_header_bar(ui, ctx);
 
             match self.app.current_screen() {
@@ -650,6 +1349,7 @@ impl eframe::App for PinpointAppUI {
                         self.draw_sign_in_required(ui, ctx, "Profile");
                     }
                 }
+                CurrentScreen::About => self.draw_about_screen(ui, ctx),
                 CurrentScreen::Friends => {
                     if self.app.is_signed_in() {
                         self.draw_main_toolbar(ui);
@@ -668,11 +1368,14 @@ impl eframe::App for PinpointAppUI {
                 }
                 CurrentScreen::Admin => {
                     if self.app.is_signed_in() {
-                        self.draw_main_toolbar(ui);
-                        self.draw_admin_screen(ui);
+                        self.draw_admin_screen(ui, ctx);
                     } else {
                         self.draw_sign_in_required(ui, ctx, "Admin");
                     }
+                }
+                CurrentScreen::Kiosk => {
+                    self.draw_main_toolbar(ui);
+                    self.draw_kiosk_screen(ui, ctx);
                 }
                 CurrentScreen::ChangePassword => {
                     if self.app.is_signed_in() {
@@ -684,6 +1387,9 @@ impl eframe::App for PinpointAppUI {
                 }
             }
         });
+
+        self.draw_share_sheet(ctx);
+        self.draw_recovery_code(ctx);
 
         // Request repaint for animation/screenshot
         if self.app.screenshot_mode() && !self.app.screenshot_taken() {

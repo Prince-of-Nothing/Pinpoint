@@ -17,13 +17,15 @@ use crate::backend::BackendConfig;
 pub struct MobileLaunchConfig {
     pub backend: BackendConfig,
     pub offline_first: bool,
+    pub app_kind: crate::webapp::WebAppKind,
 }
 
 impl Default for MobileLaunchConfig {
     fn default() -> Self {
         Self {
             backend: BackendConfig::from_env(),
-            offline_first: true,
+            offline_first: false,
+            app_kind: crate::webapp::WebAppKind::Web,
         }
     }
 }
@@ -78,6 +80,8 @@ pub enum MobileDeepLink {
     },
     /// App-internal route (`pinpoint://map`, `pinpoint://emergency`, etc.).
     Screen(crate::app::CurrentScreen),
+    /// Kiosk share-link deep link (`pinpoint://kiosk?token=XYZ` or `pinpoint://share?token=XYZ`).
+    Kiosk { token: Option<String> },
 }
 
 impl MobileDeepLink {
@@ -110,8 +114,20 @@ impl MobileDeepLink {
             });
         }
         if let Some(rest) = s.strip_prefix("pinpoint://") {
-            let slug = rest.trim_matches('/').split('?').next().unwrap_or("");
-            let screen = match slug {
+            let (slug_raw, query_part) = match rest.split_once('?') {
+                Some((r, q)) => (r.trim_matches('/'), Some(q)),
+                None => (rest.trim_matches('/'), None),
+            };
+            if slug_raw == "kiosk" || slug_raw == "share" || slug_raw == "webk" {
+                let token = query_part.and_then(|q| {
+                    q.split('&')
+                        .find_map(|kv| kv.strip_prefix("token="))
+                        .map(|v| v.to_string())
+                        .filter(|t| !t.trim().is_empty())
+                });
+                return Some(Self::Kiosk { token });
+            }
+            let screen = match slug_raw {
                 "map" => crate::app::CurrentScreen::Map,
                 "friends" => crate::app::CurrentScreen::Friends,
                 "sharing" => crate::app::CurrentScreen::Sharing,
@@ -120,6 +136,7 @@ impl MobileDeepLink {
                 "trips" => crate::app::CurrentScreen::Trips,
                 "emergency" => crate::app::CurrentScreen::Emergency,
                 "profile" => crate::app::CurrentScreen::Profile,
+                "admin" | "weba" => crate::app::CurrentScreen::Admin,
                 _ => return None,
             };
             return Some(Self::Screen(screen));
@@ -134,9 +151,13 @@ mod tests {
     use crate::app::CurrentScreen;
 
     #[test]
-    fn mobile_launch_config_defaults_to_offline_first() {
+    fn mobile_launch_config_defaults_to_online_first() {
         let cfg = MobileLaunchConfig::default();
-        assert!(cfg.offline_first);
+        assert!(
+            !cfg.offline_first,
+            "mobile should use the live backend and cached tiles when available"
+        );
+        assert_eq!(cfg.app_kind, crate::webapp::WebAppKind::Web);
         let label = mobile_backend_label(&cfg.backend);
         assert!(label.contains('@'));
     }
@@ -166,6 +187,22 @@ mod tests {
         assert_eq!(
             MobileDeepLink::parse("pinpoint://saved"),
             Some(MobileDeepLink::Screen(CurrentScreen::Bookmarks))
+        );
+        assert_eq!(
+            MobileDeepLink::parse("pinpoint://admin"),
+            Some(MobileDeepLink::Screen(CurrentScreen::Admin))
+        );
+        assert_eq!(
+            MobileDeepLink::parse("pinpoint://kiosk?token=abc12345"),
+            Some(MobileDeepLink::Kiosk {
+                token: Some("abc12345".to_string())
+            })
+        );
+        assert_eq!(
+            MobileDeepLink::parse("pinpoint://share?token=xyz789"),
+            Some(MobileDeepLink::Kiosk {
+                token: Some("xyz789".to_string())
+            })
         );
         assert!(MobileDeepLink::parse("pinpoint://unknown").is_none());
     }

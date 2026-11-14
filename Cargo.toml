@@ -8,6 +8,7 @@ publish = false
 [lib]
 name = "pinpoint_desktop"
 path = "src/lib.rs"
+crate-type = ["cdylib", "rlib"]
 
 [[bin]]
 name = "pinpoint-desktop"
@@ -58,20 +59,11 @@ name = "pinpoint-webk"
 path = "src/bin/pinpoint-webk.rs"
 
 [dependencies]
-eframe = { version = "0.32", default-features = true, features = ["glow"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
 tracing-subscriber = "0.3"
 url = "2.5"
-image = { version = "0.25", default-features = false, features = ["png"] }
-which = "6.0"
-reqwest = { version = "0.12", features = ["json"] }
-webbrowser = "1.2"
-
-# API server (pure Rust, replaces archived Go backend)
-axum = "0.7"
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "tls-rustls-ring"] }
 
 # Security dependencies
 aead = "0.6"
@@ -79,7 +71,6 @@ aes-gcm = "0.11"
 argon2 = "0.6"
 base64 = { version = "0.22", features = ["std"] }
 chrono = "0.4"
-cipher = "0.4"
 crypto-common = "0.1.5"
 generic-array = "0.14"
 hybrid-array = "0.4"
@@ -91,6 +82,28 @@ zeroize = "1.7"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time", "net", "macros", "sync"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+webbrowser = "1.2"
+image = { version = "0.25", default-features = false, features = ["png"] }
+which = "6.0"
+
+# API server (pure Rust, replaces archived Go backend). Native-only: the
+# wasm web stubs must not compile axum/sqlx/tokio/mio.
+axum = "0.7"
+sqlx = { version = "0.8", default-features = false, features = [
+  "runtime-tokio-rustls",
+  "postgres",
+  "tls-rustls-ring",
+] }
+
+# Desktop keeps accesskit + Linux windowing; Android uses the native activity
+# backend (accesskit is only compatible with game-activity on Android).
+[target.'cfg(not(target_os = "android"))'.dependencies]
+eframe = { version = "0.32", default-features = true, features = ["glow"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+eframe = { version = "0.32", default-features = false, features = ["glow", "default_fonts", "android-native-activity"] }
+winit = "0.30"
 
 # OS keychain: Windows Credential Manager / macOS Keychain / Linux Secret
 # Service (see src/security/keychain.rs). Mobile/Web targets keep the
@@ -130,7 +143,8 @@ tower = { version = "0.4", features = ["util"] }
 
 # Multiplatform targets (see docs/sdlc/06-technical-requirements.md):
 # - Desktop: `cargo build --locked` (Windows/Linux/macOS)
-# - Android: `cargo apk build --locked` (eframe/winit → aarch64-linux-android)
+# - Android: `cargo apk build --lib --target x86_64-linux-android`
+#   (eframe/winit → NativeActivity; see android/README.md)
 # - iOS:     `cargo xcodebuild` (eframe/winit → aarch64-apple-ios)
 # The same `crate-type` serves all targets; `src/platform.rs` holds every
 # `cfg(target_os)` branch so the UI core stays portable.
@@ -161,10 +175,38 @@ copyright = "MIT © 2026 Pinpoint"
 # (see ios/Info.plist NSLocation* keys).
 
 # Android APK packaging (`cargo apk build --locked`, see `android/`).
+# cargo-apk 0.10 generates AndroidManifest.xml from this TOML; NativeActivity
+# and the android.app.lib_name meta-data are added automatically.
 [package.metadata.android]
 package = "com.pinpoint.desktop"
 apk_name = "pinpoint"
-manifest = "android/AndroidManifest.xml"
+build_targets = ["x86_64-linux-android", "aarch64-linux-android"]
+resources = "android/res"
+
+[package.metadata.android.sdk]
 min_sdk_version = 26
 target_sdk_version = 35
-build_targets = ["aarch64-linux-android"]
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.INTERNET"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.ACCESS_NETWORK_STATE"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.ACCESS_FINE_LOCATION"
+
+[[package.metadata.android.uses_permission]]
+name = "android.permission.ACCESS_COARSE_LOCATION"
+
+[package.metadata.android.application]
+label = "Pinpoint"
+icon = "@mipmap/ic_launcher"
+theme = "@android:style/Theme.Material.NoActionBar"
+# Debug/emulator uses http://10.0.2.2:8000. Release builds must use HTTPS.
+uses_cleartext_traffic = true
+
+[package.metadata.android.application.activity]
+config_changes = "orientation|keyboardHidden|screenSize|smallestScreenSize|screenLayout|uiMode"
+launch_mode = "singleTop"
+exported = true

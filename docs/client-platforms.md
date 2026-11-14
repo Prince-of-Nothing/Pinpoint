@@ -12,7 +12,7 @@ verification path.
 | Windows desktop | `src/main.rs` (`pinpoint-desktop`) | `cargo build --locked` | Builds in CI; interactive Slippy canvas + offline packs + OS keychain; run: `cargo run -- --backend http://localhost:8000` |
 | Linux desktop | same binary | `Dockerfile.client` (X11) + `packaging/linux/` (.deb/.desktop) | Image builds; GUI needs X11 host |
 | macOS desktop | same binary | `cargo build --locked` + `packaging/macos/` (.app via `cargo-bundle`) | Builds in CI (`client-macos`); GUI needs macOS |
-| Android (Rust) | same `src/` via `cargo-apk` | `cargo apk build --locked` (`android/`, `[package.metadata.android]`) | Bootstrap + `geo:`/`pinpoint://` deep-link + GPS provider in `src/mobile`; APK build needs NDK/SDK |
+| Android (Rust) | same `src/` via `cargo-apk` | `cargo apk build --lib --target x86_64-linux-android` (NDK 27 + SDK 35; see `android/README.md`) | APK builds, installs and runs on the API 37 x86_64 emulator with live tiles, responsive map-first UI and NativeActivity; AArch64 device/CI and release signing pending |
 | Android (Kotlin) | `mobile/` (`org.pinpoint.mobile.MainActivity`) | `cd mobile && ./gradlew :app:assembleDebug` | Jetpack Compose + MapLibre + Keystore `SessionStore` + Clean Architecture (`:core:*`, `:feature:*`); build needs JDK 17 + Android SDK |
 | iOS (Rust) | same `src/` via `cargo-xcodebuild` | `cargo xcodebuild --locked` (`ios/Info.plist`) | Bootstrap + deep-link + GPS provider in `src/mobile`; build needs macOS/Xcode |
 | Web (Rust/WASM) | `src/bin/pinpoint-web.rs` + `web/` | `trunk serve --config web/Trunk.toml --release` | Static shell + wasm hook (`cargo check --target wasm32-unknown-unknown` in CI) |

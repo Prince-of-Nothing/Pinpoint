@@ -14,6 +14,7 @@ pub mod admin;
 pub mod commands;
 pub mod config;
 pub mod kiosk;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod kiosk_rest;
 pub mod validation;
 pub mod view_model;

@@ -16,11 +16,18 @@
 //! - Never leak secrets/tokens in error messages or logs.
 //! - Server-side enforcement only; clients are untrusted.
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod failover;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod health;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod rest;
 
-use crate::models::{CheckIn, EmergencyAlert, FriendLocation, Friendship, LocationShare, User};
+use crate::models::{
+    AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
+    LocationShare, SessionInfo, User,
+};
+use crate::osm::{MapCapabilities, Route, SearchPlace};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -57,8 +64,19 @@ pub trait Backend: BackendBounds {
     fn backend_url(&self) -> &str;
     /// Whether an authenticated session/state is currently held.
     fn session_active(&self) -> bool;
+    /// Export opaque session material for keychain persistence.
+    fn export_session(&self) -> Option<String>;
+    /// Import opaque session material; fail closed on malformed data.
+    fn import_session(&self, raw: &str) -> anyhow::Result<()>;
 
     fn login<'a>(&'a self, email: &'a str, password: &'a str) -> BackendFuture<'a, User>;
+    /// Login with an optional TOTP code for MFA-enabled accounts.
+    fn login_with_totp<'a>(
+        &'a self,
+        email: &'a str,
+        password: &'a str,
+        totp: Option<&'a str>,
+    ) -> BackendFuture<'a, User>;
     fn register<'a>(
         &'a self,
         email: &'a str,
@@ -67,6 +85,18 @@ pub trait Backend: BackendBounds {
     ) -> BackendFuture<'a, User>;
     /// Confirm logout with the backend before dropping local session state.
     fn logout<'a>(&'a self) -> BackendFuture<'a, ()>;
+    fn me(&self) -> BackendFuture<'_, User>;
+    fn anonymous<'a>(&'a self, device_name: &'a str) -> BackendFuture<'a, (User, String)>;
+    fn recover_account<'a>(&'a self, code: &'a str) -> BackendFuture<'a, (User, String)>;
+    fn list_sessions(&self) -> BackendFuture<'_, Vec<SessionInfo>>;
+    fn revoke_session<'a>(&'a self, id: &'a str) -> BackendFuture<'a, ()>;
+    fn logout_all(&self) -> BackendFuture<'_, ()>;
+    fn submit_diagnostic<'a>(
+        &'a self,
+        category: &'a str,
+        message: &'a str,
+        platform: &'a str,
+    ) -> BackendFuture<'a, i64>;
 
     fn mfa_enroll<'a>(&'a self) -> BackendFuture<'a, (String, String)>;
     fn mfa_verify<'a>(&'a self, code: &'a str) -> BackendFuture<'a, ()>;
@@ -107,6 +137,7 @@ pub trait Backend: BackendBounds {
         share_id: i64,
         is_active: Option<bool>,
         precision: Option<String>,
+        duration_hours: Option<i64>,
     ) -> BackendFuture<'a, ()>;
     fn delete_share<'a>(&'a self, share_id: i64) -> BackendFuture<'a, ()>;
 
@@ -119,10 +150,39 @@ pub trait Backend: BackendBounds {
     ) -> BackendFuture<'a, ()>;
     fn get_my_location<'a>(&'a self) -> BackendFuture<'a, FriendLocation>;
 
+    fn map_capabilities(&self) -> BackendFuture<'_, MapCapabilities>;
+    fn map_search<'a>(
+        &'a self,
+        q: &'a str,
+        lat: Option<f64>,
+        lon: Option<f64>,
+        limit: usize,
+    ) -> BackendFuture<'a, Vec<SearchPlace>>;
+    fn map_reverse(&self, lat: f64, lon: f64) -> BackendFuture<'_, SearchPlace>;
+    fn map_route<'a>(
+        &'a self,
+        from: (f64, f64),
+        to: (f64, f64),
+        mode: &'a str,
+        via: &'a [(f64, f64)],
+        avoid: &'a [String],
+        alternatives: bool,
+    ) -> BackendFuture<'a, Vec<Route>>;
+
     fn list_users<'a>(&'a self) -> BackendFuture<'a, Vec<User>>;
     fn search_users<'a>(&'a self, q: &'a str) -> BackendFuture<'a, Vec<User>>;
     fn update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()>;
     fn delete_user<'a>(&'a self, id: i64) -> BackendFuture<'a, ()>;
+    fn admin_overview(&self) -> BackendFuture<'_, serde_json::Value>;
+    fn admin_users(&self) -> BackendFuture<'_, Vec<serde_json::Value>>;
+    fn admin_update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()>;
+    fn admin_delete_user<'a>(&'a self, id: i64) -> BackendFuture<'a, ()>;
+    fn admin_diagnostics<'a>(
+        &'a self,
+        status: Option<&'a str>,
+    ) -> BackendFuture<'a, (Vec<DiagnosticReport>, i64, i64)>;
+    fn admin_update_report<'a>(&'a self, id: i64, status: &'a str) -> BackendFuture<'a, ()>;
+    fn admin_audit(&self) -> BackendFuture<'_, Vec<AdminAuditEntry>>;
 
     fn create_check_in<'a>(
         &'a self,
@@ -271,7 +331,9 @@ impl BackendConfig {
 }
 
 /// Build a backend from config. This is the single extension point for changed
-/// backend architectures.
+/// backend architectures. Native only: wasm web stubs use their host's fetch
+/// adapter instead of the cookie/CSRF REST client.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn build_backend(config: &BackendConfig) -> anyhow::Result<DynBackend> {
     use crate::backend::failover::FailoverBackend;
     match config.kind {
@@ -297,6 +359,7 @@ pub fn build_backend(config: &BackendConfig) -> anyhow::Result<DynBackend> {
 }
 
 /// Convenience: build the default REST backend from a base URL.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn build_default_backend(base_url: impl Into<String>) -> anyhow::Result<DynBackend> {
     build_backend(&BackendConfig::rest_v1(base_url))
 }

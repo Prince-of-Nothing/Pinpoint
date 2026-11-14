@@ -121,6 +121,7 @@ impl Keychain for FileKeychain {
 }
 
 /// Credential-store service name used for every Pinpoint entry.
+#[allow(dead_code)]
 const SERVICE: &str = "pinpoint";
 
 /// OS-native keychain backend.

@@ -88,9 +88,10 @@ pub fn bbox_tiles(
 }
 
 pub const PACK_TILE_CAP: usize = 4096;
-pub const CARTO_BASE: &str = "https://a.basemaps.cartocdn.com/dark_all";
-pub const WIKIMEDIA_BASE: &str = "https://maps.wikimedia.org/osm-intl";
-pub const CARTO_VOYAGER_BASE: &str = "https://a.basemaps.cartocdn.com/rastertiles/voyager";
+/// Demo OSM raster fallbacks (ODbL, no API key). Production self-hosts via
+/// `PINPOINT_TILE_URL` / the backend proxy; never use tile.openstreetmap.org.
+pub const OSM_DE_BASE: &str = "https://tile.openstreetmap.de";
+pub const OSM_FR_BASE: &str = "https://a.tile.openstreetmap.fr/osmfr";
 
 /// Candidate ODbL-compliant tile URLs for `(z, x, y)` in fallback order.
 /// A self-hosted server (`PINPOINT_TILE_URL`, e.g.
@@ -118,14 +119,9 @@ pub fn tile_candidate_urls_via(z: u32, x: u32, y: u32, backend_url: Option<&str>
             );
         }
     }
-    let key_param = match std::env::var("CARTO_API_KEY") {
-        Ok(k) if !k.trim().is_empty() => format!("?apikey={}", k.trim()),
-        _ => String::new(),
-    };
     urls.extend([
-        format!("{CARTO_BASE}/{z}/{x}/{y}.png{key_param}"),
-        format!("{WIKIMEDIA_BASE}/{z}/{x}/{y}.png"),
-        format!("{CARTO_VOYAGER_BASE}/{z}/{x}/{y}.png{key_param}"),
+        format!("{OSM_DE_BASE}/{z}/{x}/{y}.png"),
+        format!("{OSM_FR_BASE}/{z}/{x}/{y}.png"),
     ]);
     urls
 }
@@ -152,6 +148,7 @@ pub async fn download_pack(
     let client = match client {
         Some(c) => c,
         None => match reqwest::Client::builder()
+            .local_address(Some(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)))
             .timeout(Duration::from_secs(15))
             .user_agent(concat!(
                 "Pinpoint/",

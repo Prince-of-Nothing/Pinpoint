@@ -231,8 +231,58 @@ impl GpsProvider for EnvOrFileGpsProvider {
 }
 
 /// Best-available GPS provider for the current platform.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocationPermission {
+    Granted,
+    Requested,
+    Unsupported,
+}
+
+#[cfg(target_os = "android")]
+#[derive(Debug, Default, Clone, Copy)]
+pub struct AndroidLastKnownGps;
+
+#[cfg(target_os = "android")]
+impl GpsProvider for AndroidLastKnownGps {
+    fn current_position(&self) -> Option<(f64, f64, f64)> {
+        android_intent::last_known()
+    }
+}
+
 pub fn default_gps_provider() -> Box<dyn GpsProvider> {
-    Box::new(EnvOrFileGpsProvider)
+    #[cfg(target_os = "android")]
+    {
+        Box::new(AndroidLastKnownGps)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Box::new(EnvOrFileGpsProvider)
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn ensure_location_permission() -> LocationPermission {
+    android_intent::ensure_permission()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn ensure_location_permission() -> LocationPermission {
+    LocationPermission::Granted
+}
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn valid_fix(lat: f64, lon: f64, accuracy: f64) -> Option<(f64, f64, f64)> {
+    if lat.is_finite()
+        && lon.is_finite()
+        && accuracy.is_finite()
+        && (-90.0..=90.0).contains(&lat)
+        && (-180.0..=180.0).contains(&lon)
+        && accuracy > 0.0
+    {
+        Some((lat, lon, accuracy))
+    } else {
+        None
+    }
 }
 
 /// Human-readable build identity for About screens / diagnostics.
@@ -353,6 +403,14 @@ mod tests {
         assert!(parse_gps_fix("47.0, 220.0").is_none());
         assert!(parse_gps_fix("garbage").is_none());
     }
+
+    #[test]
+    fn gps_fix_validation_rejects_bad_values() {
+        assert!(super::valid_fix(47.0, 28.0, 5.0).is_some());
+        assert!(super::valid_fix(120.0, 28.0, 5.0).is_none());
+        assert!(super::valid_fix(47.0, 220.0, 5.0).is_none());
+        assert!(super::valid_fix(47.0, 28.0, 0.0).is_none());
+    }
 }
 
 #[cfg(test)]
@@ -371,7 +429,7 @@ mod intent_tests {
 #[cfg(target_os = "android")]
 mod android_intent {
     use anyhow::anyhow;
-    use jni::objects::JString;
+    use jni::objects::{JObject, JString};
     use jni::refs::Global;
     use jni::JValue;
 
@@ -401,7 +459,8 @@ mod android_intent {
         type_map { AIntent => "android.content.Intent" },
         methods {
             fn start_activity(intent: AIntent),
-            fn get_system_service(name: JString) -> JObject
+            fn get_system_service(name: JString) -> JObject,
+            fn check_self_permission(permission: JString) -> jint
         }
     }
 
@@ -544,5 +603,134 @@ mod android_intent {
             Ok(())
         })
         .map_err(|error| format!("Clipboard failed: {error}"))
+    }
+
+    fn with_context<T>(
+        f: impl FnOnce(&mut jni::Env, &AContext) -> anyhow::Result<T>,
+    ) -> anyhow::Result<T> {
+        let ctx = ndk_context::android_context();
+        if ctx.vm().is_null() || ctx.context().is_null() {
+            anyhow::bail!("Android JVM/context is not available");
+        }
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
+        vm.attach_current_thread(|env| {
+            let context: jni::sys::jobject = ctx.context() as _;
+            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
+                .map_err(|error| anyhow!("context: {error}"))?;
+            let context: &AContext = &context;
+            f(env, context)
+        })
+    }
+
+    fn has_location_permission(env: &mut jni::Env, context: &AContext) -> anyhow::Result<bool> {
+        for name in [
+            "android.permission.ACCESS_FINE_LOCATION",
+            "android.permission.ACCESS_COARSE_LOCATION",
+        ] {
+            let permission = JString::new(env, name)?;
+            if context.check_self_permission(env, permission)? == 0 {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    pub(super) fn ensure_permission() -> super::LocationPermission {
+        let granted = with_context(|env, context| -> anyhow::Result<bool> {
+            has_location_permission(env, context)
+        })
+        .unwrap_or(false);
+        if granted {
+            return super::LocationPermission::Granted;
+        }
+        let requested = with_context(|env, context| -> anyhow::Result<()> {
+            let activity = env.as_cast::<AActivity>(context)?;
+            let permission = JString::new(env, "android.permission.ACCESS_FINE_LOCATION")?;
+            let class_name = jni::strings::JNIString::from("java/lang/String");
+            let class = env.find_class(class_name)?;
+            let array = env.new_object_array(1, &class, JObject::null())?;
+            array.set_element(env, 0, &permission)?;
+            let name = jni::strings::JNIString::from("requestPermissions");
+            let runtime =
+                jni::signature::RuntimeMethodSignature::from_str("([Ljava/lang/String;I)V")?;
+            let signature = jni::signature::MethodSignature::from(&runtime);
+            env.call_method(
+                activity.as_ref(),
+                name,
+                signature,
+                &[JValue::Object(array.as_ref()), JValue::Int(1)],
+            )?;
+            Ok(())
+        });
+        if requested.is_ok() {
+            super::LocationPermission::Requested
+        } else {
+            super::LocationPermission::Unsupported
+        }
+    }
+
+    pub(super) fn last_known() -> Option<(f64, f64, f64)> {
+        with_context(|env, context| -> anyhow::Result<Option<(f64, f64, f64)>> {
+            if !has_location_permission(env, context)? {
+                return Ok(None);
+            }
+            let service_name = JString::new(env, "location")?;
+            let service = context.get_system_service(env, service_name)?;
+            if service.is_null() {
+                return Ok(None);
+            }
+            for provider in ["gps", "network"] {
+                let provider = JString::new(env, provider)?;
+                let name = jni::strings::JNIString::from("getLastKnownLocation");
+                let runtime = jni::signature::RuntimeMethodSignature::from_str(
+                    "(Ljava/lang/String;)Landroid/location/Location;",
+                )?;
+                let signature = jni::signature::MethodSignature::from(&runtime);
+                let location = env
+                    .call_method(
+                        &service,
+                        name,
+                        signature,
+                        &[JValue::Object(provider.as_ref())],
+                    )?
+                    .l()?;
+                if location.is_null() {
+                    continue;
+                }
+                let lat = call_double(env, &location, "getLatitude", "()D")?;
+                let lon = call_double(env, &location, "getLongitude", "()D")?;
+                let accuracy = call_float(env, &location, "getAccuracy", "()F")? as f64;
+                if let Some(fix) = super::valid_fix(lat, lon, accuracy) {
+                    return Ok(Some(fix));
+                }
+            }
+            Ok(None)
+        })
+        .ok()
+        .flatten()
+    }
+
+    fn call_double(
+        env: &mut jni::Env,
+        object: &JObject,
+        name: &str,
+        signature: &str,
+    ) -> anyhow::Result<f64> {
+        let name = jni::strings::JNIString::from(name);
+        let runtime = jni::signature::RuntimeMethodSignature::from_str(signature)?;
+        let signature = jni::signature::MethodSignature::from(&runtime);
+        Ok(env.call_method(object, name, signature, &[])?.d()?)
+    }
+
+    fn call_float(
+        env: &mut jni::Env,
+        object: &JObject,
+        name: &str,
+        signature: &str,
+    ) -> anyhow::Result<f32> {
+        let name = jni::strings::JNIString::from(name);
+        let runtime = jni::signature::RuntimeMethodSignature::from_str(signature)?;
+        let signature = jni::signature::MethodSignature::from(&runtime);
+        Ok(env.call_method(object, name, signature, &[])?.f()?)
     }
 }

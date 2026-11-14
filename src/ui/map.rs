@@ -79,7 +79,7 @@ impl PinpointAppUI {
                     }
                 }
                 if ui.button("📍 Use GPS").clicked() {
-                    self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+                    self.request_gps_publish(ctx);
                 }
             });
         });
@@ -681,7 +681,7 @@ impl PinpointAppUI {
                 self.mobile_publish_open = false;
             }
             if gps {
-                self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+                self.request_gps_publish(ctx);
             }
             if publish {
                 match (
@@ -839,6 +839,26 @@ impl PinpointAppUI {
             }
         }
         self.draw_route_sheet(ui, ctx, true, top);
+    }
+}
+
+impl PinpointAppUI {
+    fn request_gps_publish(&mut self, ctx: &egui::Context) {
+        match crate::platform::ensure_location_permission() {
+            crate::platform::LocationPermission::Granted => {
+                self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+            }
+            crate::platform::LocationPermission::Requested => {
+                self.app.set_notice(Some(
+                    "Location permission requested. Tap Use GPS again after granting it."
+                        .to_string(),
+                ));
+            }
+            crate::platform::LocationPermission::Unsupported => {
+                self.app
+                    .set_error(Some("Location is unavailable on this device.".to_string()));
+            }
+        }
     }
 }
 

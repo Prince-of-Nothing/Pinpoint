@@ -28,6 +28,9 @@ The per-item flagged list for this release is in
 - [FEATURE] Mobile map app polish: clean light OSM map by default with a light/dark toggle, category chips, bottom tab bar (Map/Friends/Share/Saved/Me), and a route polyline with A/B markers.
 - [FEATURE] On-device tile cache/prefetch through `/map/tiles` under the Android app data dir.
 
+### Changed
+- [INFRA] Repository cleanup: untrack the archived MSVC/Windows SDK, downloaded installers, Go toolchain and `archive/app/target`; `.gitignore` now covers them plus Android signing material.
+
 ### Fixed
 - [FIX] Auth: native login accepts an optional TOTP code, so MFA-enabled accounts can sign in instead of always receiving `MFA_REQUIRED`.
 - [FIX] Admin navigation is hidden for residents and shown for `admin`/`administrator` only.

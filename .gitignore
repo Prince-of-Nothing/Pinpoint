@@ -64,3 +64,26 @@ audit_out.txt
 # Local MSVC/Windows SDK download artifacts (from get_msvc.py) — never committed
 /msvc/
 /downloads/
+
+# Archived local toolchains/build outputs: keep on disk, never commit
+/archive/msvc/
+/archive/downloads/
+/archive/go*.zip
+/archive/go*.msi
+/archive/app/target/
+/archive/**/target/
+/archive/**/build/
+/archive/**/.gradle/
+/archive/backend/server.exe
+/archive/docker/docker
+
+# Installers and Android signing material
+*.msi
+*.cab
+*.vsix
+*.jks
+*.keystore
+*.p12
+
+# Local agent plan/ledger scratch
+.superpowers/

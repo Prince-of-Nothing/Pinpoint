@@ -64,6 +64,7 @@ fn main() {
     }
 
     pinpoint_desktop::logging::init();
+    pinpoint_desktop::crash::install_panic_hook();
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         platform = %pinpoint_desktop::platform::Platform::current().label(),
@@ -99,6 +100,7 @@ fn main() {
     };
 
     if let Err(e) = eframe::run_native("Pinpoint", options, Box::new(|_cc| Ok(Box::new(app)))) {
+        pinpoint_desktop::crash::capture_startup_error(&format!("Desktop launch failed: {e}"));
         eprintln!("Error running app: {:?}", e);
     }
 }

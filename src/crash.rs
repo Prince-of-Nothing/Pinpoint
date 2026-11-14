@@ -5,7 +5,7 @@ use chrono::{SecondsFormat, Utc};
 use regex::Regex;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Once};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub const REPORT_EMAIL: &str = "plesudinu+waitlist@proton.me";
@@ -247,6 +247,42 @@ pub fn manual_report(summary: &str, note: &str) -> String {
     )
 }
 
+static PANIC_HOOK: Once = Once::new();
+
+pub fn panic_details(payload: &str, location: Option<&str>, backtrace: &str) -> String {
+    format!(
+        "payload: {payload}\nlocation: {}\nbacktrace:\n{backtrace}",
+        location.unwrap_or("unknown location")
+    )
+}
+
+/// Install a process-wide panic hook that persists a report before the old
+/// hook runs. Idempotent: a second call keeps the first hook.
+pub fn install_panic_hook() {
+    PANIC_HOOK.call_once(|| {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            let payload = if let Some(value) = info.payload().downcast_ref::<&str>() {
+                (*value).to_string()
+            } else if let Some(value) = info.payload().downcast_ref::<String>() {
+                value.clone()
+            } else {
+                "non-string panic payload".to_string()
+            };
+            let location = info.location().map(|location| location.to_string());
+            let backtrace = std::backtrace::Backtrace::force_capture().to_string();
+            let details = panic_details(&payload, location.as_deref(), &backtrace);
+            let _ = write_report(CrashKind::Panic, &payload, &details);
+            previous(info);
+        }));
+    });
+}
+
+/// Persist a non-panic launch failure (for example `eframe::run_native`).
+pub fn capture_startup_error(error: &str) {
+    let _ = write_report(CrashKind::Startup, error, "");
+}
+
 #[cfg(unix)]
 fn page_size() -> Option<usize> {
     let value = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
@@ -348,5 +384,15 @@ mod tests {
         let summary = device_summary();
         assert!(summary.contains(std::env::consts::ARCH));
         assert!(summary.contains(crate::platform::Platform::current().label()));
+    }
+
+    #[test]
+    fn panic_details_formats_payload_location_and_backtrace() {
+        let details = panic_details("boom", Some("src/ui.rs:42:9"), "0: backtrace");
+        assert!(details.contains("boom"));
+        assert!(details.contains("src/ui.rs:42:9"));
+        assert!(details.contains("0: backtrace"));
+        let without = panic_details("boom", None, "");
+        assert!(without.contains("unknown location"));
     }
 }

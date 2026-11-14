@@ -4,7 +4,8 @@ Date: 2026-11-14
 
 ## Status
 
-Accepted
+Accepted. The `ACTION_SEND` share-in part is superseded by
+[ADR-0014](./0014-remove-action-send-target.md).
 
 ## Context
 

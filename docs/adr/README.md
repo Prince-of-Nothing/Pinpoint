@@ -39,6 +39,7 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0011 | [Self-Hosted OpenStreetMap Services](./0011-self-hosted-osm-services.md) | Accepted (config + docs) |
 | 0012 | [Opaque Server-Side Sessions Instead of JWT + Rotating Refresh Tokens](./0012-opaque-server-side-sessions.md) | Accepted |
 | 0013 | [Use the Live Android Activity for JNI and Accept Cold-Start Share/Deep-Link Delivery](./0013-android-native-activity-jni.md) | Accepted |
+| 0014 | [Remove the ACTION_SEND Target Until an onNewIntent Bridge Exists](./0014-remove-action-send-target.md) | Accepted |
 
 See [`architecture/architecture-decisions-link.md`](../architecture/architecture-decisions-link.md) for the complete list.
 

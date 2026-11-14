@@ -18,14 +18,14 @@ follow-up.
   network) and removes the request afterwards.
 - **Publish deep link:** `pinpoint://publish` publishes the current location on
   launch; it waits for a restored session before firing.
-- **Share in:** share a `geo:` link, a Google/OSM/Apple Maps link or plain
-  `lat, lon` from another app and Pinpoint opens the map there
-  (`ACTION_SEND`, `text/plain`). Android delivers repeat shares to
-  `onNewIntent`, which the Rust-only `NativeActivity` cannot observe; close
-  Pinpoint before sharing if it is already running.
 - **Share out:** place sheets have **Share** (`geo:lat,lon?q=name`) and the Kiosk
   QR card has **Share link** (`pinpoint://kiosk?token=...`), both opening the
   system share sheet.
+- **No share-in target:** Pinpoint deliberately does not appear in Android's
+  text-share sheet. Android delivers repeat shares to `onNewIntent`, which the
+  Rust-only `NativeActivity` cannot observe; a share target that silently does
+  nothing is worse than none. See ADR-0014. A Java `onNewIntent` bridge can
+  re-enable it.
 - **Deep links:** `pinpoint://map`, `pinpoint://kiosk?token=...`, `pinpoint://admin`
   and `geo:` are routed on launch.
 - **FLAG_SECURE:** screenshots and screen recording of the app window are

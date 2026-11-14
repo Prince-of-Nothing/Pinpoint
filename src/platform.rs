@@ -252,9 +252,14 @@ pub fn is_http_url(url: &str) -> bool {
 
 /// Open a URL. Android sends non-HTTP schemes through an explicit Intent
 /// because `webbrowser` deliberately rejects them there.
-#[cfg(not(target_os = "android"))]
+#[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 pub fn open_url(url: &str) -> Result<(), String> {
     webbrowser::open(url).map_err(|error| error.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn open_url(_url: &str) -> Result<(), String> {
+    Err("opening URLs is unavailable in the wasm stub".to_string())
 }
 
 #[cfg(target_os = "android")]

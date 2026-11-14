@@ -30,11 +30,13 @@ pub fn launch_android_ui(
 
     if let Some(uri) = crate::platform::android_launch_uri() {
         if let Some(link) = crate::mobile::MobileDeepLink::parse(&uri) {
+            tracing::info!("android: applied launch deep link");
             app.apply_deep_link(link);
         }
     }
     if let Some(text) = crate::platform::android_shared_text() {
         if let Some(link) = crate::mobile::MobileDeepLink::parse_shared(&text) {
+            tracing::info!("android: applied shared text link");
             app.apply_deep_link(link);
         }
     }

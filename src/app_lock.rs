@@ -36,7 +36,8 @@ impl LockStore {
     }
 
     pub fn is_configured(&self) -> bool {
-        self.load().is_some()
+        // A present-but-unreadable file must fail closed (locked), not open.
+        self.path.as_ref().is_some_and(|path| path.exists())
     }
 
     fn load(&self) -> Option<LockRecord> {
@@ -58,7 +59,20 @@ impl LockStore {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
-        write_private(path, json.as_bytes()).map_err(|e| e.to_string())
+        let tmp = path.with_extension("json.tmp");
+        write_private(&tmp, json.as_bytes()).map_err(|e| e.to_string())?;
+        #[cfg(windows)]
+        {
+            // std::fs::rename does not replace an existing file on Windows.
+            let _ = std::fs::remove_file(path);
+        }
+        std::fs::rename(&tmp, path).map_err(|e| e.to_string())?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+        }
+        Ok(())
     }
 
     pub fn verify(&self, pin: &str) -> bool {
@@ -100,7 +114,8 @@ fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         .write(true)
         .mode(0o600)
         .open(path)?;
-    file.write_all(bytes)
+    file.write_all(bytes)?;
+    file.sync_all()
 }
 
 #[cfg(not(unix))]
@@ -154,6 +169,27 @@ mod tests {
     fn removing_an_absent_lock_is_ok() {
         let (store, dir) = temp_store("absent");
         assert!(store.remove().is_ok());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn corrupt_lock_file_fails_closed() {
+        let (store, dir) = temp_store("corrupt");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("lock.json"), b"{not json").unwrap();
+        assert!(store.is_configured(), "damaged lock must stay locked");
+        assert!(!store.verify("1234"));
+        assert!(!store.verify(""));
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn changing_the_pin_replaces_the_old_hash() {
+        let (store, dir) = temp_store("change");
+        store.set_pin("1234").unwrap();
+        store.set_pin("5678").unwrap();
+        assert!(store.verify("5678"));
+        assert!(!store.verify("1234"));
         std::fs::remove_dir_all(dir).ok();
     }
 }

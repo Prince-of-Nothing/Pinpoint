@@ -238,8 +238,6 @@ pub struct PinpointAppUI {
     change_password_current: String,
     change_password_new: String,
     change_password_confirm: String,
-    // About / updates
-    about_check_started: bool,
     // Crash reporting
     crash_dialog: Option<CrashDialog>,
     crash_checked: bool,
@@ -312,7 +310,6 @@ impl PinpointAppUI {
             change_password_current: String::new(),
             change_password_new: String::new(),
             change_password_confirm: String::new(),
-            about_check_started: false,
             crash_dialog: None,
             crash_checked: false,
             admin_search_query: String::new(),

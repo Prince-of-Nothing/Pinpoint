@@ -52,14 +52,9 @@ impl PinpointAppUI {
                     .show(ui, |ui| add(ui));
             };
 
-            let mut status = self.app.data().lock().unwrap().update_status.clone();
-            if !self.about_check_started {
-                self.about_check_started = true;
-                if matches!(&status, UpdateStatus::Unknown) {
-                    self.spawn_action(PendingAction::CheckForUpdates, ctx);
-                    status = UpdateStatus::Checking;
-                }
-            }
+            // Privacy: opening About must not contact GitHub. The release
+            // check runs only when the user presses the button below.
+            let status = self.app.data().lock().unwrap().update_status.clone();
             card(ui, &mut |ui| {
                 ui.label(RichText::new("Updates").size(17.0).strong());
                 ui.add_space(4.0);

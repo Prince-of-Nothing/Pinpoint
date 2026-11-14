@@ -19,6 +19,7 @@ pub(crate) mod kiosk;
 pub(crate) mod map;
 pub(crate) mod places;
 pub(crate) mod profile;
+pub(crate) mod qr;
 pub(crate) mod route;
 pub(crate) mod share_sheet;
 pub(crate) mod sharing;

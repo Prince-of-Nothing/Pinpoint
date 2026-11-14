@@ -41,6 +41,17 @@ impl PinpointAppUI {
             });
         });
 
+        let qr_token = self.kiosk_token_input.trim().to_string();
+        if !qr_token.is_empty() {
+            ui.add_space(8.0);
+            ui.group(|ui| {
+                ui.label(RichText::new("Scan to open this kiosk").size(12.0).strong());
+                let link = format!("pinpoint://kiosk?token={qr_token}");
+                super::qr::draw_qr(ui, &link, 180.0);
+                ui.label(RichText::new(link).size(10.0));
+            });
+        }
+
         ui.add_space(12.0);
 
         let resolved = self.app.data().lock().unwrap().kiosk_resolved.clone();

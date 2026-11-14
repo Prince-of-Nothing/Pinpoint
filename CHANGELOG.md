@@ -13,6 +13,7 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] Android: register and route `pinpoint://` and `geo:` launch intents, including kiosk token links and map-centre hand-off.
+- [FEATURE] Kiosk: render a scannable QR for `pinpoint://kiosk?token=...` links.
 
 ### Security
 - [SECURITY] Android: FLAG_SECURE blocks screenshots and screen recording of location data.

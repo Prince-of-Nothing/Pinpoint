@@ -19,6 +19,7 @@ pub mod api;
 pub mod app;
 pub mod backend;
 pub mod bookmarks;
+pub mod crash;
 pub mod i18n;
 pub mod logging;
 #[cfg(not(target_arch = "wasm32"))]

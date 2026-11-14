@@ -133,6 +133,9 @@ impl PinpointAppUI {
                                     if dialog.copied {
                                         dialog.error = None;
                                     }
+                                    if let Some(path) = dialog.path.as_ref() {
+                                        crash::mark_seen(path);
+                                    }
                                 }
                                 Err(error) => {
                                     dialog.error = Some(format!(
@@ -178,7 +181,14 @@ impl PinpointAppUI {
                 }
                 self.crash_dialog = None;
             }
-            Some(CrashDialogOutcome::Close) => self.crash_dialog = None,
+            Some(CrashDialogOutcome::Close) => {
+                if let Some(dialog) = self.crash_dialog.as_ref() {
+                    if let Some(path) = dialog.path.as_ref() {
+                        crash::mark_seen(path);
+                    }
+                }
+                self.crash_dialog = None;
+            }
             None => {}
         }
     }

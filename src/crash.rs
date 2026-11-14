@@ -144,6 +144,11 @@ pub fn discard_report(path: &Path) {
     let _ = std::fs::remove_file(path);
 }
 
+/// Keep the report but stop auto-prompting for it on the next launch.
+pub fn mark_seen(path: &Path) {
+    let _ = std::fs::rename(path, path.with_extension("seen"));
+}
+
 fn prune_reports(dir: &Path, keep: usize) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
@@ -401,6 +406,17 @@ mod tests {
         assert_eq!(count, 5);
         discard_report(&pending.path);
         assert!(!pending.path.exists());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn marking_a_report_seen_removes_it_from_pending() {
+        let dir = temp_dir();
+        let path = write_report_at(&dir, CrashKind::Manual, "seen", "details").unwrap();
+        assert!(pending_report_at(&dir).is_some());
+        mark_seen(&path);
+        assert!(pending_report_at(&dir).is_none());
+        assert!(path.with_extension("seen").exists());
         std::fs::remove_dir_all(dir).ok();
     }
 

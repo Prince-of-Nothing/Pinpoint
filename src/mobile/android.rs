@@ -16,6 +16,7 @@ pub fn launch_android_ui(
 
     let mut app = crate::ui::PinpointAppUI::new(backend, None);
     app.set_offline_mode(cfg.offline_first || offline_fallback);
+    app.set_backend_unavailable(offline_fallback);
 
     match cfg.app_kind {
         crate::webapp::WebAppKind::Kiosk => {

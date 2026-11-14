@@ -293,6 +293,18 @@ pub fn enable_secure_window() -> Result<(), String> {
     Ok(())
 }
 
+/// Put text on the real system clipboard. Android's egui fallback is
+/// in-process only, so the report copy path must use JNI.
+#[cfg(target_os = "android")]
+pub fn copy_text(text: &str) -> Result<(), String> {
+    android_intent::copy_text(text)
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn copy_text(_text: &str) -> Result<(), String> {
+    Err("use the UI clipboard on desktop".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{backend_url_from_env_or_default, default_backend_url, Platform};
@@ -361,6 +373,7 @@ mod android_intent {
     use anyhow::anyhow;
     use jni::objects::JString;
     use jni::refs::Global;
+    use jni::JValue;
 
     jni::bind_java_type! {
         AUri => "android.net.Uri",
@@ -386,7 +399,10 @@ mod android_intent {
     jni::bind_java_type! {
         AContext => "android.content.Context",
         type_map { AIntent => "android.content.Intent" },
-        methods { fn start_activity(intent: AIntent) }
+        methods {
+            fn start_activity(intent: AIntent),
+            fn get_system_service(name: JString) -> JObject
+        }
     }
 
     jni::bind_java_type! {
@@ -497,5 +513,36 @@ mod android_intent {
             Ok(())
         })
         .map_err(|error| format!("FLAG_SECURE failed: {error}"))
+    }
+
+    pub(super) fn copy_text(text: &str) -> Result<(), String> {
+        let ctx = ndk_context::android_context();
+        if ctx.vm().is_null() || ctx.context().is_null() {
+            return Err("Android JVM/context is not available".to_string());
+        }
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
+        vm.attach_current_thread(|env| -> anyhow::Result<()> {
+            let context: jni::sys::jobject = ctx.context() as _;
+            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
+                .map_err(|error| anyhow!("context: {error}"))?;
+            let context: &AContext = &context;
+            let service_name = JString::new(env, "clipboard")?;
+            let service = context
+                .get_system_service(env, service_name)
+                .map_err(|error| anyhow!("getSystemService: {error}"))?;
+            if service.is_null() {
+                anyhow::bail!("clipboard service unavailable");
+            }
+            let text = JString::new(env, text)?;
+            let name = jni::strings::JNIString::from("setText");
+            let signature =
+                jni::signature::RuntimeMethodSignature::from_str("(Ljava/lang/CharSequence;)V")
+                    .map_err(|error| anyhow!("setText signature: {error}"))?;
+            let signature = jni::signature::MethodSignature::from(&signature);
+            env.call_method(&service, name, signature, &[JValue::Object(text.as_ref())])
+                .map_err(|error| anyhow!("setText: {error}"))?;
+            Ok(())
+        })
+        .map_err(|error| format!("Clipboard failed: {error}"))
     }
 }

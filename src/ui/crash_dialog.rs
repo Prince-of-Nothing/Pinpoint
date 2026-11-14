@@ -51,6 +51,19 @@ impl CrashDialog {
     }
 }
 
+pub(crate) fn copy_to_clipboard(ctx: &egui::Context, text: &str) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        let _ = ctx;
+        crate::platform::copy_text(text)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        ctx.copy_text(text.to_string());
+        Ok(())
+    }
+}
+
 impl PinpointAppUI {
     pub fn open_manual_report(&mut self) {
         let report = crash::manual_report("User-reported problem", "");
@@ -105,21 +118,46 @@ impl PinpointAppUI {
                     ui.add_space(6.0);
                     ui.horizontal_wrapped(|ui| {
                         if ui.button("Email report").clicked() {
-                            ctx.copy_text(dialog.report.clone());
-                            dialog.copied = true;
+                            match copy_to_clipboard(ctx, &dialog.report) {
+                                Ok(()) => dialog.copied = true,
+                                Err(error) => {
+                                    dialog.copied = false;
+                                    dialog.error = Some(format!(
+                                        "Could not copy the full report: {error}. \
+                                         The email body is truncated."
+                                    ));
+                                }
+                            }
                             match platform::open_url(&crash::mailto_url(&dialog.report)) {
-                                Ok(()) => dialog.error = None,
+                                Ok(()) => {
+                                    if dialog.copied {
+                                        dialog.error = None;
+                                    }
+                                }
                                 Err(error) => {
                                     dialog.error = Some(format!(
-                                        "Could not open the email app: {error}. \
-                                         The full report is on the clipboard."
-                                    ))
+                                        "Could not open the email app: {error}. {}",
+                                        if dialog.copied {
+                                            "The full report is on the clipboard."
+                                        } else {
+                                            "The email body is truncated."
+                                        }
+                                    ));
                                 }
                             }
                         }
                         if ui.button("Copy report").clicked() {
-                            ctx.copy_text(dialog.report.clone());
-                            dialog.copied = true;
+                            match copy_to_clipboard(ctx, &dialog.report) {
+                                Ok(()) => {
+                                    dialog.copied = true;
+                                    dialog.error = None;
+                                }
+                                Err(error) => {
+                                    dialog.copied = false;
+                                    dialog.error =
+                                        Some(format!("Could not copy the report: {error}"));
+                                }
+                            }
                         }
                         if dialog.path.is_some() && ui.button("Discard").clicked() {
                             outcome = Some(CrashDialogOutcome::Discard);

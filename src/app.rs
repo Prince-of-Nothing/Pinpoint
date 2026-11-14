@@ -112,6 +112,9 @@ pub struct PinpointApp {
     error_message: Arc<Mutex<Option<String>>>,
     notice_message: Arc<Mutex<Option<String>>>,
     offline_mode: Arc<Mutex<bool>>,
+    /// True only when the mobile backend fell back to loopback because the
+    /// configured URL was rejected. No persisted session or login is trusted.
+    backend_unavailable: Arc<Mutex<bool>>,
     /// Mutations that failed because all backends were down.
     /// Replayed automatically when connectivity is restored.
     pending_mutations: Arc<Mutex<Vec<PendingMutation>>>,
@@ -216,6 +219,7 @@ impl PinpointApp {
             error_message: Arc::new(Mutex::new(None)),
             notice_message: Arc::new(Mutex::new(None)),
             offline_mode: Arc::new(Mutex::new(true)),
+            backend_unavailable: Arc::new(Mutex::new(false)),
             pending_mutations: Arc::new(Mutex::new(Vec::new())),
             state_context: Arc::new(Mutex::new(StateContext::new())),
             rate_limiter: Arc::new(Mutex::new(RateLimiter::with_defaults())),
@@ -371,6 +375,16 @@ impl PinpointApp {
 
     pub fn set_offline_mode(&self, offline: bool) {
         *self.offline_mode.lock().unwrap() = offline;
+    }
+
+    /// A release fallback with no configured backend. Do not auto-restore
+    /// sessions or accept credentials through the shared loopback endpoint.
+    pub fn is_backend_unavailable(&self) -> bool {
+        *self.backend_unavailable.lock().unwrap()
+    }
+
+    pub fn set_backend_unavailable(&self, unavailable: bool) {
+        *self.backend_unavailable.lock().unwrap() = unavailable;
     }
 
     /// Returns the number of pending (unsynced) mutations.

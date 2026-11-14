@@ -17,8 +17,10 @@ The per-item flagged list for this release is in
 
 ### Security
 - [SECURITY] Android: FLAG_SECURE blocks screenshots and screen recording of location data.
+- [SECURITY] A release with no configured backend disables session restore and sign-in instead of sending credentials or a persisted session to the shared loopback port.
 
 ### Fixed
+- [FIX] Android: report and log copies use the system `ClipboardManager`, so the no-email fallback leaves the full report on the real clipboard.
 - [FIX] Android: reserve a bottom inset so the edge-to-edge gesture bar does not cover the mobile tab bar.
 
 ## [1.3.2] - 2026-11-14

@@ -182,7 +182,13 @@ impl PinpointAppUI {
                     }
                 }
                 if ui.button("Copy recent log").clicked() {
-                    ctx.copy_text(crate::logging::tail(200));
+                    if let Err(error) = crate::ui::crash_dialog::copy_to_clipboard(
+                        ctx,
+                        &crate::logging::tail(200),
+                    ) {
+                        self.app
+                            .set_error(Some(format!("Could not copy the log: {error}")));
+                    }
                 }
                 if ui.button("Clear log").clicked() {
                     crate::logging::clear();

@@ -5,6 +5,17 @@ use eframe::egui::{self};
 
 impl PinpointAppUI {
     pub fn draw_login_form(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        if self.app.is_backend_unavailable() {
+            ui.vertical_centered(|ui| {
+                ui.add_space(40.0);
+                ui.heading("Offline mode");
+                ui.label(
+                    "No backend is configured for this build. The map and demo data \
+                     are available, but sign-in is disabled.",
+                );
+            });
+            return;
+        }
         let compact = Self::is_compact(ctx);
         ui.vertical_centered(|ui| {
             if !compact {
@@ -154,6 +165,17 @@ impl PinpointAppUI {
     }
 
     pub fn draw_register(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        if self.app.is_backend_unavailable() {
+            ui.vertical_centered(|ui| {
+                ui.add_space(40.0);
+                ui.heading("Offline mode");
+                ui.label(
+                    "No backend is configured for this build. The map and demo data \
+                     are available, but registration is disabled.",
+                );
+            });
+            return;
+        }
         let compact = Self::is_compact(ctx);
         ui.vertical_centered(|ui| {
             if !compact {

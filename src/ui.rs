@@ -332,6 +332,12 @@ impl PinpointAppUI {
         }
     }
 
+    /// Mark the mobile offline fallback as untrusted so it cannot restore or
+    /// accept a session over the shared loopback endpoint.
+    pub fn set_backend_unavailable(&self, unavailable: bool) {
+        self.app.set_backend_unavailable(unavailable);
+    }
+
     /// Apply an Android `pinpoint://` or `geo:` launch URI.
     pub fn apply_deep_link(&mut self, link: crate::mobile::MobileDeepLink) {
         match link {
@@ -1039,7 +1045,7 @@ impl eframe::App for PinpointAppUI {
         self.tick_navigation();
         if !self.session_restore_attempted {
             self.session_restore_attempted = true;
-            if self.app.has_persisted_session() {
+            if self.app.has_persisted_session() && !self.app.is_backend_unavailable() {
                 self.spawn_action(PendingAction::RestorePersistedSession, ctx);
             }
         }

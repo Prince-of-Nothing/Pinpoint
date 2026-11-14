@@ -278,11 +278,19 @@ fn valid_fix(lat: f64, lon: f64, accuracy: f64) -> Option<(f64, f64, f64)> {
         && (-90.0..=90.0).contains(&lat)
         && (-180.0..=180.0).contains(&lon)
         && accuracy > 0.0
+        && accuracy <= 5_000.0
     {
         Some((lat, lon, accuracy))
     } else {
         None
     }
+}
+
+/// A last-known fix is only useful if it is recent enough to describe where
+/// the user is now.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn fix_is_recent(fix_time_ms: i64, now_ms: i64) -> bool {
+    fix_time_ms > 0 && now_ms >= fix_time_ms && now_ms - fix_time_ms <= 10 * 60 * 1000
 }
 
 /// Human-readable build identity for About screens / diagnostics.
@@ -330,6 +338,17 @@ pub fn android_launch_uri() -> Option<String> {
 #[cfg(not(target_os = "android"))]
 pub fn android_launch_uri() -> Option<String> {
     None
+}
+
+/// Open the system app-settings page (permission recovery on Android).
+#[cfg(target_os = "android")]
+pub fn open_app_settings() -> Result<(), String> {
+    android_intent::open_settings()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn open_app_settings() -> Result<(), String> {
+    Err("app settings are Android-only".to_string())
 }
 
 /// Text shared into the app with Android's `ACTION_SEND` chooser.
@@ -443,6 +462,16 @@ mod tests {
         assert!(super::valid_fix(120.0, 28.0, 5.0).is_none());
         assert!(super::valid_fix(47.0, 220.0, 5.0).is_none());
         assert!(super::valid_fix(47.0, 28.0, 0.0).is_none());
+        assert!(super::valid_fix(47.0, 28.0, 50_000.0).is_none());
+    }
+
+    #[test]
+    fn gps_fix_age_must_be_recent() {
+        let now = 1_700_000_000_000;
+        assert!(super::fix_is_recent(now - 60_000, now));
+        assert!(!super::fix_is_recent(now - 11 * 60_000, now));
+        assert!(!super::fix_is_recent(0, now));
+        assert!(!super::fix_is_recent(now + 60_000, now));
     }
 }
 
@@ -465,12 +494,30 @@ mod android_intent {
     use jni::objects::{JObject, JString};
     use jni::refs::Global;
     use jni::JValue;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
-    static ACTIVITY_PTR: AtomicUsize = AtomicUsize::new(0);
+    /// Owned JNI global reference to the current `NativeActivity`. Storing an
+    /// owned ref keeps it valid across Activity recreation; a new android_main
+    /// replaces it and dropping the old one releases the JNI reference.
+    static ACTIVITY: Mutex<Option<Global<JObject<'static>>>> = Mutex::new(None);
 
     pub(super) fn set_activity(ptr: *mut std::ffi::c_void) {
-        ACTIVITY_PTR.store(ptr as usize, Ordering::Relaxed);
+        let ctx = ndk_context::android_context();
+        if ctx.vm().is_null() {
+            tracing::warn!("android: cannot register activity without a JVM");
+            return;
+        }
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
+        let result = vm.attach_current_thread(|env| -> jni::errors::Result<()> {
+            let raw = ptr as jni::sys::jobject;
+            let local = unsafe { JObject::from_raw(&*env, raw) };
+            let global = env.new_global_ref(&local)?;
+            *ACTIVITY.lock().unwrap() = Some(global);
+            Ok(())
+        });
+        if let Err(error) = result {
+            tracing::warn!(%error, "android: failed to register the activity");
+        }
     }
 
     jni::bind_java_type! {
@@ -563,20 +610,33 @@ mod android_intent {
         .flatten()
     }
 
+    pub(super) fn open_settings() -> Result<(), String> {
+        with_activity(|env, activity| {
+            let action = JString::new(env, "android.settings.APPLICATION_DETAILS_SETTINGS")?;
+            let uri_text = JString::new(env, "package:com.pinpoint.desktop")?;
+            let uri = AUri::parse(env, uri_text).map_err(|error| anyhow!("URI: {error}"))?;
+            let intent = AIntent::new_with_url(env, &action, &uri)
+                .map_err(|error| anyhow!("Intent: {error}"))?;
+            let context: &AContext = activity.as_ref();
+            context
+                .start_activity(env, &intent)
+                .map_err(|error| anyhow!("startActivity: {error}"))?;
+            Ok(())
+        })
+        .map_err(|error| format!("Android settings failed: {error}"))
+    }
+
     pub(super) fn shared_text() -> Option<String> {
-        tracing::info!("android share: reading intent");
         let result = with_activity(|env, activity| -> anyhow::Result<Option<String>> {
             let intent = activity
                 .get_intent(env)
                 .map_err(|error| anyhow!("getIntent: {error}"))?;
             if intent.is_null() {
-                tracing::info!("android share: no launch intent");
                 return Ok(None);
             }
             let action = intent
                 .get_action(env)
                 .map_err(|error| anyhow!("getAction: {error}"))?;
-            tracing::info!("android share: action={action}");
             if action.is_null() || action.to_string() != "android.intent.action.SEND" {
                 return Ok(None);
             }
@@ -584,7 +644,6 @@ mod android_intent {
             let text = intent
                 .get_string_extra(env, &key)
                 .map_err(|error| anyhow!("getStringExtra: {error}"))?;
-            tracing::info!("android share: text_present={}", !text.is_null());
             if text.is_null() {
                 return Ok(None);
             }
@@ -679,11 +738,13 @@ mod android_intent {
         }
         let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
         vm.attach_current_thread(|env| -> anyhow::Result<T> {
-            let ptr = ACTIVITY_PTR.load(Ordering::Relaxed);
-            if ptr == 0 {
+            let guard = ACTIVITY
+                .lock()
+                .map_err(|_| anyhow!("activity lock poisoned"))?;
+            let Some(global) = guard.as_ref() else {
                 anyhow::bail!("Android Activity is not registered");
-            }
-            let raw = ptr as jni::sys::jobject;
+            };
+            let raw = global.as_raw();
             let activity = unsafe { env.as_cast_raw::<Global<AActivity>>(&raw) }
                 .map_err(|error| anyhow!("activity: {error}"))?;
             let activity: &AActivity = &activity;
@@ -742,7 +803,7 @@ mod android_intent {
     pub(super) fn last_known() -> Option<(f64, f64, f64)> {
         with_activity(|env, activity| -> anyhow::Result<Option<(f64, f64, f64)>> {
             let granted = has_location_permission(env, activity)?;
-            tracing::info!(granted, "android GPS: permission");
+            tracing::debug!(granted, "android GPS: permission");
             if !granted {
                 return Ok(None);
             }
@@ -753,38 +814,74 @@ mod android_intent {
                 tracing::warn!("android GPS: no location service");
                 return Ok(None);
             }
-            let providers = provider_names(env, &service)
-                .unwrap_or_else(|_| vec!["gps".into(), "network".into()]);
+            let mut providers = provider_names(env, &service).unwrap_or_default();
+            if providers.is_empty() {
+                providers = vec![
+                    "gps".to_string(),
+                    "fused".to_string(),
+                    "network".to_string(),
+                    "passive".to_string(),
+                ];
+            }
+            providers.sort_by_key(|name| match name.as_str() {
+                "gps" => 0,
+                "fused" => 1,
+                "network" => 2,
+                "passive" => 3,
+                _ => 4,
+            });
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
             for provider_name in providers {
-                let provider = JString::new(env, &provider_name)?;
-                let name = jni::strings::JNIString::from("getLastKnownLocation");
-                let runtime = jni::signature::RuntimeMethodSignature::from_str(
-                    "(Ljava/lang/String;)Landroid/location/Location;",
-                )?;
-                let signature = jni::signature::MethodSignature::from(&runtime);
-                let location = env
-                    .call_method(
-                        &service,
-                        name,
-                        signature,
-                        &[JValue::Object(provider.as_ref())],
-                    )?
-                    .l()?;
-                if location.is_null() {
-                    tracing::info!(provider = provider_name, "android GPS: no last fix");
-                    continue;
-                }
-                let lat = call_double(env, &location, "getLatitude", "()D")?;
-                let lon = call_double(env, &location, "getLongitude", "()D")?;
-                let accuracy = call_float(env, &location, "getAccuracy", "()F")? as f64;
-                tracing::info!(
-                    provider = provider_name,
-                    accuracy,
-                    valid = super::valid_fix(lat, lon, accuracy).is_some(),
-                    "android GPS: last fix"
-                );
-                if let Some(fix) = super::valid_fix(lat, lon, accuracy) {
-                    return Ok(Some(fix));
+                // A single provider throwing (SecurityException, dead binder)
+                // must not hide the remaining providers.
+                let candidate = (|| -> anyhow::Result<Option<(f64, f64, f64)>> {
+                    let provider = JString::new(env, &provider_name)?;
+                    let name = jni::strings::JNIString::from("getLastKnownLocation");
+                    let runtime = jni::signature::RuntimeMethodSignature::from_str(
+                        "(Ljava/lang/String;)Landroid/location/Location;",
+                    )?;
+                    let signature = jni::signature::MethodSignature::from(&runtime);
+                    let location = env
+                        .call_method(
+                            &service,
+                            name,
+                            signature,
+                            &[JValue::Object(provider.as_ref())],
+                        )?
+                        .l()?;
+                    if location.is_null() {
+                        tracing::debug!(provider = provider_name, "android GPS: no last fix");
+                        return Ok(None);
+                    }
+                    let lat = call_double(env, &location, "getLatitude", "()D")?;
+                    let lon = call_double(env, &location, "getLongitude", "()D")?;
+                    let accuracy = call_float(env, &location, "getAccuracy", "()F")? as f64;
+                    let time = call_long(env, &location, "getTime", "()J").unwrap_or(0);
+                    let recent = super::fix_is_recent(time, now_ms);
+                    tracing::debug!(
+                        provider = provider_name,
+                        accuracy,
+                        recent,
+                        "android GPS: last fix"
+                    );
+                    if !recent {
+                        return Ok(None);
+                    }
+                    Ok(super::valid_fix(lat, lon, accuracy))
+                })();
+                match candidate {
+                    Ok(Some(fix)) => return Ok(Some(fix)),
+                    Ok(None) => {}
+                    Err(error) => {
+                        tracing::warn!(
+                            provider = provider_name,
+                            %error,
+                            "android GPS: provider failed"
+                        );
+                    }
                 }
             }
             Ok(None)
@@ -839,6 +936,18 @@ mod android_intent {
         let runtime = jni::signature::RuntimeMethodSignature::from_str(signature)?;
         let signature = jni::signature::MethodSignature::from(&runtime);
         Ok(env.call_method(object, name, signature, &[])?.d()?)
+    }
+
+    fn call_long(
+        env: &mut jni::Env,
+        object: &JObject,
+        name: &str,
+        signature: &str,
+    ) -> anyhow::Result<i64> {
+        let name = jni::strings::JNIString::from(name);
+        let runtime = jni::signature::RuntimeMethodSignature::from_str(signature)?;
+        let signature = jni::signature::MethodSignature::from(&runtime);
+        Ok(env.call_method(object, name, signature, &[])?.j()?)
     }
 
     fn call_float(

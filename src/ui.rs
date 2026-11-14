@@ -787,6 +787,15 @@ impl PinpointAppUI {
                         .size(20.0)
                         .strong(),
                 );
+                if self.app.is_offline_mode() {
+                    ui.add_space(6.0);
+                    ui.label(
+                        RichText::new(i18n::t(lang, key::OFFLINE_MODE))
+                            .size(10.0)
+                            .strong()
+                            .color(Color32::from_rgb(250, 204, 21)),
+                    );
+                }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                     if !auth_screen {
                         if signed_in {

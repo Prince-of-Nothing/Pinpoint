@@ -5,8 +5,6 @@
 //! and crate features; this module provides the Pinpoint-side launch path.
 
 #[cfg(target_os = "android")]
-use crate::backend::build_backend;
-#[cfg(target_os = "android")]
 use crate::mobile::MobileLaunchConfig;
 
 #[cfg(target_os = "android")]
@@ -14,17 +12,10 @@ pub fn launch_android_ui(
     app_handle: winit::platform::android::activity::AndroidApp,
 ) -> Result<(), eframe::Error> {
     let cfg = MobileLaunchConfig::default();
-    let backend = match build_backend(&cfg.backend) {
-        Ok(b) => b,
-        Err(e) => {
-            eprintln!("Android backend init failed ({e}); using default");
-            crate::backend::build_default_backend(crate::platform::default_backend_url())
-                .expect("default backend must be constructible")
-        }
-    };
+    let (backend, offline_fallback) = crate::mobile::build_mobile_backend(&cfg.backend);
 
     let mut app = crate::ui::PinpointAppUI::new(backend, None);
-    app.set_offline_mode(cfg.offline_first);
+    app.set_offline_mode(cfg.offline_first || offline_fallback);
 
     match cfg.app_kind {
         crate::webapp::WebAppKind::Kiosk => {

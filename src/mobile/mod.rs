@@ -30,6 +30,31 @@ impl Default for MobileLaunchConfig {
     }
 }
 
+/// Loopback fallback used when a release build has no valid backend URL.
+/// The loopback policy accepts this even in release; requests fail gracefully
+/// and the app opens in offline mode.
+pub const MOBILE_OFFLINE_FALLBACK: &str = "http://localhost:8080";
+
+/// Resolve the mobile backend without ever panicking on a rejected URL.
+/// Returns `(backend, offline_fallback)`.
+pub fn build_mobile_backend(
+    config: &crate::backend::BackendConfig,
+) -> (crate::backend::DynBackend, bool) {
+    match crate::backend::build_backend(config) {
+        Ok(backend) => (backend, false),
+        Err(error) => {
+            tracing::error!(
+                %error,
+                url = %config.base_url,
+                "mobile backend URL rejected; starting with the offline fallback"
+            );
+            let fallback = crate::backend::build_default_backend(MOBILE_OFFLINE_FALLBACK)
+                .expect("the loopback fallback is always accepted by URL policy");
+            (fallback, true)
+        }
+    }
+}
+
 /// Resolved backend config for mobile launches (env/host override > platform
 /// default). Adapters enforce transport policy (ADR-0006).
 pub fn mobile_backend_config() -> BackendConfig {
@@ -205,5 +230,25 @@ mod tests {
             })
         );
         assert!(MobileDeepLink::parse("pinpoint://unknown").is_none());
+    }
+}
+
+#[cfg(test)]
+mod backend_tests {
+    use super::*;
+    use crate::backend::BackendConfig;
+
+    #[test]
+    fn invalid_backend_falls_back_offline_instead_of_panicking() {
+        let cfg = BackendConfig::rest_v1("ftp://example.com");
+        let (_backend, offline) = build_mobile_backend(&cfg);
+        assert!(offline, "a rejected URL must select the offline fallback");
+    }
+
+    #[test]
+    fn https_backend_stays_online() {
+        let cfg = BackendConfig::rest_v1("https://example.com");
+        let (_backend, offline) = build_mobile_backend(&cfg);
+        assert!(!offline, "a valid HTTPS backend must not be offline");
     }
 }

@@ -274,6 +274,8 @@ pub struct PinpointAppUI {
     pin_focus_requested: bool,
     pin_setup: String,
     pin_setup_confirm: String,
+    /// Android `pinpoint://publish` requested before the first frame.
+    pending_gps_publish_at: Option<std::time::Instant>,
 }
 
 impl PinpointAppUI {
@@ -351,6 +353,7 @@ impl PinpointAppUI {
             pin_focus_requested: lock_enabled,
             pin_setup: String::new(),
             pin_setup_confirm: String::new(),
+            pending_gps_publish_at: None,
         }
     }
 
@@ -387,6 +390,10 @@ impl PinpointAppUI {
                 if let Some(token) = token {
                     self.kiosk_token_input = token;
                 }
+            }
+            crate::mobile::MobileDeepLink::PublishLocation => {
+                self.app.set_screen(CurrentScreen::Map);
+                self.pending_gps_publish_at = Some(std::time::Instant::now());
             }
         }
     }
@@ -1214,6 +1221,16 @@ impl eframe::App for PinpointAppUI {
             self.session_restore_attempted = true;
             if self.app.has_persisted_session() && !self.app.is_backend_unavailable() {
                 self.spawn_action(PendingAction::RestorePersistedSession, ctx);
+            }
+        }
+        if let Some(since) = self.pending_gps_publish_at {
+            if self.app.is_signed_in() {
+                self.pending_gps_publish_at = None;
+                self.spawn_action(PendingAction::PublishGpsLocation, ctx);
+            } else if since.elapsed() > std::time::Duration::from_secs(12) {
+                self.pending_gps_publish_at = None;
+                self.app
+                    .set_error(Some("Sign in to publish your location.".to_string()));
             }
         }
         if Self::is_compact(ctx) && self.mobile_selected_place.is_none() {

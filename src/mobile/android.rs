@@ -55,6 +55,22 @@ pub fn launch_android_ui(
     eframe::run_native("Pinpoint", options, Box::new(|_cc| Ok(Box::new(app))))
 }
 
+/// Debug-only opt-in for screenshots/UI automation. Release builds never
+/// consult this marker, so FLAG_SECURE stays unconditional in production.
+#[cfg(target_os = "android")]
+fn screenshots_allowed_for_testing() -> bool {
+    #[cfg(debug_assertions)]
+    {
+        crate::platform::app_data_dir()
+            .map(|dir| dir.join("allow_screenshots").exists())
+            .unwrap_or(false)
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        false
+    }
+}
+
 /// Native entry point expected by `android-activity` / `cargo-apk` in the
 /// cdylib. The eframe `NativeOptions::android_app` field receives the handle.
 #[cfg(target_os = "android")]
@@ -64,20 +80,15 @@ pub extern "C" fn android_main(app_handle: winit::platform::android::activity::A
     crate::logging::init();
     crate::crash::install_panic_hook();
     crate::platform::set_android_activity(app_handle.activity_as_ptr());
-    if let Err(error) = crate::platform::enable_secure_window() {
-        tracing::warn!(%error, "FLAG_SECURE was not applied");
+    if !screenshots_allowed_for_testing() {
+        if let Err(error) = crate::platform::enable_secure_window() {
+            tracing::warn!(%error, "FLAG_SECURE was not applied");
+        }
     }
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
         "Android launch starting"
     );
-    #[cfg(debug_assertions)]
-    {
-        let fix_present = crate::platform::default_gps_provider()
-            .current_position()
-            .is_some();
-        tracing::info!(fix_present, "android GPS diagnostic");
-    }
     if let Err(e) = launch_android_ui(app_handle) {
         crate::crash::capture_startup_error(&format!("Android launch failed: {e}"));
         tracing::error!(error = %e, "Android launch failed");

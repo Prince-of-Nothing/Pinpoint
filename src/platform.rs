@@ -270,6 +270,19 @@ pub fn ensure_location_permission() -> LocationPermission {
     LocationPermission::Granted
 }
 
+/// Actively ask Android for a fix when no provider has a recent last-known
+/// location. Blocks up to `timeout` on the calling thread; call it off the UI
+/// thread.
+#[cfg(target_os = "android")]
+pub fn request_single_fix(timeout: std::time::Duration) -> Option<(f64, f64, f64)> {
+    android_intent::request_single_fix(timeout)
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn request_single_fix(_timeout: std::time::Duration) -> Option<(f64, f64, f64)> {
+    None
+}
+
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
 fn valid_fix(lat: f64, lon: f64, accuracy: f64) -> Option<(f64, f64, f64)> {
     if lat.is_finite()
@@ -888,6 +901,139 @@ mod android_intent {
         })
         .ok()
         .flatten()
+    }
+
+    pub(super) fn request_single_fix(timeout: std::time::Duration) -> Option<(f64, f64, f64)> {
+        if let Some(fix) = last_known() {
+            return Some(fix);
+        }
+        let pending = match start_updates() {
+            Ok(pending) => pending,
+            Err(error) => {
+                tracing::warn!(%error, "android GPS: could not start updates");
+                return None;
+            }
+        };
+        let started = std::time::Instant::now();
+        let mut fix = None;
+        while started.elapsed() < timeout {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if let Some(candidate) = last_known() {
+                fix = Some(candidate);
+                break;
+            }
+        }
+        stop_updates(&pending);
+        fix
+    }
+
+    fn start_updates() -> anyhow::Result<Global<JObject<'static>>> {
+        with_activity(|env, activity| {
+            if !has_location_permission(env, activity)? {
+                anyhow::bail!("location permission not granted");
+            }
+            let context: &AContext = activity.as_ref();
+            let service_name = JString::new(env, "location")?;
+            let service = context.get_system_service(env, service_name)?;
+            if service.is_null() {
+                anyhow::bail!("no location service");
+            }
+            let action = JString::new(env, "com.pinpoint.desktop.LOCATION_WARMUP")?;
+            let intent_class =
+                env.find_class(jni::strings::JNIString::from("android/content/Intent"))?;
+            let ctor_runtime =
+                jni::signature::RuntimeMethodSignature::from_str("(Ljava/lang/String;)V")?;
+            let ctor_sig = jni::signature::MethodSignature::from(&ctor_runtime);
+            let intent =
+                env.new_object(&intent_class, ctor_sig, &[JValue::Object(action.as_ref())])?;
+            let package = JString::new(env, "com.pinpoint.desktop")?;
+            let set_pkg_runtime = jni::signature::RuntimeMethodSignature::from_str(
+                "(Ljava/lang/String;)Landroid/content/Intent;",
+            )?;
+            let set_pkg_sig = jni::signature::MethodSignature::from(&set_pkg_runtime);
+            env.call_method(
+                &intent,
+                jni::strings::JNIString::from("setPackage"),
+                set_pkg_sig,
+                &[JValue::Object(package.as_ref())],
+            )
+            .map_err(|error| anyhow!("setPackage: {error}"))?;
+            let pi_class =
+                env.find_class(jni::strings::JNIString::from("android/app/PendingIntent"))?;
+            let get_runtime = jni::signature::RuntimeMethodSignature::from_str(
+                "(Landroid/content/Context;ILandroid/content/Intent;I)Landroid/app/PendingIntent;",
+            )?;
+            let get_sig = jni::signature::MethodSignature::from(&get_runtime);
+            let activity_obj: &JObject = activity.as_ref();
+            // FLAG_UPDATE_CURRENT | FLAG_MUTABLE: the system attaches the
+            // location extra before delivering the private broadcast.
+            let pending = env
+                .call_static_method(
+                    &pi_class,
+                    jni::strings::JNIString::from("getBroadcast"),
+                    get_sig,
+                    &[
+                        JValue::Object(activity_obj),
+                        JValue::Int(0),
+                        JValue::Object(intent.as_ref()),
+                        JValue::Int(0x0A00_0000),
+                    ],
+                )?
+                .l()?;
+            if pending.is_null() {
+                anyhow::bail!("PendingIntent.getBroadcast returned null");
+            }
+            for provider in ["gps", "fused", "network"] {
+                let provider = JString::new(env, provider)?;
+                let runtime = jni::signature::RuntimeMethodSignature::from_str(
+                    "(Ljava/lang/String;JFLandroid/app/PendingIntent;)V",
+                )?;
+                let signature = jni::signature::MethodSignature::from(&runtime);
+                // A missing provider throws; try the next one.
+                let _ = env.call_method(
+                    &service,
+                    jni::strings::JNIString::from("requestLocationUpdates"),
+                    signature,
+                    &[
+                        JValue::Object(provider.as_ref()),
+                        JValue::Long(1000),
+                        JValue::Float(0.0),
+                        JValue::Object(pending.as_ref()),
+                    ],
+                );
+            }
+            Ok(env.new_global_ref(&pending)?)
+        })
+    }
+
+    fn stop_updates(pending: &Global<JObject<'static>>) {
+        let _ = with_activity(|env, activity| -> anyhow::Result<()> {
+            let context: &AContext = activity.as_ref();
+            let service_name = JString::new(env, "location")?;
+            let service = context.get_system_service(env, service_name)?;
+            let pending_obj: &JObject = pending.as_ref();
+            if !service.is_null() {
+                let runtime = jni::signature::RuntimeMethodSignature::from_str(
+                    "(Landroid/app/PendingIntent;)V",
+                )?;
+                let signature = jni::signature::MethodSignature::from(&runtime);
+                let _ = env.call_method(
+                    &service,
+                    jni::strings::JNIString::from("removeUpdates"),
+                    signature,
+                    &[JValue::Object(pending_obj)],
+                );
+            }
+            let _ = env.call_method(
+                pending_obj,
+                jni::strings::JNIString::from("cancel"),
+                jni::signature::MethodSignature::from(
+                    &jni::signature::RuntimeMethodSignature::from_str("()V")?,
+                ),
+                &[],
+            );
+            Ok(())
+        });
     }
 
     fn provider_names(env: &mut jni::Env, service: &JObject) -> anyhow::Result<Vec<String>> {

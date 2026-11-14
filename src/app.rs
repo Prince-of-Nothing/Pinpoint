@@ -1140,7 +1140,19 @@ impl PinpointApp {
     /// or the fix cannot be obtained, so callers can fall back to a
     /// manual location.
     pub async fn publish_my_location(&self) -> anyhow::Result<()> {
-        match crate::platform::default_gps_provider().current_position() {
+        let provider = crate::platform::default_gps_provider();
+        let fix = match provider.current_position() {
+            Some(fix) => Some(fix),
+            // No provider has a recent last-known fix: actively request one
+            // without blocking a tokio worker.
+            None => tokio::task::spawn_blocking(|| {
+                crate::platform::request_single_fix(std::time::Duration::from_secs(8))
+            })
+            .await
+            .ok()
+            .flatten(),
+        };
+        match fix {
             Some((lat, lon, accuracy)) => self.publish_location(lat, lon, accuracy).await,
             None => {
                 self.set_error(Some(
@@ -1181,6 +1193,7 @@ impl PinpointApp {
             Ok(()) => {
                 self.audit_logger
                     .log_event("location", "publish", None, "success");
+                tracing::info!("location published");
                 self.set_notice(Some("Location published.".to_string()));
                 if let Err(e) = self.refresh_friend_locations().await {
                     self.set_error(Some(e.to_string()));

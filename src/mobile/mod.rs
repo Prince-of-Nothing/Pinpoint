@@ -107,6 +107,8 @@ pub enum MobileDeepLink {
     Screen(crate::app::CurrentScreen),
     /// Kiosk share-link deep link (`pinpoint://kiosk?token=XYZ` or `pinpoint://share?token=XYZ`).
     Kiosk { token: Option<String> },
+    /// Publish the current location now (`pinpoint://publish`).
+    PublishLocation,
 }
 
 impl MobileDeepLink {
@@ -151,6 +153,9 @@ impl MobileDeepLink {
                         .filter(|t| !t.trim().is_empty())
                 });
                 return Some(Self::Kiosk { token });
+            }
+            if slug_raw == "publish" || slug_raw == "publish-gps" || slug_raw == "share-location" {
+                return Some(Self::PublishLocation);
             }
             let screen = match slug_raw {
                 "map" => crate::app::CurrentScreen::Map,
@@ -205,7 +210,6 @@ fn is_shared_target(link: &MobileDeepLink) -> bool {
         MobileDeepLink::Geo { .. } | MobileDeepLink::Kiosk { .. }
     )
 }
-
 fn geo_link(lat: f64, lon: f64, label: Option<String>) -> Option<MobileDeepLink> {
     if crate::security::validation::validate_location(lat, lon, None).is_valid() {
         Some(MobileDeepLink::Geo {
@@ -401,6 +405,14 @@ mod tests {
             })
         );
         assert!(MobileDeepLink::parse("pinpoint://unknown").is_none());
+        assert_eq!(
+            MobileDeepLink::parse("pinpoint://publish"),
+            Some(MobileDeepLink::PublishLocation)
+        );
+        assert_eq!(
+            MobileDeepLink::parse("pinpoint://publish-gps"),
+            Some(MobileDeepLink::PublishLocation)
+        );
     }
 }
 

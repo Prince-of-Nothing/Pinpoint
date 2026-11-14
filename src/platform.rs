@@ -245,6 +245,27 @@ pub fn build_identity() -> String {
     )
 }
 
+/// True for URLs the `webbrowser` crate can open on every platform.
+pub fn is_http_url(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with("http://")
+}
+
+/// Open a URL. Android sends non-HTTP schemes through an explicit Intent
+/// because `webbrowser` deliberately rejects them there.
+#[cfg(not(target_os = "android"))]
+pub fn open_url(url: &str) -> Result<(), String> {
+    webbrowser::open(url).map_err(|error| error.to_string())
+}
+
+#[cfg(target_os = "android")]
+pub fn open_url(url: &str) -> Result<(), String> {
+    if is_http_url(url) {
+        webbrowser::open(url).map_err(|error| error.to_string())
+    } else {
+        android_intent::open(url)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{backend_url_from_env_or_default, default_backend_url, Platform};
@@ -292,5 +313,91 @@ mod tests {
         assert!(parse_gps_fix("120.0, 28.0").is_none());
         assert!(parse_gps_fix("47.0, 220.0").is_none());
         assert!(parse_gps_fix("garbage").is_none());
+    }
+}
+
+#[cfg(test)]
+mod intent_tests {
+    use super::is_http_url;
+
+    #[test]
+    fn only_http_urls_use_the_webbrowser_path() {
+        assert!(is_http_url("https://example.com/x"));
+        assert!(is_http_url("http://localhost:8080"));
+        assert!(!is_http_url("mailto:test@example.com"));
+        assert!(!is_http_url("geo:47.0,28.8"));
+    }
+}
+
+#[cfg(target_os = "android")]
+mod android_intent {
+    use anyhow::anyhow;
+    use jni::objects::JString;
+    use jni::refs::Global;
+
+    jni::bind_java_type! {
+        AUri => "android.net.Uri",
+        methods { static fn parse(uri: JString) -> AUri }
+    }
+
+    jni::bind_java_type! {
+        AIntent => "android.content.Intent",
+        type_map { AUri => "android.net.Uri" },
+        constructors { fn new_with_url(action: JString, uri: AUri) },
+        fields {
+            #[allow(non_snake_case)]
+            static ACTION_VIEW: JString,
+            #[allow(non_snake_case)]
+            static FLAG_ACTIVITY_NEW_TASK: jint
+        },
+        methods { fn add_flags(flags: jint) -> AIntent }
+    }
+
+    jni::bind_java_type! {
+        AContext => "android.content.Context",
+        type_map { AIntent => "android.content.Intent" },
+        methods { fn start_activity(intent: AIntent) }
+    }
+
+    jni::bind_java_type! {
+        AActivity => "android.app.Activity",
+        type_map { AContext => "android.content.Context" },
+        is_instance_of { activity: AContext }
+    }
+
+    pub(super) fn open(url: &str) -> Result<(), String> {
+        let ctx = ndk_context::android_context();
+        if ctx.vm().is_null() || ctx.context().is_null() {
+            return Err("Android JVM/context is not available".to_string());
+        }
+        let vm = unsafe { jni::JavaVM::from_raw(ctx.vm() as _) };
+        vm.attach_current_thread(|env| -> anyhow::Result<()> {
+            let context: jni::sys::jobject = ctx.context() as _;
+            let context = unsafe { env.as_cast_raw::<Global<AContext>>(&context) }
+                .map_err(|error| anyhow!("context: {error}"))?;
+            let context: &AContext = &context;
+            let action =
+                AIntent::ACTION_VIEW(env).map_err(|error| anyhow!("ACTION_VIEW: {error}"))?;
+            let url = JString::new(env, url).map_err(|error| anyhow!("URL string: {error}"))?;
+            let uri = AUri::parse(env, url).map_err(|error| anyhow!("URI parse: {error}"))?;
+            let intent = AIntent::new_with_url(env, &action, &uri)
+                .map_err(|error| anyhow!("Intent: {error}"))?;
+            if env.as_cast::<AActivity>(&context).is_ok() {
+                context
+                    .start_activity(env, &intent)
+                    .map_err(|error| anyhow!("startActivity: {error}"))?;
+            } else {
+                let flag = AIntent::FLAG_ACTIVITY_NEW_TASK(env)
+                    .map_err(|error| anyhow!("FLAG_ACTIVITY_NEW_TASK: {error}"))?;
+                let intent = intent
+                    .add_flags(env, flag)
+                    .map_err(|error| anyhow!("addFlags: {error}"))?;
+                context
+                    .start_activity(env, &intent)
+                    .map_err(|error| anyhow!("startActivity: {error}"))?;
+            }
+            Ok(())
+        })
+        .map_err(|error| format!("Android Intent failed: {error}"))
     }
 }

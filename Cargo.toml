@@ -106,6 +106,8 @@ eframe = { version = "0.32", default-features = true, features = ["glow"] }
 [target.'cfg(target_os = "android")'.dependencies]
 eframe = { version = "0.32", default-features = false, features = ["glow", "default_fonts", "android-native-activity"] }
 winit = "0.30"
+jni = "0.22"
+ndk-context = "0.1"
 
 # OS keychain: Windows Credential Manager / macOS Keychain / Linux Secret
 # Service (see src/security/keychain.rs). Mobile/Web targets keep the

@@ -12,6 +12,17 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-11-14
+### Added
+- [FEATURE] Crash reporting: Rust panics and `eframe::run_native` startup errors write a redacted app-private report; the next launch shows an editable dialog with Email/Copy/Discard/Close, and About/Profile expose a manual Report a problem flow.
+- [FEATURE] Rolling native log under the app data directory, with 1 MiB rotation, copy and clear actions.
+- [FEATURE] Troubleshooting card in About with device/page-size summary, log path, pending report access and an Offline badge on mobile.
+
+### Fixed
+- [FIX] Android release: a rejected default backend URL now opens the app with the loopback offline fallback and a visible Offline badge instead of panicking before the UI.
+- [FIX] Updates: opening About no longer contacts GitHub automatically; the release check runs only when the user presses Check for updates.
+- [FIX] WASM: keep the web stub compiling by stubbing the native URL opener.
+
 ## [1.3.1] - 2026-11-14
 ### Fixed
 - [FIX] Android: align the arm64 native library to 16 KB so the APK loads on Android 15+ devices configured with 16 KB pages.

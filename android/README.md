@@ -46,7 +46,7 @@ binaries; without `--lib`, cargo-apk tries to package the `bin` artifact.
 `.github/workflows/release.yml` is adapted from the ArtCraft release pattern:
 
 - **Push a `v*` tag** whose version matches `Cargo.toml` (for example
-  `v1.3.1`). The workflow builds one APK for `arm64-v8a` and one for
+  `v1.3.2`). The workflow builds one APK for `arm64-v8a` and one for
   `armeabi-v7a`, re-signs both with the release key, verifies the certificate
   and creates a **draft** GitHub release named after the tag with an empty
   "What's Changed" section.
@@ -82,6 +82,32 @@ Tagged releases **fail** without `PINPOINT_KEYSTORE_BASE64`,
 `PINPOINT_KEYSTORE_PASSWORD` and `PINPOINT_KEY_ALIAS`; a release is never
 signed with the temporary key. The temporary key and decoded release keystore
 are deleted in an `always()` step.
+
+## Crash reports and logs
+
+- Rust panics and `eframe::run_native` startup errors write a redacted report
+  under `files/crash-reports/` in the app sandbox.
+- A rolling log lives under `files/logs/pinpoint.log`.
+- On the next launch, About → Troubleshooting shows the report. **Email report**
+  opens the phone's mail app with a `mailto:` link; nothing is sent
+  automatically.
+- Pre-Rust/native crashes (linker failures, SIGSEGV) still need
+  `adb logcat -d | findstr /i "pinpoint AndroidRuntime linker"`.
+
+## Connecting a real phone to a local backend
+
+The release fallback is `http://localhost:8080` (loopback, accepted by the URL
+policy). With USB debugging:
+
+```powershell
+adb reverse tcp:8080 tcp:8080
+$env:BIND_ADDR = "0.0.0.0:8080"
+cargo run --bin pinpoint-server
+```
+
+Open Pinpoint and sign in; the reverse tunnel reaches the laptop server and
+clears the Offline badge. A remote backend must use HTTPS; non-loopback plain
+HTTP is rejected by the transport policy.
 
 ## Manifest and resources
 

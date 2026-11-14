@@ -1,18 +1,34 @@
-# Pinpoint 1.3.1 — Release Notes
+# Pinpoint 1.3.2 — Release Notes
 
-**Released:** 2026-11-14 · **Version:** `1.3.1` (from `1.3.0`) ·
-**Status:** Android startup hotfix — 16 KB page-size support.
+**Released:** 2026-11-14 · **Version:** `1.3.2` (from `1.3.1`) ·
+**Status:** Android startup fix + local crash reporting and diagnostics.
 
-**Artifacts:** `pinpoint-android-1.3.1.apk` (arm64-v8a) and
-`pinpoint-android-1.3.1-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.1` tag.
+**Artifacts:** `pinpoint-android-1.3.2.apk` (arm64-v8a) and
+`pinpoint-android-1.3.2-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.2` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.1 patch
+## 0. 1.3.2 patch
+
+- **Android release startup:** a rejected default backend URL now falls back to
+  the loopback offline client instead of panicking. The app opens with an
+  **Offline** badge; `adb reverse tcp:8080 tcp:8080` lets a USB phone reach the
+  laptop server at the fallback URL.
+- **Crash reports:** Rust panics and `eframe::run_native` errors write a redacted
+  report under the app data directory. The next launch shows an editable dialog
+  with Email/Copy/Discard/Close. Nothing is sent automatically; Email opens the
+  user's mail app with a `mailto:` link to `plesudinu+waitlist@proton.me`.
+- **Logs and troubleshooting:** a rolling 1 MiB log, a device/page-size summary,
+  log copy/clear, and a manual **Report a problem** flow in About/Profile.
+- **Update check privacy:** opening About no longer contacts GitHub; the check
+  runs only when the user presses **Check for updates**.
+- **16 KB alignment:** the arm64 linker alignment from 1.3.1 remains in place.
+
+## 1. 1.3.1 patch
 
 - **Android 16 KB pages:** the arm64 native library is now linked with
   `-Wl,-z,max-page-size=16384`, so its `PT_LOAD` segments are 16 KB aligned.
@@ -20,7 +36,7 @@ Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening �
   libraries (`program alignment (4096) cannot be smaller than system page size
   (16384)`), which closed the app before the UI started.
 
-## 1. 1.3.0 native parity
+## 2. 1.3.0 native parity
 
 - **Native map proxy**: search/reverse/routing go through the Pinpoint backend
   with map-centre bias, stops, avoid classes, alternatives and capability

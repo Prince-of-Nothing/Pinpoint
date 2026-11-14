@@ -741,17 +741,22 @@ mod android_intent {
 
     pub(super) fn last_known() -> Option<(f64, f64, f64)> {
         with_activity(|env, activity| -> anyhow::Result<Option<(f64, f64, f64)>> {
-            if !has_location_permission(env, activity)? {
+            let granted = has_location_permission(env, activity)?;
+            tracing::info!(granted, "android GPS: permission");
+            if !granted {
                 return Ok(None);
             }
             let context: &AContext = activity.as_ref();
             let service_name = JString::new(env, "location")?;
             let service = context.get_system_service(env, service_name)?;
             if service.is_null() {
+                tracing::warn!("android GPS: no location service");
                 return Ok(None);
             }
-            for provider in ["gps", "network"] {
-                let provider = JString::new(env, provider)?;
+            let providers = provider_names(env, &service)
+                .unwrap_or_else(|_| vec!["gps".into(), "network".into()]);
+            for provider_name in providers {
+                let provider = JString::new(env, &provider_name)?;
                 let name = jni::strings::JNIString::from("getLastKnownLocation");
                 let runtime = jni::signature::RuntimeMethodSignature::from_str(
                     "(Ljava/lang/String;)Landroid/location/Location;",
@@ -766,11 +771,18 @@ mod android_intent {
                     )?
                     .l()?;
                 if location.is_null() {
+                    tracing::info!(provider = provider_name, "android GPS: no last fix");
                     continue;
                 }
                 let lat = call_double(env, &location, "getLatitude", "()D")?;
                 let lon = call_double(env, &location, "getLongitude", "()D")?;
                 let accuracy = call_float(env, &location, "getAccuracy", "()F")? as f64;
+                tracing::info!(
+                    provider = provider_name,
+                    accuracy,
+                    valid = super::valid_fix(lat, lon, accuracy).is_some(),
+                    "android GPS: last fix"
+                );
                 if let Some(fix) = super::valid_fix(lat, lon, accuracy) {
                     return Ok(Some(fix));
                 }
@@ -779,6 +791,42 @@ mod android_intent {
         })
         .ok()
         .flatten()
+    }
+
+    fn provider_names(env: &mut jni::Env, service: &JObject) -> anyhow::Result<Vec<String>> {
+        let name = jni::strings::JNIString::from("getAllProviders");
+        let runtime = jni::signature::RuntimeMethodSignature::from_str("()Ljava/util/List;")?;
+        let signature = jni::signature::MethodSignature::from(&runtime);
+        let list = env.call_method(service, name, signature, &[])?.l()?;
+        if list.is_null() {
+            return Ok(Vec::new());
+        }
+        let size_runtime = jni::signature::RuntimeMethodSignature::from_str("()I")?;
+        let size_sig = jni::signature::MethodSignature::from(&size_runtime);
+        let size = env
+            .call_method(&list, jni::strings::JNIString::from("size"), size_sig, &[])?
+            .i()?;
+        let mut names = Vec::new();
+        for index in 0..size {
+            let get_runtime =
+                jni::signature::RuntimeMethodSignature::from_str("(I)Ljava/lang/Object;")?;
+            let get_sig = jni::signature::MethodSignature::from(&get_runtime);
+            let item = env
+                .call_method(
+                    &list,
+                    jni::strings::JNIString::from("get"),
+                    get_sig,
+                    &[JValue::Int(index)],
+                )?
+                .l()?;
+            if item.is_null() {
+                continue;
+            }
+            if let Ok(text) = env.as_cast::<JString>(&item) {
+                names.push(text.to_string());
+            }
+        }
+        Ok(names)
     }
 
     fn call_double(

@@ -65,6 +65,13 @@ pub extern "C" fn android_main(app_handle: winit::platform::android::activity::A
         version = env!("CARGO_PKG_VERSION"),
         "Android launch starting"
     );
+    #[cfg(debug_assertions)]
+    {
+        let fix_present = crate::platform::default_gps_provider()
+            .current_position()
+            .is_some();
+        tracing::info!(fix_present, "android GPS diagnostic");
+    }
     if let Err(e) = launch_android_ui(app_handle) {
         crate::crash::capture_startup_error(&format!("Android launch failed: {e}"));
         tracing::error!(error = %e, "Android launch failed");

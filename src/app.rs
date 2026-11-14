@@ -1143,7 +1143,10 @@ impl PinpointApp {
         match crate::platform::default_gps_provider().current_position() {
             Some((lat, lon, accuracy)) => self.publish_location(lat, lon, accuracy).await,
             None => {
-                self.set_error(Some("No GPS fix available.".to_string()));
+                self.set_error(Some(
+                    "No GPS fix available. Wait for a location fix (or open a maps app once) and try again."
+                        .to_string(),
+                ));
                 Err(anyhow::anyhow!("No GPS fix available."))
             }
         }

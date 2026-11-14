@@ -46,7 +46,7 @@ binaries; without `--lib`, cargo-apk tries to package the `bin` artifact.
 `.github/workflows/release.yml` is adapted from the ArtCraft release pattern:
 
 - **Push a `v*` tag** whose version matches `Cargo.toml` (for example
-  `v1.3.0`). The workflow builds one APK for `arm64-v8a` and one for
+  `v1.3.1`). The workflow builds one APK for `arm64-v8a` and one for
   `armeabi-v7a`, re-signs both with the release key, verifies the certificate
   and creates a **draft** GitHub release named after the tag with an empty
   "What's Changed" section.
@@ -120,7 +120,10 @@ and the admin console are reachable from the drawer and deep links
 
 - Debug APK is ~185 MB (debug symbols, x86_64); the signed release APKs are
   ~5 MB per ABI.
-- A physical AArch64 device run is still pending.
+- The arm64 build is linked with `-Wl,-z,max-page-size=16384` (see
+  `.cargo/config.toml`) for Android 15+ 16 KB-page devices. A physical AArch64
+  device run is still pending; an Android 15+ 16 KB device is the target for
+  the first hardware validation.
 - Headless emulators with SwiftShader can show Android's "System UI isn't
   responding" dialog under low memory; use Android Studio's emulator with host
   GPU for the demo.

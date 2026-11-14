@@ -12,6 +12,10 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-14
+### Fixed
+- [FIX] Android: align the arm64 native library to 16 KB so the APK loads on Android 15+ devices configured with 16 KB pages.
+
 ## [1.3.0] - 2026-11-14
 ### Added
 - [FEATURE] Native map proxy: search, reverse geocoding and routing now call the Pinpoint backend with map-centre bias, stops, avoid classes, alternatives and capability gating.

@@ -1,19 +1,26 @@
-# Pinpoint 1.3.0 — Release Notes
+# Pinpoint 1.3.1 — Release Notes
 
-**Released:** 2026-11-14 · **Version:** `1.3.0` (from `1.2.1`) ·
-**Status:** thesis demo — Android/eframe parity, native map app, sharing,
-account tools, admin console and GitHub update checker.
+**Released:** 2026-11-14 · **Version:** `1.3.1` (from `1.3.0`) ·
+**Status:** Android startup hotfix — 16 KB page-size support.
 
-**Artifacts:** `pinpoint-android-1.3.0.apk` (arm64-v8a) and
-`pinpoint-android-1.3.0-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.0` tag.
+**Artifacts:** `pinpoint-android-1.3.1.apk` (arm64-v8a) and
+`pinpoint-android-1.3.1-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.1` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.0 native parity
+## 0. 1.3.1 patch
+
+- **Android 16 KB pages:** the arm64 native library is now linked with
+  `-Wl,-z,max-page-size=16384`, so its `PT_LOAD` segments are 16 KB aligned.
+  Android 15+ phones configured with 16 KB pages refuse to load 4 KB-aligned
+  libraries (`program alignment (4096) cannot be smaller than system page size
+  (16384)`), which closed the app before the UI started.
+
+## 1. 1.3.0 native parity
 
 - **Native map proxy**: search/reverse/routing go through the Pinpoint backend
   with map-centre bias, stops, avoid classes, alternatives and capability

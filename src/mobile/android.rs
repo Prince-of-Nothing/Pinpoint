@@ -41,7 +41,13 @@ pub fn launch_android_ui(
 #[no_mangle]
 #[allow(improper_ctypes_definitions)] // AndroidApp is the android-activity ABI type
 pub extern "C" fn android_main(app_handle: winit::platform::android::activity::AndroidApp) {
+    crate::logging::init();
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        "Android launch starting"
+    );
     if let Err(e) = launch_android_ui(app_handle) {
+        tracing::error!(error = %e, "Android launch failed");
         eprintln!("Android launch failed: {e}");
     }
 }

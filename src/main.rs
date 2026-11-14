@@ -63,7 +63,12 @@ fn main() {
         }
     }
 
-    tracing_subscriber::fmt::init();
+    pinpoint_desktop::logging::init();
+    tracing::info!(
+        version = env!("CARGO_PKG_VERSION"),
+        platform = %pinpoint_desktop::platform::Platform::current().label(),
+        "Pinpoint starting"
+    );
 
     // The map is fully functional offline. Build the backend via the modular
     // factory (ADR-0006 transport policy enforced by the REST adapter). If the

@@ -27,6 +27,21 @@ impl PinpointAppUI {
                     ));
                     if ui.button("Remove").clicked() {
                         store.remove(&b.id);
+                        self.app.refresh_bookmarks();
+                    }
+                    if ui.button("Map").clicked() {
+                        self.focus_map_at(b.latitude, b.longitude);
+                    }
+                    if ui.button("Share").clicked() {
+                        self.share_text(
+                            ctx,
+                            &format!(
+                                "geo:{:.5},{:.5}?q={}",
+                                b.latitude,
+                                b.longitude,
+                                crate::ui::map::encode_component(&b.name)
+                            ),
+                        );
                     }
                 });
             }
@@ -63,6 +78,7 @@ impl PinpointAppUI {
                         self.bookmark_name.clone()
                     };
                     store.add(&name, lat, lon);
+                    self.app.refresh_bookmarks();
                     self.bookmark_name.clear();
                     self.bookmark_lat.clear();
                     self.bookmark_lon.clear();

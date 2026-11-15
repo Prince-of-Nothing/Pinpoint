@@ -443,6 +443,35 @@ pub fn render_map_with(
             }
         }
 
+        // Saved places (on-device bookmarks), drawn under friend pins.
+        let saved_color = Color32::from_rgb(96, 165, 250);
+        for (name, latitude, longitude) in &state.map_bookmark_pins {
+            let pin_pos = project_to_rect(
+                *latitude,
+                *longitude,
+                state.map_center_lat,
+                state.map_center_lon,
+                z,
+                map_rect,
+            );
+            if !map_rect.expand(24.0).contains(pin_pos) {
+                continue;
+            }
+            painter.circle_filled(pin_pos, pin_radius * 0.8, saved_color);
+            painter.circle_stroke(
+                pin_pos,
+                pin_radius * 0.8,
+                Stroke::new(2.0_f32, Color32::WHITE),
+            );
+            painter.text(
+                pin_pos + Vec2::new(0.0, -(icon_size * 0.5)),
+                egui::Align2::CENTER_BOTTOM,
+                name,
+                egui::FontId::proportional(label_size * 0.95),
+                Color32::WHITE,
+            );
+        }
+
         // Draw pins for each location
         for loc in &all_locations {
             let pin_pos = project_to_rect(
@@ -509,6 +538,11 @@ pub fn render_map_with(
                         .size(12.0)
                         .color(Color32::from_rgb(248, 113, 113)),
                 );
+                ui.label(
+                    RichText::new("● Saved")
+                        .size(12.0)
+                        .color(Color32::from_rgb(96, 165, 250)),
+                );
                 if !compact {
                     ui.label(
                         RichText::new("(drag map to pan, scroll/+/− to zoom)")
@@ -559,9 +593,11 @@ pub fn render_map_with(
         } else if compact {
             egui::ScrollArea::vertical()
                 .max_height(180.0)
-                .show(ui, |ui| draw_location_list(ui, &all_locations));
+                .show(ui, |ui| {
+                    draw_location_list(ui, &all_locations, &mut state.map_bookmark_pins)
+                });
         } else {
-            draw_location_list(ui, &all_locations);
+            draw_location_list(ui, &all_locations, &mut state.map_bookmark_pins);
         }
     }
 }
@@ -606,7 +642,11 @@ fn open_map_in_browser(ctx: &egui::Context, loc: &FriendLocation, provider: &str
     }
 }
 
-fn draw_location_list(ui: &mut Ui, locations: &[FriendLocation]) {
+fn draw_location_list(
+    ui: &mut Ui,
+    locations: &[FriendLocation],
+    bookmark_pins: &mut Vec<(String, f64, f64)>,
+) {
     ui.group(|ui| {
         ui.label(RichText::new(format!("Locations: {}", locations.len())).size(14.0));
 
@@ -659,6 +699,7 @@ fn draw_location_list(ui: &mut Ui, locations: &[FriendLocation]) {
                 if ui.small_button("★ Save").clicked() {
                     let store = crate::bookmarks::BookmarkStore::default_location();
                     store.add(&loc.user_name, loc.latitude, loc.longitude);
+                    *bookmark_pins = store.map_pins();
                 }
                 if ui.small_button("Address").clicked() {
                     // Handled by Places screen reverse lookup; here just notice.

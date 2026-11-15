@@ -333,6 +333,7 @@ impl PinpointAppUI {
                         if ui.small_button("★ Save").clicked() {
                             let store = crate::bookmarks::BookmarkStore::default_location();
                             store.add(&place.short_name, place.latitude, place.longitude);
+                            self.app.refresh_bookmarks();
                             self.app
                                 .set_notice(Some(format!("Saved {}", place.short_name)));
                         }
@@ -837,6 +838,7 @@ impl PinpointAppUI {
             if save {
                 let store = crate::bookmarks::BookmarkStore::default_location();
                 store.add(&place.short_name, place.latitude, place.longitude);
+                self.app.refresh_bookmarks();
                 self.app
                     .set_notice(Some(format!("Saved {}", place.short_name)));
             }
@@ -893,7 +895,7 @@ impl PinpointAppUI {
 }
 
 /// Percent-encode a URL path/query component (UTF-8 bytes, unreserved kept).
-fn encode_component(value: &str) -> String {
+pub(crate) fn encode_component(value: &str) -> String {
     value
         .bytes()
         .map(|b| {

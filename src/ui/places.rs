@@ -107,6 +107,7 @@ impl PinpointAppUI {
                         if ui.small_button("Save").clicked() {
                             let store = crate::bookmarks::BookmarkStore::default_location();
                             store.add(&poi.name, poi.latitude, poi.longitude);
+                            self.app.refresh_bookmarks();
                             self.app.set_notice(Some(format!("Saved {}", poi.name)));
                         }
                         if ui.small_button("OSM").clicked() {

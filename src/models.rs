@@ -372,6 +372,8 @@ pub struct AppData {
     pub users: Vec<User>,
     pub settings: Settings,
     pub bookmarks_count: usize,
+    /// Saved places drawn as blue pins on the map: (name, latitude, longitude).
+    pub map_bookmark_pins: Vec<(String, f64, f64)>,
     /// Pending MFA enrolment secret (set by enroll, cleared on verify).
     pub totp_pending_secret: Option<String>,
     /// Whether the signed-in user's account has MFA enabled (from login/status).

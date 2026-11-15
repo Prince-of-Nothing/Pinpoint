@@ -147,6 +147,29 @@ pub enum CurrentScreen {
 }
 
 impl PinpointApp {
+    /// Saved places as map pins. On-device only; never synced.
+    fn bookmark_pins() -> Vec<(String, f64, f64)> {
+        crate::bookmarks::BookmarkStore::default_location().map_pins()
+    }
+
+    /// Fresh per-session data with demo friends and on-device bookmarks.
+    fn fresh_data() -> AppData {
+        AppData {
+            locations: Self::demo_locations(),
+            map_bookmark_pins: Self::bookmark_pins(),
+            ..Default::default()
+        }
+    }
+
+    /// Re-read bookmarks after the user adds or removes a saved place.
+    pub fn refresh_bookmarks(&self) {
+        let pins = Self::bookmark_pins();
+        if let Ok(mut data) = self.data.lock() {
+            data.bookmarks_count = pins.len();
+            data.map_bookmark_pins = pins;
+        }
+    }
+
     fn demo_locations() -> Vec<FriendLocation> {
         let now = "2026-11-08T12:00:00Z".to_string();
         vec![
@@ -187,10 +210,7 @@ impl PinpointApp {
         // Seed demo friend locations so the map is functional offline
         // before any server connection. These are example locations
         // around Chicago for demonstration purposes only.
-        let data = AppData {
-            locations: Self::demo_locations(),
-            ..Default::default()
-        };
+        let data = Self::fresh_data();
 
         // Persist the active encryption key in the OS keychain when one is
         // available (Windows Credential Manager / macOS Keychain / Linux
@@ -721,10 +741,7 @@ impl PinpointApp {
                 *self.e2e_location_key.lock().unwrap() = None;
                 self.key_manager.delete_secret("e2e_location_key");
                 self.clear_persisted_session();
-                let fresh = AppData {
-                    locations: Self::demo_locations(),
-                    ..Default::default()
-                };
+                let fresh = Self::fresh_data();
                 *self.data.lock().unwrap() = fresh;
                 self.set_screen(CurrentScreen::Map);
                 self.set_offline_mode(true);
@@ -858,10 +875,7 @@ impl PinpointApp {
         *self.e2e_location_key.lock().unwrap() = None;
         self.key_manager.delete_secret("e2e_location_key");
         self.clear_persisted_session();
-        let fresh = AppData {
-            locations: Self::demo_locations(),
-            ..Default::default()
-        };
+        let fresh = Self::fresh_data();
         *self.data.lock().unwrap() = fresh;
         self.set_screen(CurrentScreen::Map);
         self.set_offline_mode(true);
@@ -917,10 +931,7 @@ impl PinpointApp {
             Ok(sessions_revoked) => {
                 if sessions_revoked {
                     self.clear_persisted_session();
-                    let fresh = AppData {
-                        locations: Self::demo_locations(),
-                        ..Default::default()
-                    };
+                    let fresh = Self::fresh_data();
                     *self.data.lock().unwrap() = fresh;
                     self.set_screen(CurrentScreen::Map);
                     self.set_offline_mode(true);

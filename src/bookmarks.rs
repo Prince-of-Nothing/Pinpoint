@@ -47,6 +47,14 @@ impl BookmarkStore {
         serde_json::from_str(&text).unwrap_or_default()
     }
 
+    /// Saved places as map pins: `(name, latitude, longitude)`.
+    pub fn map_pins(&self) -> Vec<(String, f64, f64)> {
+        self.list()
+            .into_iter()
+            .map(|bookmark| (bookmark.name, bookmark.latitude, bookmark.longitude))
+            .collect()
+    }
+
     pub fn add(&self, name: &str, latitude: f64, longitude: f64) -> Bookmark {
         let mut list = self.list();
         let bm = Bookmark {
@@ -164,6 +172,27 @@ mod tests {
         assert_eq!(bm.name, "Home");
         // In-memory mode persists nothing — list stays empty by design.
         assert!(store.list().is_empty());
+    }
+
+    #[test]
+    fn map_pins_mirror_saved_places() {
+        let dir = std::env::temp_dir().join(format!(
+            "pinpoint-bm-pins-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = BookmarkStore::new(Some(dir.clone()));
+        store.add("Home", 47.01, 28.86);
+        store.add("Work", 47.02, 28.87);
+        let pins = store.map_pins();
+        assert_eq!(pins.len(), 2);
+        assert!(pins.iter().any(|(name, lat, lon)| name == "Home"
+            && (*lat - 47.01).abs() < 1e-9
+            && (*lon - 28.86).abs() < 1e-9));
+        std::fs::remove_dir_all(dir).ok();
     }
 
     #[test]

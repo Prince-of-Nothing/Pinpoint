@@ -87,7 +87,7 @@ pub fn write_report(kind: CrashKind, summary: &str, details: &str) -> Option<Pat
 
 fn write_report_at(base: &Path, kind: CrashKind, summary: &str, details: &str) -> Option<PathBuf> {
     let dir = base.join("crash-reports");
-    std::fs::create_dir_all(&dir).ok()?;
+    create_private_dir(&dir).ok()?;
     let log_tail = crate::logging::tail(MAX_LOG_LINES);
     let text = build_report(kind, summary, details, &log_tail);
     let now = Utc::now();
@@ -103,9 +103,41 @@ fn write_report_at(base: &Path, kind: CrashKind, summary: &str, details: &str) -
         seq,
         kind.label()
     ));
-    std::fs::write(&path, text).ok()?;
+    write_private_file(&path, &text).ok()?;
     prune_reports(&dir, KEEP_REPORTS);
     Some(path)
+}
+
+fn create_private_dir(dir: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        let mut builder = std::fs::DirBuilder::new();
+        builder.recursive(true).mode(0o700).create(dir)
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::create_dir_all(dir)
+    }
+}
+
+fn write_private_file(path: &Path, text: &str) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .mode(0o600)
+            .open(path)?;
+        file.write_all(text.as_bytes())
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(path, text)
+    }
 }
 
 /// Newest report, if one is waiting for the user.
@@ -469,5 +501,24 @@ mod tests {
         assert!(details.contains("0: backtrace"));
         let without = panic_details("boom", None, "");
         assert!(without.contains("unknown location"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_report_files_and_dir_are_private() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = temp_dir();
+        let path = write_report_at(&dir, CrashKind::Manual, "permissions", "details").unwrap();
+        let report_dir = dir.join("crash-reports");
+        assert_eq!(
+            std::fs::metadata(&report_dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        std::fs::remove_dir_all(dir).ok();
     }
 }

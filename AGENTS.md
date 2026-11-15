@@ -4,8 +4,9 @@
 
 - **Rust multiplatform client** (root crate `pinpoint-desktop` v1.2.1):
   `src/lib.rs` (portable core) + `src/main.rs` (desktop), eframe/egui UI +
-  `reqwest`. One codebase for desktop / Android (`cargo-apk`) / iOS
-  (`cargo-xcodebuild`) / wasm stub — see `docs/adr/0007-rust-multiplatform.md`.
+  `reqwest`. One codebase for desktop / Android (`cargo-apk` + Gradle/Java
+  bridge, ADR-0017) / iOS (`cargo-xcodebuild`) / wasm stub - see
+  `docs/adr/0007-rust-multiplatform.md`.
   Modules: `api` (session cookie + `X-CSRF-Token` double-submit, plain HTTP
   only for loopback, ADR-0006), `app`/`ui` (state/screens), `map` (pins +
   OSM hand-off + ODbL credit), `osm` (Nominatim/OSRM/Overpass in Rust),
@@ -47,6 +48,9 @@ multiplatform section); they share `src/` via `cfg(target_os)`.
   change it only with a contract test update and an ADR if semantic.
 - Platform code goes in `src/platform.rs`; OSM network calls in `src/osm.rs`;
   nothing platform- or network-specific inside `src/ui.rs`.
+- Android Java lives only in `android/app/src/main/java` for platform APIs with
+  no Rust binding (ADR-0017). No Kotlin or AndroidX app rewrite. The APK is
+  assembled by `android/gradlew`, not by cargo-apk's generated APK.
 
 ## Branching and pull requests (mandatory)
 

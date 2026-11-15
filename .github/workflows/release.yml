@@ -122,16 +122,23 @@ jobs:
           VERSION: ${{ steps.v.outputs.version }}
         run: |
           mkdir -p dist
+          chmod +x android/gradlew
+          zipalign="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)zipalign"
           # One APK per ABI, like the ArtCraft releases: 64-bit ARM for most
-          # phones and 32-bit ARM for older/low-end ones.
+          # phones and 32-bit ARM for older/low-end ones. Gradle builds the
+          # Rust .so via cargo-apk, packages the Java bridge/DEX and returns an
+          # unsigned, unaligned release APK.
           for abi in arm64-v8a armeabi-v7a; do
             case "$abi" in
-              arm64-v8a) target=aarch64-linux-android; suffix="" ;;
-              armeabi-v7a) target=armv7-linux-androideabi; suffix="-armeabi-v7a" ;;
+              arm64-v8a) suffix="" ;;
+              armeabi-v7a) suffix="-armeabi-v7a" ;;
             esac
-            cargo apk build --release --lib --target "$target"
-            cp target/release/apk/pinpoint.apk \
-              "dist/pinpoint-android-${VERSION}${suffix}.apk"
+            (cd android && ./gradlew :app:assembleRelease \
+              -Pabi="$abi" -PrustProfile=release --no-daemon)
+            out="dist/pinpoint-android-${VERSION}${suffix}.apk"
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk "$out"
+            "$zipalign" -f -p 4 "$out" "$out.aligned"
+            mv "$out.aligned" "$out"
           done
 
       - name: Re-sign with the release key

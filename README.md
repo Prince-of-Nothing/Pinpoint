@@ -30,10 +30,12 @@ production-hardened. See the functional-state matrix and per-item
   run on 8005 (diagnostics) and 8006 (admin API).
 - **Desktop client** — map, Nominatim search, OSRM routing (drive/walk/bike),
   Overpass POIs, bookmarks, check-ins, emergency, offline tile packs.
-- **Android client** - same Rust core packaged with cargo-apk 0.10; responsive
+- **Android client** - same Rust core packaged with Gradle + cargo-apk; responsive
   map-first shell, live OSM tiles via the backend, kiosk check-in, admin and
-  tool screens, and the About/update checker. Local crash reports, a rolling
-  log and About → Troubleshooting make failures reportable without a server.
+  tool screens, share-in via a small Java `onNewIntent` bridge, optional
+  biometric unlock and a user-started foreground location service. Local crash
+  reports, a rolling log and About → Troubleshooting make failures reportable
+  without a server.
   Builds and runs on the API 37 x86_64 emulator; tag-driven signed arm64/armv7
   APKs come from the release workflow, and a physical AArch64 device run is
   still pending.

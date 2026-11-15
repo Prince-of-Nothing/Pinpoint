@@ -238,6 +238,17 @@ pub enum LocationPermission {
     Unsupported,
 }
 
+/// Result of the platform biometric prompt on Android. Other platforms report
+/// [`BiometricStatus::Unavailable`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BiometricStatus {
+    Idle,
+    Pending,
+    Success,
+    Failed,
+    Unavailable,
+}
+
 #[cfg(target_os = "android")]
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AndroidLastKnownGps;
@@ -268,6 +279,52 @@ pub fn ensure_location_permission() -> LocationPermission {
 #[cfg(not(target_os = "android"))]
 pub fn ensure_location_permission() -> LocationPermission {
     LocationPermission::Granted
+}
+
+/// Request "all the time" background location (and the notification
+/// permission on Android 13+). Android 11+ may require the user to choose
+/// "Allow all the time" in app settings after this request.
+#[cfg(target_os = "android")]
+pub fn ensure_background_location_permission() -> LocationPermission {
+    android_intent::ensure_background_permission()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn ensure_background_location_permission() -> LocationPermission {
+    LocationPermission::Granted
+}
+
+/// Whether the device exposes an enrolled biometric prompt.
+#[cfg(target_os = "android")]
+pub fn android_biometric_supported() -> bool {
+    android_intent::biometric_supported()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn android_biometric_supported() -> bool {
+    false
+}
+
+/// Start the system biometric prompt. The result is polled with
+/// [`android_poll_biometric`]; the prompt does not block the UI thread.
+#[cfg(target_os = "android")]
+pub fn android_start_biometric() -> BiometricStatus {
+    android_intent::start_biometric()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn android_start_biometric() -> BiometricStatus {
+    BiometricStatus::Unavailable
+}
+
+#[cfg(target_os = "android")]
+pub fn android_poll_biometric() -> BiometricStatus {
+    android_intent::poll_biometric()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn android_poll_biometric() -> BiometricStatus {
+    BiometricStatus::Unavailable
 }
 
 /// Actively ask Android for a fix when no provider has a recent last-known
@@ -407,6 +464,19 @@ pub fn android_shared_text() -> Option<String> {
     android_intent::shared_text()
 }
 
+/// Consume the newest share captured by `onNewIntent` (or the cold-start
+/// intent) exactly once. This is the repeat-share path; [`android_shared_text`]
+/// is the legacy read-only helper.
+#[cfg(target_os = "android")]
+pub fn android_take_shared_text() -> Option<String> {
+    android_intent::take_shared_text()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn android_take_shared_text() -> Option<String> {
+    None
+}
+
 #[cfg(not(target_os = "android"))]
 pub fn android_shared_text() -> Option<String> {
     None
@@ -433,6 +503,80 @@ pub fn set_android_activity(ptr: *mut std::ffi::c_void) {
 
 #[cfg(not(target_os = "android"))]
 pub fn set_android_activity(_ptr: *mut std::ffi::c_void) {}
+
+/// Give the Android foreground service a handle to the active app so a fix is
+/// published through the same session, consent and validation paths as the UI.
+#[cfg(target_os = "android")]
+pub fn register_android_app(app: std::sync::Weak<crate::app::PinpointApp>) {
+    android_service::register(app);
+}
+
+#[cfg(target_os = "android")]
+pub fn android_start_background_location(interval_secs: u64) -> Result<(), String> {
+    android_intent::start_location_service(interval_secs)
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn android_start_background_location(_interval_secs: u64) -> Result<(), String> {
+    Err("background location is Android-only".to_string())
+}
+
+#[cfg(target_os = "android")]
+pub fn android_stop_background_location() -> Result<(), String> {
+    android_intent::stop_location_service()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn android_stop_background_location() -> Result<(), String> {
+    Err("background location is Android-only".to_string())
+}
+
+#[cfg(target_os = "android")]
+pub fn android_background_location_running() -> bool {
+    android_intent::location_service_running()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn android_background_location_running() -> bool {
+    false
+}
+
+/// JNI callback from `PinpointActivity.onNewIntent`: wake an idle egui loop so
+/// the new share is consumed immediately, not on the next user interaction.
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_com_pinpoint_desktop_PinpointActivity_nativeWakeUi<'caller>(
+    mut unowned_env: jni::EnvUnowned<'caller>,
+    _this: jni::objects::JObject<'caller>,
+) {
+    let _ = unowned_env
+        .with_env(|_env| -> jni::errors::Result<()> {
+            crate::ui::android_wake();
+            Ok(())
+        })
+        .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
+}
+
+/// JNI callback from the foreground location service. The service only passes
+/// the latest fix; Rust validates and publishes it through the active session.
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_com_pinpoint_desktop_PinpointLocationService_nativePublishLocation<
+    'caller,
+>(
+    mut unowned_env: jni::EnvUnowned<'caller>,
+    _class: jni::objects::JClass<'caller>,
+    latitude: f64,
+    longitude: f64,
+    accuracy: f64,
+) {
+    let _ = unowned_env
+        .with_env(|_env| -> jni::errors::Result<()> {
+            android_service::publish(latitude, longitude, accuracy);
+            Ok(())
+        })
+        .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
+}
 
 /// Prevent Android screenshots/screen recording of location data.
 #[cfg(target_os = "android")]
@@ -563,6 +707,71 @@ mod intent_tests {
         assert!(is_http_url("http://localhost:8080"));
         assert!(!is_http_url("mailto:test@example.com"));
         assert!(!is_http_url("geo:47.0,28.8"));
+    }
+
+    #[test]
+    fn android_only_bridges_fail_closed_elsewhere() {
+        #[cfg(not(target_os = "android"))]
+        {
+            use super::{
+                android_background_location_running, android_biometric_supported,
+                android_poll_biometric, android_start_background_location, android_start_biometric,
+                android_stop_background_location, android_take_shared_text, BiometricStatus,
+            };
+            assert!(!android_biometric_supported());
+            assert_eq!(android_start_biometric(), BiometricStatus::Unavailable);
+            assert_eq!(android_poll_biometric(), BiometricStatus::Unavailable);
+            assert!(android_start_background_location(60).is_err());
+            assert!(android_stop_background_location().is_err());
+            assert!(!android_background_location_running());
+            assert!(android_take_shared_text().is_none());
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+mod android_service {
+    use crate::app::PinpointApp;
+    use std::sync::{Mutex, OnceLock, Weak};
+
+    /// App handle registered by `PinpointAppUI::new`; the foreground service
+    /// publishes through the same backend, session and consent checks as the UI.
+    static APP: Mutex<Option<Weak<PinpointApp>>> = Mutex::new(None);
+    /// A dedicated single-worker runtime; service callbacks can arrive from any
+    /// Java thread and must not block it.
+    static RUNTIME: OnceLock<Option<tokio::runtime::Runtime>> = OnceLock::new();
+
+    pub(super) fn register(app: Weak<PinpointApp>) {
+        if let Ok(mut guard) = APP.lock() {
+            *guard = Some(app);
+        }
+    }
+
+    pub(super) fn publish(latitude: f64, longitude: f64, accuracy: f64) {
+        let app = APP
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().and_then(Weak::upgrade));
+        let Some(app) = app else {
+            tracing::warn!("android service: no app handle for a background fix");
+            return;
+        };
+        let runtime = RUNTIME.get_or_init(|| {
+            tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(1)
+                .enable_all()
+                .build()
+                .ok()
+        });
+        let Some(runtime) = runtime.as_ref() else {
+            tracing::warn!("android service: could not start the publish runtime");
+            return;
+        };
+        runtime.spawn(async move {
+            if let Err(error) = app.publish_location(latitude, longitude, accuracy).await {
+                tracing::warn!(%error, "android service: background publish failed");
+            }
+        });
     }
 }
 
@@ -736,6 +945,109 @@ mod android_intent {
         }
     }
 
+    /// Consume the newest `ACTION_SEND` text captured by `PinpointActivity`.
+    /// The Java side clears it so a repeated frame cannot re-open the same
+    /// location.
+    pub(super) fn take_shared_text() -> Option<String> {
+        let result = with_activity(|env, activity| -> anyhow::Result<Option<String>> {
+            let activity_obj: &JObject = activity.as_ref();
+            let runtime = jni::signature::RuntimeMethodSignature::from_str("()Ljava/lang/String;")?;
+            let signature = jni::signature::MethodSignature::from(&runtime);
+            let text = env
+                .call_method(
+                    activity_obj,
+                    jni::strings::JNIString::from("consumeShare"),
+                    signature,
+                    &[],
+                )
+                .map_err(|error| anyhow!("consumeShare: {error}"))?
+                .l()?;
+            if text.is_null() {
+                return Ok(None);
+            }
+            let text = env
+                .as_cast::<JString>(&text)
+                .map_err(|error| anyhow!("consumeShare string: {error}"))?;
+            Ok(Some(text.to_string()))
+        });
+        match result {
+            Ok(value) => value,
+            Err(error) => {
+                tracing::warn!("android share: {error}");
+                None
+            }
+        }
+    }
+
+    pub(super) fn biometric_supported() -> bool {
+        with_activity(|env, activity| -> anyhow::Result<bool> {
+            let activity_obj: &JObject = activity.as_ref();
+            Ok(call_int(env, activity_obj, "isBiometricSupported")? != 0)
+        })
+        .unwrap_or(false)
+    }
+
+    pub(super) fn start_biometric() -> super::BiometricStatus {
+        let started = with_activity(|env, activity| -> anyhow::Result<i32> {
+            let activity_obj: &JObject = activity.as_ref();
+            call_int(env, activity_obj, "startBiometric")
+        })
+        .unwrap_or(0);
+        if started == 1 {
+            super::BiometricStatus::Pending
+        } else {
+            super::BiometricStatus::Unavailable
+        }
+    }
+
+    pub(super) fn poll_biometric() -> super::BiometricStatus {
+        match with_activity(|env, activity| -> anyhow::Result<i32> {
+            let activity_obj: &JObject = activity.as_ref();
+            call_int(env, activity_obj, "pollBiometric")
+        }) {
+            Ok(0) => super::BiometricStatus::Idle,
+            Ok(1) => super::BiometricStatus::Pending,
+            Ok(2) => super::BiometricStatus::Success,
+            Ok(3) => super::BiometricStatus::Failed,
+            _ => super::BiometricStatus::Unavailable,
+        }
+    }
+
+    pub(super) fn start_location_service(interval_secs: u64) -> Result<(), String> {
+        let interval = interval_secs.clamp(15, 3600) as i32;
+        with_activity(|env, activity| -> anyhow::Result<()> {
+            let activity_obj: &JObject = activity.as_ref();
+            let started = call_int_arg(env, activity_obj, "startLocationService", interval)?;
+            if started == 1 {
+                Ok(())
+            } else {
+                anyhow::bail!("startLocationService returned 0")
+            }
+        })
+        .map_err(|error| format!("Android background location failed: {error}"))
+    }
+
+    pub(super) fn stop_location_service() -> Result<(), String> {
+        with_activity(|env, activity| -> anyhow::Result<()> {
+            let activity_obj: &JObject = activity.as_ref();
+            let stopped = call_int(env, activity_obj, "stopLocationService")?;
+            if stopped == 1 {
+                Ok(())
+            } else {
+                anyhow::bail!("stopLocationService returned 0")
+            }
+        })
+        .map_err(|error| format!("Android background location stop failed: {error}"))
+    }
+
+    pub(super) fn location_service_running() -> bool {
+        with_activity(|env, activity| -> anyhow::Result<bool> {
+            let activity_obj: &JObject = activity.as_ref();
+            Ok(call_int(env, activity_obj, "isLocationServiceRunning")? != 0)
+        })
+        .unwrap_or(false)
+    }
+
     pub(super) fn share_text(text: &str) -> Result<(), String> {
         with_activity(|env, activity| {
             let action = JString::new(env, "android.intent.action.SEND")?;
@@ -868,6 +1180,50 @@ mod android_intent {
                 name,
                 signature,
                 &[JValue::Object(array.as_ref()), JValue::Int(1)],
+            )?;
+            Ok(())
+        });
+        if requested.is_ok() {
+            super::LocationPermission::Requested
+        } else {
+            super::LocationPermission::Unsupported
+        }
+    }
+
+    pub(super) fn ensure_background_permission() -> super::LocationPermission {
+        let granted = with_activity(|env, activity| -> anyhow::Result<bool> {
+            let context: &AContext = activity.as_ref();
+            let permission = JString::new(env, "android.permission.ACCESS_BACKGROUND_LOCATION")?;
+            Ok(context.check_self_permission(env, permission)? == 0)
+        })
+        .unwrap_or(false);
+        if granted {
+            return super::LocationPermission::Granted;
+        }
+        let requested = with_activity(|env, activity| -> anyhow::Result<()> {
+            let class_name = jni::strings::JNIString::from("java/lang/String");
+            let class = env.find_class(class_name)?;
+            let array = env.new_object_array(2, &class, JObject::null())?;
+            for (index, name) in [
+                "android.permission.ACCESS_BACKGROUND_LOCATION",
+                "android.permission.POST_NOTIFICATIONS",
+            ]
+            .iter()
+            .enumerate()
+            {
+                let permission = JString::new(env, *name)?;
+                array.set_element(env, index, &permission)?;
+            }
+            let name = jni::strings::JNIString::from("requestPermissions");
+            let runtime =
+                jni::signature::RuntimeMethodSignature::from_str("([Ljava/lang/String;I)V")?;
+            let signature = jni::signature::MethodSignature::from(&runtime);
+            let activity_obj: &JObject = activity.as_ref();
+            env.call_method(
+                activity_obj,
+                name,
+                signature,
+                &[JValue::Object(array.as_ref()), JValue::Int(2)],
             )?;
             Ok(())
         });
@@ -1135,6 +1491,27 @@ mod android_intent {
             }
         }
         Ok(names)
+    }
+
+    fn call_int(env: &mut jni::Env, object: &JObject, name: &str) -> anyhow::Result<i32> {
+        let name = jni::strings::JNIString::from(name);
+        let runtime = jni::signature::RuntimeMethodSignature::from_str("()I")?;
+        let signature = jni::signature::MethodSignature::from(&runtime);
+        Ok(env.call_method(object, name, signature, &[])?.i()?)
+    }
+
+    fn call_int_arg(
+        env: &mut jni::Env,
+        object: &JObject,
+        name: &str,
+        arg: i32,
+    ) -> anyhow::Result<i32> {
+        let name = jni::strings::JNIString::from(name);
+        let runtime = jni::signature::RuntimeMethodSignature::from_str("(I)I")?;
+        let signature = jni::signature::MethodSignature::from(&runtime);
+        Ok(env
+            .call_method(object, name, signature, &[JValue::Int(arg)])?
+            .i()?)
     }
 
     fn call_double(

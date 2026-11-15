@@ -85,6 +85,85 @@ impl PinpointAppUI {
             );
         });
         ui.add_space(8.0);
+        #[cfg(target_os = "android")]
+        {
+            ui.group(|ui| {
+                ui.label(RichText::new("Background sharing").size(14.0).strong());
+                ui.label(
+                    "Publishes your latest location on a fixed interval while Pinpoint is in \
+                     the background. A persistent notification stays visible; stop it here or \
+                     in Android settings.",
+                );
+                let mut interval = self.prefs.background_interval_secs.clamp(15, 3600);
+                egui::ComboBox::from_id_salt("background_interval")
+                    .selected_text(format!("{interval}s"))
+                    .show_ui(ui, |ui| {
+                        for value in [15_u64, 30, 60, 120, 300, 600] {
+                            ui.selectable_value(&mut interval, value, format!("{value}s"));
+                        }
+                    });
+                if interval != self.prefs.background_interval_secs {
+                    self.prefs.background_interval_secs = interval;
+                    self.save_prefs();
+                }
+                let running = crate::platform::android_background_location_running();
+                if running {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(52, 211, 153),
+                        format!("Running every {interval}s."),
+                    );
+                    if ui.button("Stop background sharing").clicked() {
+                        match crate::platform::android_stop_background_location() {
+                            Ok(()) => self
+                                .app
+                                .set_notice(Some("Background sharing stopped.".to_string())),
+                            Err(error) => self.app.set_error(Some(error)),
+                        }
+                    }
+                } else {
+                    if ui.button("Start background sharing").clicked() {
+                        let fine = crate::platform::ensure_location_permission();
+                        let background = crate::platform::ensure_background_location_permission();
+                        if fine != crate::platform::LocationPermission::Granted {
+                            self.app.set_notice(Some(
+                                "Allow location access, then start background sharing again."
+                                    .to_string(),
+                            ));
+                        } else if background != crate::platform::LocationPermission::Granted {
+                            self.app.set_notice(Some(
+                                "Allow location \"all the time\" in app settings, then start again."
+                                    .to_string(),
+                            ));
+                        } else {
+                            match crate::platform::android_start_background_location(interval) {
+                                Ok(()) => {
+                                    self.prefs.background_interval_secs = interval;
+                                    self.save_prefs();
+                                    self.app.set_notice(Some(
+                                        "Background sharing started.".to_string(),
+                                    ));
+                                }
+                                Err(error) => self.app.set_error(Some(error)),
+                            }
+                        }
+                    }
+                    if ui.button("Open app settings").clicked() {
+                        if let Err(error) = crate::platform::open_app_settings() {
+                            self.app.set_error(Some(error));
+                        }
+                    }
+                }
+                ui.label(
+                    RichText::new(
+                        "Only while signed in. Location is latest-only; no history is kept. \
+                         Android may stop the service when the app is force-stopped.",
+                    )
+                    .size(10.0)
+                    .color(egui::Color32::from_rgb(148, 163, 184)),
+                );
+            });
+            ui.add_space(8.0);
+        }
         ui.group(|ui| {
             ui.label(RichText::new("Safety").size(14.0).strong());
             ui.label("Share expiry, pause, and delete live under Sharing. Emergency alerts under Emergency.");
@@ -109,6 +188,7 @@ impl PinpointAppUI {
                         self.pin_error = None;
                         self.pin_retry_at = None;
                         self.pin_focus_requested = true;
+                        self.biometric_auto_prompted = false;
                     }
                     if ui.button("Remove PIN").clicked() {
                         match crate::app_lock::LockStore::default_location().remove() {
@@ -181,6 +261,38 @@ impl PinpointAppUI {
                 .size(10.0)
                 .color(egui::Color32::from_rgb(148, 163, 184)),
             );
+            #[cfg(target_os = "android")]
+            if self.lock_enabled {
+                ui.add_space(6.0);
+                if crate::platform::android_biometric_supported() {
+                    let mut enabled = self.prefs.biometric_unlock;
+                    if ui
+                        .checkbox(&mut enabled, "Unlock with biometrics")
+                        .changed()
+                    {
+                        self.prefs.biometric_unlock = enabled;
+                        self.save_prefs();
+                        self.pin_error = None;
+                        self.biometric_auto_prompted = false;
+                        if enabled {
+                            let _ = crate::platform::android_start_biometric();
+                        }
+                    }
+                    ui.label(
+                        RichText::new(
+                            "Fingerprint or face can unlock the app; the PIN remains the fallback.",
+                        )
+                        .size(10.0)
+                        .color(egui::Color32::from_rgb(148, 163, 184)),
+                    );
+                } else {
+                    ui.label(
+                        RichText::new("No enrolled biometrics are available on this device.")
+                            .size(10.0)
+                            .color(egui::Color32::from_rgb(148, 163, 184)),
+                    );
+                }
+            }
         });
         ui.add_space(8.0);
         ui.group(|ui| {

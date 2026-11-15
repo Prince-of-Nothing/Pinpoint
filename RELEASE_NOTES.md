@@ -1,18 +1,31 @@
-# Pinpoint 1.3.10 — Release Notes
+# Pinpoint 1.3.11 — Release Notes
 
-**Released:** 2026-11-15 · **Version:** `1.3.10` (from `1.3.9`) ·
-**Status:** URL-handler allowlist and clearer diagnostics.
+**Released:** 2026-11-15 · **Version:** `1.3.11` (from `1.3.10`) ·
+**Status:** Private Unix diagnostics and a branch/PR-only workflow.
 
-**Artifacts:** `pinpoint-android-1.3.10.apk` (arm64-v8a) and
-`pinpoint-android-1.3.10-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.10` tag.
+**Artifacts:** `pinpoint-android-1.3.11.apk` (arm64-v8a) and
+`pinpoint-android-1.3.11-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.11` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.10 hardening
+## 0. 1.3.11 hardening
+
+- **Private Unix diagnostics:** `crash-reports/` and `logs/` are created with
+  mode `0700`; report and log files use `0600`. Panic details, backtrace paths
+  and log tails are no longer readable by other local users. Unix-gated tests
+  assert the modes.
+- **Branch/PR workflow:** `AGENTS.md`, `CONTRIBUTING.md` and the PR template now
+  require a fresh branch from `main`, a PR, Squash and merge, then a new branch
+  for the next change. `scripts/commit.ps1` refuses to commit on `main`.
+  GitHub is configured for squash-only merges with automatic branch deletion.
+- **No direct main pushes:** this release itself lands through PR #23 from
+  `fix/diagnostics-permissions`.
+
+## 1. 1.3.10 hardening
 
 - **URL allowlist:** `platform::open_url` accepts only `mailto:`, `tel:` and
   `geo:`. HTTP/HTTPS, `file:`, `content:`, `intent:`, `javascript:` and

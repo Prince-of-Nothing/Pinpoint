@@ -114,6 +114,29 @@ pub fn pending_report() -> Option<StoredReport> {
     pending_report_at(&base)
 }
 
+/// Number of `.txt` crash reports still awaiting attention (seen reports are
+/// renamed to `.seen` and are not counted).
+pub fn pending_report_count() -> usize {
+    crate::platform::app_data_dir()
+        .map(|base| pending_report_count_at(&base))
+        .unwrap_or(0)
+}
+
+fn pending_report_count_at(base: &Path) -> usize {
+    std::fs::read_dir(base.join("crash-reports"))
+        .map(|entries| {
+            entries
+                .filter_map(Result::ok)
+                .filter(|entry| {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with("crash-") && name.ends_with(".txt")
+                })
+                .count()
+        })
+        .unwrap_or(0)
+}
+
 fn pending_report_at(base: &Path) -> Option<StoredReport> {
     let dir = base.join("crash-reports");
     let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
@@ -417,6 +440,17 @@ mod tests {
         mark_seen(&path);
         assert!(pending_report_at(&dir).is_none());
         assert!(path.with_extension("seen").exists());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn pending_report_count_ignores_seen_reports() {
+        let dir = temp_dir();
+        let first = write_report_at(&dir, CrashKind::Manual, "first", "details").unwrap();
+        let _second = write_report_at(&dir, CrashKind::Manual, "second", "details").unwrap();
+        assert_eq!(pending_report_count_at(&dir), 2);
+        mark_seen(&first);
+        assert_eq!(pending_report_count_at(&dir), 1);
         std::fs::remove_dir_all(dir).ok();
     }
 

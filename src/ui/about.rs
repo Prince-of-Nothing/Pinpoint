@@ -155,9 +155,11 @@ impl PinpointAppUI {
             });
 
             let pending = crate::crash::pending_report();
+            let pending_count = crate::crash::pending_report_count();
             let has_pending = pending.is_some();
             let pending_for_button = pending;
             let device = crate::crash::device_summary();
+            let backend = redacted_backend_url(&self.app.backend_url());
             let log_path = crate::logging::log_path();
 
             ui.add_space(10.0);
@@ -203,6 +205,18 @@ impl PinpointAppUI {
                     crate::logging::clear();
                 }
                 ui.add_space(4.0);
+                ui.label(
+                    RichText::new(format!("Backend: {backend}"))
+                        .size(10.0)
+                        .color(muted),
+                );
+                ui.label(
+                    RichText::new(format!(
+                        "Pending crash reports: {pending_count} (seen reports are kept but not counted)"
+                    ))
+                    .size(10.0)
+                    .color(muted),
+                );
                 ui.label(RichText::new(device.as_str()).size(10.0).color(muted));
                 if let Some(path) = &log_path {
                     ui.label(
@@ -221,5 +235,45 @@ impl PinpointAppUI {
             );
             });
         });
+    }
+}
+
+/// Hide any userinfo in a backend URL before showing it in diagnostics.
+fn redacted_backend_url(url: &str) -> String {
+    let Some(scheme_end) = url.find("://") else {
+        return url.to_string();
+    };
+    let rest = &url[scheme_end + 3..];
+    let authority_end = rest.find('/').unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    match authority.rfind('@') {
+        Some(at) => format!(
+            "{}://{}{}",
+            &url[..scheme_end],
+            &authority[at + 1..],
+            &rest[authority_end..]
+        ),
+        None => url.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::redacted_backend_url;
+
+    #[test]
+    fn backend_url_userinfo_is_redacted() {
+        assert_eq!(
+            redacted_backend_url("http://user:pass@localhost:8080/api"),
+            "http://localhost:8080/api"
+        );
+        assert_eq!(
+            redacted_backend_url("https://example.com"),
+            "https://example.com"
+        );
+        assert_eq!(
+            redacted_backend_url("http://127.0.0.1:8000"),
+            "http://127.0.0.1:8000"
+        );
     }
 }

@@ -321,10 +321,50 @@ pub fn is_http_url(url: &str) -> bool {
     url.starts_with("https://") || url.starts_with("http://")
 }
 
-/// Open a URL. Android sends non-HTTP schemes through an explicit Intent
-/// because `webbrowser` deliberately rejects them there.
+/// Only these schemes may leave the app through the OS URL handler.
+/// Everything else (file:, content:, intent:, javascript:, http/https, ...)
+/// is rejected so a future caller cannot launch arbitrary components.
+pub fn is_allowed_external_url(url: &str) -> bool {
+    // No whitespace/control characters: they are not valid in these URIs and
+    // can be used to confuse Intent/URL parsing.
+    if url.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return false;
+    }
+    let Some(colon) = url.find(':') else {
+        return false;
+    };
+    let scheme = &url[..colon];
+    if scheme.is_empty()
+        || !scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+    {
+        return false;
+    }
+    if url[colon + 1..].trim().is_empty() {
+        return false;
+    }
+    matches!(
+        scheme.to_ascii_lowercase().as_str(),
+        "mailto" | "tel" | "geo"
+    )
+}
+
+fn reject_unsupported_url(url: &str) -> Result<(), String> {
+    if is_allowed_external_url(url) {
+        Ok(())
+    } else {
+        Err(format!(
+            "unsupported URL scheme; allowed schemes are mailto:, tel: and geo: ({url})"
+        ))
+    }
+}
+
+/// Open an allowlisted external URL. Android sends it through an explicit
+/// Intent because `webbrowser` deliberately rejects non-HTTP schemes there.
 #[cfg(all(not(target_os = "android"), not(target_arch = "wasm32")))]
 pub fn open_url(url: &str) -> Result<(), String> {
+    reject_unsupported_url(url)?;
     webbrowser::open(url).map_err(|error| error.to_string())
 }
 
@@ -335,11 +375,8 @@ pub fn open_url(_url: &str) -> Result<(), String> {
 
 #[cfg(target_os = "android")]
 pub fn open_url(url: &str) -> Result<(), String> {
-    if is_http_url(url) {
-        webbrowser::open(url).map_err(|error| error.to_string())
-    } else {
-        android_intent::open(url)
-    }
+    reject_unsupported_url(url)?;
+    android_intent::open(url)
 }
 
 /// URI from the Activity launch intent (`pinpoint://...` or `geo:...`).
@@ -490,7 +527,35 @@ mod tests {
 
 #[cfg(test)]
 mod intent_tests {
+    use super::is_allowed_external_url;
     use super::is_http_url;
+
+    #[test]
+    fn allowed_external_urls_are_mailto_tel_geo_only() {
+        assert!(is_allowed_external_url("mailto:test@example.com"));
+        assert!(is_allowed_external_url("MAILTO:test@example.com"));
+        assert!(is_allowed_external_url("tel:+37360000000"));
+        assert!(is_allowed_external_url("geo:47.0105,28.8638"));
+        assert!(is_allowed_external_url("geo:47.0105,28.8638?q=Home"));
+        for rejected in [
+            "http://example.com",
+            "https://example.com",
+            "file:///etc/passwd",
+            "content://contacts/1",
+            "intent://scan/#Intent;scheme=zxing;end",
+            "javascript:alert(1)",
+            "pinpoint://admin",
+            "mailto:",
+            "mailto",
+            " mailto:test@example.com",
+            "mailto:\u{0}test@example.com",
+        ] {
+            assert!(
+                !is_allowed_external_url(rejected),
+                "should reject {rejected:?}"
+            );
+        }
+    }
 
     #[test]
     fn only_http_urls_use_the_webbrowser_path() {

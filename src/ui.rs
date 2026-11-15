@@ -184,6 +184,29 @@ enum PendingAction {
     },
 }
 
+#[cfg(target_os = "android")]
+static ANDROID_UI_CONTEXT: std::sync::Mutex<Option<egui::Context>> = std::sync::Mutex::new(None);
+
+/// Keep a clone of the egui context so JNI callbacks (new share, biometric
+/// result) can wake an idle UI thread.
+#[cfg(target_os = "android")]
+pub fn store_android_context(ctx: &egui::Context) {
+    if let Ok(mut guard) = ANDROID_UI_CONTEXT.lock() {
+        if guard.is_none() {
+            *guard = Some(ctx.clone());
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+pub fn android_wake() {
+    if let Ok(guard) = ANDROID_UI_CONTEXT.lock() {
+        if let Some(ctx) = guard.as_ref() {
+            ctx.request_repaint();
+        }
+    }
+}
+
 pub struct PinpointAppUI {
     app: Arc<PinpointApp>,
     rt: Runtime,
@@ -274,6 +297,7 @@ pub struct PinpointAppUI {
     pin_focus_requested: bool,
     pin_setup: String,
     pin_setup_confirm: String,
+    biometric_auto_prompted: bool,
     /// Android `pinpoint://publish` requested before the first frame.
     pending_gps_publish_at: Option<std::time::Instant>,
     // On-device preferences and launch update check
@@ -287,6 +311,8 @@ impl PinpointAppUI {
     /// `DynBackend` to adapt to changed backend architectures.
     pub fn new(backend: DynBackend, screenshot_path: Option<String>) -> Self {
         let app = Arc::new(PinpointApp::new(backend, screenshot_path));
+        #[cfg(target_os = "android")]
+        crate::platform::register_android_app(Arc::downgrade(&app));
         PinpointApp::start_auto_refresh(Arc::clone(&app));
         let lock_store = crate::app_lock::LockStore::default_location();
         let lock_enabled = lock_store.is_configured();
@@ -361,6 +387,7 @@ impl PinpointAppUI {
             pin_focus_requested: lock_enabled,
             pin_setup: String::new(),
             pin_setup_confirm: String::new(),
+            biometric_auto_prompted: false,
             pending_gps_publish_at: None,
             prefs,
             prefs_store,
@@ -1196,12 +1223,58 @@ impl PinpointAppUI {
                 self.pin_input.clear();
                 self.pin_error = None;
                 self.pin_focus_requested = true;
+                self.biometric_auto_prompted = false;
                 tracing::info!("app lock: re-locked after returning to the foreground");
             }
         }
     }
 
+    #[cfg(target_os = "android")]
+    fn tick_android_biometric(&mut self) {
+        if !self.prefs.biometric_unlock {
+            return;
+        }
+        if !self.biometric_auto_prompted {
+            self.biometric_auto_prompted = true;
+            if !crate::platform::android_biometric_supported() {
+                self.prefs.biometric_unlock = false;
+                self.save_prefs();
+                self.pin_error = Some("Biometrics are unavailable here; use your PIN.".to_string());
+                return;
+            }
+            let _ = crate::platform::android_start_biometric();
+        }
+        match crate::platform::android_poll_biometric() {
+            crate::platform::BiometricStatus::Success => {
+                self.locked = false;
+                self.pin_input.clear();
+                self.pin_error = None;
+                self.pin_retry_at = None;
+                self.biometric_auto_prompted = false;
+                tracing::info!("app lock: unlocked with biometrics");
+            }
+            crate::platform::BiometricStatus::Failed => {
+                if self.pin_error.is_none() {
+                    self.pin_error = Some("Biometrics cancelled; use your PIN.".to_string());
+                }
+            }
+            crate::platform::BiometricStatus::Unavailable => {
+                self.prefs.biometric_unlock = false;
+                self.save_prefs();
+                self.pin_error = Some("Biometrics are unavailable here; use your PIN.".to_string());
+            }
+            _ => {}
+        }
+    }
+
     fn draw_lock_screen(&mut self, ctx: &egui::Context) {
+        #[cfg(target_os = "android")]
+        {
+            self.tick_android_biometric();
+            if !self.locked {
+                return;
+            }
+        }
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::NONE
@@ -1260,6 +1333,16 @@ impl PinpointAppUI {
                                 .color(Color32::from_rgb(248, 113, 113)),
                         );
                     }
+                    #[cfg(target_os = "android")]
+                    if self.prefs.biometric_unlock && crate::platform::android_biometric_supported()
+                    {
+                        ui.add_space(8.0);
+                        if ui.button("Unlock with biometrics").clicked() {
+                            self.pin_error = None;
+                            self.biometric_auto_prompted = true;
+                            let _ = crate::platform::android_start_biometric();
+                        }
+                    }
                 });
             });
     }
@@ -1305,6 +1388,8 @@ impl PinpointAppUI {
 
 impl eframe::App for PinpointAppUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        #[cfg(target_os = "android")]
+        store_android_context(ctx);
         if self.lock_enabled {
             self.update_focus_lock(ctx);
             if self.locked {
@@ -1335,6 +1420,16 @@ impl eframe::App for PinpointAppUI {
             self.session_restore_attempted = true;
             if self.app.has_persisted_session() && !self.app.is_backend_unavailable() {
                 self.spawn_action(PendingAction::RestorePersistedSession, ctx);
+            }
+        }
+        #[cfg(target_os = "android")]
+        if let Some(text) = crate::platform::android_take_shared_text() {
+            if let Some(link) = crate::mobile::MobileDeepLink::parse_shared(&text) {
+                tracing::info!(?link, "android: applied shared deep link");
+                self.apply_deep_link(link);
+            } else {
+                tracing::warn!("android: shared text had no location or kiosk link");
+                self.app.set_notice(Some(format!("Shared text: {text}")));
             }
         }
         if let Some(since) = self.pending_gps_publish_at {

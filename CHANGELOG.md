@@ -13,9 +13,13 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] Read-only service status and discovery: `GET /status` (HTML) and `GET /api/v1/services` (JSON) in the combined server and every split binary. They report the version, service kind, database mode, component path prefixes and sanitized OSM/tile endpoints, with no secrets or user data (ADR-0016).
+- [FEATURE] Android share-in restored with a small Java `PinpointActivity` bridge: cold-start and repeat `ACTION_SEND` text are delivered to the existing allowlisted deep-link parser instead of being silently ignored.
+- [FEATURE] Android biometric unlock: optional Profile toggle, platform `BiometricPrompt` on API 28+, PIN fallback, persisted opt-in and no biometric data stored.
+- [FEATURE] Android background location: user-started, non-exported foreground service with a persistent notification, 15–600 s interval, explicit stop control, background-location/notification permission flow, and publishing through the same Rust session and consent checks.
 
 ### Changed
 - [INFRA] CI: every pull request now fails unless its body links an issue with `Closes`/`Fixes`/`Resolves`/`Refs #N`; the `skip-issue-link` label is the escape hatch for release/tooling PRs.
+- [INFRA] Android APKs are packaged by a Gradle module under `android/` (Java bridge, DEX, service manifest, resources) while cargo-apk builds the Rust `.so`; release workflow zipaligns and signs the Gradle output. Requires JDK 21 for AGP 8.7 (ADR-0017).
 - [DOCS] Tracker: every issue now has a native GitHub type, a `PREFIX-n` title ID, one `severity:*` and one `priority:*` label. Adds `docs/ISSUE_TAXONOMY.md`, `scripts/new-issue.ps1`, a task issue template, and prunes the redundant `feature`/`fix`/`docs`/`release`/`go` labels.
 
 ## [1.3.13] - 2026-11-15

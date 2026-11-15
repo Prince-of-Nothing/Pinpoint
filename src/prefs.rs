@@ -22,6 +22,17 @@ pub struct LocalPrefs {
     /// Unix seconds of the last update check (launch or manual).
     #[serde(default)]
     pub last_update_check_unix: u64,
+    /// Offer the platform biometric prompt on the app lock screen. Off by
+    /// default; the PIN always remains the fallback.
+    #[serde(default)]
+    pub biometric_unlock: bool,
+    /// Foreground-service update interval in seconds (15-3600).
+    #[serde(default = "default_background_interval")]
+    pub background_interval_secs: u64,
+}
+
+fn default_background_interval() -> u64 {
+    60
 }
 
 fn default_true() -> bool {
@@ -34,6 +45,8 @@ impl Default for LocalPrefs {
             update_check_on_launch: true,
             dismissed_update_tag: String::new(),
             last_update_check_unix: 0,
+            biometric_unlock: false,
+            background_interval_secs: 60,
         }
     }
 }
@@ -147,10 +160,17 @@ mod tests {
             update_check_on_launch: false,
             dismissed_update_tag: "v1.3.13".to_string(),
             last_update_check_unix: 1_700_000_000,
+            biometric_unlock: true,
+            background_interval_secs: 120,
         };
         store.save(&prefs).expect("save");
         assert_eq!(store.load(), prefs);
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn biometric_unlock_defaults_off() {
+        assert!(!LocalPrefs::default().biometric_unlock);
     }
 
     #[test]

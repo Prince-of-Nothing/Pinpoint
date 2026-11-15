@@ -42,6 +42,7 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0014 | [Remove the ACTION_SEND Target Until an onNewIntent Bridge Exists](./0014-remove-action-send-target.md) | Accepted |
 | 0015 | [Throttled, Opt-Out Launch-Time Update Check](./0015-launch-time-update-check.md) | Accepted |
 | 0016 | [Read-Only Service Status and Integration Discovery](./0016-service-status-discovery.md) | Accepted |
+| 0017 | [Minimal Java Android Bridge for Share-In, Biometrics and Background Location](./0017-android-java-bridge.md) | Accepted |
 
 See [`architecture/architecture-decisions-link.md`](../architecture/architecture-decisions-link.md) for the complete list.
 

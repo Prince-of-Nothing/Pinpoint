@@ -182,7 +182,9 @@ copyright = "MIT Â© 2026 Pinpoint"
 # manual lat/lon today; GPS requires the same entitlements as Android/iOS
 # (see ios/Info.plist NSLocation* keys).
 
-# Android APK packaging (`cargo apk build --locked`, see `android/`).
+# Android packaging (`cargo apk build --locked`, see `android/`).
+# cargo-apk builds the Rust .so; Gradle packages the Java bridge, DEX and
+# service manifest into the APK (ADR-0017). Do not install cargo-apk's APK.
 # cargo-apk 0.10 generates AndroidManifest.xml from this TOML; NativeActivity
 # and the android.app.lib_name meta-data are added automatically.
 [package.metadata.android]

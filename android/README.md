@@ -1,8 +1,9 @@
-# android/ — Android client (Rust, `cargo-apk`)
+# android/ — Android client (Rust core + thin Java bridge)
 
-The Android app is the same `pinpoint_desktop` crate as desktop/web, packaged
-with **cargo-apk 0.10** using an `android.app.NativeActivity` entry
-(`android_main`) and the eframe/winit `android-native-activity` backend.
+The Android app is the same `pinpoint_desktop` crate as desktop/web. The Rust
+core is still built with **cargo-apk 0.10** for NDK/linker handling and uses
+the eframe/winit `android-native-activity` backend. **Gradle** packages the
+`.so`, the Java bridge, resources and manifest into the APK (ADR-0017).
 
 **Status:** builds, installs and runs on the API 37 x86_64 emulator (tested on
 Windows with Android Studio's SDK). The map uses live OSM tiles through the
@@ -21,11 +22,19 @@ follow-up.
 - **Share out:** place sheets have **Share** (`geo:lat,lon?q=name`) and the Kiosk
   QR card has **Share link** (`pinpoint://kiosk?token=...`), both opening the
   system share sheet.
-- **No share-in target:** Pinpoint deliberately does not appear in Android's
-  text-share sheet. Android delivers repeat shares to `onNewIntent`, which the
-  Rust-only `NativeActivity` cannot observe; a share target that silently does
-  nothing is worse than none. See ADR-0014. A Java `onNewIntent` bridge can
-  re-enable it.
+- **Share-in:** Pinpoint appears in Android's text-share sheet. The small
+  `PinpointActivity` subclass overrides `onNewIntent` and calls `setIntent`, so
+  every share is captured (cold start and while an instance is alive), then
+  parsed by the allowlisted `MobileDeepLink::parse_shared`. A `nativeWakeUi`
+  JNI call repaints an idle UI. Verified with two consecutive shares.
+- **Biometric unlock:** optional Profile toggle; the platform
+  `BiometricPrompt` (API 28+) unlocks the existing PIN lock. The PIN remains
+  the fallback. State is polled from Rust; no biometric data is stored.
+- **Background location:** Profile → **Background sharing** starts a
+  non-exported foreground service with a persistent notification. It publishes
+  GPS/network/passive fixes at 15–600 s through the same Rust session, consent
+  and encryption paths, and stops from the same screen. Android's "all the
+  time" location and notification permissions are requested explicitly.
 - **Deep links:** `pinpoint://map`, `pinpoint://kiosk?token=...`, `pinpoint://admin`
   and `geo:` are routed on launch.
 - **FLAG_SECURE:** screenshots and screen recording of the app window are
@@ -53,38 +62,40 @@ follow-up.
 - Rustup stable with `x86_64-linux-android` (emulator) and/or
   `aarch64-linux-android` (devices):
   `rustup target add x86_64-linux-android aarch64-linux-android`.
-- `cargo install cargo-apk --locked`.
-- JDK 17+ (the JDK 25 used by Android Studio works) and the MSVC build tools
-  for the host-side build scripts.
+- `cargo install cargo-apk --locked` (builds the Rust `.so`).
+- **JDK 21** for Gradle/AGP 8.7. JDK 25 is too new for AGP 8.7.
+- The MSVC build tools for the host-side build scripts.
 
 ## Build and install
 
 ```powershell
 $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
 $env:ANDROID_NDK_HOME = "$env:ANDROID_HOME\ndk\27.2.12479018"
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25.0.5.8-hotspot"
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.0.13+9"
 
-# Emulator (x86_64):
-cargo apk build --lib --target x86_64-linux-android
-adb install -r -t target/debug/apk/pinpoint.apk
-adb shell am start -n com.pinpoint.desktop/android.app.NativeActivity
+cd android
+# Emulator (x86_64); Gradle invokes cargo-apk and copies the .so:
+.\gradlew.bat :app:assembleDebug -Pabi=x86_64
+adb install -r -d -t app\build\outputs\apk\debug\app-debug.apk
+adb shell am start -n com.pinpoint.desktop/.PinpointActivity
 
-# Devices (AArch64): replace the target and build a fat APK if needed:
-# cargo apk build --lib --target aarch64-linux-android
+# Devices (arm64-v8a or armeabi-v7a), release .so:
+.\gradlew.bat :app:assembleRelease -Pabi=arm64-v8a -PrustProfile=release
 ```
 
-`cargo apk build --lib` is required because the package also exposes desktop
-binaries; without `--lib`, cargo-apk tries to package the `bin` artifact.
+Gradle output is an *unsigned* release APK; the release workflow zipaligns and
+signs it. `cargo apk build --lib` is only the Rust build step now; do not
+install the APK it writes, because it has no Java DEX or service declaration.
 
 ## Releases (GitHub Actions)
 
 `.github/workflows/release.yml` is adapted from the ArtCraft release pattern:
 
 - **Push a `v*` tag** whose version matches `Cargo.toml` (for example
-  `v1.3.4`). The workflow builds one APK for `arm64-v8a` and one for
-  `armeabi-v7a`, re-signs both with the release key, verifies the certificate
-  and creates a **draft** GitHub release named after the tag with an empty
-  "What's Changed" section.
+  `v1.3.4`). The workflow builds one Gradle APK for `arm64-v8a` and one for
+  `armeabi-v7a`, zipaligns and signs both with the release key, verifies the
+  certificate and creates a **draft** GitHub release named after the tag with
+  an empty "What's Changed" section.
 - **Publish the draft** on GitHub. It becomes the latest release, and the
   in-app About → Updates checker will detect it.
 - **Manual run** (Actions → Release → Run workflow) is a dry run: it builds

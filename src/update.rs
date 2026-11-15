@@ -2,9 +2,10 @@
 //!
 //! The app has no auto-updater (Android APKs are installed by the user or
 //! Obtainium), so this module answers one question: is the GitHub release
-//! newer than the running `CARGO_PKG_VERSION`? The check is user-initiated
-//! and reads the public Atom feed, so it needs no token and sends no account
-//! data. It is intentionally a direct GitHub request; the UI says so.
+//! newer than the running `CARGO_PKG_VERSION`? The check runs at most once a
+//! day at launch (opt-out in Profile & settings) or on demand, and reads the
+//! public Atom feed, so it needs no token and sends no account data. It is
+//! intentionally a direct GitHub request; the UI says so.
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::time::Duration;
@@ -42,6 +43,22 @@ pub enum UpdateStatus {
 impl UpdateStatus {
     pub fn is_available(&self) -> bool {
         matches!(self, Self::Available { .. })
+    }
+}
+
+/// Release to show in the in-app banner, if any. Dismissal is per release
+/// tag, so a newer release re-enables the banner.
+pub fn banner_release<'a>(
+    status: &'a UpdateStatus,
+    dismissed_tag: &str,
+) -> Option<&'a ReleaseInfo> {
+    match status {
+        UpdateStatus::Available { latest, .. }
+            if !dismissed_tag.trim().eq_ignore_ascii_case(latest.tag.trim()) =>
+        {
+            Some(latest)
+        }
+        _ => None,
     }
 }
 
@@ -235,6 +252,47 @@ mod tests {
         assert_eq!(
             strip_html("<p>Hello <strong>world</strong></p>"),
             "Hello world"
+        );
+    }
+
+    #[test]
+    fn banner_shows_only_for_a_newer_undismissed_release() {
+        let latest = ReleaseInfo {
+            tag: "v1.3.13".to_string(),
+            title: "v1.3.13 route polish".to_string(),
+            url: "https://github.com/Prince-of-Nothing/Pinpoint/releases/tag/v1.3.13".to_string(),
+            updated: "2026-11-15T10:00:00Z".to_string(),
+            notes: String::new(),
+        };
+        let available = UpdateStatus::Available {
+            current: "1.3.10".to_string(),
+            latest: latest.clone(),
+        };
+        assert_eq!(
+            banner_release(&available, "").map(|r| r.tag.as_str()),
+            Some("v1.3.13")
+        );
+        assert!(banner_release(&available, "v1.3.13").is_none());
+        assert!(banner_release(&available, " V1.3.13 ").is_none());
+        assert!(banner_release(
+            &UpdateStatus::UpToDate {
+                current: "1.3.13".to_string()
+            },
+            ""
+        )
+        .is_none());
+        assert!(banner_release(&UpdateStatus::Checking, "").is_none());
+
+        let newer = UpdateStatus::Available {
+            current: "1.3.10".to_string(),
+            latest: ReleaseInfo {
+                tag: "v1.3.14".to_string(),
+                ..latest
+            },
+        };
+        assert_eq!(
+            banner_release(&newer, "v1.3.13").map(|r| r.tag.as_str()),
+            Some("v1.3.14")
         );
     }
 }

@@ -276,6 +276,10 @@ pub struct PinpointAppUI {
     pin_setup_confirm: String,
     /// Android `pinpoint://publish` requested before the first frame.
     pending_gps_publish_at: Option<std::time::Instant>,
+    // On-device preferences and launch update check
+    prefs: crate::prefs::LocalPrefs,
+    prefs_store: crate::prefs::PrefsStore,
+    update_check_started: bool,
 }
 
 impl PinpointAppUI {
@@ -287,6 +291,8 @@ impl PinpointAppUI {
         let lock_store = crate::app_lock::LockStore::default_location();
         let lock_enabled = lock_store.is_configured();
         let lock_remaining = lock_store.lockout_remaining();
+        let prefs_store = crate::prefs::PrefsStore::default_location();
+        let prefs = prefs_store.load();
         Self {
             app,
             rt: Runtime::new().expect("Failed to create tokio runtime"),
@@ -356,6 +362,9 @@ impl PinpointAppUI {
             pin_setup: String::new(),
             pin_setup_confirm: String::new(),
             pending_gps_publish_at: None,
+            prefs,
+            prefs_store,
+            update_check_started: false,
         }
     }
 
@@ -363,6 +372,77 @@ impl PinpointAppUI {
     /// accept a session over the shared loopback endpoint.
     pub fn set_backend_unavailable(&self, unavailable: bool) {
         self.app.set_backend_unavailable(unavailable);
+    }
+
+    /// Persist the on-device preferences. A failure is non-fatal: the choice
+    /// still applies for this session.
+    fn save_prefs(&self) {
+        let _ = self.prefs_store.save(&self.prefs);
+    }
+
+    /// Record the check time, persist it, and start a GitHub releases check.
+    /// Manual checks are always allowed; launch checks are throttled by
+    /// [`crate::prefs::update_check_due`].
+    fn request_update_check(&mut self, ctx: &egui::Context) {
+        self.prefs.last_update_check_unix = crate::prefs::now_unix();
+        self.save_prefs();
+        self.spawn_action(PendingAction::CheckForUpdates, ctx);
+    }
+
+    /// Dismiss the banner for one release tag; a later release shows it again.
+    fn dismiss_update_banner(&mut self) {
+        let tag = {
+            let data = self.app.data();
+            let data = data.lock().unwrap();
+            match &data.update_status {
+                crate::update::UpdateStatus::Available { latest, .. } => latest.tag.clone(),
+                _ => return,
+            }
+        };
+        self.prefs.dismissed_update_tag = tag;
+        self.save_prefs();
+    }
+
+    /// Non-blocking banner shown when a newer GitHub release exists. It is
+    /// deliberately visible on every screen except About (which has its own
+    /// update card) and remembers a per-release dismissal.
+    fn draw_update_banner(&mut self, ui: &mut egui::Ui) {
+        if self.app.current_screen() == CurrentScreen::About {
+            return;
+        }
+        let latest = {
+            let data = self.app.data();
+            let data = data.lock().unwrap();
+            crate::update::banner_release(&data.update_status, &self.prefs.dismissed_update_tag)
+                .cloned()
+        };
+        let Some(latest) = latest else { return };
+        egui::Frame::new()
+            .fill(Color32::from_rgb(61, 44, 12))
+            .stroke(egui::Stroke::new(1.0_f32, Color32::from_rgb(250, 204, 21)))
+            .corner_radius(egui::CornerRadius::same(10))
+            .inner_margin(egui::Margin::symmetric(12, 8))
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(format!(
+                            "Pinpoint {} is available (you have {}).",
+                            latest.tag,
+                            crate::update::current_version()
+                        ))
+                        .size(13.0)
+                        .strong()
+                        .color(Color32::from_rgb(253, 230, 138)),
+                    );
+                    if ui.button("View update").clicked() {
+                        self.app.set_screen(CurrentScreen::About);
+                    }
+                    if ui.button("Later").clicked() {
+                        self.dismiss_update_banner();
+                    }
+                });
+            });
+        ui.add_space(6.0);
     }
 
     /// Focus the map on a coordinate, marking the viewport initialized so the
@@ -1238,6 +1318,17 @@ impl eframe::App for PinpointAppUI {
                 self.crash_dialog = Some(CrashDialog::from_pending(stored));
             }
         }
+        if !self.update_check_started {
+            self.update_check_started = true;
+            if self.prefs.update_check_on_launch
+                && crate::prefs::update_check_due(
+                    self.prefs.last_update_check_unix,
+                    crate::prefs::now_unix(),
+                )
+            {
+                self.request_update_check(ctx);
+            }
+        }
         self.sync_route_results();
         self.tick_navigation();
         if !self.session_restore_attempted {
@@ -1582,6 +1673,7 @@ impl eframe::App for PinpointAppUI {
         };
         panel.show(ctx, |ui| {
             self.draw_header_bar(ui, ctx);
+            self.draw_update_banner(ui);
 
             match self.app.current_screen() {
                 CurrentScreen::Map => {

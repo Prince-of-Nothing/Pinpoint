@@ -41,7 +41,8 @@ production-hardened. See the functional-state matrix and per-item
   `city_only`), purpose-bound, expiring, revocable; enforced server-side.
 - **Privacy** — no trackers, no analytics, no raw IP storage, no IP/WebRTC
   geolocation; local-only web assets (no Google Fonts/CDNs); ODbL attribution
-  everywhere.
+  everywhere. The only automatic non-Pinpoint request is a once-a-day,
+  opt-out GitHub release check (ADR-0015).
 - **Postgres persistence** — migrations 1–15, verified against live Postgres 16:
   a registered user and published location survived a server restart, and the
   split diagnostics/admin ports shared sessions, reports and audit rows.

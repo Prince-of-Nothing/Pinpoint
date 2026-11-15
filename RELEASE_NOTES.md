@@ -1,16 +1,31 @@
-# Pinpoint 1.3.12 — Release Notes
+# Pinpoint 1.3.13 — Release Notes
 
-**Released:** 2026-11-15 · **Version:** `1.3.12` (from `1.3.11`) ·
-**Status:** GeoJSON saved-place import and issue-linked PRs.
+**Released:** 2026-11-15 · **Version:** `1.3.13` (from `1.3.12`) ·
+**Status:** Launch-time update notification and opt-out.
 
-**Artifacts:** `pinpoint-android-1.3.12.apk` (arm64-v8a) and
-`pinpoint-android-1.3.12-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.12` tag.
+**Artifacts:** `pinpoint-android-1.3.13.apk` (arm64-v8a) and
+`pinpoint-android-1.3.13-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.13` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
+
+## 1.3.13 update notification
+
+- **Launch check:** Pinpoint now checks GitHub's public releases feed at most
+  once a day after launch/unlock. An older build shows a banner naming the new
+  release, with **View update** and **Later** (dismisses that tag).
+- **Opt-out:** Profile & settings → Updates turns the automatic check off. The
+  manual About → Check for updates button always works.
+- **Privacy:** only `Pinpoint/<version>` is sent; no account, location, friend
+  or device data. The check is skipped while the app lock is showing. Details in
+  ADR-0015 and `docs/PRIVACY.md`.
+- **Persistence:** `prefs.json` stores the opt-out, dismissed release tag and
+  last check time on-device.
+- **Tests:** preference round-trip, corrupt/missing fallback, unwritable store
+  and the 24-hour throttle are unit-tested.
 
 ## 0. 1.3.12 features
 

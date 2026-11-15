@@ -63,6 +63,29 @@ impl PinpointAppUI {
         });
         ui.add_space(8.0);
         ui.group(|ui| {
+            ui.label(RichText::new("Updates").size(14.0).strong());
+            let mut check_on_launch = self.prefs.update_check_on_launch;
+            if ui
+                .checkbox(
+                    &mut check_on_launch,
+                    "Check GitHub for a newer release at launch",
+                )
+                .changed()
+            {
+                self.prefs.update_check_on_launch = check_on_launch;
+                self.save_prefs();
+            }
+            ui.label(
+                RichText::new(
+                    "At most once a day. Only GitHub's public releases feed is requested; no \
+                     account, location or friend data is sent.",
+                )
+                .size(10.0)
+                .color(egui::Color32::from_rgb(148, 163, 184)),
+            );
+        });
+        ui.add_space(8.0);
+        ui.group(|ui| {
             ui.label(RichText::new("Safety").size(14.0).strong());
             ui.label("Share expiry, pause, and delete live under Sharing. Emergency alerts under Emergency.");
             ui.label("Location is latest-only; no history is stored.");

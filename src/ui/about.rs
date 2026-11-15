@@ -2,8 +2,9 @@
 //!
 //! Visual language follows the ArtCraft apps: near-black canvas, large
 //! headings, rounded surface cards and a single accent action. The update
-//! check is user-initiated and reads GitHub's public releases feed.
-use super::{PendingAction, PinpointAppUI};
+//! check runs at most once a day at launch (opt-out) or on demand and reads
+//! GitHub's public releases feed.
+use super::PinpointAppUI;
 use crate::app::CurrentScreen;
 use crate::update::{self, UpdateStatus};
 use eframe::egui::{self, Color32, RichText};
@@ -52,15 +53,18 @@ impl PinpointAppUI {
                     .show(ui, |ui| add(ui));
             };
 
-            // Privacy: opening About must not contact GitHub. The release
-            // check runs only when the user presses the button below.
+            // Privacy: opening About itself never contacts GitHub. The
+            // throttled launch check may already have run; the button below
+            // forces a fresh check.
             let status = self.app.data().lock().unwrap().update_status.clone();
             card(ui, &mut |ui| {
                 ui.label(RichText::new("Updates").size(17.0).strong());
                 ui.add_space(4.0);
                 match &status {
                     UpdateStatus::Unknown => {
-                        ui.label("Check GitHub releases to see whether a newer version exists.");
+                        ui.label(
+                            "Pinpoint checks GitHub once a day at launch. You can also check now.",
+                        );
                     }
                     UpdateStatus::Checking => {
                         ui.horizontal(|ui| {
@@ -121,7 +125,7 @@ impl PinpointAppUI {
                         )
                         .clicked()
                     {
-                        self.spawn_action(PendingAction::CheckForUpdates, ctx);
+                        self.request_update_check(ctx);
                     }
                     if ui.button("Open releases").clicked() {
                         let _ = webbrowser::open(update::RELEASES_URL);
@@ -129,8 +133,9 @@ impl PinpointAppUI {
                 });
                 ui.label(
                     RichText::new(
-                        "The check contacts github.com only when you press the button. No account, \
-                         location or friend data is sent.",
+                        "The check fetches GitHub's public releases feed at most once a day at \
+                         launch; turn it off in Profile & settings. No account, location or friend \
+                         data is sent.",
                     )
                     .size(10.0)
                     .color(muted),

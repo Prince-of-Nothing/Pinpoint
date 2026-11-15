@@ -18,6 +18,9 @@ source of truth for *why* a decision was made.
 | [0010](../adr/0010-normalized-encrypted-database.md) | Normalized, encrypted, modular database schema | Accepted (design target) |
 | [0011](../adr/0011-self-hosted-osm-services.md) | Self-hosted OpenStreetMap services | Accepted (config + docs) |
 | [0012](../adr/0012-opaque-server-side-sessions.md) | Opaque server-side sessions instead of JWT + rotating refresh tokens | Accepted |
+| [0013](../adr/0013-android-native-activity-jni.md) | Use the live Android activity for JNI and accept cold-start share/deep-link delivery | Accepted |
+| [0014](../adr/0014-remove-action-send-target.md) | Remove the ACTION_SEND target until an onNewIntent bridge exists | Accepted |
+| [0015](../adr/0015-launch-time-update-check.md) | Throttled, opt-out launch-time update check | Accepted |
 
 Add a row here whenever a new ADR is created. See [`adr/template.md`](../adr/template.md)
 for the format used to write new ADRs, and [`adr/README.md`](../adr/README.md) for the

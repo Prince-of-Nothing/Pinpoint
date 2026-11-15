@@ -12,6 +12,10 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.3.13] - 2026-11-15
+### Fixed
+- [FIX] Updates: launching an older build now checks GitHub at most once a day, shows a banner when a newer release exists, and links to it. The check can be disabled in Profile & settings; the manual About check remains. Adds `prefs.json` persistence (opt-out, dismissed tag, last check) and ADR-0015.
+
 ## [1.3.12] - 2026-11-15
 ### Added
 - [FEATURE] Saved places: import a GeoJSON `FeatureCollection` from the Saved screen. Points are validated (finite, in range), non-Point geometries and malformed features are counted, duplicates against existing places and within the batch are skipped, names/notes/categories are preserved, one import is capped at 500 places, and map pins refresh immediately.

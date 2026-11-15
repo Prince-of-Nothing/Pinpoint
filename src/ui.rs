@@ -225,6 +225,7 @@ pub struct PinpointAppUI {
     bookmark_name: String,
     bookmark_lat: String,
     bookmark_lon: String,
+    bookmark_import_text: String,
     // Profile
     profile_name: String,
     diagnostic_category: String,
@@ -316,6 +317,7 @@ impl PinpointAppUI {
             bookmark_name: String::new(),
             bookmark_lat: String::new(),
             bookmark_lon: String::new(),
+            bookmark_import_text: String::new(),
             profile_name: String::new(),
             diagnostic_category: "map".to_string(),
             diagnostic_message: String::new(),

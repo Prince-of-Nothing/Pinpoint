@@ -91,5 +91,44 @@ impl PinpointAppUI {
                 let _ = ctx;
             }
         });
+        ui.add_space(8.0);
+        ui.group(|ui| {
+            ui.label(RichText::new("Import GeoJSON").size(14.0).strong());
+            ui.label(
+                RichText::new(
+                    "Paste a FeatureCollection exported from Pinpoint (Saved → Copy GeoJSON).",
+                )
+                .size(10.0)
+                .color(egui::Color32::from_rgb(148, 163, 184)),
+            );
+            ui.add(
+                egui::TextEdit::multiline(&mut self.bookmark_import_text)
+                    .hint_text("{\"type\":\"FeatureCollection\",...}")
+                    .desired_rows(6)
+                    .desired_width(ui.available_width()),
+            );
+            if ui.button("Import GeoJSON").clicked() {
+                match store.import_geojson(&self.bookmark_import_text) {
+                    Ok(summary) => {
+                        self.app.refresh_bookmarks();
+                        let message = format!(
+                            "Imported {} places ({} duplicates, {} invalid, {} over limit).",
+                            summary.imported,
+                            summary.duplicates,
+                            summary.invalid,
+                            summary.over_limit
+                        );
+                        if summary.imported > 0 {
+                            self.bookmark_import_text.clear();
+                            self.app.set_notice(Some(message));
+                        } else {
+                            self.app
+                                .set_error(Some(format!("{message} No new places were imported.")));
+                        }
+                    }
+                    Err(error) => self.app.set_error(Some(error)),
+                }
+            }
+        });
     }
 }

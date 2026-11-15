@@ -11,8 +11,16 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.3.12] - 2026-11-15
+### Added
+- [FEATURE] Saved places: import a GeoJSON `FeatureCollection` from the Saved screen. Points are validated (finite, in range), non-Point geometries and malformed features are counted, duplicates against existing places and within the batch are skipped, names/notes/categories are preserved, one import is capped at 500 places, and map pins refresh immediately.
+
 ### Changed
-- [INFRA] Every pull request must link an issue with `Closes #N` or `Refs #N`; the `PR issue link` workflow enforces it, with `skip-issue-link` reserved for exceptional release/tooling PRs.
+- [INFRA] Every pull request must link an issue with `Closes #N` or `Refs #N`; documented in AGENTS/CONTRIBUTING and the PR template. The enforcing workflow is tracked in #29 pending the `workflow` token scope.
+
+### Fixed
+- [FIX] GeoJSON import writes once at the end instead of rewriting `bookmarks.json` per feature.
 
 ## [1.3.11] - 2026-11-15
 ### Security

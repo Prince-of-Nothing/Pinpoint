@@ -1,16 +1,38 @@
-# Pinpoint 1.3.13 — Release Notes
+# Pinpoint 1.3.14 — Release Notes
 
-**Released:** 2026-11-15 · **Version:** `1.3.13` (from `1.3.12`) ·
-**Status:** Launch-time update notification and opt-out.
+**Released:** 2026-11-16 · **Version:** `1.3.14` (from `1.3.13`) ·
+**Status:** Android bridge (share-in, biometrics, background location), services status page and issue-link CI.
 
-**Artifacts:** `pinpoint-android-1.3.13.apk` (arm64-v8a) and
-`pinpoint-android-1.3.13-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.13` tag.
+**Artifacts:** `pinpoint-android-1.3.14.apk` (arm64-v8a) and
+`pinpoint-android-1.3.14-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.14` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
+
+## 1.3.14 features
+
+- **Android share-in:** Pinpoint appears in the text-share sheet again. A small
+  Java `PinpointActivity` captures cold-start and repeat shares, wakes the Rust
+  UI, and applies the allowlisted deep link. Verified with two consecutive
+  shares on the API 37 emulator.
+- **Android biometric unlock:** optional Profile toggle; platform
+  `BiometricPrompt` on API 28+ unlocks the PIN lock, with the PIN always
+  available as fallback. No biometric data is stored.
+- **Android background location:** user-started, non-exported foreground
+  service with a persistent notification, 15–600 s interval, explicit stop
+  control and the Android “all the time” permission flow.
+- **Services page:** `GET /status` and `/api/v1/services` report the service
+  kind, database mode, component paths and sanitized OSM/tile endpoints
+  (ADR-0016).
+- **Issue-link CI:** every PR now fails unless its body links an issue with
+  `Closes`/`Refs #N` (ADR/policy #29).
+- **Build:** Android APKs are packaged by Gradle (Java bridge, DEX, service
+  manifest, resources) around the cargo-apk-built `.so`; the release workflow
+  zipaligns and signs the unsigned Gradle output. Requires JDK 21 for AGP 8.7
+  (ADR-0017).
 
 ## 1.3.13 update notification
 

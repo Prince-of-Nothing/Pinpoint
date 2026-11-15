@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.3.14] - 2026-11-16
 ### Added
 - [FEATURE] Read-only service status and discovery: `GET /status` (HTML) and `GET /api/v1/services` (JSON) in the combined server and every split binary. They report the version, service kind, database mode, component path prefixes and sanitized OSM/tile endpoints, with no secrets or user data (ADR-0016).
 - [FEATURE] Android share-in restored with a small Java `PinpointActivity` bridge: cold-start and repeat `ACTION_SEND` text are delivered to the existing allowlisted deep-link parser instead of being silently ignored.

@@ -304,6 +304,8 @@ pub struct PinpointAppUI {
     prefs: crate::prefs::LocalPrefs,
     prefs_store: crate::prefs::PrefsStore,
     update_check_started: bool,
+    update_dialog_open: bool,
+    update_dialog_for: Option<String>,
 }
 
 impl PinpointAppUI {
@@ -392,6 +394,8 @@ impl PinpointAppUI {
             prefs,
             prefs_store,
             update_check_started: false,
+            update_dialog_open: false,
+            update_dialog_for: None,
         }
     }
 
@@ -450,26 +454,149 @@ impl PinpointAppUI {
             .corner_radius(egui::CornerRadius::same(10))
             .inner_margin(egui::Margin::symmetric(12, 8))
             .show(ui, |ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        RichText::new(format!(
-                            "Pinpoint {} is available (you have {}).",
-                            latest.tag,
-                            crate::update::current_version()
-                        ))
-                        .size(13.0)
-                        .strong()
-                        .color(Color32::from_rgb(253, 230, 138)),
-                    );
-                    if ui.button("View update").clicked() {
-                        self.app.set_screen(CurrentScreen::About);
-                    }
-                    if ui.button("Later").clicked() {
-                        self.dismiss_update_banner();
+                ui.vertical(|ui| {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(
+                            RichText::new(format!(
+                                "Pinpoint {} is available (you have {}).",
+                                latest.tag,
+                                crate::update::current_version()
+                            ))
+                            .size(13.0)
+                            .strong()
+                            .color(Color32::from_rgb(253, 230, 138)),
+                        );
+                        if let Some(download) = latest.download_url() {
+                            if ui.button("Download APK").clicked() {
+                                let _ = webbrowser::open(download);
+                            }
+                        }
+                        if ui.button("What's new").clicked() {
+                            self.app.set_screen(CurrentScreen::About);
+                        }
+                        if ui.button("Later").clicked() {
+                            self.dismiss_update_banner();
+                        }
+                    });
+                    let summary = crate::update::notes_plain(&latest.notes)
+                        .lines()
+                        .filter(|line| !line.trim().is_empty())
+                        .take(2)
+                        .collect::<Vec<_>>()
+                        .join(" · ");
+                    if !summary.is_empty() {
+                        ui.label(
+                            RichText::new(summary)
+                                .size(10.0)
+                                .color(Color32::from_rgb(252, 211, 77)),
+                        );
                     }
                 });
             });
         ui.add_space(6.0);
+    }
+
+    /// Open the release-notes dialog once per available tag. Dismissing it
+    /// stores the tag, so a later launch does not nag for the same release.
+    fn maybe_open_update_dialog(&mut self) {
+        let tag = {
+            let data = self.app.data();
+            let data = data.lock().unwrap();
+            crate::update::banner_release(&data.update_status, &self.prefs.dismissed_update_tag)
+                .map(|latest| latest.tag.clone())
+        };
+        if let Some(tag) = tag {
+            if self.update_dialog_for.as_deref() != Some(tag.as_str()) {
+                self.update_dialog_for = Some(tag);
+                self.update_dialog_open = true;
+            }
+        }
+    }
+
+    fn draw_update_dialog(&mut self, ctx: &egui::Context) {
+        if !self.update_dialog_open {
+            return;
+        }
+        let latest = {
+            let data = self.app.data();
+            let data = data.lock().unwrap();
+            match &data.update_status {
+                crate::update::UpdateStatus::Available { latest, .. } => Some(latest.clone()),
+                _ => None,
+            }
+        };
+        let Some(latest) = latest else {
+            self.update_dialog_open = false;
+            return;
+        };
+        let mut open = self.update_dialog_open;
+        let mut close_and_dismiss = false;
+        egui::Window::new(format!("Pinpoint {} is available", latest.tag))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(true)
+            .default_width(480.0)
+            .show(ctx, |ui| {
+                ui.label(
+                    RichText::new(format!(
+                        "You have {}. Here is what changed:",
+                        crate::update::current_version()
+                    ))
+                    .size(12.0),
+                );
+                ui.add_space(4.0);
+                egui::ScrollArea::vertical()
+                    .id_salt("update_dialog_notes")
+                    .max_height(300.0)
+                    .show(ui, |ui| {
+                        ui.label(
+                            RichText::new(crate::update::notes_plain(&latest.notes)).size(12.0),
+                        );
+                    });
+                ui.separator();
+                ui.horizontal_wrapped(|ui| {
+                    if let Some(download) = latest.download_url() {
+                        if ui
+                            .add(
+                                egui::Button::new(
+                                    RichText::new("Download APK").strong().color(Color32::BLACK),
+                                )
+                                .fill(Color32::from_rgb(52, 211, 153)),
+                            )
+                            .clicked()
+                        {
+                            let _ = webbrowser::open(download);
+                        }
+                    }
+                    if ui.button("Open release page").clicked() {
+                        let _ = webbrowser::open(&latest.url);
+                    }
+                    if ui.button("Later").clicked() {
+                        close_and_dismiss = true;
+                    }
+                });
+                if let Some(name) = latest.apk_name() {
+                    let size = latest
+                        .assets
+                        .iter()
+                        .find(|asset| asset.name == name)
+                        .map(|asset| asset.size)
+                        .unwrap_or(0);
+                    ui.label(
+                        RichText::new(format!(
+                            "{name} · {:.1} MB · direct download",
+                            size as f64 / 1_048_576.0
+                        ))
+                        .size(10.0)
+                        .color(Color32::from_rgb(148, 163, 184)),
+                    );
+                }
+            });
+        self.update_dialog_open = open && !close_and_dismiss;
+        if close_and_dismiss || !self.update_dialog_open {
+            self.dismiss_update_banner();
+            self.update_dialog_for = None;
+        }
     }
 
     /// Focus the map on a coordinate, marking the viewport initialized so the
@@ -1414,6 +1541,7 @@ impl eframe::App for PinpointAppUI {
                 self.request_update_check(ctx);
             }
         }
+        self.maybe_open_update_dialog();
         self.sync_route_results();
         self.tick_navigation();
         if !self.session_restore_attempted {
@@ -1842,6 +1970,7 @@ impl eframe::App for PinpointAppUI {
         self.draw_share_sheet(ctx);
         self.draw_recovery_code(ctx);
         self.draw_crash_dialog(ctx);
+        self.draw_update_dialog(ctx);
 
         // Request repaint for animation/screenshot
         if self.app.screenshot_mode() && !self.app.screenshot_taken() {

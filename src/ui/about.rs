@@ -94,9 +94,51 @@ impl PinpointAppUI {
                         }
                         if !latest.notes.is_empty() {
                             ui.add_space(4.0);
-                            ui.label(RichText::new(&latest.notes).size(11.0).color(muted));
+                            ui.label(RichText::new("What's new").size(12.0).strong());
+                            egui::ScrollArea::vertical()
+                                .id_salt("about_release_notes")
+                                .max_height(220.0)
+                                .show(ui, |ui| {
+                                    ui.label(
+                                        RichText::new(update::notes_plain(&latest.notes))
+                                            .size(11.0)
+                                            .color(muted),
+                                    );
+                                });
                         }
-                        ui.add_space(4.0);
+                        ui.add_space(6.0);
+                        if let Some(download) = latest.download_url() {
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        RichText::new("Download APK").strong().color(Color32::WHITE),
+                                    )
+                                    .fill(accent),
+                                )
+                                .clicked()
+                            {
+                                let _ = webbrowser::open(download);
+                            }
+                            if let Some(name) = latest.apk_name() {
+                                let size = latest
+                                    .assets
+                                    .iter()
+                                    .find(|asset| asset.name == name)
+                                    .map(|asset| asset.size)
+                                    .unwrap_or(0);
+                                ui.label(
+                                    RichText::new(format!(
+                                        "{name} · {:.1} MB · direct download",
+                                        size as f64 / 1_048_576.0
+                                    ))
+                                    .size(10.0)
+                                    .color(muted),
+                                );
+                            }
+                            if ui.button("Copy download link").clicked() {
+                                ctx.copy_text(download.to_string());
+                            }
+                        }
                         if ui.button("Open release page").clicked() {
                             let _ = webbrowser::open(&latest.url);
                         }

@@ -83,22 +83,25 @@ cargo run -- --backend http://127.0.0.1:8000
 ```powershell
 $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
 $env:ANDROID_NDK_HOME = "$env:ANDROID_HOME\ndk\27.2.12479018"
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25.0.5.8-hotspot"
-cargo apk build --lib --target x86_64-linux-android
-adb install -r -t target/debug/apk/pinpoint.apk
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.0.13+9"
+cd android
+.\gradlew.bat :app:assembleDebug -Pabi=x86_64
+adb install -r -d -t app\build\outputs\apk\debug\app-debug.apk
+adb shell am start -n com.pinpoint.desktop/.PinpointActivity
 ```
 
 The Android emulator reaches the host at `http://10.0.2.2:8080`; run
 `BIND_ADDR=0.0.0.0:8080 cargo run --bin pinpoint-server`. Use Android Studio
-for the emulator/logcat; the APK itself is built by cargo-apk, not Gradle. See
+for the emulator/logcat; Gradle packages the Rust `.so`, Java bridge and APK. See
 [`android/README.md`](./android/README.md) for prerequisites and caveats.
 
 Pushing a `vX.Y.Z` tag that matches `Cargo.toml` runs
 [`.github/workflows/release.yml`](./.github/workflows/release.yml): it builds
-signed `arm64-v8a` and `armeabi-v7a` APKs, verifies the release certificate and
-creates a draft GitHub release. Publish the draft so the in-app About → Updates
-checker can see it. Manual workflow runs are dry runs. See
-[`android/README.md`](./android/README.md) for the key secrets and caveats.
+one signed universal APK (`arm64-v8a` + `armeabi-v7a`), verifies the release
+certificate and creates a draft GitHub release. Publish the draft so the in-app
+About → Updates checker can see the notes and the direct APK link. Manual
+workflow runs are dry runs. See [`android/README.md`](./android/README.md) for
+the key secrets and caveats.
 
 ### Docker
 

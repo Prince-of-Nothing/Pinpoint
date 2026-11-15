@@ -79,8 +79,8 @@ cd android
 adb install -r -d -t app\build\outputs\apk\debug\app-debug.apk
 adb shell am start -n com.pinpoint.desktop/.PinpointActivity
 
-# Devices (arm64-v8a or armeabi-v7a), release .so:
-.\gradlew.bat :app:assembleRelease -Pabi=arm64-v8a -PrustProfile=release
+# Devices: universal APK (arm64-v8a + armeabi-v7a), release .so:
+.\gradlew.bat :app:assembleRelease -Pabi=universal -PrustProfile=release
 ```
 
 Gradle output is an *unsigned* release APK; the release workflow zipaligns and
@@ -92,10 +92,10 @@ install the APK it writes, because it has no Java DEX or service declaration.
 `.github/workflows/release.yml` is adapted from the ArtCraft release pattern:
 
 - **Push a `v*` tag** whose version matches `Cargo.toml` (for example
-  `v1.3.4`). The workflow builds one Gradle APK for `arm64-v8a` and one for
-  `armeabi-v7a`, zipaligns and signs both with the release key, verifies the
-  certificate and creates a **draft** GitHub release named after the tag with
-  an empty "What's Changed" section.
+  `v1.3.4`). The workflow builds one universal Gradle APK containing
+  `arm64-v8a` and `armeabi-v7a`, zipaligns and signs it with the release key,
+  verifies the certificate and creates a **draft** GitHub release named after
+  the tag with an empty "What's Changed" section.
 - **Publish the draft** on GitHub. It becomes the latest release, and the
   in-app About → Updates checker will detect it.
 - **Manual run** (Actions → Release → Run workflow) is a dry run: it builds

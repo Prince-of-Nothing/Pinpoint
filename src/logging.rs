@@ -53,11 +53,11 @@ pub fn init() {
     INIT.call_once(|| {
         let Some(path) = log_path() else { return };
         let Some(dir) = path.parent() else { return };
-        if fs::create_dir_all(dir).is_err() {
+        if create_log_dir(dir).is_err() {
             return;
         }
         rotate_if_needed(&path);
-        let Ok(file) = OpenOptions::new().create(true).append(true).open(&path) else {
+        let Ok(file) = open_log(&path) else {
             return;
         };
         let file = Arc::new(Mutex::new(file));
@@ -103,6 +103,30 @@ fn truncate_open(file: &mut File) -> io::Result<()> {
     file.set_len(0)?;
     file.seek(SeekFrom::Start(0))?;
     Ok(())
+}
+
+fn create_log_dir(dir: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        let mut builder = std::fs::DirBuilder::new();
+        builder.recursive(true).mode(0o700).create(dir)
+    }
+    #[cfg(not(unix))]
+    {
+        fs::create_dir_all(dir)
+    }
+}
+
+fn open_log(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options.open(path)
 }
 
 fn rotate_if_needed(path: &Path) {
@@ -195,6 +219,33 @@ mod tests {
         file.write_all(b"after\n").unwrap();
         drop(file);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "after\n");
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_log_dir_and_file_are_private() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!(
+            "pinpoint-log-perms-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        super::create_log_dir(&dir).unwrap();
+        let path = dir.join("pinpoint.log");
+        let _file = super::open_log(&path).unwrap();
+        assert_eq!(
+            std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
         std::fs::remove_dir_all(dir).ok();
     }
 }

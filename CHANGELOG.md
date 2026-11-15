@@ -11,6 +11,11 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.3.11] - 2026-11-15
+### Security
+- [SECURITY] Unix diagnostics: crash-report and log directories are created `0700` and files `0600`, so panic details, backtrace paths and log tails are not readable by other local users. Covered by Unix CI tests.
+
 ### Changed
 - [DOCS] Process: every change now goes through a feature branch and pull request; `main` is never committed or pushed directly. Documented in `AGENTS.md`, `CONTRIBUTING.md`, the PR template and the commit helper guard.
 

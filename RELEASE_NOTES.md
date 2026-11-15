@@ -1,18 +1,35 @@
-# Pinpoint 1.3.7 — Release Notes
+# Pinpoint 1.3.8 — Release Notes
 
-**Released:** 2026-11-15 · **Version:** `1.3.7` (from `1.3.6`) ·
-**Status:** Saved places on the map, with Map and Share actions.
+**Released:** 2026-11-15 · **Version:** `1.3.8` (from `1.3.7`) ·
+**Status:** PIN lockout state survives app restarts.
 
-**Artifacts:** `pinpoint-android-1.3.7.apk` (arm64-v8a) and
-`pinpoint-android-1.3.7-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.7` tag.
+**Artifacts:** `pinpoint-android-1.3.8.apk` (arm64-v8a) and
+`pinpoint-android-1.3.8-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.8` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.7 features
+## 0. 1.3.8 security fix
+
+- **Persistent lockout:** `lock.json` now stores the consecutive failure count
+  and a lockout deadline (`locked_until_ms`). Force-stopping the app no longer
+  resets the retry delay.
+- **Startup enforcement:** the remaining lockout is loaded before the first
+  frame; the Unlock button stays disabled until it expires.
+- **Reset on success:** a correct PIN clears the failure count and deadline.
+- **Atomic writes:** failure state follows the same temp-file + fsync + rename
+  path as the PIN hash; corrupt state keeps the app locked.
+- **Device verification:** a wrong PIN persisted `failures:1` across
+  force-stop; a 60 s persisted lockout rejected the correct PIN; after expiry
+  the correct PIN unlocked and the file returned to `failures:0`,
+  `locked_until_ms:0`.
+- **Tests:** reload persistence, growing failure count, lockout expiry,
+  startup deadline and corrupt-state fail-closed are unit-tested.
+
+## 1. 1.3.7 features
 
 - **Saved places on the map:** on-device bookmarks render as blue pins with
   their names, drawn under friend pins. They survive login/logout resets and

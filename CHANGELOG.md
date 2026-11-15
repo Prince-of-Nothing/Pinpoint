@@ -12,6 +12,11 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.3.8] - 2026-11-15
+### Fixed
+- [SECURITY] PIN lock: the wrong-attempt count and lockout deadline are persisted in `lock.json`, so force-stopping the app no longer resets the retry delay. The remaining lockout is enforced at startup; a correct PIN clears the state; the lock screen repaints the countdown.
+- [FIX] Lock state writes stay atomic and fail closed on a corrupt file; tests cover reload persistence, lockout expiry, failure accumulation and the startup deadline.
+
 ## [1.3.7] - 2026-11-15
 ### Added
 - [FEATURE] Map: saved places render as blue pins with their names, under friend pins, and survive login/logout resets.

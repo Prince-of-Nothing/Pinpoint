@@ -32,7 +32,8 @@ follow-up.
   blocked. Verified on the emulator: `screencap` returns a black app window.
 - **On-device PIN lock:** Profile → App lock stores only an Argon2id hash in
   `files/lock.json`; the app locks on launch and when returning from the
-  background.
+  background. Wrong-attempt count and lockout deadline are persisted, so
+  force-stopping does not reset the delay.
 - **Android 15:** the mobile tab bar reserves the gesture-navigation inset.
 - **Pinch-to-zoom** works on the map.
 - **Saved places on the map:** bookmarks render as blue pins with their names.

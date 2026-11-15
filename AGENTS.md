@@ -58,6 +58,9 @@ multiplatform section); they share `src/` via `cfg(target_os)`.
   `release/vX.Y.Z`.
 - Push the branch and open a pull request. The PR title carries the same type
   flag as the commit, for example `[FEATURE] map: add offline pack`.
+- Every PR references the issue it fixes with `Closes #N` or `Refs #N`. The
+  `PR issue link` workflow enforces this; `skip-issue-link` is reserved for
+  exceptional release/tooling PRs.
 - Run the full gate and let CI pass before merging. Use **Squash and merge** so
   `main` keeps one type-flagged commit per change; delete the branch afterward.
 - After the merge, update local `main` and create the **next** branch from it

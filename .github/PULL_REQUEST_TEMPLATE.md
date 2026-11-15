@@ -34,4 +34,4 @@
 
 ## Related
 
-Closes #
+Closes # <!-- required; use Closes #N or Refs #N -->

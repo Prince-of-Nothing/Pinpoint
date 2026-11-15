@@ -12,6 +12,11 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.3.9] - 2026-11-15
+### Added
+- [FEATURE] Map: tapping a saved-place pin opens its place sheet (Directions, Set as origin, Save, Copy, Share, map apps) without a network round-trip. The map centres on the bookmark at the current zoom and suppresses the duplicate pin label while it is selected.
+- [FIX] Lock screen: the persisted lockout countdown is visually verified on the API 37 emulator (108s → 80s, Unlock disabled).
+
 ## [1.3.8] - 2026-11-15
 ### Fixed
 - [SECURITY] PIN lock: the wrong-attempt count and lockout deadline are persisted in `lock.json`, so force-stopping the app no longer resets the retry delay. The remaining lockout is enforced at startup; a correct PIN clears the state; the lock screen repaints the countdown.

@@ -1,18 +1,32 @@
-# Pinpoint 1.3.8 — Release Notes
+# Pinpoint 1.3.9 — Release Notes
 
-**Released:** 2026-11-15 · **Version:** `1.3.8` (from `1.3.7`) ·
-**Status:** PIN lockout state survives app restarts.
+**Released:** 2026-11-15 · **Version:** `1.3.9` (from `1.3.8`) ·
+**Status:** Saved-place pins open their place sheet; lockout countdown visually verified.
 
-**Artifacts:** `pinpoint-android-1.3.8.apk` (arm64-v8a) and
-`pinpoint-android-1.3.8-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.8` tag.
+**Artifacts:** `pinpoint-android-1.3.9.apk` (arm64-v8a) and
+`pinpoint-android-1.3.9-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.9` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.8 security fix
+## 0. 1.3.9 features
+
+- **Tap a saved-place pin:** a screen-space hit test finds the nearest bookmark
+  (20 pt radius), opens its place sheet without a reverse-geocode request, and
+  centres the map at the current zoom. The duplicate blue label is suppressed
+  while the selected-place marker is shown.
+- **Place sheet actions:** Directions, Set as origin, Save, Copy, Share, OSM,
+  Google, Organic and Magic Earth all work from a bookmark tap.
+- **Lockout countdown verified:** on the API 37 emulator, the lock screen showed
+  **“Try again in 108s.”** with Unlock disabled, then **“Try again in 80s.”**
+  seconds later.
+- **Bookmark tap verified:** tapping the blue “Saved Cafe” pin logged
+  `bookmark tapped` and opened the sheet with **0 m from map centre**.
+
+## 1. 1.3.8 security fix
 
 - **Persistent lockout:** `lock.json` now stores the consecutive failure count
   and a lockout deadline (`locked_until_ms`). Force-stopping the app no longer

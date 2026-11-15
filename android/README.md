@@ -37,8 +37,10 @@ follow-up.
 - **Android 15:** the mobile tab bar reserves the gesture-navigation inset.
 - **Pinch-to-zoom** works on the map.
 - **Saved places on the map:** bookmarks render as blue pins with their names.
-  The Saved screen offers **Map** (centre there) and **Share** (`geo:` link)
-  for each place, and the map updates immediately after add/remove.
+  Tapping a pin opens its place sheet (Directions, Set as origin, Save, Copy,
+  Share, map apps) without a network lookup. The Saved screen offers **Map**
+  and **Share** for each place, and the map updates immediately after
+  add/remove.
 - **Debug UI automation:** debug builds skip FLAG_SECURE when
   `files/allow_screenshots` exists (`adb shell run-as com.pinpoint.desktop touch
   files/allow_screenshots`). Release builds ignore the marker.

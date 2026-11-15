@@ -12,6 +12,11 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-11-15
+### Added
+- [FEATURE] Map: saved places render as blue pins with their names, under friend pins, and survive login/logout resets.
+- [FEATURE] Saved places: each bookmark gains **Map** (centre the map there) and **Share** (`geo:` link) actions; the list refreshes map pins immediately after add/remove.
+
 ## [1.3.6] - 2026-11-14
 ### Removed
 - [FIX] Android: remove the `ACTION_SEND` text-share target. Repeat shares were silently ignored while Pinpoint was alive because Android delivers them to `onNewIntent`, which the Rust-only `NativeActivity` cannot observe. Share-out (places/kiosk), `pinpoint://` and `geo:` deep links remain. `launchMode` stays `singleTop`; `standard` caused android-activity lifecycle errors and elevated threads. See ADR-0014.

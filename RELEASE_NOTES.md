@@ -1,18 +1,29 @@
-# Pinpoint 1.3.6 — Release Notes
+# Pinpoint 1.3.7 — Release Notes
 
-**Released:** 2026-11-14 · **Version:** `1.3.6` (from `1.3.5`) ·
-**Status:** Remove the share-in target that silently did nothing while the app was alive.
+**Released:** 2026-11-15 · **Version:** `1.3.7` (from `1.3.6`) ·
+**Status:** Saved places on the map, with Map and Share actions.
 
-**Artifacts:** `pinpoint-android-1.3.6.apk` (arm64-v8a) and
-`pinpoint-android-1.3.6-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.6` tag.
+**Artifacts:** `pinpoint-android-1.3.7.apk` (arm64-v8a) and
+`pinpoint-android-1.3.7-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.7` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.6 fix
+## 0. 1.3.7 features
+
+- **Saved places on the map:** on-device bookmarks render as blue pins with
+  their names, drawn under friend pins. They survive login/logout resets and
+  update immediately after adding or removing a place.
+- **Saved place actions:** every entry on the Saved screen now has **Map**
+  (centre the map there) and **Share** (`geo:` link through the system share
+  sheet; desktop copies it).
+- **Verified on the API 37 emulator:** a bookmark at 46.99, 28.84 rendered as a
+  visible blue “Saved Cafe” pin, and the Saved screen listed 1 saved place.
+
+## 1. 1.3.6 fix
 
 - **Removed the Android text-share target.** Android delivers a second
   `ACTION_SEND` to `onNewIntent`; `NativeActivity` does not update

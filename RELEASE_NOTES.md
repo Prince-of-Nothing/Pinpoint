@@ -1,18 +1,33 @@
-# Pinpoint 1.3.11 — Release Notes
+# Pinpoint 1.3.12 — Release Notes
 
-**Released:** 2026-11-15 · **Version:** `1.3.11` (from `1.3.10`) ·
-**Status:** Private Unix diagnostics and a branch/PR-only workflow.
+**Released:** 2026-11-15 · **Version:** `1.3.12` (from `1.3.11`) ·
+**Status:** GeoJSON saved-place import and issue-linked PRs.
 
-**Artifacts:** `pinpoint-android-1.3.11.apk` (arm64-v8a) and
-`pinpoint-android-1.3.11-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.11` tag.
+**Artifacts:** `pinpoint-android-1.3.12.apk` (arm64-v8a) and
+`pinpoint-android-1.3.12-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
+source `zip`/`tar.gz` archives for the `v1.3.12` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
 
-## 0. 1.3.11 hardening
+## 0. 1.3.12 features
+
+- **GeoJSON import:** paste a `FeatureCollection` exported from Pinpoint into
+  Saved → Import GeoJSON. Points are validated (finite, latitude/longitude
+  ranges), non-Point geometries are rejected, duplicates against existing
+  places and within the batch are skipped, and name/note/category survive.
+  One import is capped at 500 places and writes `bookmarks.json` once.
+- **Immediate map refresh:** imported places appear as blue pins without a
+  restart.
+- **Tests:** round-trip, duplicate/invalid classification, malformed/empty
+  documents, non-writable stores and the 500-place cap.
+- **Issue-linked PRs:** AGENTS/CONTRIBUTING and the PR template require
+  `Closes #N`/`Refs #N`; automated enforcement is tracked in #29 pending the
+  `workflow` token scope.
+
+## 1. 1.3.11 hardening
 
 - **Private Unix diagnostics:** `crash-reports/` and `logs/` are created with
   mode `0700`; report and log files use `0600`. Panic details, backtrace paths

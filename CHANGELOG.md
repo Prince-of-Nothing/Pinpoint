@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Changed
+- [INFRA] Every pull request must link an issue with `Closes #N` or `Refs #N`; the `PR issue link` workflow enforces it, with `skip-issue-link` reserved for exceptional release/tooling PRs.
 
 ## [1.3.11] - 2026-11-15
 ### Security

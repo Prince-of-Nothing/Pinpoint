@@ -43,7 +43,8 @@ Everything under `archive/` is historical and is not built.
 2. Commit with a type flag: `[FEATURE] area: ...`, `[FIX] ...`, `[SECURITY] ...`,
    `[DOCS] ...`, `[INFRA] ...`, `[RELEASE] vX.Y.Z`.
 3. Push the branch, open a pull request and fill in the template. The PR title
-   uses the same type flag.
+   uses the same type flag. Every PR must reference the issue it fixes with
+   `Closes #N` or `Refs #N`; the `PR issue link` check enforces this.
 4. Wait for CI/review, then **Squash and merge** so `main` keeps one
    type-flagged commit per change. Delete the branch.
 5. Update local `main` and create the **next** branch from it before starting

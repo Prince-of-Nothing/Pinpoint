@@ -48,6 +48,28 @@ multiplatform section); they share `src/` via `cfg(target_os)`.
 - Platform code goes in `src/platform.rs`; OSM network calls in `src/osm.rs`;
   nothing platform- or network-specific inside `src/ui.rs`.
 
+## Branching and pull requests (mandatory)
+
+`main` is release-ready at all times. **Never commit or push directly to
+`main`.**
+
+- Start every change on a fresh branch from an up-to-date `main`:
+  `feat/<slug>`, `fix/<slug>`, `docs/<slug>`, `infra/<slug>` or
+  `release/vX.Y.Z`.
+- Push the branch and open a pull request. The PR title carries the same type
+  flag as the commit, for example `[FEATURE] map: add offline pack`.
+- Run the full gate and let CI pass before merging. Use **Squash and merge** so
+  `main` keeps one type-flagged commit per change; delete the branch afterward.
+- After the merge, update local `main` and create the **next** branch from it
+  before starting another feature.
+- Multiple branches are fine for independent work, but each must be based on
+  `main`, rebaseable and independently mergeable. Do not keep long-lived or
+  stacked branches; merge the base PR first.
+- Releases: `release/vX.Y.Z` from `main`, gate + review, PR, merge, then tag
+  the merge commit on `main`. Hotfixes use a `fix/` branch and the same PR flow.
+- When the user says "push", push the **current branch** and open/update its PR;
+  do not push `main`.
+
 ## Commits
 
 Every commit is authored by the repository owner only. No `Co-authored-by:`
@@ -96,8 +118,9 @@ Additive seams (never rewrite): new table → migration + domain module; new scr
   Fixed/Removed). The `scripts/commit.ps1 -Message "..."` helper does
   both: runs the full gate, prepends a stub, commits.
 - When the user says "push" (or "commit and push"): run the full gate,
-  update `CHANGELOG.md`, commit, then `git push` (only after the gate is
-  green). Never push a red tree.
+  update `CHANGELOG.md`, commit on the feature branch, push that branch and
+  open/update its pull request (only after the gate is green). Never push
+  `main`; merge through the PR. Never push a red tree.
 - Never commit without running `cargo fmt/clippy/build/test` first.
 
 ## Docs conventions

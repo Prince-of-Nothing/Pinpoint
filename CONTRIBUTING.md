@@ -4,6 +4,7 @@ Thanks for your interest! This is a thesis project with strict security and docu
 requirements, so contribution rules are tighter than a typical hobby repo.
 
 ## Ground rules
+
 1. **Security is non-negotiable.** Any change touching authentication, authorization, consent,
    or location data requires: (a) a test proving the old behavior still holds, and (b) a test
    proving the new attack surface fails closed. If unsure, open an issue first.
@@ -15,49 +16,85 @@ requirements, so contribution rules are tighter than a typical hobby repo.
 5. **No secrets, no real user data** anywhere — including tests. Use the seeded demo identities.
 
 ## Development workflow
+
 ```bash
-# Backend (Go 1.22+)
-cd backend
-go build ./...
-go vet ./...
-go test ./...              # must pass before pushing; keep it that way
+# Rust client + server (the only active codebase)
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo build --locked
+cargo test --locked
 
-# Full stack
-docker compose up --build  # http://localhost:8080
-
-# Lint/format
-gofmt -l .                 # must print nothing
+# Optional gates
+cargo check --locked --target wasm32-unknown-unknown \
+  --bin pinpoint-web --bin pinpoint-weba --bin pinpoint-webk
+cargo audit
+cargo apk build --lib --target aarch64-linux-android   # Android changes
 ```
 
-## Branching & commits
-- `main` stays deployable; work on feature branches: `feat/…`, `fix/…`, `docs/…`, `chore/…`
-- Conventional Commits: `feat(api): add share expiry`, `fix(store): keep email index in sync`
-- Rebase rather than merge-commit when possible; keep history readable.
+Everything under `archive/` is historical and is not built.
+
+## Branching and pull requests (mandatory)
+
+`main` is release-ready at all times. **Never commit or push directly to `main`.**
+
+1. Start from an up-to-date `main` and create one branch per change:
+   `feat/<slug>`, `fix/<slug>`, `docs/<slug>`, `infra/<slug>` or
+   `release/vX.Y.Z`.
+2. Commit with a type flag: `[FEATURE] area: ...`, `[FIX] ...`, `[SECURITY] ...`,
+   `[DOCS] ...`, `[INFRA] ...`, `[RELEASE] vX.Y.Z`.
+3. Push the branch, open a pull request and fill in the template. The PR title
+   uses the same type flag.
+4. Wait for CI/review, then **Squash and merge** so `main` keeps one
+   type-flagged commit per change. Delete the branch.
+5. Update local `main` and create the **next** branch from it before starting
+   the next feature.
+
+Multiple branches are allowed for independent work, but each must be based on
+`main`, rebaseable and independently mergeable. Do not keep stacked or
+long-lived branches; merge the base PR first. Releases branch from `main`, merge
+through a PR, and are tagged on `main` afterward.
+
+Saying "push" means push the current branch and open/update its PR — never push
+`main`.
 
 ## Pull request checklist
-- [ ] `go build`, `go vet`, `go test ./...` pass (CI will re-check)
-- [ ] New/changed behavior covered by tests
-- [ ] No new lint/gofmt findings
-- [ ] Docs updated (`docs/`, README, CHANGELOG "Unreleased")
-- [ ] Breaking API changes flagged in the PR title with `!` and migration note
-- [ ] For security-sensitive code: threat considered — what happens on IDOR, replay,
-      revoked consent mid-session, expired token? Answer in the PR description.
+
+- [ ] Branch is based on the latest `main` and has no unrelated changes
+- [ ] PR title starts with the correct type flag
+- [ ] `cargo fmt --all -- --check` passes
+- [ ] `cargo clippy --all-targets -- -D warnings` passes
+- [ ] `cargo build --locked && cargo test --locked` passes
+- [ ] wasm gate and `cargo audit` pass (or the PR explains why not)
+- [ ] Android APK build passes when `src/platform.rs`, `src/mobile/` or
+      `Cargo.toml` Android metadata changed
+- [ ] `CHANGELOG.md` `[Unreleased]` updated (Added/Changed/Fixed/Removed)
+- [ ] Docs/ADR updated in the same PR
+- [ ] No secrets, tokens, keystores or real user data
+- [ ] No `Co-authored-by:` trailers (owner-only authorship, see `AGENTS.md`)
+- [ ] CI is green; merge with **Squash and merge**, then delete the branch
 
 ## Code style
-- Go: standard `gofmt`; prefer explicit errors (`errors.New`/`fmt.Errorf` with `%w` wrapping);
-  no global mutable state outside `internal/store`; handlers stay thin, logic in store/security.
-- JS (web clients): ES modules, no build step, no dependencies unless justified in the PR.
-- Naming mirrors the domain: `SharePermission`, `precision`, `expiry` — see `docs/GLOSSARY.md`.
+
+- Rust 2021; `rustfmt` and `clippy -D warnings` are mandatory.
+- Platform/OS branches live in `src/platform.rs`; OSM network calls in
+  `src/osm.rs`; no platform or network specifics in `src/ui.rs`.
+- UI code goes in `src/ui.rs` or a per-screen `src/ui/<name>.rs` module.
+- Prefer explicit errors (`anyhow::Result`, `thiserror`) over panics; no
+  `unwrap()` on request or user-data paths.
+- Keep server-side enforcement authoritative; client checks are advisory.
 
 ## Reporting bugs
+
 Open an issue with: reproduction steps, expected vs actual, environment (Docker vs local),
 and — importantly — **do not publicly disclose security vulnerabilities**; see `SECURITY.md`.
 
 ## Proposal process (RFC-lite)
+
 For anything larger than a bugfix, open an issue titled `RFC: <summary>` describing problem,
 proposed approach, alternatives, and security implications. Get a 👍 from the maintainer
 before writing code. This keeps the thesis scope honest.
 
 ## License note
+
 Until a LICENSE file is added, contributions are made under "inbound=outbound, all rights
 reserved to the project author" (academic work). Ask before repurposing code elsewhere.

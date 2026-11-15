@@ -5,6 +5,19 @@
 //! never synced, never containing friend/shared locations.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+
+/// Maximum number of new places accepted from one GeoJSON import.
+pub const MAX_IMPORT: usize = 500;
+
+/// Result of a GeoJSON import.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ImportSummary {
+    pub imported: usize,
+    pub duplicates: usize,
+    pub invalid: usize,
+    pub over_limit: usize,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bookmark {
@@ -107,51 +120,135 @@ impl BookmarkStore {
     }
 
     /// Import bookmarks from an RFC 7946 GeoJSON `FeatureCollection`.
-    /// Validates every coordinate pair fail-closed; returns the number of
-    /// imported places.
-    pub fn import_geojson(&self, raw: &str) -> Result<usize, String> {
+    /// Validates every Point coordinate pair fail-closed, rejects non-Point
+    /// geometries, deduplicates against existing places and within the batch,
+    /// preserves names/notes/categories, and writes once at the end.
+    pub fn import_geojson(&self, raw: &str) -> Result<ImportSummary, String> {
+        if self.path.is_none() {
+            return Err("Import needs a writable app data directory.".to_string());
+        }
         let doc: serde_json::Value =
             serde_json::from_str(raw).map_err(|e| format!("Invalid GeoJSON: {e}"))?;
+        if doc.get("type").and_then(|t| t.as_str()) != Some("FeatureCollection") {
+            return Err("Expected a GeoJSON FeatureCollection.".to_string());
+        }
         let features = doc
             .get("features")
             .and_then(|f| f.as_array())
             .ok_or_else(|| "GeoJSON missing 'features' array".to_string())?;
-        let mut count = 0usize;
-        for f in features {
-            let coords = f
-                .get("geometry")
+        if features.is_empty() {
+            return Err("GeoJSON has no features.".to_string());
+        }
+
+        let existing = self.list();
+        let mut seen: HashSet<String> = existing.iter().map(dedupe_key).collect();
+        let mut imported = Vec::new();
+        let mut summary = ImportSummary::default();
+        let stamp = chrono::Utc::now();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+
+        for (index, feature) in features.iter().enumerate() {
+            if summary.imported >= MAX_IMPORT {
+                summary.over_limit = features.len() - index;
+                break;
+            }
+            let geometry = feature.get("geometry");
+            let geometry_type = geometry
+                .and_then(|g| g.get("type"))
+                .and_then(|t| t.as_str());
+            if geometry_type != Some("Point") {
+                summary.invalid += 1;
+                continue;
+            }
+            let Some(coords) = geometry
                 .and_then(|g| g.get("coordinates"))
-                .and_then(|c| c.as_array());
-            let Some(coords) = coords else { continue };
+                .and_then(|c| c.as_array())
+            else {
+                summary.invalid += 1;
+                continue;
+            };
             if coords.len() < 2 {
+                summary.invalid += 1;
                 continue;
             }
             let (Some(lon), Some(lat)) = (coords[0].as_f64(), coords[1].as_f64()) else {
+                summary.invalid += 1;
                 continue;
             };
-            if !crate::security::validation::validate_location(lat, lon, None).is_valid() {
+            if !lat.is_finite()
+                || !lon.is_finite()
+                || !crate::security::validation::validate_location(lat, lon, None).is_valid()
+            {
+                summary.invalid += 1;
                 continue;
             }
-            let name = f
-                .get("properties")
+            let properties = feature.get("properties");
+            let name = properties
                 .and_then(|p| p.get("name"))
                 .and_then(|n| n.as_str())
+                .map(str::trim)
+                .filter(|n| !n.is_empty())
                 .unwrap_or("Imported place");
-            self.add(name, lat, lon);
-            count += 1;
+            let note = properties
+                .and_then(|p| p.get("note"))
+                .and_then(|n| n.as_str())
+                .unwrap_or("")
+                .to_string();
+            let category = properties
+                .and_then(|p| p.get("category"))
+                .and_then(|c| c.as_str())
+                .unwrap_or("")
+                .to_string();
+            let bookmark = Bookmark {
+                id: format!("bm_import_{nanos}_{index}"),
+                name: name.to_string(),
+                latitude: lat,
+                longitude: lon,
+                note,
+                category,
+                created_at: stamp.to_rfc3339(),
+            };
+            if !seen.insert(dedupe_key(&bookmark)) {
+                summary.duplicates += 1;
+                continue;
+            }
+            summary.imported += 1;
+            imported.push(bookmark);
         }
-        Ok(count)
+
+        if summary.imported > 0 {
+            imported.extend(existing);
+            if !self.persist(&imported) {
+                return Err("Could not write the imported places.".to_string());
+            }
+        }
+        Ok(summary)
     }
 
-    fn persist(&self, list: &[Bookmark]) {
-        let Some(path) = &self.path else { return };
+    fn persist(&self, list: &[Bookmark]) -> bool {
+        let Some(path) = &self.path else { return false };
         if let Some(parent) = path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            if std::fs::create_dir_all(parent).is_err() {
+                return false;
+            }
         }
-        if let Ok(text) = serde_json::to_string_pretty(list) {
-            let _ = std::fs::write(path, text);
+        match serde_json::to_string_pretty(list) {
+            Ok(text) => std::fs::write(path, text).is_ok(),
+            Err(_) => false,
         }
     }
+}
+
+fn dedupe_key(bookmark: &Bookmark) -> String {
+    format!(
+        "{}|{}|{}",
+        bookmark.name.trim().to_lowercase(),
+        (bookmark.latitude * 100_000.0).round() as i64,
+        (bookmark.longitude * 100_000.0).round() as i64
+    )
 }
 
 impl Default for BookmarkStore {
@@ -162,7 +259,7 @@ impl Default for BookmarkStore {
 
 #[cfg(test)]
 mod tests {
-    use super::BookmarkStore;
+    use super::{BookmarkStore, ImportSummary};
 
     #[test]
     fn in_memory_store_add_remove() {
@@ -222,7 +319,7 @@ mod tests {
 
         let store2 = BookmarkStore::new(Some(dir2.clone()));
         let imported = store2.import_geojson(&gj).unwrap();
-        assert_eq!(imported, 1);
+        assert_eq!(imported.imported, 1);
         let list2 = store2.list();
         assert_eq!(list2.len(), 1);
         assert_eq!(list2[0].name, "Valea Morilor");
@@ -231,5 +328,121 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(dir1);
         let _ = std::fs::remove_dir_all(dir2);
+    }
+
+    #[test]
+    fn import_dedupes_validates_and_preserves_properties() {
+        let dir = std::env::temp_dir().join(format!(
+            "pinpoint-bm-import-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = BookmarkStore::new(Some(dir.clone()));
+        let doc = serde_json::json!({
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [28.86, 47.01]},
+                    "properties": {"name": " Home ", "note": "gate code", "category": "home"}
+                },
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [28.86, 47.01]},
+                    "properties": {"name": "home"}
+                },
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [200.0, 47.0]},
+                    "properties": {"name": "out of range"}
+                },
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": [[0.0, 0.0], [1.0, 1.0]]},
+                    "properties": {"name": "line"}
+                },
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [28.87, 47.02]},
+                    "properties": {}
+                }
+            ]
+        });
+        let summary = store.import_geojson(&doc.to_string()).unwrap();
+        assert_eq!(
+            summary,
+            ImportSummary {
+                imported: 2,
+                duplicates: 1,
+                invalid: 2,
+                over_limit: 0
+            }
+        );
+        let list = store.list();
+        assert_eq!(list.len(), 2);
+        let home = list.iter().find(|b| b.name == "Home").unwrap();
+        assert_eq!(home.note, "gate code");
+        assert_eq!(home.category, "home");
+        assert!(list.iter().any(|b| b.name == "Imported place"));
+
+        // Re-importing the same document adds nothing.
+        let again = store.import_geojson(&doc.to_string()).unwrap();
+        assert_eq!(again.imported, 0);
+        assert_eq!(again.duplicates, 3);
+        assert_eq!(again.invalid, 2);
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn import_rejects_malformed_and_empty_documents() {
+        let dir = std::env::temp_dir().join(format!(
+            "pinpoint-bm-bad-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let store = BookmarkStore::new(Some(dir.clone()));
+        assert!(store.import_geojson("not json").is_err());
+        assert!(store
+            .import_geojson(r#"{"type":"Feature","geometry":null}"#)
+            .is_err());
+        assert!(store
+            .import_geojson(r#"{"type":"FeatureCollection","features":[]}"#)
+            .is_err());
+        assert!(BookmarkStore::new(None).import_geojson("{}").is_err());
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn import_is_capped_at_maximum() {
+        let dir = std::env::temp_dir().join(format!(
+            "pinpoint-bm-cap-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let features: Vec<serde_json::Value> = (0..=super::MAX_IMPORT)
+            .map(|i| {
+                serde_json::json!({
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [28.0 + i as f64 / 1000.0, 47.0]},
+                    "properties": {"name": format!("Place {i}")}
+                })
+            })
+            .collect();
+        let doc = serde_json::json!({"type": "FeatureCollection", "features": features});
+        let store = BookmarkStore::new(Some(dir.clone()));
+        let summary = store.import_geojson(&doc.to_string()).unwrap();
+        assert_eq!(summary.imported, super::MAX_IMPORT);
+        assert_eq!(summary.over_limit, 1);
+        assert_eq!(store.list().len(), super::MAX_IMPORT);
+        std::fs::remove_dir_all(dir).ok();
     }
 }

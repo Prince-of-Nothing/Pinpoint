@@ -11,8 +11,17 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.3.10] - 2026-11-15
+### Security
+- [SECURITY] `platform::open_url` now allowlists only `mailto:`, `tel:` and `geo:`. HTTP/HTTPS, `file:`, `content:`, `intent:`, `javascript:` and `pinpoint:` are rejected and cannot launch arbitrary OS handlers; whitespace/control characters are rejected.
+
 ### Added
+- [FEATURE] About → Troubleshooting shows the configured backend URL (userinfo redacted) and the number of pending crash reports; reports marked seen are kept but not counted.
 - [INFRA] Docker: `scripts/docker-maintenance.ps1` prunes BuildKit cache and compacts Docker Desktop's WSL data disk. README documents why the VHDX does not shrink by itself after pruning.
+
+### Fixed
+- [FIX] Crash diagnostics count only `crash-*.txt` files, matching the pending-report logic.
 
 ## [1.3.9] - 2026-11-15
 ### Added

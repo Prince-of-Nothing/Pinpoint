@@ -61,6 +61,10 @@ multiplatform section); they share `src/` via `cfg(target_os)`.
 - Every PR references the issue it fixes with `Closes #N` or `Refs #N`. The
   `PR issue link` workflow enforces this; `skip-issue-link` is reserved for
   exceptional release/tooling PRs.
+- Every issue carries a native type (Bug/Feature/Task), a `PREFIX-n` title ID
+  and one `severity:*` plus one `priority:*` label. Use
+  `scripts/new-issue.ps1` (see `docs/ISSUE_TAXONOMY.md`), and keep the tracker
+  current when opening, closing or re-scoping work.
 - Run the full gate and let CI pass before merging. Use **Squash and merge** so
   `main` keeps one type-flagged commit per change; delete the branch afterward.
 - After the merge, update local `main` and create the **next** branch from it

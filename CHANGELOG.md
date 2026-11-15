@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Changed
+- [DOCS] Tracker: every issue now has a native GitHub type, a `PREFIX-n` title ID, one `severity:*` and one `priority:*` label. Adds `docs/ISSUE_TAXONOMY.md`, `scripts/new-issue.ps1`, a task issue template, and prunes the redundant `feature`/`fix`/`docs`/`release`/`go` labels.
 
 ## [1.3.13] - 2026-11-15
 ### Fixed

@@ -74,6 +74,31 @@ Saying "push" means push the current branch and open/update its PR — never pus
 - [ ] No `Co-authored-by:` trailers (owner-only authorship, see `AGENTS.md`)
 - [ ] CI is green; merge with **Squash and merge**, then delete the branch
 
+## Issue tracker
+
+Every issue has exactly one native GitHub type (**Bug**, **Feature** or
+**Task**), a `PREFIX-n` title ID, one `severity:*` label and one `priority:*`
+label. Triage an issue in this order:
+
+1. Set the type.
+2. Rename the title to the next ID, for example `FEAT-6: Offline map packs`.
+3. Add `severity:critical|important|medium|minor`.
+4. Add `priority:asap|high|normal|low`.
+5. Add domain labels and `needs:compliance` when privacy, consent, security or
+   location data is involved.
+
+Create a correctly triaged issue with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/new-issue.ps1 `
+  -Prefix FEAT -Type Feature -Title "Offline map packs" `
+  -Severity medium -Priority normal -Label android
+```
+
+`-DryRun` prints the next ID and command without creating anything. The full
+rules, severity/priority definitions and label set are in
+[`docs/ISSUE_TAXONOMY.md`](./docs/ISSUE_TAXONOMY.md).
+
 ## Code style
 
 - Rust 2021; `rustfmt` and `clippy -D warnings` are mandatory.

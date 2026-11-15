@@ -12,6 +12,14 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.3.15] - 2026-11-16
+### Added
+- [FEATURE] Update dialog with the release notes for the new version, a direct **Download APK** button and the asset name/size. The GitHub Releases API supplies the real tag, release page URL, notes and assets; the Atom feed remains a fallback.
+- [FEATURE] The updater selects the universal APK asset, so the app downloads the correct file without the user choosing between 32-bit and 64-bit builds.
+
+### Fixed
+- [FIX] Release builds are one universal APK containing both `arm64-v8a` and `armeabi-v7a` native libraries. This prevents 64-bit-only devices from accidentally installing the 32-bit asset and reporting a bad package.
+
 ## [1.3.14] - 2026-11-16
 ### Added
 - [FEATURE] Read-only service status and discovery: `GET /status` (HTML) and `GET /api/v1/services` (JSON) in the combined server and every split binary. They report the version, service kind, database mode, component path prefixes and sanitized OSM/tile endpoints, with no secrets or user data (ADR-0016).

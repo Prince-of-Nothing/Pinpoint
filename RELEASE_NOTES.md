@@ -1,16 +1,31 @@
-# Pinpoint 1.3.14 — Release Notes
+# Pinpoint 1.3.15 — Release Notes
 
-**Released:** 2026-11-16 · **Version:** `1.3.14` (from `1.3.13`) ·
-**Status:** Android bridge (share-in, biometrics, background location), services status page and issue-link CI.
+**Released:** 2026-11-16 · **Version:** `1.3.15` (from `1.3.14`) ·
+**Status:** Universal APK and a release-notes update dialog with direct download.
 
-**Artifacts:** `pinpoint-android-1.3.14.apk` (arm64-v8a) and
-`pinpoint-android-1.3.14-armeabi-v7a.apk` (32-bit ARM). GitHub also generates the
-source `zip`/`tar.gz` archives for the `v1.3.14` tag.
+**Artifacts:** `pinpoint-android-1.3.15.apk` — **universal**: `arm64-v8a` and
+`armeabi-v7a` in one APK. GitHub also generates the source `zip`/`tar.gz`
+archives for the `v1.3.15` tag.
 
 Flags: `[FEATURE]` new capability · `[FIX]` bug fix · `[SECURITY]` hardening ·
 `[DOCS]` documentation · `[INFRA]` build/deploy.
 
 ---
+
+## 1.3.15 fixes
+
+- **One universal APK:** the release now contains both ARM ABIs in a single
+  `pinpoint-android-1.3.15.apk`. A 64-bit phone can no longer pick the 32-bit
+  asset and fail with a bad-package error.
+- **Real update data:** the checker uses GitHub's Releases API for the tag,
+  release page, body and asset list. The Atom feed is only a fallback.
+- **Direct download:** **Download APK** opens the universal asset URL directly;
+  the asset name and size are shown, and the link can be copied.
+- **What's new:** a launch dialog shows the release notes for the available
+  version (like Aniyomi), with **Download APK**, **Open release page** and
+  **Later**. About → Updates shows the same notes.
+- **Upgrade note:** if a locally built/debug APK with a different signature is
+  installed, uninstall it once before installing this release.
 
 ## 1.3.14 features
 

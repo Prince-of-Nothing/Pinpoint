@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Changed
+- [DOCS] Process: every change now goes through a feature branch and pull request; `main` is never committed or pushed directly. Documented in `AGENTS.md`, `CONTRIBUTING.md`, the PR template and the commit helper guard.
 
 ## [1.3.10] - 2026-11-15
 ### Security

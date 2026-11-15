@@ -1,10 +1,10 @@
 # scripts/commit.ps1 — Gate + commit helper (run after a feature is done).
 #
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File scripts/commit.ps1 -Message "feat(x): ..." -Body "details"
+#   powershell -ExecutionPolicy Bypass -File scripts/commit.ps1 -Message "[FEATURE] area: ..." -Body "details"
 #
 # Runs fmt/clippy/build/test, prepends a CHANGELOG entry stub, commits.
-# Does NOT push.
+# Refuses to run on main. Does NOT push; open a PR from the feature branch.
 
 param(
     [Parameter(Mandatory = $true)][string]$Message,
@@ -14,6 +14,11 @@ param(
 
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
+
+$branch = (& git branch --show-current).Trim()
+if ($branch -eq "main" -or $branch -eq "master") {
+    throw "Refusing to commit on '$branch'. Create a feature branch first: git switch -c feat/<slug>"
+}
 
 function Gate($cmd) { Write-Host ">> $cmd"; Invoke-Expression $cmd; if ($LASTEXITCODE -ne 0) { throw "gate failed: $cmd" } }
 
@@ -41,3 +46,4 @@ if ($Body) { $gitArgs += @("-m", $Body) }
 git add -A
 git commit @gitArgs
 Write-Host "Committed: $Message"
+Write-Host "Next: git push -u origin $branch, open/update the PR, wait for CI, then squash-merge."

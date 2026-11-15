@@ -110,6 +110,20 @@ internal gateway name is allowed to use plaintext HTTP only through the
 explicit `PINPOINT_ALLOW_PLAINTEXT_HOSTS=gateway` opt-in (exact hostnames,
 no wildcard); HTTPS remains the default everywhere else.
 
+#### Docker disk maintenance
+
+Rust builds accumulate BuildKit cache quickly (`docker system df`). Run an
+Administrator PowerShell from the repository root to prune cache beyond 5 GB
+and compact Docker Desktop's WSL disk:
+
+```powershell
+./scripts/docker-maintenance.ps1
+```
+
+The script keeps images, containers and volumes. Windows does not shrink
+`docker_data.vhdx` automatically, so pruning alone does not return the space
+to the host until the disk is compacted.
+
 ### Release artifact
 
 Unzip `dist/pinpoint-1.2.1-windows-x64.zip`, run `pinpoint-server.exe`, open

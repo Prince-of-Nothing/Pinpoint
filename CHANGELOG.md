@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Added
+- [INFRA] Docker: `scripts/docker-maintenance.ps1` prunes BuildKit cache and compacts Docker Desktop's WSL data disk. README documents why the VHDX does not shrink by itself after pruning.
 
 ## [1.3.9] - 2026-11-15
 ### Added

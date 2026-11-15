@@ -162,6 +162,30 @@ pub fn apply_pinch_zoom(zoom: u8, accum: f32, delta: f32) -> (u8, f32) {
     (zoom, accum.clamp(-step, step))
 }
 
+/// Return the bookmark whose projected pin is within `radius` screen points of
+/// `pos`. Used to turn a tap into the place sheet instead of a reverse geocode.
+pub fn bookmark_hit(
+    state: &AppData,
+    map_rect: Rect,
+    pos: Pos2,
+    radius: f32,
+) -> Option<(String, f64, f64)> {
+    state
+        .map_bookmark_pins
+        .iter()
+        .find_map(|(name, latitude, longitude)| {
+            let pin = project_to_rect(
+                *latitude,
+                *longitude,
+                state.map_center_lat,
+                state.map_center_lon,
+                state.map_zoom,
+                map_rect,
+            );
+            (pin.distance(pos) <= radius).then(|| (name.clone(), *latitude, *longitude))
+        })
+}
+
 /// Render an interactive Slippy tile canvas showing friend locations and
 /// cached tiles at the default 320 pt height.
 pub fn render_map(ui: &mut Ui, state: &mut AppData) {
@@ -253,13 +277,17 @@ pub fn render_map_with(
 
         if response.clicked() && ui.input(|i| i.multi_touch()).is_none() {
             if let Some(pos) = response.interact_pointer_pos() {
-                state.map_click = Some(screen_to_latlon(
-                    map_rect,
-                    state.map_center_lat,
-                    state.map_center_lon,
-                    state.map_zoom,
-                    pos,
-                ));
+                if let Some(bookmark) = bookmark_hit(state, map_rect, pos, 20.0) {
+                    state.map_bookmark_click = Some(bookmark);
+                } else {
+                    state.map_click = Some(screen_to_latlon(
+                        map_rect,
+                        state.map_center_lat,
+                        state.map_center_lon,
+                        state.map_zoom,
+                        pos,
+                    ));
+                }
             }
         }
 
@@ -446,6 +474,13 @@ pub fn render_map_with(
         // Saved places (on-device bookmarks), drawn under friend pins.
         let saved_color = Color32::from_rgb(96, 165, 250);
         for (name, latitude, longitude) in &state.map_bookmark_pins {
+            // The selected-place marker draws this bookmark already.
+            if state.selected_place.as_ref().is_some_and(|place| {
+                (place.latitude - *latitude).abs() < 1e-9
+                    && (place.longitude - *longitude).abs() < 1e-9
+            }) {
+                continue;
+            }
             let pin_pos = project_to_rect(
                 *latitude,
                 *longitude,
@@ -781,5 +816,28 @@ mod tests {
         let (zoom, accum) = apply_pinch_zoom(2, 0.0, 0.05);
         assert_eq!(zoom, 2);
         assert_eq!(accum, 0.0);
+    }
+
+    #[test]
+    fn bookmark_hit_matches_projected_pin() {
+        let mut data = AppData {
+            map_bookmark_pins: vec![("Saved Cafe".into(), 47.03, 28.90)],
+            ..Default::default()
+        };
+        ensure_viewport(&mut data);
+        let rect = Rect::from_min_size(Pos2::new(10.0, 20.0), Vec2::new(400.0, 300.0));
+        let pin = project_to_rect(
+            47.03,
+            28.90,
+            data.map_center_lat,
+            data.map_center_lon,
+            data.map_zoom,
+            rect,
+        );
+        assert_eq!(
+            bookmark_hit(&data, rect, pin, 20.0),
+            Some(("Saved Cafe".into(), 47.03, 28.90))
+        );
+        assert!(bookmark_hit(&data, rect, pin + Vec2::new(40.0, 40.0), 20.0).is_none());
     }
 }

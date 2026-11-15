@@ -374,6 +374,15 @@ impl PinpointAppUI {
         data.map_zoom = 15;
     }
 
+    /// Centre the map on a coordinate without changing the zoom.
+    pub(crate) fn center_map_at(&mut self, latitude: f64, longitude: f64) {
+        self.app.set_screen(CurrentScreen::Map);
+        let data = self.app.data();
+        let mut data = data.lock().unwrap();
+        data.map_center_lat = latitude;
+        data.map_center_lon = longitude;
+    }
+
     /// Apply an Android `pinpoint://` or `geo:` launch URI.
     pub fn apply_deep_link(&mut self, link: crate::mobile::MobileDeepLink) {
         match link {

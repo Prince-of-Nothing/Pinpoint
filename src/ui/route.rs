@@ -370,6 +370,23 @@ impl super::PinpointAppUI {
     /// Consume one map tap: set B when the route sheet is open, otherwise
     /// reverse-geocode it into the place sheet.
     pub(crate) fn handle_map_click(&mut self, ctx: &egui::Context) {
+        let bookmark = { self.app.data().lock().unwrap().map_bookmark_click.take() };
+        if let Some((name, latitude, longitude)) = bookmark {
+            let place = crate::osm::SearchPlace {
+                display_name: name.clone(),
+                short_name: name,
+                latitude,
+                longitude,
+                category: "saved".to_string(),
+                place_type: "bookmark".to_string(),
+                distance_m: None,
+            };
+            self.app.data().lock().unwrap().selected_place = Some(place.clone());
+            self.mobile_selected_place = Some(place);
+            self.center_map_at(latitude, longitude);
+            tracing::info!("bookmark tapped");
+            return;
+        }
         let click = { self.app.data().lock().unwrap().map_click.take() };
         if let Some((lat, lon)) = click {
             if self.route_plan.open {

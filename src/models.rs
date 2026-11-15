@@ -341,6 +341,8 @@ pub struct AppData {
     pub selected_place: Option<SearchPlace>,
     /// One-shot map tap coordinate consumed by the UI.
     pub map_click: Option<(f64, f64)>,
+    /// One-shot bookmark tap (name, latitude, longitude) consumed by the UI.
+    pub map_bookmark_click: Option<(String, f64, f64)>,
     /// Nearby POI results from the last Overpass query (Places screen).
     pub poi_results: Vec<crate::osm::Poi>,
     /// Last calculated route (summary/steps/GPX export).

@@ -700,3 +700,74 @@ async fn map_route_rejects_invalid_coordinates() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn status_page_and_services_json_are_public_and_sanitized() {
+    use pinpoint_desktop::server::{router, AppState, ServiceKind};
+
+    let app = router(AppState::for_owner(ServiceKind::All));
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/services")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["service"], "all");
+    assert_eq!(json["components"]["locations"], "/api/v1/locations");
+    assert!(json["integrations"]["nominatim"].is_string());
+    assert!(
+        !json["integrations"].to_string().contains('@'),
+        "integration endpoints must not expose userinfo"
+    );
+
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/status")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let html = String::from_utf8_lossy(&body);
+    assert!(html.contains("Pinpoint services"));
+    assert!(html.contains("OpenStreetMap"));
+    assert!(html.contains("/api/v1/services"));
+}
+
+#[tokio::test]
+async fn split_service_mounts_status_with_its_own_kind() {
+    use pinpoint_desktop::server::{auth_router, status_routes, AppState, ServiceKind};
+
+    let app = auth_router()
+        .merge(status_routes())
+        .with_state(AppState::for_owner(ServiceKind::Auth));
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/services")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["service"], "auth");
+}

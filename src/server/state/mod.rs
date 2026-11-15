@@ -55,6 +55,19 @@ pub enum ServiceKind {
 }
 
 impl ServiceKind {
+    /// Stable lowercase name for `/status` and `/api/v1/services`.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::All => "all",
+            Self::Auth => "auth",
+            Self::Users => "users",
+            Self::Locations => "locations",
+            Self::MapOnly => "map",
+            Self::Diag => "diag",
+            Self::Admin => "admin",
+        }
+    }
+
     pub fn owns_users(self) -> bool {
         matches!(self, Self::All | Self::Auth)
     }

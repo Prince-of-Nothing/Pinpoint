@@ -20,6 +20,7 @@ const ADMIN_USERS_JS: &str = include_str!("../../web/app/admin/users.js");
 const ADMIN_DIAGNOSTICS_JS: &str = include_str!("../../web/app/admin/diagnostics.js");
 const ADMIN_AUDIT_JS: &str = include_str!("../../web/app/admin/audit.js");
 const APP_CSS: &str = include_str!("../../web/app/app.css");
+pub(crate) const STATUS_CSS: &str = include_str!("../../web/status.css");
 const FAVICON: &str = include_str!("../../web/app/favicon.svg");
 const LEAFLET_JS: &str = include_str!("../../web/app/vendor/leaflet.js");
 const LEAFLET_CSS: &str = include_str!("../../web/app/vendor/leaflet.css");
@@ -39,7 +40,7 @@ frame-ancestors 'none'; form-action 'self'; object-src 'none'; manifest-src 'sel
 
 const PERMISSIONS_POLICY: &str = "geolocation=(self), camera=(), microphone=(), payment=(), usb=()";
 
-fn secure(mut resp: Response) -> Response {
+pub(crate) fn secure(mut resp: Response) -> Response {
     let headers = resp.headers_mut();
     headers.insert(
         header::X_CONTENT_TYPE_OPTIONS,

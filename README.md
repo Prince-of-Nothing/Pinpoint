@@ -63,6 +63,8 @@ device validation. See [`ROADMAP.md`](./ROADMAP.md) and
 ```bash
 cargo run --bin pinpoint-server
 # → http://127.0.0.1:8000/  (in-memory demo store, seeded Alice/Bob)
+# → http://127.0.0.1:8000/  (in-memory demo store, seeded Alice/Bob)
+# → http://127.0.0.1:8000/status  (service + integration status, ADR-0016)
 # demo login: alice@example.com / DemoPass123!
 ```
 

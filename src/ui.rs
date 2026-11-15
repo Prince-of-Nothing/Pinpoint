@@ -269,7 +269,6 @@ pub struct PinpointAppUI {
     lock_armed: bool,
     pin_input: String,
     pin_error: Option<String>,
-    pin_failures: u32,
     pin_retry_at: Option<std::time::Instant>,
     pin_focus_requested: bool,
     pin_setup: String,
@@ -284,7 +283,9 @@ impl PinpointAppUI {
     pub fn new(backend: DynBackend, screenshot_path: Option<String>) -> Self {
         let app = Arc::new(PinpointApp::new(backend, screenshot_path));
         PinpointApp::start_auto_refresh(Arc::clone(&app));
-        let lock_enabled = crate::app_lock::LockStore::default_location().is_configured();
+        let lock_store = crate::app_lock::LockStore::default_location();
+        let lock_enabled = lock_store.is_configured();
+        let lock_remaining = lock_store.lockout_remaining();
         Self {
             app,
             rt: Runtime::new().expect("Failed to create tokio runtime"),
@@ -348,8 +349,7 @@ impl PinpointAppUI {
             lock_armed: false,
             pin_input: String::new(),
             pin_error: None,
-            pin_failures: 0,
-            pin_retry_at: None,
+            pin_retry_at: lock_remaining.map(|remaining| std::time::Instant::now() + remaining),
             pin_focus_requested: lock_enabled,
             pin_setup: String::new(),
             pin_setup_confirm: String::new(),
@@ -1156,6 +1156,7 @@ impl PinpointAppUI {
                         self.attempt_unlock();
                     }
                     if retry_secs > 0 {
+                        ctx.request_repaint_after(std::time::Duration::from_millis(500));
                         ui.label(
                             RichText::new(format!("Try again in {retry_secs}s."))
                                 .size(12.0)
@@ -1173,25 +1174,41 @@ impl PinpointAppUI {
     }
 
     fn attempt_unlock(&mut self) {
-        if crate::app_lock::LockStore::default_location().verify(&self.pin_input) {
-            self.locked = false;
-            self.pin_input.clear();
-            self.pin_error = None;
-            self.pin_failures = 0;
-            self.pin_retry_at = None;
-            tracing::info!("app lock: unlocked");
-            return;
+        let store = crate::app_lock::LockStore::default_location();
+        match store.attempt(&self.pin_input) {
+            crate::app_lock::LockAttempt::Unlocked => {
+                self.locked = false;
+                self.pin_input.clear();
+                self.pin_error = None;
+                self.pin_retry_at = None;
+                tracing::info!("app lock: unlocked");
+            }
+            crate::app_lock::LockAttempt::Wrong {
+                failures,
+                retry_after_ms,
+            } => {
+                let secs = retry_after_ms.div_ceil(1000);
+                self.pin_retry_at = Some(
+                    std::time::Instant::now() + std::time::Duration::from_millis(retry_after_ms),
+                );
+                self.pin_error = Some(if failures >= 3 {
+                    format!("Wrong PIN ({secs}s lockout).")
+                } else {
+                    "Wrong PIN.".to_string()
+                });
+                self.pin_input.clear();
+                self.pin_focus_requested = true;
+            }
+            crate::app_lock::LockAttempt::LockedOut { retry_after_ms } => {
+                let secs = retry_after_ms.div_ceil(1000);
+                self.pin_retry_at = Some(
+                    std::time::Instant::now() + std::time::Duration::from_millis(retry_after_ms),
+                );
+                self.pin_error = Some(format!("Locked. Try again in {secs}s."));
+                self.pin_input.clear();
+                self.pin_focus_requested = true;
+            }
         }
-        self.pin_failures = self.pin_failures.saturating_add(1);
-        let delay = 1u64 << self.pin_failures.min(5);
-        self.pin_retry_at = Some(std::time::Instant::now() + std::time::Duration::from_secs(delay));
-        self.pin_error = Some(if self.pin_failures >= 3 {
-            format!("Wrong PIN ({delay}s lockout).")
-        } else {
-            "Wrong PIN.".to_string()
-        });
-        self.pin_input.clear();
-        self.pin_focus_requested = true;
     }
 }
 

@@ -152,8 +152,8 @@ impl PinpointAppUI {
             );
             ui.label(
                 RichText::new(
-                    "Casual privacy lock only: it does not encrypt app data, and the retry \
-                     delay resets when the app restarts.",
+                    "Casual privacy lock only: it does not encrypt app data. The retry delay \
+                     is persisted on this device, so force-stopping the app does not clear it.",
                 )
                 .size(10.0)
                 .color(egui::Color32::from_rgb(148, 163, 184)),

@@ -1,0 +1,25 @@
+name: PR issue link
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  linked-issue:
+    if: github.actor != 'dependabot[bot]' && !contains(github.event.pull_request.labels.*.name, 'skip-issue-link')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require Closes/Refs #N in the PR body
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if printf '%s\n' "$PR_BODY" | grep -Eiq '(closes|fixes|resolves|refs) +#[0-9]+'; then
+            echo "Linked issue found."
+          else
+            echo "::error::PR body must link an issue: add 'Closes #123' or 'Refs #123'."
+            exit 1
+          fi

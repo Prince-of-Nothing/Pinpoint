@@ -15,6 +15,7 @@ The per-item flagged list for this release is in
 - [FEATURE] Read-only service status and discovery: `GET /status` (HTML) and `GET /api/v1/services` (JSON) in the combined server and every split binary. They report the version, service kind, database mode, component path prefixes and sanitized OSM/tile endpoints, with no secrets or user data (ADR-0016).
 
 ### Changed
+- [INFRA] CI: every pull request now fails unless its body links an issue with `Closes`/`Fixes`/`Resolves`/`Refs #N`; the `skip-issue-link` label is the escape hatch for release/tooling PRs.
 - [DOCS] Tracker: every issue now has a native GitHub type, a `PREFIX-n` title ID, one `severity:*` and one `priority:*` label. Adds `docs/ISSUE_TAXONOMY.md`, `scripts/new-issue.ps1`, a task issue template, and prunes the redundant `feature`/`fix`/`docs`/`release`/`go` labels.
 
 ## [1.3.13] - 2026-11-15

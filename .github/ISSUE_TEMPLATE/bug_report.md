@@ -1,9 +1,12 @@
 ---
 name: Bug report
 about: Report a defect
-title: "[bug] "
+title: "BUG: "
 labels: bug
 ---
+
+<!-- Triage: set type Bug, rename to BUG-<n>: ..., and add one severity:* and
+one priority:* label. See docs/ISSUE_TAXONOMY.md. -->
 
 **Describe the bug**
 

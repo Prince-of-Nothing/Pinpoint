@@ -21,6 +21,7 @@ source of truth for *why* a decision was made.
 | [0013](../adr/0013-android-native-activity-jni.md) | Use the live Android activity for JNI and accept cold-start share/deep-link delivery | Accepted |
 | [0014](../adr/0014-remove-action-send-target.md) | Remove the ACTION_SEND target until an onNewIntent bridge exists | Accepted |
 | [0015](../adr/0015-launch-time-update-check.md) | Throttled, opt-out launch-time update check | Accepted |
+| [0016](../adr/0016-service-status-discovery.md) | Read-only service status and integration discovery | Accepted |
 
 Add a row here whenever a new ADR is created. See [`adr/template.md`](../adr/template.md)
 for the format used to write new ADRs, and [`adr/README.md`](../adr/README.md) for the

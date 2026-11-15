@@ -10,7 +10,8 @@
 //! - `POST /api/v1/friendships/`, `GET /api/v1/friendships/`, `POST /friendships/{id}/respond`
 //! - `POST /locations/shares`, `GET /locations/shares`, `PATCH /locations/shares/{id}`
 //! - `POST /locations/me`, `GET /locations/friends`
-//! - `GET /health`
+//! - `GET /health`, `GET /api/v1/sync-status`
+//! - `GET /status`, `GET /api/v1/services` (read-only status/discovery, ADR-0016)
 //!
 //! In-memory store (demo/tests/local). For production, swap `Store` for
 //! Postgres behind the same handlers. All validation/consent/precision
@@ -25,6 +26,7 @@ mod handlers;
 mod locations_handlers;
 mod migrations;
 mod state;
+mod status;
 mod usernames;
 mod users_handlers;
 mod web_handlers;
@@ -32,6 +34,7 @@ mod web_handlers;
 pub use handlers::health;
 pub use handlers::sync_status;
 pub use state::{AppState, ServiceKind, Store, StoredSession};
+pub use status::routes as status_routes;
 
 pub use crate::models::{FriendLocation, Friendship, LocationShare, User};
 
@@ -150,6 +153,7 @@ pub fn router(state: AppState) -> Router {
         .merge(map_router())
         .merge(admin_router())
         .merge(diagnostic_router())
+        .merge(status_routes())
         .route("/", get(web_handlers::index))
         .route("/app.js", get(web_handlers::app_js))
         .route("/map.js", get(web_handlers::map_js))

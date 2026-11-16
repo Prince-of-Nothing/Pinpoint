@@ -17,14 +17,11 @@
   incl. the spiral execution plan; UML `docs/uml/01–15`).
   Contribution rules in `CONTRIBUTING.md`.
 
-## Archive (`archive/` — NOT built)
+## Repository history
 
-Everything else was archived in the Rust-multiplatform pivot:
-`backend/` (Go + Python), `web/` (vanilla JS), `mobile/` (Kotlin),
-`app/` (gidireads Rust static site), `e2e/`, `docker/`, `scripts/`,
-`shots/`, plus compose/render/binaries and junk files. See
-`archive/README.md`. Do not build, lint or import from `archive/`; consult
-it only as historical reference. OSM maps policy lives in
+Only the active Rust stack is tracked. The historical Go/Python/Kotlin/web
+prototypes were removed from the working tree; consult git history or
+ADR-0007 when you need them. OSM maps policy lives in
 `docs/sdlc/07-openstreetmap-integration.md`; never use
 `tile.openstreetmap.org` (OSMF policy).
 

@@ -65,18 +65,6 @@ audit_out.txt
 /msvc/
 /downloads/
 
-# Archived local toolchains/build outputs: keep on disk, never commit
-/archive/msvc/
-/archive/downloads/
-/archive/go*.zip
-/archive/go*.msi
-/archive/app/target/
-/archive/**/target/
-/archive/**/build/
-/archive/**/.gradle/
-/archive/backend/server.exe
-/archive/docker/docker
-
 # Installers and Android signing material
 *.msi
 *.cab

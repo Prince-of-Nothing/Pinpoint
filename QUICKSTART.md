@@ -6,8 +6,9 @@ desktop client has it). See [`RELEASE_NOTES.md`](./RELEASE_NOTES.md) for the
 functional-state matrix and [`ROADMAP.md`](./ROADMAP.md) for what's next.
 
 This guide gets the pure-Rust stack running: API server (`pinpoint-server`) +
-desktop client (`pinpoint-desktop`). The Go backend and old web/mobile stacks
-are archived under `archive/` (see ADR-0007/0008).
+desktop client (`pinpoint-desktop`). The historical Go/Python/Kotlin/web
+prototypes were removed from the working tree; consult git history or
+ADR-0007/0008 if you need them.
 
 ## Overview
 

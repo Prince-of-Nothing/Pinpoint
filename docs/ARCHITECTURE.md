@@ -2,8 +2,8 @@
 
 > Current architecture (Rust). The arc42 documentation in
 > [`docs/architecture/`](./architecture/) is the detailed source; the
-> historical Go/FastAPI/Kotlin trees are archived under `archive/` and are
-> **not** built.
+> historical Go/FastAPI/Kotlin trees were removed from the working tree and
+> are **not** built. Use git history or ADR-0007 if you need them.
 
 ## Overview
 

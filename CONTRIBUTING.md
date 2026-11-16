@@ -31,8 +31,6 @@ cargo audit
 cargo apk build --lib --target aarch64-linux-android   # Android changes
 ```
 
-Everything under `archive/` is historical and is not built.
-
 ## Branching and pull requests (mandatory)
 
 `main` is release-ready at all times. **Never commit or push directly to `main`.**

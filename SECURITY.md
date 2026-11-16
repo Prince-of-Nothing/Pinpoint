@@ -11,8 +11,8 @@ We aim to acknowledge within 72 hours.
 
 ## Supported versions
 
-Only the latest commit on `main` is supported. Archived stacks under
-`archive/` are not maintained.
+Only the latest commit on `main` is supported. Historical stacks removed from
+the working tree are not maintained.
 
 ## Security controls
 

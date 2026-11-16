@@ -1,5 +1,0 @@
-error: unexpected argument ';' found
-
-Usage: cargo.exe build [OPTIONS]
-
-For more information, try '--help'.

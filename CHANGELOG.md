@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Removed
+- [INFRA] Removed the `archive/` tree (315 historical files) and its Docker/build ignore entries. The old Go/Python/Kotlin/web stacks remain available in git history and ADR-0007.
 
 ## [1.3.15] - 2026-11-16
 ### Added

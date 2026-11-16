@@ -13,6 +13,7 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] Web map foundation: vendored MapLibre GL JS 6.18.0 and PMTiles 4.5.0, a no-CDN `web/map/` module and preview, and the 94 KB ODbL Monaco fixture with a headless smoke test.
+- [FEATURE] Web offline packs: a same-origin pack catalog, manifest and SHA-256 verification, OPFS storage, a Range-capable service worker, download/update/delete UI, and a headless OPFS smoke test.
 
 ## [1.5.3] - 2026-11-16
 ### Fixed

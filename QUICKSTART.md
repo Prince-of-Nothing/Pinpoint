@@ -2,8 +2,8 @@
 
 **Release 1.0.0 (2026-11-13).** The web UI has accounts, map, publishing,
 friends, shares and sessions; **web search/routing is not in 1.0.0** (the
-desktop client has it). See [`RELEASE_NOTES.md`](./RELEASE_NOTES.md) for the
-functional-state matrix and [`ROADMAP.md`](./ROADMAP.md) for what's next.
+desktop client has it). See [`RELEASE_NOTES.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/RELEASE_NOTES.md) for the
+functional-state matrix and the [roadmap](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Roadmap) for what's next.
 
 This guide gets the pure-Rust stack running: API server (`pinpoint-server`) +
 desktop client (`pinpoint-desktop`). The historical Go/Python/Kotlin/web
@@ -215,7 +215,7 @@ Access: http://localhost:8080/
 
 - **User Guide:** `docs/USER_GUIDE.md`
 - **Troubleshooting:** `docs/TROUBLESHOOTING.md`
-- **Full Documentation:** `docs/sdlc/README.md`
+- **Full Documentation:** [Pinpoint wiki](https://github.com/Prince-of-Nothing/Pinpoint/wiki)
 - **Features:** `docs/FEATURES.md`
 - **End of Service:** `docs/END_OF_SERVICE.md`
 

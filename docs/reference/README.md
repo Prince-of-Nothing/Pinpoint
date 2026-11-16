@@ -23,7 +23,7 @@
 Reference material mirrors the system structure and stays strictly descriptive. See the [Diátaxis reference guide](https://diataxis.fr/reference/) for writing principles.
 
 **Looking for:**
-- Architecture rationale? → [docs/architecture/](../architecture)
-- Deferred-feature discussion? → [docs/explanation/](../explanation)
-- How-to guides? → [docs/how-to/](../how-to)
-- Tutorials? → [docs/tutorials/](../tutorials)
+- Architecture rationale? → [wiki Architecture index](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Architecture-Index)
+- Deferred-feature discussion? → [wiki Explanation index](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Explanation-Index)
+- How-to guides? → [wiki How-To index](https://github.com/Prince-of-Nothing/Pinpoint/wiki/How-To-Index)
+- Tutorials? → [wiki Tutorials index](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Tutorials-Index)

@@ -121,5 +121,5 @@ gh issue edit 34 --type Bug \
   --add-label severity:important,priority:high
 ```
 
-See [`CONTRIBUTING.md`](../CONTRIBUTING.md) for the branch/PR rules and
-[`docs/adr/`](./adr/) for architecture decisions.
+See [`CONTRIBUTING.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/CONTRIBUTING.md) for the branch/PR rules and
+[`docs/adr/`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/adr/README.md) for architecture decisions.

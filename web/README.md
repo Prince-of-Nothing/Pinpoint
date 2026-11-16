@@ -61,7 +61,7 @@ Desktop GUI modules (`src/ui`, `map`, `tilepacks`) are `#[cfg(not(wasm32))]`.
 The wasm bins currently provide modular wiring/stubs plus HTML shells. A full
 egui web UI reusing desktop screens requires the `tokio` → wasm-runtime swap
 (`wasm_bindgen_futures`/async spawn), browser storage for bookmarks, and no
-filesystem tilepacks — tracked in [`docs/client-platforms.md`](../docs/client-platforms.md).
+filesystem tilepacks — tracked in [`docs/client-platforms.md`](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Client-Platforms).
 
 Backend URL: `PINPOINT_BACKEND` / host config > per-platform default. In
 production, use HTTPS (ADR-0006); plain HTTP is only valid for loopback

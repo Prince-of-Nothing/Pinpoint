@@ -6,7 +6,7 @@ Friendship does not grant access to anyone's location: each person explicitly
 chooses who can see them, at what precision, and for how long. Every share can
 be revoked, and recipients can see whether a location is fresh or stale.
 
-**Current release: [1.2.1](./RELEASE_NOTES.md)** — thesis demo, not
+**Current release: [1.2.1](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/RELEASE_NOTES.md)** — thesis demo, not
 production-hardened. See the functional-state matrix and per-item
 `[FEATURE]` / `[FIX]` flags in the release notes.
 
@@ -53,8 +53,8 @@ production-hardened. See the functional-state matrix and per-item
   fallbacks only.
 
 **Still pending:** OAuth/passkeys/magic links, iOS build, and physical AArch64
-device validation. See [`ROADMAP.md`](./ROADMAP.md) and
-[`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
+device validation. See the [roadmap](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Roadmap) and
+[`RELEASE_NOTES.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/RELEASE_NOTES.md).
 
 ---
 
@@ -93,14 +93,14 @@ adb shell am start -n com.pinpoint.desktop/.PinpointActivity
 The Android emulator reaches the host at `http://10.0.2.2:8080`; run
 `BIND_ADDR=0.0.0.0:8080 cargo run --bin pinpoint-server`. Use Android Studio
 for the emulator/logcat; Gradle packages the Rust `.so`, Java bridge and APK. See
-[`android/README.md`](./android/README.md) for prerequisites and caveats.
+[`android/README.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/android/README.md) for prerequisites and caveats.
 
 Pushing a `vX.Y.Z` tag that matches `Cargo.toml` runs
-[`.github/workflows/release.yml`](./.github/workflows/release.yml): it builds
+[`.github/workflows/release.yml`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/.github/workflows/release.yml): it builds
 one signed universal APK (`arm64-v8a` + `armeabi-v7a`), verifies the release
 certificate and creates a draft GitHub release. Publish the draft so the in-app
 About → Updates checker can see the notes and the direct APK link. Manual
-workflow runs are dry runs. See [`android/README.md`](./android/README.md) for
+workflow runs are dry runs. See [`android/README.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/android/README.md) for
 the key secrets and caveats.
 
 ### Docker
@@ -146,11 +146,11 @@ entry in `src/main.rs`, Axum API in `src/server/` (auth/users/locations/map
 routers behind a gateway), OSM clients in `src/osm.rs`, platform code in
 `src/platform.rs`. Desktop, Android, iOS and a WASM stub share the core.
 
-- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — current module map
-- [`docs/adr/`](./docs/adr/) — decisions (ADR-0007…0012)
-- [`docs/SECURITY.md`](./docs/SECURITY.md) — security model and gaps
-- [`docs/PRIVACY.md`](./docs/PRIVACY.md) — GDPR posture
-- [`docs/reference/api-contract.md`](./docs/reference/api-contract.md) — live API
+- [`docs/ARCHITECTURE.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/ARCHITECTURE.md) — current module map
+- [`docs/adr/`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/adr/README.md) — decisions (ADR-0007…0012)
+- [`docs/SECURITY.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/SECURITY.md) — security model and gaps
+- [`docs/PRIVACY.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/PRIVACY.md) — GDPR posture
+- [`docs/reference/api-contract.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/reference/api-contract.md) — live API
 
 ---
 

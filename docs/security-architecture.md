@@ -2,7 +2,7 @@
 
 **Status:** Implemented (Rust client, `src/security/` + server-side Go backend)  
 **Audience:** Developers, reviewers, security auditors  
-**Related:** `docs/sdlc/10-security-and-privacy.md`, `docs/design-patterns.md`, ADR-0006
+**Related:** [wiki SDLC-10 security and privacy](https://github.com/Prince-of-Nothing/Pinpoint/wiki/SDLC-10-Security-And-Privacy), [wiki Design Patterns](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Design-Patterns), ADR-0006
 
 This document describes every security measure in Pinpoint: what it protects,
 how it works, where the code lives, and how it is tested. It also documents

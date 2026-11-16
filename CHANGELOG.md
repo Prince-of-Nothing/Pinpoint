@@ -3,7 +3,7 @@
 All notable changes to this project are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 Semantic Versioning. 1.0.0 is the thesis demo release; production hardening is
-tracked in [`ROADMAP.md`](./ROADMAP.md).
+tracked in the [wiki roadmap](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Roadmap).
 
 Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 `[SECURITY]` hardening · `[DOCS]` documentation · `[INFRA]` build/deploy.
@@ -11,6 +11,9 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Changed
+- [DOCS] Moved 146 non-essential design, SDLC, UML, component, tutorial, project and thesis docs to the [GitHub wiki](https://github.com/Prince-of-Nothing/Pinpoint/wiki) as 150 structured pages. Build/setup/testing/deployment, ADR, security, privacy, OSM policy and API-contract docs remain in `docs/`; cross-links and Map QA were updated.
+
 ### Removed
 - [INFRA] Removed the `archive/` tree (315 historical files) and its Docker/build ignore entries. The old Go/Python/Kotlin/web stacks remain available in git history and ADR-0007.
 

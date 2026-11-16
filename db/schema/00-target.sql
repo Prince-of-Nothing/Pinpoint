@@ -1,6 +1,6 @@
 -- Pinpoint — target relational schema (design reference)
 --
--- This file is the **design target** described in docs/database/schema.md.
+-- This file is the **design target** described in the wiki Database-Schema page.
 -- It is additive and is not applied by the runtime yet; the migration plan
 -- lives in that document. Sensitive columns are application-encrypted
 -- (`*_enc`, format `v1:<nonce>:`), lookups use blind indexes (`*_hash`).

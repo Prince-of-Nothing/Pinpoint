@@ -22,7 +22,7 @@ jobs:
       - name: OSM attribution present
         run: |
           grep -q 'openstreetmap.org/copyright' src/map.rs && echo "OK: map attribution" || { echo "FAIL: missing ODbL attribution"; exit 1; }
-          grep -q 'OpenStreetMap contributors' docs/sdlc/07-openstreetmap-integration.md && echo "OK: docs attribution" || { echo "FAIL: missing docs attribution"; exit 1; }
-      - name: SDLC + UML set present (Rust-multiplatform docs)
+          grep -q 'OpenStreetMap contributors' docs/OSM_POLICY.md && echo "OK: docs attribution" || { echo "FAIL: missing docs attribution"; exit 1; }
+      - name: Essential docs present
         run: |
-          test -f docs/sdlc/README.md && test -f docs/sdlc/07-openstreetmap-integration.md && test -f docs/uml/12-sequence-map-search.md && echo "OK: docs present"
+          test -f docs/OSM_POLICY.md && test -f docs/ARCHITECTURE.md && test -f docs/adr/README.md && test -f docs/reference/api-contract.md && echo "OK: docs present"

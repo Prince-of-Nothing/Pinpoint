@@ -44,13 +44,15 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0016 | [Read-Only Service Status and Integration Discovery](./0016-service-status-discovery.md) | Accepted |
 | 0017 | [Minimal Java Android Bridge for Share-In, Biometrics and Background Location](./0017-android-java-bridge.md) | Accepted |
 
-See [`architecture/architecture-decisions-link.md`](../architecture/architecture-decisions-link.md) for the complete list.
+See the table above; the current architecture summary is in
+[`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). Design and SDLC context is in the
+[Pinpoint wiki](https://github.com/Prince-of-Nothing/Pinpoint/wiki).
 
 ## About This Layer
 
 ADRs preserve *decision history* — complementing architecture documentation (current state) and explanation (broader context).
 
 **Looking for:**
-- Current architecture? → [docs/architecture/](../architecture)
-- Broader context? → [docs/explanation/](../explanation)
+- Current architecture? → [docs/ARCHITECTURE.md](../ARCHITECTURE.md)
+- Broader context? → [Pinpoint wiki](https://github.com/Prince-of-Nothing/Pinpoint/wiki)
 - Technical specifications? → [docs/reference/](../reference)

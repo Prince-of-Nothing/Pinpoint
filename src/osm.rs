@@ -18,7 +18,7 @@ use std::time::{Duration, Instant};
 
 /// Public demo endpoints (defaults only). Production must point the
 /// `PINPOINT_*_URL` env vars at **self-hosted** services — see
-/// `docs/maps/self-hosted-osm.md` and ADR-0011.
+/// `docs/OSM_POLICY.md` and ADR-0011.
 pub const PUBLIC_NOMINATIM: &str = "https://nominatim.openstreetmap.org";
 pub const PUBLIC_OSRM: &str = "https://router.project-osrm.org";
 pub const PUBLIC_OVERPASS: &str = "https://overpass-api.de/api/interpreter";

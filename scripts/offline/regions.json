@@ -3,18 +3,34 @@
     "id": "moldova",
     "name": "Moldova",
     "geofabrik": "https://download.geofabrik.de/europe/moldova-latest.osm.pbf",
+    "source": {
+      "sha256": "249574c43abf7850092b15d1e396cbca0368c09f027eb99f71aeadf167905752",
+      "bytes": 101528058
+    },
+    "base_url": "https://packs.pinpoint.example/moldova",
     "bbox": [26.6, 45.4, 30.2, 48.5],
     "minzoom": 0,
     "maxzoom": 14,
-    "valhalla_config": "scripts/offline/valhalla-moldova.json"
+    "images": {
+      "planetiler": "openmaptiles/planetiler-openmaptiles@sha256:f5d7bcd8be4f534fef0132bd669c15e47b34503f14e070209d7680d1dd77eaa4",
+      "valhalla": "ghcr.io/valhalla/valhalla@sha256:b8c515f8b3c212047755594fefe1c5c837ca417094b6908840179f130a3aa80b"
+    }
   },
   "monaco": {
     "id": "monaco",
     "name": "Monaco",
     "geofabrik": "https://download.geofabrik.de/europe/monaco-latest.osm.pbf",
+    "source": {
+      "sha256": "d35d64fde04dc83062910bb858ccb4750e223694b85def924a200b4246621d36",
+      "bytes": 708123
+    },
+    "base_url": "https://packs.pinpoint.example/monaco",
     "bbox": [7.40, 43.72, 7.44, 43.75],
     "minzoom": 0,
     "maxzoom": 12,
-    "valhalla_config": "scripts/offline/valhalla-monaco.json"
+    "images": {
+      "planetiler": "openmaptiles/planetiler-openmaptiles@sha256:f5d7bcd8be4f534fef0132bd669c15e47b34503f14e070209d7680d1dd77eaa4",
+      "valhalla": "ghcr.io/valhalla/valhalla@sha256:b8c515f8b3c212047755594fefe1c5c837ca417094b6908840179f130a3aa80b"
+    }
   }
 }

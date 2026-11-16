@@ -4,14 +4,24 @@ $ErrorActionPreference = "Stop"
 $src = Join-Path ([IO.Path]::GetTempPath()) ("osm-src-" + [guid]::NewGuid() + ".pbf")
 $dst = Join-Path ([IO.Path]::GetTempPath()) ("osm-dst-" + [guid]::NewGuid() + ".pbf")
 $part = "$dst.part"
-Set-Content -Path $src -Value "hello osm" -NoNewline
+[IO.File]::WriteAllText($src, "hello osm")
 
 try {
     Get-OsmExtract -Region @{ name = "test" } -Destination $dst -SourcePath $src | Out-Null
     if (-not (Test-Path $dst)) { throw "destination missing" }
     if ((Get-Content $dst -Raw) -ne "hello osm") { throw "content mismatch" }
-    Remove-Item $dst -Force
 
+    $goodHash = (Get-FileHash -Algorithm SHA256 -Path $dst).Hash
+    [IO.File]::WriteAllText($src, "changed osm")
+    Get-OsmExtract -Region @{ name = "test" } -Destination $dst -SourcePath $src -ExpectedSha256 $goodHash | Out-Null
+    if ((Get-Content $dst -Raw) -ne "hello osm") { throw "matching destination was replaced" }
+
+    [IO.File]::WriteAllText($dst, "stale osm")
+    $sourceHash = (Get-FileHash -Algorithm SHA256 -Path $src).Hash
+    Get-OsmExtract -Region @{ name = "test" } -Destination $dst -SourcePath $src -ExpectedSha256 $sourceHash | Out-Null
+    if ((Get-Content $dst -Raw) -ne "changed osm") { throw "mismatching destination was reused" }
+
+    Remove-Item $dst -Force
     $threw = $false
     try {
         Get-OsmExtract -Region @{} -Destination $dst -SourcePath $src -ExpectedSha256 ("0" * 64) | Out-Null

@@ -1,23 +1,39 @@
+function New-PmtilesFixture {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    $parent = Split-Path -Parent $Path
+    if ($parent -and -not (Test-Path $parent)) {
+        New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+    $header = [Text.Encoding]::ASCII.GetBytes("PMTiles") + [byte[]](3) + (New-Object byte[] 24)
+    [IO.File]::WriteAllBytes($Path, $header)
+}
+
 function New-VerifyFixture {
-    param([Parameter(Mandatory = $true)][string]$Dir)
+    param(
+        [Parameter(Mandatory = $true)][string]$Dir,
+        [string]$BaseUrl = "https://example.test/packs/moldova"
+    )
 
     $ErrorActionPreference = "Stop"
     New-Item -ItemType Directory -Force -Path $Dir | Out-Null
 
     $repo = Resolve-Path (Join-Path $PSScriptRoot "../../..")
-    $bin = Get-ChildItem (Join-Path $repo "target/debug") -Filter "pinpoint-offline-index*" -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -eq "pinpoint-offline-index" -or $_.Name -eq "pinpoint-offline-index.exe" } |
-        Select-Object -First 1
+    $bin = @(
+        (Join-Path $repo "target/debug/pinpoint-offline-index.exe"),
+        (Join-Path $repo "target/debug/pinpoint-offline-index"),
+        (Join-Path $repo "target/release/pinpoint-offline-index.exe"),
+        (Join-Path $repo "target/release/pinpoint-offline-index")
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
     if (-not $bin) {
         throw "offline index binary not found; run cargo build --features offline-build --bin pinpoint-offline-index"
     }
 
     $pmtiles = Join-Path $Dir "moldova.pmtiles"
-    $header = [Text.Encoding]::ASCII.GetBytes("PMTiles") + [byte[]](3) + (New-Object byte[] 24)
-    [IO.File]::WriteAllBytes($pmtiles, $header)
+    New-PmtilesFixture -Path $pmtiles
 
     $search = Join-Path $Dir "moldova-search.sqlite"
-    & $bin.FullName --fixture $search | Out-Null
+    & $bin --fixture $search | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "fixture index failed" }
 
     $tar = Join-Path $Dir "moldova-valhalla.tar"
@@ -44,5 +60,5 @@ function New-VerifyFixture {
         minzoom = 0
         maxzoom = 14
     }
-    New-OfflineManifest -Region $region -Version "moldova-20260101" -Files @($pmtiles, $search, $tar) -Output (Join-Path $Dir "manifest.json") | Out-Null
+    New-OfflineManifest -Region $region -Version "moldova-20260101" -Files @($pmtiles, $search, $tar) -Output (Join-Path $Dir "manifest.json") -BaseUrl "https://packs.pinpoint.example/moldova" | Out-Null
 }

@@ -88,21 +88,22 @@ jobs:
       - name: Build offline index CLI
         run: cargo build --features offline-build --bin pinpoint-offline-index
 
-      - name: Prepare region fixture
+      - name: Reject unsupported fixture region
         run: |
           if [ "$OFFLINE_REGION" != "monaco" ]; then
             echo "The committed CI fixture is Monaco only; got '$OFFLINE_REGION'." >&2
             exit 1
           fi
-          mkdir -p "dist/offline/$OFFLINE_REGION"
-          cp "scripts/offline/tests/fixtures/monaco.osm.pbf" "dist/offline/$OFFLINE_REGION/$OFFLINE_REGION.osm.pbf"
-
       - name: Build region pack
         run: |
           if [ "$OFFLINE_SKIP_ROUTING" = "true" ]; then
-            pwsh scripts/offline/build.ps1 -Region "$OFFLINE_REGION" -SkipDownload -SkipRouting
+            pwsh scripts/offline/build.ps1 -Region "$OFFLINE_REGION" \
+              -OsmPath "scripts/offline/tests/fixtures/monaco.osm.pbf" \
+              -SkipDownload -SkipRouting
           else
-            pwsh scripts/offline/build.ps1 -Region "$OFFLINE_REGION" -SkipDownload
+            pwsh scripts/offline/build.ps1 -Region "$OFFLINE_REGION" \
+              -OsmPath "scripts/offline/tests/fixtures/monaco.osm.pbf" \
+              -SkipDownload
           fi
 
       - name: Verify region pack

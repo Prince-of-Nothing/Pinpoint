@@ -31,7 +31,17 @@ function Get-OsmExtract {
             Copy-Item -Path $SourcePath -Destination $part -Force
         } else {
             if (-not $Region.geofabrik) { throw "region has no geofabrik URL" }
-            Invoke-WebRequest -Uri $Region.geofabrik -OutFile $part -UseBasicParsing
+            $curlPath = $null
+            $curlExe = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue
+            if ($curlExe) {
+                $curlPath = $curlExe.Source
+            } else {
+                $curl = Get-Command curl -CommandType Application -ErrorAction SilentlyContinue
+                if ($curl) { $curlPath = $curl.Source }
+            }
+            if (-not $curlPath) { throw "curl not found; install curl" }
+            & $curlPath -4 -L --fail --retry 3 --retry-delay 2 -o $part $Region.geofabrik
+            if ($LASTEXITCODE -ne 0) { throw "download failed for $($Region.geofabrik)" }
         }
 
         if ((Get-Item $part).Length -eq 0) { throw "downloaded file is empty: $Destination" }

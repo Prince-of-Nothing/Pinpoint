@@ -20,9 +20,40 @@ pub use sessions::session_idle_seconds;
 pub use sessions::StoredSession;
 pub use store::Store;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
+
+/// Remove erased accounts and every store row tied to them.
+///
+/// A concurrent persist can snapshot the store just before a delete commits
+/// and upsert it just after. Tombstoning the ids and filtering every clone
+/// before it reaches Postgres makes resurrection impossible.
+fn strip_deleted_users(store: &mut Store, deleted: &HashSet<i64>) {
+    if deleted.is_empty() {
+        return;
+    }
+    let deleted_friendships: HashSet<i64> = store
+        .friendships
+        .iter()
+        .filter(|f| deleted.contains(&f.requester_id) || deleted.contains(&f.receiver_id))
+        .map(|f| f.id)
+        .collect();
+    store.users.retain(|u| !deleted.contains(&u.id));
+    store
+        .friendships
+        .retain(|f| !deleted.contains(&f.requester_id) && !deleted.contains(&f.receiver_id));
+    store.shares.retain(|s| {
+        !deleted.contains(&s.owner_id) && !deleted_friendships.contains(&s.friendship_id)
+    });
+    store.locations.retain(|l| !deleted.contains(&l.user_id));
+    store.check_ins.retain(|c| !deleted.contains(&c.user_id));
+    store.emergencies.retain(|e| !deleted.contains(&e.user_id));
+    store
+        .diagnostic_reports
+        .retain(|r| r.user_id.is_none_or(|id| !deleted.contains(&id)));
+    store.admin_audit.retain(|a| !deleted.contains(&a.actor_id));
+}
 
 /// Application state shared between handlers.
 #[derive(Debug, Clone)]
@@ -37,6 +68,9 @@ pub struct AppState {
     pub last_persist_at: Arc<Mutex<Option<SystemTime>>>,
     /// In-memory session cache (Postgres is authoritative when configured).
     pub sessions: Arc<Mutex<HashMap<String, StoredSession>>>,
+    /// Accounts erased through the self/admin delete path. Stale snapshots
+    /// must never upsert these ids back after the SQL delete.
+    pub deleted_users: Arc<Mutex<HashSet<i64>>>,
 }
 
 /// Which deployable this `AppState` backs (controls persistence ownership).
@@ -121,6 +155,7 @@ impl AppState {
             owner,
             last_persist_at: Arc::new(Mutex::new(None)),
             sessions: Arc::new(Mutex::new(HashMap::new())),
+            deleted_users: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 
@@ -141,6 +176,7 @@ impl AppState {
                     owner,
                     last_persist_at: Arc::new(Mutex::new(None)),
                     sessions: Arc::new(Mutex::new(HashMap::new())),
+                    deleted_users: Arc::new(Mutex::new(HashSet::new())),
                 };
                 app.init_postgres().await;
                 app
@@ -216,7 +252,11 @@ impl AppState {
             .bind(self.owner.lock_key())
             .execute(&mut *tx)
             .await;
-        let store = self.store.lock().unwrap().snapshot();
+        let mut store = self.store.lock().unwrap().snapshot();
+        {
+            let deleted = self.deleted_users.lock().unwrap();
+            strip_deleted_users(&mut store, &deleted);
+        }
         if self.owner.owns_snapshot() {
             let data = serde_json::to_value(&store).unwrap_or_default();
             let _ = sqlx::query(
@@ -321,5 +361,124 @@ mod tests {
         deduped.dedup();
         assert_eq!(deduped.len(), keys.len(), "lock keys must be distinct");
         assert!(keys.iter().all(|k| *k > 0));
+    }
+
+    #[test]
+    fn erased_users_are_stripped_from_every_persisted_domain() {
+        use super::{strip_deleted_users, Store};
+        use crate::models::{
+            AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
+            LocationShare, User,
+        };
+        use std::collections::HashSet;
+
+        fn user(id: i64) -> User {
+            User {
+                id,
+                username: String::new(),
+                email: format!("user{id}@example.invalid"),
+                full_name: format!("User {id}"),
+                role: "resident".into(),
+                is_active: true,
+                must_change_password: false,
+                password_hash: None,
+                totp_secret: None,
+                mfa_enabled: false,
+                mfa_last_step: 0,
+                failed_login_attempts: 0,
+                locked_until: None,
+                auth_method: "email".into(),
+                public_key: None,
+                recovery_code_hash: None,
+                identity_subject: None,
+            }
+        }
+
+        let mut store = Store {
+            users: vec![user(1), user(2)],
+            friendships: vec![Friendship {
+                id: 10,
+                requester_id: 2,
+                receiver_id: 1,
+                requester_name: "User 2".into(),
+                receiver_name: "User 1".into(),
+                status: "accepted".into(),
+                created_at: None,
+                responded_at: None,
+            }],
+            shares: vec![LocationShare {
+                id: 20,
+                friendship_id: 10,
+                owner_id: 2,
+                direction: "to_friend".into(),
+                precision_level: "exact".into(),
+                is_active: true,
+                last_location_update_at: None,
+                expires_at: None,
+                label: None,
+            }],
+            locations: vec![FriendLocation {
+                user_id: 2,
+                user_name: "User 2".into(),
+                latitude: 0.0,
+                longitude: 0.0,
+                precision_level: "exact".into(),
+                updated_at: "now".into(),
+                accuracy: None,
+            }],
+            check_ins: vec![CheckIn {
+                id: 30,
+                user_id: 2,
+                user_name: "User 2".into(),
+                latitude: 0.0,
+                longitude: 0.0,
+                note: String::new(),
+                kind: "manual".into(),
+                created_at: "now".into(),
+            }],
+            emergencies: vec![EmergencyAlert {
+                id: 40,
+                user_id: 2,
+                user_name: "User 2".into(),
+                latitude: 0.0,
+                longitude: 0.0,
+                created_at: "now".into(),
+                resolved: false,
+            }],
+            diagnostic_reports: vec![DiagnosticReport {
+                id: 50,
+                user_id: Some(2),
+                username: Some("User 2".into()),
+                category: "other".into(),
+                message: "test".into(),
+                app_version: "1.5.2".into(),
+                platform: "web".into(),
+                status: "open".into(),
+                created_at: "now".into(),
+            }],
+            admin_audit: vec![AdminAuditEntry {
+                id: 60,
+                actor_id: 2,
+                actor_username: "User 2".into(),
+                action: "user.self_delete".into(),
+                target: "user:2".into(),
+                detail: None,
+                created_at: "now".into(),
+            }],
+            ..Default::default()
+        };
+
+        let deleted: HashSet<i64> = [2].into_iter().collect();
+        strip_deleted_users(&mut store, &deleted);
+
+        assert_eq!(store.users.len(), 1);
+        assert_eq!(store.users[0].id, 1);
+        assert!(store.friendships.is_empty());
+        assert!(store.shares.is_empty());
+        assert!(store.locations.is_empty());
+        assert!(store.check_ins.is_empty());
+        assert!(store.emergencies.is_empty());
+        assert!(store.diagnostic_reports.is_empty());
+        assert!(store.admin_audit.is_empty());
     }
 }

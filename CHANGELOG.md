@@ -12,6 +12,11 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-11-16
+### Fixed
+- [SECURITY] Account erasure: deleted user ids are tombstoned and filtered from every persist snapshot, so a concurrent background refresh can no longer upsert the account back after `DELETE FROM pinpoint_users` (1.5.2 removed the row, then the post-delete persist re-inserted it from a stale in-memory store).
+- [FIX] `load_users` ignores tombstoned ids, so a stale normalized read cannot restore an erased account.
+
 ## [1.5.2] - 2026-11-16
 ### Fixed
 - [SECURITY] Postgres account erasure: each cleanup statement now runs independently, so an append-only audit table without `DELETE` permission can no longer abort the transaction before the user row is removed. Audit entries are anonymised, sessions expired and reports detached when deletion is denied; a user row blocked by a foreign key is scrubbed and disabled.

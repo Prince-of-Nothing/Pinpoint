@@ -6,7 +6,9 @@ friend markers, and it is the component the web app, Android WebView and
 desktop WebView will consume.
 
 This is a **foundation**, not the finished offline feature. There is no pack
-download manager, OPFS storage, service worker, search or routing here yet.
+download manager, OPFS storage, service worker, routing or in-map search UI
+here yet. The separate `search.js` module already searches the M1
+`places`/`places_fts` SQLite index on-device; see [`search.md`](search.md).
 
 ## Run the preview
 
@@ -40,15 +42,21 @@ sprites or remote tile URLs.
 | `web/map/index.html` | Preview page with controls, status and visible attribution |
 | `web/map/preview.css` | Preview-only styling |
 | `web/map/map.js` | ES module API (`createMap`, markers, clicks, theme, destroy) |
+| `web/map/search.js` | On-device SQLite FTS5 search API (`openSearch`, `search`, `close`) |
+| `web/map/search.md` | Search API, hosting, CSP and WebView integration notes |
 | `web/map/style.json` | Minimal OpenMapTiles-schema style for the fixture |
 | `web/map/fixtures/monaco.pmtiles` | 94 KB ODbL test fixture |
+| `web/map/fixtures/balti-search.sqlite` | 24 KB ODbL FTS5 search fixture (Bălți/Кишинёв) |
 | `web/map/fixtures/README.md` | Fixture provenance, build date and ODbL notice |
 | `web/map/serve.mjs` | Dependency-free static server with Range support |
-| `web/map/test/smoke.mjs` | Static + headless-browser smoke test |
+| `web/map/test/smoke.mjs` | Static + headless-browser map smoke test |
+| `web/map/test/search-smoke.mjs` | HTTP + Chromium/Node offline-search smoke test |
 | `web/vendor/maplibre-gl.js` | MapLibre GL JS 6.18.0 ES module |
 | `web/vendor/maplibre-gl-worker.mjs` | MapLibre 6.18.0 worker (required sibling) |
 | `web/vendor/maplibre-gl.css` | MapLibre 6.18.0 stylesheet |
 | `web/vendor/pmtiles.js` | PMTiles 4.5.0 browser IIFE build |
+| `web/vendor/sqlite3.mjs` | `@sqlite.org/sqlite-wasm` 3.54.1-build1 engine |
+| `web/vendor/sqlite3.wasm` | SQLite 3.54.1 WASM binary with FTS5 |
 
 ## Install in a page
 
@@ -166,6 +174,25 @@ registered so a later `createMap` can reuse it. Calling `destroy` twice is safe.
 - `getMap()` — returns the underlying MapLibre map (or `null` before
   initialization) for advanced use such as `flyTo`.
 
+## Offline search
+
+`web/map/search.js` is a separate ES module for the M1 SQLite search index. It
+does not require MapLibre and does not touch `map.js`:
+
+```js
+import { openSearch } from "/map/search.js";
+
+const search = await openSearch({
+  sqliteUrl: "/map/fixtures/balti-search.sqlite",
+});
+console.log(search.search("balti"));
+search.close();
+```
+
+The full API, tokenisation rules, ranking, CSP guidance and the COOP/COEP
+position are in [`search.md`](search.md). The preview page does **not** wire a
+search box yet; that integration belongs to the web-app stream.
+
 ## Style contract
 
 `style.json` renders `background`, `water`, `waterway`, `landuse`, `landcover`
@@ -194,11 +221,14 @@ provenance and build date.
 |---|---|---|
 | `maplibre-gl` | `6.18.0` | <https://www.npmjs.com/package/maplibre-gl/v/6.18.0> |
 | `pmtiles` | `4.5.0` | <https://www.npmjs.com/package/pmtiles/v/4.5.0> |
+| `@sqlite.org/sqlite-wasm` | `3.54.1-build1` | <https://www.npmjs.com/package/@sqlite.org/sqlite-wasm/v/3.54.1-build1> |
 
 Exact tarball URLs, SHA-256 hashes, build notes and licenses are in
 `web/vendor/README.md`. MapLibre 6 ships as an ES module and resolves its
 worker relative to `maplibre-gl.js`, so `maplibre-gl-worker.mjs` must stay in
 the same directory. PMTiles is the IIFE browser build and bundles `fflate`.
+SQLite WASM is vendored instead of `sql.js` because the M1 index uses FTS5 and
+the stock `sql.js` browser build does not compile FTS5.
 
 ## Test
 
@@ -229,7 +259,13 @@ Also useful:
 
 ```powershell
 node --check web/map/map.js
+node web/map/test/search-smoke.mjs
 ```
+
+`search-smoke.mjs` serves the same tree, checks the pinned SQLite assets and
+fixture, then runs the real search module (Chromium when Puppeteer is
+available, Node fallback otherwise). It asserts `balti` → Bălți,
+`кишин` → Кишинёв, punctuation-only → `[]`, and local-only traffic.
 
 ## Limitations and follow-up stream
 
@@ -239,7 +275,9 @@ node --check web/map/map.js
   web stream.
 - **No labels.** Glyphs and sprites are deliberately absent. A production
   style needs vendored glyphs/sprites and a label layer pass.
-- **No search or routing.** No SQLite WASM, Valhalla WASM or search bar.
+- **Search is a module, not a UI.** `search.js` searches the M1 SQLite index
+  on-device, but the preview page has no search box and `web/app/` is not
+  wired to it yet. Routing is still out of scope.
 - **No persistence of friend pins.** `web/app/app.js` still owns session-backed
   friend data. Replacing `web/app/map.js` with this module and keeping the
   existing pin/share behavior is part of the web-app integration stream.

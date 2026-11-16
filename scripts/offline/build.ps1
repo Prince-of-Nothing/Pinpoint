@@ -50,4 +50,12 @@ if ($DryRun) {
     return
 }
 
-throw "pipeline steps are added in Tasks 2-7"
+if (-not (Test-Path $packDir)) {
+    New-Item -ItemType Directory -Force -Path $packDir | Out-Null
+}
+if (-not $SkipDownload) {
+    . "$PSScriptRoot/download.ps1"
+    Get-OsmExtract -Region $cfg -Destination $osm | Out-Null
+}
+
+throw "pipeline steps are added in Tasks 3-7"

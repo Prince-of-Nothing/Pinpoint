@@ -22,6 +22,10 @@ pub struct LocalPrefs {
     /// Unix seconds of the last update check (launch or manual).
     #[serde(default)]
     pub last_update_check_unix: u64,
+    /// App version that performed the last update check. Empty in older prefs,
+    /// which forces one check after installing a new version.
+    #[serde(default)]
+    pub last_update_check_version: String,
     /// Offer the platform biometric prompt on the app lock screen. Off by
     /// default; the PIN always remains the fallback.
     #[serde(default)]
@@ -48,6 +52,7 @@ impl Default for LocalPrefs {
             update_check_on_launch: true,
             dismissed_update_tag: String::new(),
             last_update_check_unix: 0,
+            last_update_check_version: String::new(),
             biometric_unlock: false,
             background_interval_secs: 60,
             server_url: String::new(),
@@ -132,9 +137,23 @@ pub fn update_check_due(last_check_unix: u64, now_unix: u64) -> bool {
         || now_unix - last_check_unix >= UPDATE_CHECK_INTERVAL_SECS
 }
 
+/// Whether a launch check is due for this app version. A newly installed
+/// version always gets one check; the 24h throttle then applies to that
+/// version. An empty `last_version` (older prefs) counts as a version change.
+pub fn update_check_due_for(
+    last_check_unix: u64,
+    now_unix: u64,
+    last_version: &str,
+    current_version: &str,
+) -> bool {
+    last_version.trim() != current_version.trim() || update_check_due(last_check_unix, now_unix)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{update_check_due, LocalPrefs, PrefsStore, UPDATE_CHECK_INTERVAL_SECS};
+    use super::{
+        update_check_due, update_check_due_for, LocalPrefs, PrefsStore, UPDATE_CHECK_INTERVAL_SECS,
+    };
 
     fn temp_dir(label: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!(
@@ -164,6 +183,7 @@ mod tests {
             update_check_on_launch: false,
             dismissed_update_tag: "v1.3.13".to_string(),
             last_update_check_unix: 1_700_000_000,
+            last_update_check_version: "1.4.1".to_string(),
             biometric_unlock: true,
             background_interval_secs: 120,
             server_url: "https://example.test".to_string(),
@@ -213,5 +233,19 @@ mod tests {
         assert!(update_check_due(1_000, 1_000 + UPDATE_CHECK_INTERVAL_SECS));
         // A clock that moved backwards must not block the check forever.
         assert!(update_check_due(2_000, 1_000));
+    }
+
+    #[test]
+    fn launch_check_is_due_after_version_change() {
+        let now = 2_000_000;
+        assert!(update_check_due_for(now - 60, now, "1.4.0", "1.4.1"));
+        assert!(update_check_due_for(now - 60, now, "", "1.4.1"));
+        assert!(!update_check_due_for(now - 60, now, "1.4.1", "1.4.1"));
+        assert!(update_check_due_for(
+            now - UPDATE_CHECK_INTERVAL_SECS,
+            now,
+            "1.4.1",
+            "1.4.1"
+        ));
     }
 }

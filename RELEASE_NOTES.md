@@ -1,3 +1,43 @@
+# Pinpoint 1.4.2 - Release Notes
+
+**Released:** 2026-11-16 - **Version:** `1.4.2` (from `1.4.1`) -
+**Status:** Update check after an app upgrade.
+
+**Artifacts:** `pinpoint-android-1.4.2.apk` - **universal**: `arm64-v8a` and
+`armeabi-v7a` in one APK. GitHub also generates the source `zip`/`tar.gz`
+archives for the `v1.4.2` tag.
+
+Flags: `[FEATURE]` new capability - `[FIX]` bug fix - `[SECURITY]` hardening -
+`[DOCS]` documentation - `[INFRA]` build/deploy.
+
+---
+
+## 1.4.2 fix
+
+- **Upgrade check:** a newly installed app version performs one launch update
+  check even if the previous version checked less than 24 hours ago. Repeated
+  launches of the same version remain throttled to once a day.
+- **Privacy:** the request is still one GET of the public releases feed with
+  `Pinpoint/<version>` as the User-Agent; no account, location, friend or
+  device data. The version-change exception is recorded in ADR-0018 and the
+  privacy note.
+- **Manual path unchanged:** **About -> Check for updates** still runs at any
+  time.
+
+## Known issues
+
+- Theme switcher is not included; it remains tracked in #58.
+- #49 server-side anonymous session scoping remains open.
+- MFA management in the web UI is not included; MFA-enabled accounts can still
+  sign in with a code.
+
+## Upgrade note
+
+If a locally built/debug APK with a different signature is installed, uninstall
+it once before installing this release.
+
+---
+
 # Pinpoint 1.4.1 - Release Notes
 
 **Released:** 2026-11-16 - **Version:** `1.4.1` (from `1.4.0`) -

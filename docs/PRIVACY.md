@@ -22,11 +22,12 @@ ever goes public, this becomes the basis of the real privacy statement.)*
 - No OSM query leakage: only user-initiated searches/routes/POIs reach the OSM
   services, and production self-hosts them (ADR-0011); friend coordinates never
   leave Pinpoint.
-- No hidden phone-home: the only automatic external request is a once-a-day
-  GitHub releases feed check (ADR-0015), which can be turned off in Profile &
-  settings. It sends only `Pinpoint/<version>` as the User-Agent — no account,
-  location, friend or device data. GitHub sees the request IP, as with any HTTPS
-  request. Manual checks from About always remain available.
+- No hidden phone-home: the only automatic external request is at most one
+  GitHub releases feed check a day for the same app version, plus one after
+  installing a new version (ADR-0015, ADR-0018). It can be turned off in
+  Profile & settings. It sends only `Pinpoint/<version>` as the User-Agent — no
+  account, location, friend or device data. GitHub sees the request IP, as with
+  any HTTPS request. Manual checks from About always remain available.
 - **No IP-based or covert geolocation.** We never derive location from IP
   addresses, WebRTC candidates, call metadata or similar side channels. We do not
   store IP addresses for tracking or analytics. If a short-lived security hash is

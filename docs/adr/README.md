@@ -43,6 +43,7 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0015 | [Throttled, Opt-Out Launch-Time Update Check](./0015-launch-time-update-check.md) | Accepted |
 | 0016 | [Read-Only Service Status and Integration Discovery](./0016-service-status-discovery.md) | Accepted |
 | 0017 | [Minimal Java Android Bridge for Share-In, Biometrics and Background Location](./0017-android-java-bridge.md) | Accepted |
+| 0018 | [One Update Check After Installing a New App Version](./0018-update-check-after-version-change.md) | Accepted |
 
 See the table above; the current architecture summary is in
 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). Design and SDLC context is in the

@@ -29,6 +29,9 @@ pub struct LocalPrefs {
     /// Foreground-service update interval in seconds (15-3600).
     #[serde(default = "default_background_interval")]
     pub background_interval_secs: u64,
+    /// Backend URL saved by the user. Empty = the platform default.
+    #[serde(default)]
+    pub server_url: String,
 }
 
 fn default_background_interval() -> u64 {
@@ -47,6 +50,7 @@ impl Default for LocalPrefs {
             last_update_check_unix: 0,
             biometric_unlock: false,
             background_interval_secs: 60,
+            server_url: String::new(),
         }
     }
 }
@@ -162,10 +166,16 @@ mod tests {
             last_update_check_unix: 1_700_000_000,
             biometric_unlock: true,
             background_interval_secs: 120,
+            server_url: "https://example.test".to_string(),
         };
         store.save(&prefs).expect("save");
         assert_eq!(store.load(), prefs);
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn server_url_defaults_empty() {
+        assert!(LocalPrefs::default().server_url.is_empty());
     }
 
     #[test]

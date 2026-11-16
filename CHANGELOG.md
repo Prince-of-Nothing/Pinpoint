@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.5.1] - 2026-11-16
 ### Fixed
 - [SECURITY] Locations: `/api/v1/locations/friends` now requires an accepted friendship and an active, non-expired share owned by the location owner. Removed the demo bypass that returned every latest location to any signed-in user.
 - [FIX] Account deletion now deletes related shares, friendships, locations, check-ins, emergencies, diagnostics, sessions and audit rows in one transaction before the user row, so Postgres erasure actually completes.

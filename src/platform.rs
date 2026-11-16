@@ -558,6 +558,107 @@ pub fn android_background_location_running() -> bool {
     false
 }
 
+/// Whether this platform can host the shared MapLibre page in an app WebView.
+/// Today that is Android only; desktop and iOS keep the egui/native map.
+pub fn map_webview_supported() -> bool {
+    cfg!(target_os = "android")
+}
+
+/// Whether the full-screen MapLibre WebView is currently open.
+#[cfg(target_os = "android")]
+pub fn map_webview_visible() -> bool {
+    android_webview_map::visible()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn map_webview_visible() -> bool {
+    false
+}
+
+/// Start the loopback server (once per process) and show the MapLibre page in
+/// a full-screen WebView above the egui surface.
+#[cfg(target_os = "android")]
+pub fn show_map_webview() -> Result<(), String> {
+    android_webview_map::show()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn show_map_webview() -> Result<(), String> {
+    Err("the MapLibre WebView is Android-only".to_string())
+}
+
+#[cfg(target_os = "android")]
+pub fn hide_map_webview() -> Result<(), String> {
+    android_webview_map::hide()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn hide_map_webview() -> Result<(), String> {
+    Ok(())
+}
+
+/// Consume the newest map click reported by the WebView bridge.
+pub fn take_map_webview_click() -> Option<(f64, f64)> {
+    #[cfg(target_os = "android")]
+    {
+        android_webview_map::take_click()
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        None
+    }
+}
+
+/// Ask Android's share sheet for a point selected in the WebView map.
+#[cfg(target_os = "android")]
+pub fn share_map_webview_point(lat: f64, lon: f64, label: &str) -> Result<(), String> {
+    android_webview_map::share(lat, lon, label)
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn share_map_webview_point(_lat: f64, _lon: f64, _label: &str) -> Result<(), String> {
+    Err("the MapLibre WebView is Android-only".to_string())
+}
+
+/// JNI callback from `PinpointActivity`'s `PinpointBridge` JavaScript
+/// interface. Runs on the WebView bridge thread; it only stores validated
+/// coordinates and wakes the UI.
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_com_pinpoint_desktop_PinpointActivity_nativeMapClick<'caller>(
+    mut unowned_env: jni::EnvUnowned<'caller>,
+    _this: jni::objects::JObject<'caller>,
+    latitude: f64,
+    longitude: f64,
+) {
+    let _ = unowned_env
+        .with_env(|_env| -> jni::errors::Result<()> {
+            android_webview_map::record_click(latitude, longitude);
+            crate::ui::android_wake();
+            Ok(())
+        })
+        .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
+}
+
+/// JNI callback from the Java close control / back gesture, so the egui map
+/// screen updates its show/hide button even when the WebView closes itself.
+#[cfg(target_os = "android")]
+#[no_mangle]
+pub extern "system" fn Java_com_pinpoint_desktop_PinpointActivity_nativeMapWebViewClosed<
+    'caller,
+>(
+    mut unowned_env: jni::EnvUnowned<'caller>,
+    _this: jni::objects::JObject<'caller>,
+) {
+    let _ = unowned_env
+        .with_env(|_env| -> jni::errors::Result<()> {
+            android_webview_map::mark_closed();
+            crate::ui::android_wake();
+            Ok(())
+        })
+        .resolve::<jni::errors::ThrowRuntimeExAndDefault>();
+}
+
 /// JNI callback from `PinpointActivity.onNewIntent`: wake an idle egui loop so
 /// the new share is consumed immediately, not on the next user interaction.
 #[cfg(target_os = "android")]
@@ -761,6 +862,57 @@ mod intent_tests {
             assert!(!android_background_location_running());
             assert!(android_take_shared_text().is_none());
         }
+    }
+}
+
+#[cfg(target_os = "android")]
+mod android_webview_map {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Mutex;
+
+    static VISIBLE: AtomicBool = AtomicBool::new(false);
+    static LAST_CLICK: Mutex<Option<(f64, f64)>> = Mutex::new(None);
+
+    pub(super) fn visible() -> bool {
+        VISIBLE.load(Ordering::Acquire)
+    }
+
+    pub(super) fn show() -> Result<(), String> {
+        let server = crate::mobile::map_server::shared()?;
+        super::android_intent::show_map_webview(&server.map_url())?;
+        VISIBLE.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    pub(super) fn hide() -> Result<(), String> {
+        super::android_intent::hide_map_webview()?;
+        VISIBLE.store(false, Ordering::Release);
+        Ok(())
+    }
+
+    pub(super) fn mark_closed() {
+        VISIBLE.store(false, Ordering::Release);
+    }
+
+    pub(super) fn record_click(latitude: f64, longitude: f64) {
+        if crate::security::validation::validate_location(latitude, longitude, None).is_valid() {
+            if let Ok(mut last) = LAST_CLICK.lock() {
+                *last = Some((latitude, longitude));
+            }
+        } else {
+            tracing::warn!("map bridge: rejected an out-of-range click");
+        }
+    }
+
+    pub(super) fn take_click() -> Option<(f64, f64)> {
+        LAST_CLICK.lock().ok().and_then(|mut last| last.take())
+    }
+
+    pub(super) fn share(lat: f64, lon: f64, label: &str) -> Result<(), String> {
+        if !crate::security::validation::validate_location(lat, lon, None).is_valid() {
+            return Err("invalid map coordinates".to_string());
+        }
+        super::android_intent::share_geo(lat, lon, label)
     }
 }
 
@@ -1081,6 +1233,70 @@ mod android_intent {
             Ok(call_int(env, activity_obj, "isLocationServiceRunning")? != 0)
         })
         .unwrap_or(false)
+    }
+
+    pub(super) fn show_map_webview(url: &str) -> Result<(), String> {
+        with_activity(|env, activity| -> anyhow::Result<()> {
+            let activity_obj: &JObject = activity.as_ref();
+            let url = JString::new(env, url)?;
+            let runtime =
+                jni::signature::RuntimeMethodSignature::from_str("(Ljava/lang/String;)V")?;
+            let signature = jni::signature::MethodSignature::from(&runtime);
+            env.call_method(
+                activity_obj,
+                jni::strings::JNIString::from("showMapWebView"),
+                signature,
+                &[JValue::Object(url.as_ref())],
+            )
+            .map_err(|error| anyhow!("showMapWebView: {error}"))?;
+            Ok(())
+        })
+        .map_err(|error| format!("Android map WebView failed: {error}"))
+    }
+
+    pub(super) fn hide_map_webview() -> Result<(), String> {
+        with_activity(|env, activity| -> anyhow::Result<()> {
+            let activity_obj: &JObject = activity.as_ref();
+            let runtime = jni::signature::RuntimeMethodSignature::from_str("()V")?;
+            let signature = jni::signature::MethodSignature::from(&runtime);
+            env.call_method(
+                activity_obj,
+                jni::strings::JNIString::from("hideMapWebView"),
+                signature,
+                &[],
+            )
+            .map_err(|error| anyhow!("hideMapWebView: {error}"))?;
+            Ok(())
+        })
+        .map_err(|error| format!("Android map WebView close failed: {error}"))
+    }
+
+    pub(super) fn share_geo(lat: f64, lon: f64, label: &str) -> Result<(), String> {
+        with_activity(|env, activity| -> anyhow::Result<()> {
+            let activity_obj: &JObject = activity.as_ref();
+            let label = JString::new(env, label)?;
+            let runtime =
+                jni::signature::RuntimeMethodSignature::from_str("(DDLjava/lang/String;)I")?;
+            let signature = jni::signature::MethodSignature::from(&runtime);
+            let shared = env
+                .call_method(
+                    activity_obj,
+                    jni::strings::JNIString::from("shareGeo"),
+                    signature,
+                    &[
+                        JValue::Double(lat),
+                        JValue::Double(lon),
+                        JValue::Object(label.as_ref()),
+                    ],
+                )
+                .map_err(|error| anyhow!("shareGeo: {error}"))?
+                .i()?;
+            if shared != 1 {
+                anyhow::bail!("shareGeo returned {shared}");
+            }
+            Ok(())
+        })
+        .map_err(|error| format!("Android map share failed: {error}"))
     }
 
     pub(super) fn share_text(text: &str) -> Result<(), String> {

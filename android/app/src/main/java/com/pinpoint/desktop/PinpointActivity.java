@@ -1,8 +1,23 @@
 package com.pinpoint.desktop;
 
+import android.annotation.SuppressLint;
 import android.app.NativeActivity;
 import android.content.Intent;
+import android.graphics.Color;
+import android.net.Uri;
 import android.os.Bundle;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.FrameLayout;
 
 /**
  * Thin Java bridge around {@link NativeActivity}.
@@ -13,8 +28,10 @@ import android.os.Bundle;
  * start intent. This subclass stores the newest intent and exposes repeat
  * shares to Rust through {@link #consumeShare()}.
  *
- * <p>It also hosts the biometric prompt and the foreground location service
- * (ADR-0017). No account data is stored here.
+ * <p>It also hosts the biometric prompt, the foreground location service and
+ * the full-screen MapLibre WebView (ADR-0017). No account data is stored here;
+ * the WebView only loads the loopback origin chosen by the Rust map server and
+ * never receives session or CSRF material.
  */
 public class PinpointActivity extends NativeActivity {
     static {
@@ -24,11 +41,39 @@ public class PinpointActivity extends NativeActivity {
     }
 
     private static native void nativeWakeUi();
+    private static native void nativeMapClick(double latitude, double longitude);
+    private static native void nativeMapWebViewClosed();
+
+    private static final String MAP_BRIDGE_NAME = "PinpointBridge";
+
+    /**
+     * Binds the preview page's map handle to the Java bridge. The contract is
+     * generic: any page can call {@code PinpointBridge.onMapClick(lat, lon)} or
+     * {@code PinpointBridge.onShareRequest(lat, lon, label)} itself. This shim
+     * only makes the unchanged web/map preview work without page edits.
+     */
+    private static final String MAP_BRIDGE_BOOTSTRAP =
+        "(function(){try{"
+            + "if(window.__pinpointBridgeBound){return \"bound\";}"
+            + "var preview=window.__pinpointPreview;"
+            + "var handle=preview&&preview.handle;"
+            + "if(handle&&typeof handle.onClick===\"function\"){"
+            + "handle.onClick(function(point){"
+            + "try{if(window.PinpointBridge&&PinpointBridge.onMapClick){"
+            + "PinpointBridge.onMapClick(point.lat,point.lon);}}catch(error){}});"
+            + "window.__pinpointBridgeBound=true;return \"preview\";"
+            + "}return \"no-handle\";"
+            + "}catch(error){return \"error\";}})()";
 
     private final Object shareLock = new Object();
     private String pendingShare;
     private static volatile int biometricState = 0;
     private android.os.CancellationSignal biometricCancel;
+
+    private FrameLayout mapOverlay;
+    private WebView mapWebView;
+    private String mapHost;
+    private int mapPort = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -42,6 +87,284 @@ public class PinpointActivity extends NativeActivity {
         setIntent(intent);
         captureShare(intent);
         nativeWakeUi();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mapWebView != null && mapOverlay != null
+            && mapOverlay.getVisibility() == View.VISIBLE) {
+            mapWebView.onResume();
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        if (mapWebView != null && mapOverlay != null
+            && mapOverlay.getVisibility() == View.VISIBLE) {
+            mapWebView.onPause();
+        }
+        super.onPause();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (mapWebView != null) {
+            mapWebView.destroy();
+            mapWebView = null;
+        }
+        mapOverlay = null;
+        super.onDestroy();
+    }
+
+    /** The WebView close control and the system back gesture both land here. */
+    @SuppressWarnings("deprecation")
+    @Override
+    public void onBackPressed() {
+        if (mapOverlay != null && mapOverlay.getVisibility() == View.VISIBLE) {
+            hideMapWebView();
+            return;
+        }
+        super.onBackPressed();
+    }
+
+    /**
+     * Show the loopback MapLibre page in a full-screen WebView above the egui
+     * surface. Called from Rust; the URL is validated again here so a bad JNI
+     * call cannot navigate the WebView off loopback.
+     */
+    public void showMapWebView(final String url) {
+        final Uri parsed = Uri.parse(url);
+        if (!"http".equals(parsed.getScheme())
+            || !"127.0.0.1".equals(parsed.getHost())
+            || parsed.getPort() <= 0
+            || parsed.getPort() > 65535) {
+            android.util.Log.w("PinpointMap", "refused a non-loopback map URL");
+            return;
+        }
+        runOnUiThread(() -> {
+            mapHost = parsed.getHost();
+            mapPort = parsed.getPort();
+            if (mapOverlay == null) {
+                mapOverlay = buildMapOverlay();
+                addContentView(
+                    mapOverlay,
+                    new ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                );
+            }
+            mapOverlay.setVisibility(View.VISIBLE);
+            mapOverlay.bringToFront();
+            mapOverlay.requestFocus();
+            if ((getApplicationInfo().flags
+                    & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+                WebView.setWebContentsDebuggingEnabled(true);
+            }
+            mapWebView.onResume();
+            mapWebView.loadUrl(url);
+        });
+    }
+
+    /** Hide the overlay and tell Rust so the map screen button stays in sync. */
+    public void hideMapWebView() {
+        runOnUiThread(() -> {
+            if (mapOverlay == null) {
+                return;
+            }
+            mapOverlay.setVisibility(View.GONE);
+            if (mapWebView != null) {
+                mapWebView.onPause();
+            }
+            nativeMapWebViewClosed();
+        });
+    }
+
+    /**
+     * Share a map point as a {@code geo:} link through the system chooser.
+     * Used by {@code PinpointBridge.onShareRequest} and by the Rust map screen.
+     * Returns 1 when the request was accepted for the UI thread.
+     */
+    public int shareGeo(final double latitude, final double longitude, final String label) {
+        if (!validGeo(latitude, longitude)) {
+            return 0;
+        }
+        runOnUiThread(() -> {
+            String suffix = (label == null || label.trim().isEmpty())
+                ? ""
+                : "?q=" + Uri.encode(label.trim());
+            String link = "geo:" + latitude + "," + longitude + suffix;
+            Intent send = new Intent(Intent.ACTION_SEND);
+            send.setType("text/plain");
+            send.putExtra(Intent.EXTRA_TEXT, link);
+            try {
+                startActivity(Intent.createChooser(send, "Share location"));
+            } catch (Throwable error) {
+                android.util.Log.w("PinpointMap", "share sheet failed", error);
+            }
+        });
+        return 1;
+    }
+
+    private static boolean validGeo(double latitude, double longitude) {
+        return Double.isFinite(latitude)
+            && Double.isFinite(longitude)
+            && latitude >= -90.0
+            && latitude <= 90.0
+            && longitude >= -180.0
+            && longitude <= 180.0;
+    }
+
+    private FrameLayout buildMapOverlay() {
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(Color.rgb(244, 241, 234));
+
+        WebView web = new WebView(this);
+        configureMapWebView(web);
+        overlay.addView(
+            web,
+            new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        );
+
+        Button close = new Button(this);
+        close.setText("Close map");
+        close.setAllCaps(false);
+        close.setContentDescription("Close the offline map");
+        FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP | Gravity.END
+        );
+        closeParams.setMargins(16, 16, 16, 16);
+        close.setOnClickListener(view -> hideMapWebView());
+        overlay.addView(close, closeParams);
+
+        mapWebView = web;
+        return overlay;
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    @SuppressWarnings("deprecation")
+    private void configureMapWebView(WebView web) {
+        WebSettings settings = web.getSettings();
+        settings.setJavaScriptEnabled(true);
+        // The preview stores its light/dark choice in localStorage.
+        settings.setDomStorageEnabled(true);
+        // The page is fully local: no file/content origins and no remote nav.
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setAllowFileAccessFromFileURLs(false);
+        settings.setAllowUniversalAccessFromFileURLs(false);
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setMediaPlaybackRequiresUserGesture(true);
+        settings.setGeolocationEnabled(false);
+        settings.setSupportMultipleWindows(false);
+        settings.setJavaScriptCanOpenWindowsAutomatically(false);
+        settings.setSaveFormData(false);
+        settings.setSavePassword(false);
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        settings.setSupportZoom(true);
+        settings.setBuiltInZoomControls(false);
+        web.setBackgroundColor(Color.rgb(244, 241, 234));
+        web.setHorizontalScrollBarEnabled(false);
+        web.setVerticalScrollBarEnabled(false);
+        web.addJavascriptInterface(new MapBridge(), MAP_BRIDGE_NAME);
+        web.setWebViewClient(new MapWebViewClient());
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage message) {
+                android.util.Log.i(
+                    "PinpointMap",
+                    message.message() + " @" + message.lineNumber()
+                );
+                return true;
+            }
+        });
+    }
+
+    /** Only the live loopback origin may navigate the WebView. */
+    private boolean isLoopbackMapUrl(Uri uri) {
+        return uri != null
+            && "http".equals(uri.getScheme())
+            && mapHost != null
+            && mapHost.equals(uri.getHost())
+            && mapPort > 0
+            && mapPort == uri.getPort();
+    }
+
+    /**
+     * Remote navigations are blocked in the WebView. https attribution links
+     * (OSM/OpenMapTiles/ODbL) can still leave through the system browser.
+     */
+    private boolean handleMapNavigation(Uri uri) {
+        if (isLoopbackMapUrl(uri)) {
+            return false;
+        }
+        if (uri != null && "https".equalsIgnoreCase(uri.getScheme())) {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, uri));
+            } catch (Throwable error) {
+                android.util.Log.w("PinpointMap", "external link failed", error);
+            }
+        } else {
+            android.util.Log.w("PinpointMap", "blocked a non-loopback navigation");
+        }
+        return true;
+    }
+
+    private final class MapWebViewClient extends WebViewClient {
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            return handleMapNavigation(request.getUrl());
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            super.onPageFinished(view, url);
+            if (!isLoopbackMapUrl(Uri.parse(url))) {
+                return;
+            }
+            view.evaluateJavascript(MAP_BRIDGE_BOOTSTRAP, value -> {
+                if (value != null && value.contains("no-handle")) {
+                    view.postDelayed(() -> {
+                        if (mapWebView != null) {
+                            mapWebView.evaluateJavascript(MAP_BRIDGE_BOOTSTRAP, null);
+                        }
+                    }, 500);
+                }
+            });
+        }
+
+        @Override
+        public void onReceivedError(
+            WebView view,
+            WebResourceRequest request,
+            WebResourceError error
+        ) {
+            if (request.isForMainFrame()) {
+                android.util.Log.w(
+                    "PinpointMap",
+                    "main frame failed: " + error.getDescription() + " " + request.getUrl()
+                );
+            }
+        }
+    }
+
+    /** The only JavaScript surface exposed to the loopback page. */
+    private final class MapBridge {
+        @JavascriptInterface
+        public void onMapClick(double latitude, double longitude) {
+            nativeMapClick(latitude, longitude);
+        }
+
+        @JavascriptInterface
+        public void onShareRequest(double latitude, double longitude, String label) {
+            shareGeo(latitude, longitude, label);
+        }
     }
 
     /** True when the device advertises biometric hardware and is API 28+. */

@@ -9,6 +9,9 @@
 pub mod android;
 #[cfg(target_os = "ios")]
 pub mod ios;
+/// Loopback host for the shared MapLibre WebView page (Android and local
+/// previews). Native-only because it needs axum/tokio.
+pub mod map_server;
 
 use crate::backend::BackendConfig;
 

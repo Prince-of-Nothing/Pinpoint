@@ -294,6 +294,8 @@ pub struct PinpointAppUI {
     mobile_nav_open: bool,
     mobile_publish_open: bool,
     mobile_selected_place: Option<crate::osm::SearchPlace>,
+    /// Last point reported by the Android MapLibre WebView bridge.
+    webview_map_click: Option<(f64, f64)>,
     // On-device PIN app lock
     lock_enabled: bool,
     locked: bool,
@@ -399,6 +401,7 @@ impl PinpointAppUI {
             mobile_nav_open: false,
             mobile_publish_open: false,
             mobile_selected_place: None,
+            webview_map_click: None,
             lock_enabled,
             locked: lock_enabled,
             lock_armed: false,

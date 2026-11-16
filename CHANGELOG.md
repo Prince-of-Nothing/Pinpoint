@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.4.0] - 2026-11-16
 ### Added
 - [FEATURE] Web account panel: edit the display name, change the password, manage active sessions and open the account area from the existing drawer.
 - [FEATURE] Web crash capture: uncaught errors stay in memory and are sent only when the user presses **Send report**, with URLs and token-like fields redacted.

@@ -1,3 +1,53 @@
+# Pinpoint 1.4.0 - Release Notes
+
+**Released:** 2026-11-16 - **Version:** `1.4.0` (from `1.3.15`) -
+**Status:** Web account and security parity.
+
+**Artifacts:** `pinpoint-android-1.4.0.apk` - **universal**: `arm64-v8a` and
+`armeabi-v7a` in one APK. GitHub also generates the source `zip`/`tar.gz`
+archives for the `v1.4.0` tag.
+
+Flags: `[FEATURE]` new capability - `[FIX]` bug fix - `[SECURITY]` hardening -
+`[DOCS]` documentation - `[INFRA]` build/deploy.
+
+---
+
+## 1.4.0 features
+
+- **Web account panel:** email and public username are read-only with a copy
+  button; the display name is editable; password change and active-session
+  management live in the existing drawer. Anonymous accounts see a note
+  instead of a password form.
+- **Web MFA login:** the sign-in form now accepts a 6-digit authenticator code
+  for accounts with MFA enabled.
+- **Web crash capture:** uncaught errors stay in memory and are sent only when
+  the user presses **Send report**. URLs and token/password-like fields are
+  redacted; no location, IP, email, cookie, CSRF token or device ID.
+- **Security:** `POST /auth/password/change` now verifies the current password.
+  A missing or wrong value returns `401` without revoking the session.
+  `must_change_password` accounts keep the force-change path.
+- **Anonymous sign-in:** repeated clicks are ignored while a request is in
+  flight. Server-side session scoping remains tracked in #49.
+- **Docs:** non-essential design, SDLC, UML, component, tutorial, project and
+  thesis docs moved to the
+  [Pinpoint wiki](https://github.com/Prince-of-Nothing/Pinpoint/wiki); the
+  archived tree was removed.
+
+## Known issues
+
+- #49 server-side anonymous session scoping remains open; the client-side
+  duplicate-click guard is included here.
+- MFA management in the web UI is not included; MFA-enabled accounts can sign
+  in with a code.
+- Background location is not portable to a browser tab.
+
+## Upgrade note
+
+If a locally built/debug APK with a different signature is installed, uninstall
+it once before installing this release.
+
+---
+
 # Pinpoint 1.3.15 — Release Notes
 
 **Released:** 2026-11-16 · **Version:** `1.3.15` (from `1.3.14`) ·

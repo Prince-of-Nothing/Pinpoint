@@ -28,7 +28,13 @@ function New-VerifyFixture {
     if ($LASTEXITCODE -ne 0) { throw "fixture tar failed" }
 
     $attribution = Join-Path $Dir "ATTRIBUTION.md"
-    Set-Content -Path $attribution -Value "Map data © OpenStreetMap contributors, ODbL 1.0." -Encoding UTF8
+    $canonical = @(
+        "Map data $([char]0x00A9) OpenStreetMap contributors, available under the Open Database License (ODbL) 1.0."
+        ""
+        "https://www.openstreetmap.org/copyright"
+        "https://opendatacommons.org/licenses/odbl/1-0/"
+    ) -join "`n"
+    [IO.File]::WriteAllText($attribution, $canonical, (New-Object Text.UTF8Encoding($false)))
 
     . "$PSScriptRoot/../manifest.ps1"
     $region = [pscustomobject]@{
@@ -38,5 +44,5 @@ function New-VerifyFixture {
         minzoom = 0
         maxzoom = 14
     }
-    New-OfflineManifest -Region $region -Version "moldova-test" -Files @($pmtiles, $search, $tar) -Output (Join-Path $Dir "manifest.json") | Out-Null
+    New-OfflineManifest -Region $region -Version "moldova-20260101" -Files @($pmtiles, $search, $tar) -Output (Join-Path $Dir "manifest.json") | Out-Null
 }

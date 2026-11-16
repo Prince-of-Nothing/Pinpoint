@@ -13,6 +13,7 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] Web map foundation: vendored MapLibre GL JS 6.18.0 and PMTiles 4.5.0, a no-CDN `web/map/` module and preview, and the 94 KB ODbL Monaco fixture with a headless smoke test.
+- [FEATURE] Web app map: `/map.js` is now a thin adapter over the shared MapLibre + PMTiles foundation, with same-origin `/map-assets/*` and `/vendor/*` routes, byte-range fixture serving, visible OSM/OpenMapTiles/ODbL attribution and a headless adapter test. Leaflet was removed from the web app.
 
 ## [1.5.3] - 2026-11-16
 ### Fixed

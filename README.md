@@ -17,7 +17,8 @@ production-hardened. See the functional-state matrix and per-item
 - **Accounts & sessions** — email/password (Argon2id) and anonymous
   device-bound accounts, opaque `HttpOnly` session cookies + CSRF, session
   list/revoke, logout-all, lockout, TOTP MFA.
-- **Web UI at `/`** — map-first Leaflet UI (locally vendored), place search,
+- **Web UI at `/`** — map-first MapLibre GL JS + PMTiles UI (locally
+  vendored), place search,
   A→B routing with alternatives/steps (drive; walk/bike when self-hosted),
   saved/recent places per account, locate-me, plus the auth, publish, friends,
   shares and sessions surfaces in a drawer.

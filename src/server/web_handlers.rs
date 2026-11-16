@@ -3,9 +3,12 @@
 //! The UI is plain HTML/CSS/JS (no third-party scripts, no build step) and
 //! talks to the same `/api/v1` contract as the desktop/mobile clients with a
 //! session cookie + `X-CSRF-Token`. CSP keeps it same-origin and tracker-free.
+//!
+//! The map uses the shared MapLibre GL JS + PMTiles foundation from `web/map/`
+//! and the vendored libraries from `web/vendor/`. PMTiles reads tiles with
+//! HTTP Range requests, so the fixture route implements byte serving.
 
-use axum::extract::Path;
-use axum::http::{header, HeaderValue};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 
 const INDEX: &str = include_str!("../../web/app/index.html");
@@ -23,21 +26,29 @@ const ADMIN_AUDIT_JS: &str = include_str!("../../web/app/admin/audit.js");
 const APP_CSS: &str = include_str!("../../web/app/app.css");
 pub(crate) const STATUS_CSS: &str = include_str!("../../web/status.css");
 const FAVICON: &str = include_str!("../../web/app/favicon.svg");
-const LEAFLET_JS: &str = include_str!("../../web/app/vendor/leaflet.js");
-const LEAFLET_CSS: &str = include_str!("../../web/app/vendor/leaflet.css");
-const LEAFLET_LICENSE: &str = include_str!("../../web/app/vendor/LICENSE");
-const LEAFLET_LAYERS: &[u8] = include_bytes!("../../web/app/vendor/images/layers.png");
-const LEAFLET_LAYERS_2X: &[u8] = include_bytes!("../../web/app/vendor/images/layers-2x.png");
-const LEAFLET_MARKER: &[u8] = include_bytes!("../../web/app/vendor/images/marker-icon.png");
-const LEAFLET_MARKER_2X: &[u8] = include_bytes!("../../web/app/vendor/images/marker-icon-2x.png");
-const LEAFLET_SHADOW: &[u8] = include_bytes!("../../web/app/vendor/images/marker-shadow.png");
+
+// Shared map foundation (web/map) and vendored browser libraries (web/vendor).
+// Everything is compiled into the binary: no runtime file lookup, no CDN.
+const MAP_FOUNDATION_JS: &str = include_str!("../../web/map/map.js");
+const MAP_STYLE_JSON: &str = include_str!("../../web/map/style.json");
+const MAP_README: &str = include_str!("../../web/map/README.md");
+const MAP_FIXTURE_README: &str = include_str!("../../web/map/fixtures/README.md");
+const MAP_FIXTURE: &[u8] = include_bytes!("../../web/map/fixtures/monaco.pmtiles");
+const MAPLIBRE_JS: &str = include_str!("../../web/vendor/maplibre-gl.js");
+const MAPLIBRE_WORKER: &str = include_str!("../../web/vendor/maplibre-gl-worker.mjs");
+const MAPLIBRE_CSS: &str = include_str!("../../web/vendor/maplibre-gl.css");
+const MAPLIBRE_LICENSE: &str = include_str!("../../web/vendor/maplibre-gl.LICENSE.txt");
+const PMTILES_JS: &str = include_str!("../../web/vendor/pmtiles.js");
+const PMTILES_LICENSE: &str = include_str!("../../web/vendor/pmtiles.LICENSE.txt");
 
 // Same-origin only: no Google Fonts, no CDN scripts, no third-party pixels.
 // `font-src` is explicit even though the UI uses system fonts, so a future
-// `@font-face` cannot silently pull a remote file.
+// `@font-face` cannot silently pull a remote file. MapLibre's module worker is
+// same-origin, and PMTiles range requests stay under `connect-src 'self'`.
 const CSP: &str = "default-src 'self'; img-src 'self' data:; script-src 'self'; \
-style-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; \
-frame-ancestors 'none'; form-action 'self'; object-src 'none'; manifest-src 'self'";
+worker-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; \
+base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; \
+manifest-src 'self'";
 
 const PERMISSIONS_POLICY: &str = "geolocation=(self), camera=(), microphone=(), payment=(), usb=()";
 
@@ -192,33 +203,211 @@ fn cached(mut resp: Response, mime: &'static str) -> Response {
     resp
 }
 
-pub async fn leaflet_js() -> Response {
-    cached(LEAFLET_JS.into_response(), "text/javascript; charset=utf-8")
+// ---------------------------------------------------------------------------
+// Shared map foundation + vendored MapLibre/PMTiles (all same-origin)
+// ---------------------------------------------------------------------------
+
+pub async fn map_foundation_js() -> Response {
+    module_js(MAP_FOUNDATION_JS)
 }
 
-pub async fn leaflet_css() -> Response {
-    cached(LEAFLET_CSS.into_response(), "text/css; charset=utf-8")
+pub async fn map_style_json() -> Response {
+    cached(MAP_STYLE_JSON.into_response(), "application/json")
 }
 
-pub async fn leaflet_license() -> Response {
-    cached(LEAFLET_LICENSE.into_response(), "text/plain; charset=utf-8")
+pub async fn map_readme() -> Response {
+    cached(MAP_README.into_response(), "text/plain; charset=utf-8")
 }
 
-/// Only the five vendored Leaflet sprites are served; anything else is 404.
-pub async fn leaflet_image(Path(name): Path<String>) -> Response {
-    let bytes: &[u8] = match name.as_str() {
-        "layers.png" => LEAFLET_LAYERS,
-        "layers-2x.png" => LEAFLET_LAYERS_2X,
-        "marker-icon.png" => LEAFLET_MARKER,
-        "marker-icon-2x.png" => LEAFLET_MARKER_2X,
-        "marker-shadow.png" => LEAFLET_SHADOW,
-        _ => {
-            return (
-                axum::http::StatusCode::NOT_FOUND,
-                axum::Json(serde_json::json!({"error": "not found"})),
-            )
-                .into_response()
+pub async fn map_fixture_readme() -> Response {
+    cached(
+        MAP_FIXTURE_README.into_response(),
+        "text/plain; charset=utf-8",
+    )
+}
+
+pub async fn maplibre_js() -> Response {
+    cached(
+        MAPLIBRE_JS.into_response(),
+        "text/javascript; charset=utf-8",
+    )
+}
+
+pub async fn maplibre_worker() -> Response {
+    cached(
+        MAPLIBRE_WORKER.into_response(),
+        "text/javascript; charset=utf-8",
+    )
+}
+
+pub async fn maplibre_css() -> Response {
+    cached(MAPLIBRE_CSS.into_response(), "text/css; charset=utf-8")
+}
+
+pub async fn maplibre_license() -> Response {
+    cached(
+        MAPLIBRE_LICENSE.into_response(),
+        "text/plain; charset=utf-8",
+    )
+}
+
+pub async fn pmtiles_js() -> Response {
+    cached(PMTILES_JS.into_response(), "text/javascript; charset=utf-8")
+}
+
+pub async fn pmtiles_license() -> Response {
+    cached(PMTILES_LICENSE.into_response(), "text/plain; charset=utf-8")
+}
+
+enum ByteRange {
+    None,
+    Invalid,
+    Satisfiable(usize, usize),
+}
+
+/// Parse a single `Range: bytes=...` header. Multipart ranges are not needed
+/// by PMTiles and are treated as invalid rather than partially served.
+fn parse_range(headers: &HeaderMap, len: usize) -> ByteRange {
+    let Some(value) = headers.get(header::RANGE) else {
+        return ByteRange::None;
+    };
+    let Ok(text) = value.to_str() else {
+        return ByteRange::Invalid;
+    };
+    let Some((unit, spec)) = text.trim().split_once('=') else {
+        return ByteRange::Invalid;
+    };
+    if !unit.trim().eq_ignore_ascii_case("bytes") || spec.contains(',') || len == 0 {
+        return ByteRange::Invalid;
+    }
+    let Some((start, end)) = spec.trim().split_once('-') else {
+        return ByteRange::Invalid;
+    };
+    let start = start.trim();
+    let end = end.trim();
+
+    let (start, end) = if start.is_empty() {
+        // Suffix range: the last N bytes.
+        let Ok(suffix) = end.parse::<usize>() else {
+            return ByteRange::Invalid;
+        };
+        if suffix == 0 {
+            return ByteRange::Invalid;
+        }
+        (len.saturating_sub(suffix), len - 1)
+    } else {
+        let Ok(start) = start.parse::<usize>() else {
+            return ByteRange::Invalid;
+        };
+        let end = if end.is_empty() {
+            len - 1
+        } else {
+            match end.parse::<usize>() {
+                Ok(end) => end.min(len - 1),
+                Err(_) => return ByteRange::Invalid,
+            }
+        };
+        (start, end)
+    };
+
+    if start >= len || end < start {
+        return ByteRange::Invalid;
+    }
+    ByteRange::Satisfiable(start, end)
+}
+
+/// PMTiles fixture. Range requests return `206` so MapLibre/PMTiles can read
+/// the archive header and individual tiles without downloading the whole file.
+pub async fn map_fixture(headers: HeaderMap) -> Response {
+    let len = MAP_FIXTURE.len();
+    let range = parse_range(&headers, len);
+
+    let mut resp = match range {
+        ByteRange::None => {
+            let mut resp = MAP_FIXTURE.to_vec().into_response();
+            resp.headers_mut().insert(
+                header::CONTENT_LENGTH,
+                HeaderValue::from_str(&len.to_string()).expect("fixture length"),
+            );
+            resp
+        }
+        ByteRange::Invalid => {
+            let resp = (StatusCode::RANGE_NOT_SATISFIABLE, "").into_response();
+            let mut resp = secure(resp);
+            resp.headers_mut().insert(
+                header::CONTENT_RANGE,
+                HeaderValue::from_str(&format!("bytes */{len}")).expect("content range"),
+            );
+            resp.headers_mut()
+                .insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+            resp.headers_mut()
+                .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+            return resp;
+        }
+        ByteRange::Satisfiable(start, end) => {
+            let slice = MAP_FIXTURE[start..=end].to_vec();
+            let mut resp = (StatusCode::PARTIAL_CONTENT, slice).into_response();
+            resp.headers_mut().insert(
+                header::CONTENT_LENGTH,
+                HeaderValue::from_str(&(end - start + 1).to_string()).expect("slice length"),
+            );
+            resp.headers_mut().insert(
+                header::CONTENT_RANGE,
+                HeaderValue::from_str(&format!("bytes {start}-{end}/{len}"))
+                    .expect("content range"),
+            );
+            resp
         }
     };
-    cached(bytes.to_vec().into_response(), "image/png")
+
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
+    resp.headers_mut()
+        .insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+    let mut resp = secure(resp);
+    resp.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=86400"),
+    );
+    resp
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn range(value: &str, len: usize) -> ByteRange {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::RANGE, HeaderValue::from_str(value).unwrap());
+        parse_range(&headers, len)
+    }
+
+    #[test]
+    fn range_parser_handles_pmtiles_requests() {
+        assert!(matches!(
+            range("bytes=0-126", 1000),
+            ByteRange::Satisfiable(0, 126)
+        ));
+        assert!(matches!(
+            range("bytes=900-", 1000),
+            ByteRange::Satisfiable(900, 999)
+        ));
+        assert!(matches!(
+            range("bytes=-100", 1000),
+            ByteRange::Satisfiable(900, 999)
+        ));
+        assert!(matches!(
+            range("bytes=0-9999", 1000),
+            ByteRange::Satisfiable(0, 999)
+        ));
+        assert!(matches!(
+            parse_range(&HeaderMap::new(), 1000),
+            ByteRange::None
+        ));
+        assert!(matches!(range("bytes=1000-", 1000), ByteRange::Invalid));
+        assert!(matches!(range("bytes=0-1,5-6", 1000), ByteRange::Invalid));
+        assert!(matches!(range("items=0-1", 1000), ByteRange::Invalid));
+    }
 }

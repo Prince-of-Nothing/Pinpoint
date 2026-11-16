@@ -236,13 +236,16 @@ node --check web/map/map.js
 - **No offline packs yet.** This loads a local PMTiles file that is already on
   the origin. The download manager, manifest verification, SHA-256 check,
   atomic replace, progress UI, OPFS storage and service worker are the next
-  web stream.
+  web stream. The web app consumes this module through `web/app/map.js`; the
+  Rust server serves it under `/map-assets/*` and the vendored libraries under
+  `/vendor/*`.
 - **No labels.** Glyphs and sprites are deliberately absent. A production
   style needs vendored glyphs/sprites and a label layer pass.
-- **No search or routing.** No SQLite WASM, Valhalla WASM or search bar.
+- **No search or routing.** No SQLite WASM, Valhalla WASM or search bar. The
+  existing online `/map/*` search and routing UI is unchanged by this module.
 - **No persistence of friend pins.** `web/app/app.js` still owns session-backed
-  friend data. Replacing `web/app/map.js` with this module and keeping the
-  existing pin/share behavior is part of the web-app integration stream.
+  friend data; the adapter maps `setFriendMarkers` onto `setLocations` and keeps
+  the existing auth, share and privacy behavior.
 - **Markers are not clustered.** `setLocations` renders one circle per valid
   location; large friend lists may need clustering later.
 - **Theme support is style-aware.** `setTheme` recolours the layer ids in this

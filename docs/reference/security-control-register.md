@@ -183,8 +183,9 @@ in [Security Test Report](../evidence/security-test-report.md).
     **CSRF token bound to the session** (stored hashed, compared in
     constant time). The access token is kept only in memory. Bearer tokens
     are never accepted from cookies or query strings.
-  - **Headers:** strict CSP (`script-src 'self'`, no inline or eval; the
-    Leaflet library is served locally), `nosniff`, `X-Frame-Options: DENY`,
+  - **Headers:** strict CSP (`script-src 'self'`, `worker-src 'self'`, no inline
+    or eval; the MapLibre and PMTiles libraries are served locally),
+    `nosniff`, `X-Frame-Options: DENY`,
     `frame-ancestors 'none'`, `Referrer-Policy: no-referrer`,
     `Cache-Control: no-store` on the API, and HSTS in production. No CORS
     unless origins are explicitly configured.

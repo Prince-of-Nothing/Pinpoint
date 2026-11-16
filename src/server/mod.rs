@@ -172,13 +172,32 @@ pub fn router(state: AppState) -> Router {
         .route("/app.css", get(web_handlers::app_css))
         .route("/favicon.svg", get(web_handlers::favicon))
         .route("/favicon.ico", get(web_handlers::favicon))
-        .route("/vendor/leaflet.js", get(web_handlers::leaflet_js))
-        .route("/vendor/leaflet.css", get(web_handlers::leaflet_css))
+        .route("/vendor/maplibre-gl.js", get(web_handlers::maplibre_js))
         .route(
-            "/vendor/leaflet/LICENSE",
-            get(web_handlers::leaflet_license),
+            "/vendor/maplibre-gl-worker.mjs",
+            get(web_handlers::maplibre_worker),
         )
-        .route("/vendor/images/:file", get(web_handlers::leaflet_image))
+        .route("/vendor/maplibre-gl.css", get(web_handlers::maplibre_css))
+        .route(
+            "/vendor/maplibre-gl.LICENSE.txt",
+            get(web_handlers::maplibre_license),
+        )
+        .route("/vendor/pmtiles.js", get(web_handlers::pmtiles_js))
+        .route(
+            "/vendor/pmtiles.LICENSE.txt",
+            get(web_handlers::pmtiles_license),
+        )
+        .route("/map-assets/map.js", get(web_handlers::map_foundation_js))
+        .route("/map-assets/style.json", get(web_handlers::map_style_json))
+        .route("/map-assets/README.md", get(web_handlers::map_readme))
+        .route(
+            "/map-assets/fixtures/README.md",
+            get(web_handlers::map_fixture_readme),
+        )
+        .route(
+            "/map-assets/fixtures/monaco.pmtiles",
+            get(web_handlers::map_fixture),
+        )
         .route("/health", get(handlers::health))
         .route("/api/v1/sync-status", get(handlers::sync_status))
         .with_state(state)

@@ -32,11 +32,11 @@ function Get-OsmExtract {
         } else {
             if (-not $Region.geofabrik) { throw "region has no geofabrik URL" }
             $curlPath = $null
-            $curlExe = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue
+            $curlExe = Get-Command curl.exe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($curlExe) {
                 $curlPath = $curlExe.Source
             } else {
-                $curl = Get-Command curl -CommandType Application -ErrorAction SilentlyContinue
+                $curl = Get-Command curl -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
                 if ($curl) { $curlPath = $curl.Source }
             }
             if (-not $curlPath) { throw "curl not found; install curl" }

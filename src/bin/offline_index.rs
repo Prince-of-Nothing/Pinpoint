@@ -41,13 +41,7 @@ const NAME_KEYS: &[&str] = &[
 ];
 
 const DISPLAY_KEYS: &[&str] = &[
-    "name:ro",
-    "name:ru",
-    "name:uk",
-    "name:bg",
-    "name:gag",
-    "name:en",
-    "name",
+    "name:ro", "name:ru", "name:uk", "name:bg", "name:gag", "name:en", "name",
 ];
 
 pub fn normalize_name(input: &str) -> String {
@@ -287,8 +281,7 @@ fn build_index(osm: &Path, out: &Path) -> Result<usize> {
     if let Some(parent) = out.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::rename(&temporary, out)
-        .with_context(|| format!("publish index {}", out.display()))?;
+    std::fs::rename(&temporary, out).with_context(|| format!("publish index {}", out.display()))?;
     Ok(places.len())
 }
 

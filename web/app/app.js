@@ -14,6 +14,9 @@ const state = {
   locations: [],
 };
 
+let accountNameDirty = false;
+let authBusy = false;
+
 const $ = (id) => document.getElementById(id);
 
 function show(el, visible) {
@@ -58,12 +61,14 @@ function captureCsrf(res, body) {
 // ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
-async function login(email, password) {
+async function login(email, password, totp = "") {
+  const payload = { email, password };
+  if (totp) payload.totp = totp;
   const res = await fetch("/api/v1/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     credentials: "include",
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify(payload),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body?.error?.message || `Login failed (HTTP ${res.status})`);
@@ -86,15 +91,11 @@ async function register(email, password, fullName) {
   await enterApp();
 }
 
-async function logout() {
-  try {
-    await api("/api/v1/auth/logout", { method: "POST" });
-  } catch (_) {
-    // best effort; local state is cleared regardless
-  }
+function resetToLogin() {
   state.user = null;
   state.csrf = null;
   state.locations = [];
+  accountNameDirty = false;
   mapApi?.clearRoute();
   mapApi?.clearSelfLocation();
   $("nav-banner").classList.add("hidden");
@@ -112,6 +113,19 @@ async function logout() {
   show($("recovery-panel"), false);
   $("recovery-code").textContent = "";
   show($("login-panel"), true);
+  clearPasswordFields();
+  $("login-password").value = "";
+  $("login-totp").value = "";
+  renderAccount();
+}
+
+async function logout() {
+  try {
+    await api("/api/v1/auth/logout", { method: "POST" });
+  } catch (_) {
+    // best effort; local state is cleared regardless
+  }
+  resetToLogin();
   setStatus("Signed out.");
 }
 
@@ -137,6 +151,76 @@ function renderIdentity() {
   $("user-email").textContent = state.user?.email || "";
   const handle = state.user?.username;
   $("user-handle").textContent = handle ? `@${handle}` : "";
+  renderAccount();
+}
+
+function renderAccount() {
+  const user = state.user;
+  $("account-email").textContent = user?.email || "";
+  const handle = user?.username;
+  $("account-username").textContent = handle ? `@${handle}` : "No public username yet.";
+  $("account-copy-username").disabled = !handle;
+  const nameInput = $("account-name");
+  if (!accountNameDirty && document.activeElement !== nameInput) {
+    nameInput.value = user?.full_name || "";
+  }
+  const anonymous = user?.auth_method === "anonymous";
+  show($("password-form"), !anonymous);
+  show($("password-anonymous-note"), anonymous);
+}
+
+function clearPasswordFields() {
+  for (const id of ["password-current", "password-new", "password-confirm"]) {
+    const input = $(id);
+    if (input) input.value = "";
+  }
+}
+
+async function saveDisplayName() {
+  if (!state.user) return;
+  const name = $("account-name").value.trim();
+  if (!name) {
+    setStatus("Display name cannot be empty.", true);
+    return;
+  }
+  try {
+    const updated = await api(`/api/v1/users/${state.user.id}`, {
+      method: "PATCH",
+      body: { full_name: name },
+    });
+    state.user = { ...state.user, ...updated };
+    accountNameDirty = false;
+    renderIdentity();
+    setStatus("Display name saved.");
+  } catch (err) {
+    setStatus(err.message, true);
+  }
+}
+
+async function changePassword() {
+  if (!state.user) return;
+  const current = $("password-current").value;
+  const next = $("password-new").value;
+  const confirm = $("password-confirm").value;
+  if (next !== confirm) {
+    setStatus("New passwords do not match.", true);
+    return;
+  }
+  try {
+    await api("/api/v1/auth/password/change", {
+      method: "POST",
+      body: {
+        current_password: current,
+        new_password: next,
+        confirm_password: confirm,
+      },
+    });
+    resetToLogin();
+    setStatus("Password changed. Sign in again with the new password.");
+  } catch (err) {
+    clearPasswordFields();
+    setStatus(err.message, true);
+  }
 }
 
 async function refresh() {
@@ -274,6 +358,9 @@ function showRecoveryCode(code) {
 }
 
 async function anonymousSignIn() {
+  if (authBusy) return;
+  authBusy = true;
+  $("anonymous").disabled = true;
   try {
     const res = await fetch("/api/v1/auth/anonymous", {
       method: "POST",
@@ -290,10 +377,15 @@ async function anonymousSignIn() {
     setStatus("Anonymous account created. Save the recovery code.");
   } catch (err) {
     setStatus(err.message, true);
+  } finally {
+    authBusy = false;
+    $("anonymous").disabled = false;
   }
 }
 
 async function recoverAccount(code) {
+  if (authBusy) return;
+  authBusy = true;
   try {
     const res = await fetch("/api/v1/auth/anonymous/recover", {
       method: "POST",
@@ -310,6 +402,8 @@ async function recoverAccount(code) {
     setStatus("Account recovered. The previous code is no longer valid.");
   } catch (err) {
     setStatus(err.message, true);
+  } finally {
+    authBusy = false;
   }
 }
 
@@ -333,28 +427,79 @@ async function logoutAll() {
   } catch (_) {
     // local state is cleared regardless
   }
-  state.user = null;
-  state.csrf = null;
-  state.locations = [];
-  mapApi?.clearRoute();
-  mapApi?.clearSelfLocation();
-  $("nav-banner").classList.add("hidden");
-  $("place-sheet").classList.add("hidden");
-  $("route-panel").classList.add("hidden");
-  $("share-sheet").classList.add("hidden");
-  $("search-results").classList.add("hidden");
-  $("saved-list").innerHTML = "";
-  $("recent-list").innerHTML = "";
-  show($("app-panel"), false);
-  show($("session-bar"), false);
-  show($("admin-tab"), false);
-  $("user-handle").textContent = "";
-  adminConsole?.close();
-  show($("recovery-panel"), false);
-  $("recovery-code").textContent = "";
-  show($("login-panel"), true);
+  resetToLogin();
   setStatus("Signed out on every device.");
 }
+
+// ---------------------------------------------------------------------------
+// Crash capture: latest uncaught error, sent only when the user asks.
+// ---------------------------------------------------------------------------
+let lastCrash = null;
+let crashSentFor = null;
+const crashShownFor = new Set();
+
+function crashSignature(error) {
+  return `${error.name || "Error"}: ${error.message || ""}`.slice(0, 240);
+}
+
+function sanitizeCrashText(value) {
+  return String(value || "")
+    .replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/gi, "[url]")
+    .replace(
+      /\b(token|password|secret|csrf|session|cookie|authorization)[=:]\s*\S+/gi,
+      "$1=[redacted]",
+    )
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 2000);
+}
+
+function showCrash(error) {
+  const signature = crashSignature(error);
+  if (crashShownFor.has(signature)) return;
+  crashShownFor.add(signature);
+  lastCrash = {
+    signature,
+    message: sanitizeCrashText(
+      `${error.name || "Error"}: ${error.message || "Unknown error"}\n${(error.stack || "")
+        .split("\n")
+        .slice(0, 10)
+        .join("\n")}`,
+    ),
+  };
+  show($("crash-banner"), true);
+}
+
+async function sendCrash() {
+  if (!lastCrash || crashSentFor === lastCrash.signature) return;
+  crashSentFor = lastCrash.signature;
+  const headers = { "Content-Type": "application/json", Accept: "application/json" };
+  if (state.csrf) headers["X-CSRF-Token"] = state.csrf;
+  try {
+    const res = await fetch("/api/v1/diagnostics/report", {
+      method: "POST",
+      headers,
+      credentials: "include",
+      body: JSON.stringify({ category: "crash", message: lastCrash.message, platform: "web" }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    setStatus("Crash report sent. Thank you.");
+  } catch (err) {
+    crashSentFor = null;
+    setStatus(`Could not send the report: ${err.message}`, true);
+  } finally {
+    show($("crash-banner"), false);
+    lastCrash = null;
+  }
+}
+
+window.addEventListener("error", (event) => {
+  if (event.error) showCrash(event.error);
+});
+window.addEventListener("unhandledrejection", (event) => {
+  const reason = event.reason;
+  showCrash(reason instanceof Error ? reason : new Error(String(reason)));
+});
 
 // ---------------------------------------------------------------------------
 // Leaflet map (locally vendored; tiles via the same-origin proxy)
@@ -472,7 +617,11 @@ async function sendFriendRequest(username) {
 $("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   try {
-    await login($("login-email").value.trim(), $("login-password").value);
+    await login(
+      $("login-email").value.trim(),
+      $("login-password").value,
+      $("login-totp").value.trim(),
+    );
     setStatus("");
   } catch (err) {
     setStatus(err.message, true);
@@ -596,6 +745,33 @@ function setDrawer(open) {
 setDrawer(window.innerWidth >= 900);
 drawerToggle.addEventListener("click", () => {
   setDrawer(drawerToggle.getAttribute("aria-expanded") !== "true");
+});
+
+$("account-name-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  saveDisplayName();
+});
+$("account-name").addEventListener("input", () => {
+  accountNameDirty = true;
+});
+$("account-copy-username").addEventListener("click", async () => {
+  const handle = state.user?.username;
+  if (!handle) return;
+  try {
+    await navigator.clipboard.writeText(`@${handle}`);
+    setStatus("Username copied.");
+  } catch (_) {
+    setStatus(`@${handle}`);
+  }
+});
+$("password-form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  changePassword();
+});
+$("crash-send").addEventListener("click", sendCrash);
+$("crash-dismiss").addEventListener("click", () => {
+  show($("crash-banner"), false);
+  lastCrash = null;
 });
 
 // Initial session check (cookie may already be valid).

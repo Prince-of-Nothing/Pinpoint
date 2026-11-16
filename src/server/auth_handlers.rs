@@ -413,6 +413,10 @@ pub async fn change_password(
         .get("new_password")
         .and_then(Value::as_str)
         .unwrap_or("");
+    let current_password = body
+        .get("current_password")
+        .and_then(Value::as_str)
+        .unwrap_or("");
     let confirm = body
         .get("confirm_password")
         .and_then(Value::as_str)
@@ -431,6 +435,23 @@ pub async fn change_password(
         let Some(user) = store.users.iter_mut().find(|u| u.id == cu.user_id) else {
             return unauthenticated();
         };
+        // A normal change must prove the current password; the force-change
+        // path is for accounts the server already flagged as must-change and
+        // has no current password to check.
+        if !user.must_change_password {
+            let Some(hash) = user.password_hash.as_deref() else {
+                return error_envelope("VALIDATION_FAILED", "This account has no password.");
+            };
+            if current_password.is_empty()
+                || !crate::security::password::verify_password(current_password, hash)
+            {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(json!({"error": {"code": "INVALID_CREDENTIALS", "message": "Current password is incorrect."}})),
+                )
+                    .into_response();
+            }
+        }
         user.password_hash = Some(crate::security::password::hash_password(
             new_password,
             crate::security::password::DEFAULT_ITERS,

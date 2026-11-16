@@ -215,6 +215,24 @@ button:hover { filter: brightness(1.05); }
 
 #status.error { color: var(--danger); border-color: var(--danger); }
 
+.card h3 { margin: 1rem 0 0.5rem; font-size: 0.95rem; }
+
+.crash-banner {
+  position: fixed;
+  bottom: 4.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  width: min(92vw, 520px);
+  background: var(--panel);
+  border: 1px solid #fbbf24;
+  border-radius: 0.75rem;
+  padding: 0.85rem 1rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.crash-banner p { margin: 0.35rem 0 0.5rem; }
+
 code { background: #111827; padding: 0.05rem 0.3rem; border-radius: 0.25rem; }
 
 @media (max-width: 600px) {

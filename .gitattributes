@@ -2,3 +2,10 @@
 * text=auto
 *.sh text eol=lf
 android/gradlew text eol=lf
+
+# Vendored map libraries: keep LF so the hashes in web/vendor/README.md stay stable
+web/vendor/maplibre-gl.js text eol=lf
+web/vendor/maplibre-gl-worker.mjs text eol=lf
+web/vendor/maplibre-gl.css text eol=lf
+web/vendor/pmtiles.js text eol=lf
+web/map/fixtures/monaco.pmtiles binary

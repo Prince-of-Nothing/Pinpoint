@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Pinpoint · Offline map foundation</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231c2430'/%3E%3Cpath d='M16 25s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z' fill='none' stroke='%23f4f1ea' stroke-width='2'/%3E%3Ccircle cx='16' cy='12.5' r='2.4' fill='%236fd3b6'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="./preview.css">
+  <script>
+    try {
+      const saved = localStorage.getItem("pinpoint-map-theme");
+      const dark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    } catch {
+      document.documentElement.dataset.theme = "light";
+    }
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <p class="eyebrow">Pinpoint · web map foundation</p>
+        <h1>Offline vector map</h1>
+      </div>
+    </div>
+
+    <div class="controls" role="group" aria-label="Map preview controls">
+      <button id="theme" type="button" aria-pressed="false">Dark mode</button>
+      <button id="reset" type="button">Reset view</button>
+      <button id="markers" type="button" aria-pressed="true">Hide markers</button>
+      <span class="readout">click <span id="click-readout">—</span></span>
+    </div>
+  </header>
+
+  <main>
+    <div class="map-frame">
+      <div id="map" role="application" aria-label="Offline Monaco vector map"></div>
+
+      <div id="status" class="map-status" data-state="loading" role="status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="status-text">Loading Monaco fixture…</span>
+      </div>
+
+      <div class="map-meta">Monaco fixture · z0–12 · 94 KB</div>
+
+      <div class="map-attribution">
+        Map data ©
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>
+        <span class="sep">·</span>
+        <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a>
+        <span class="sep">·</span>
+        <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener noreferrer">ODbL 1.0</a>
+      </div>
+    </div>
+  </main>
+
+  <!-- Local browser build; publishes globalThis.pmtiles. Never load this from any CDN -->
+  <script src="../vendor/pmtiles.js"></script>
+
+  <script type="module">
+    import { createMap } from "./map.js";
+
+    const MONACO_CENTER = [7.4246, 43.7384];
+    const MONACO_ZOOM = 13.2;
+
+    // Demo data only. Real friend locations arrive through setLocations().
+    const SAMPLE_LOCATIONS = [
+      {
+        user_id: 1,
+        user_name: "Ana",
+        latitude: 43.7384,
+        longitude: 7.4246,
+        precision_level: "exact",
+      },
+      {
+        user_id: 2,
+        user_name: "Mihai",
+        latitude: 43.7311,
+        longitude: 7.4197,
+        precision_level: "approximate",
+      },
+      {
+        user_id: 3,
+        user_name: "Elena",
+        latitude: 43.7451,
+        longitude: 7.4302,
+        precision_level: "city_only",
+      },
+    ];
+
+    const statusEl = document.getElementById("status");
+    const statusTextEl = document.getElementById("status-text");
+    const themeButton = document.getElementById("theme");
+    const resetButton = document.getElementById("reset");
+    const markersButton = document.getElementById("markers");
+    const clickReadout = document.getElementById("click-readout");
+
+    let theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    let markersVisible = true;
+    let handle = null;
+
+    function setStatus(text, state) {
+      statusTextEl.textContent = text;
+      statusEl.dataset.state = state;
+    }
+
+    function syncThemeButton() {
+      themeButton.textContent = theme === "dark" ? "Light mode" : "Dark mode";
+      themeButton.setAttribute("aria-pressed", String(theme === "dark"));
+    }
+
+    syncThemeButton();
+
+    try {
+      handle = createMap({
+        container: "#map",
+        styleUrl: "./style.json",
+        pmtilesUrl: "./fixtures/monaco.pmtiles",
+        center: MONACO_CENTER,
+        zoom: MONACO_ZOOM,
+        onLoad: () => {
+          setStatus("Monaco · vector tiles ready", "ready");
+          window.__pinpointMapReady = true;
+        },
+        onError: (error) => {
+          const message = error?.message || String(error);
+          setStatus(`Map error: ${message}`, "error");
+          window.__pinpointMapError = message;
+          console.error("[map preview]", error);
+        },
+      });
+
+      handle.setTheme(theme);
+      handle.setLocations(SAMPLE_LOCATIONS);
+      handle.onClick(({ lat, lon }) => {
+        clickReadout.textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      });
+
+      window.__pinpointPreview = {
+        handle,
+        locations: SAMPLE_LOCATIONS,
+        get map() {
+          return handle.getMap();
+        },
+      };
+    } catch (error) {
+      const message = error?.message || String(error);
+      setStatus(`Map error: ${message}`, "error");
+      window.__pinpointMapError = message;
+      console.error("[map preview]", error);
+    }
+
+    themeButton.addEventListener("click", () => {
+      theme = theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = theme;
+      try {
+        localStorage.setItem("pinpoint-map-theme", theme);
+      } catch {
+        // Private browsing or storage disabled: theme still applies for this page.
+      }
+      handle?.setTheme(theme);
+      syncThemeButton();
+    });
+
+    resetButton.addEventListener("click", () => {
+      handle?.getMap()?.flyTo({ center: MONACO_CENTER, zoom: MONACO_ZOOM, duration: 650 });
+    });
+
+    markersButton.addEventListener("click", () => {
+      markersVisible = !markersVisible;
+      handle?.setLocations(markersVisible ? SAMPLE_LOCATIONS : []);
+      markersButton.textContent = markersVisible ? "Hide markers" : "Show markers";
+      markersButton.setAttribute("aria-pressed", String(markersVisible));
+    });
+  </script>
+</body>
+</html>

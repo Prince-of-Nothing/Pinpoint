@@ -1,8 +1,8 @@
 # Pinpoint 2.0 — Offline Maps for Moldova (Design)
 
-**Status:** Proposed
+**Status:** Approved (2026-11-16)
 **Date:** 2026-11-16
-**Deciders:** repository owner
+**Deciders:** repository owner (approved 2026-11-16)
 **Scope:** Moldova first; Android, desktop and web; offline basemap, offline search and offline turn-by-turn routing.
 **Related:** ADR-0007 (Rust multiplatform), ADR-0017 (Android Java bridge), OSM/ODbL policy, `docs/security-architecture.md`.
 
@@ -457,11 +457,12 @@ The ADR is part of the 2.0 PR, not this design doc.
 
 ## 22. Approval
 
-This design is ready for approval. Once approved, the next step is the
-implementation plan (`writing-plans`), not code. The approval covers:
+Approved by the repository owner on 2026-11-16. The approval covers:
 
 - architecture A (MapLibre GL JS in a WebView + PMTiles + SQLite FTS5 +
   Valhalla), including the ADR-0007 exception;
 - Moldova first, Android + desktop + web;
 - the platform floors and hosting/privacy calls in §21.
+
+The next step is the implementation plan (`writing-plans`), not code.
 

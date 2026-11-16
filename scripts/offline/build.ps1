@@ -41,7 +41,7 @@ if ($DryRun) {
     Write-Output "pack dir: $packDir"
     Write-Output "artifacts: $pmtiles $search $valhalla $manifest $attribution"
     if (-not $SkipDownload) {
-        Write-PlannedCommand "download" "Invoke-WebRequest $($cfg.geofabrik) -> $osm"
+        Write-PlannedCommand "download" "curl -4 -L $($cfg.geofabrik) -> $osm"
     }
     if (-not $SkipBasemap) {
         Write-PlannedCommand "basemap" "docker run --rm -v `"$packDir`:/data`" openmaptiles/planetiler-openmaptiles:latest --force --download --osm-path=/data/$Region.osm.pbf --output=/data/$Region.pmtiles --maxzoom=$($cfg.maxzoom)"

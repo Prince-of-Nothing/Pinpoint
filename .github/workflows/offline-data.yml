@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       region:
-        description: Region id from scripts/offline/regions.json
+        description: Region id (the committed fixture is Monaco only)
         required: true
         default: monaco
       skip_routing:
@@ -29,12 +29,21 @@ jobs:
       - name: Build offline index CLI
         run: cargo build --features offline-build --bin pinpoint-offline-index
 
+      - name: Prepare region fixture
+        run: |
+          if [ "${{ inputs.region }}" != "monaco" ]; then
+            echo "The committed CI fixture is Monaco only." >&2
+            exit 1
+          fi
+          mkdir -p "dist/offline/${{ inputs.region }}"
+          cp "scripts/offline/tests/fixtures/monaco.osm.pbf" "dist/offline/${{ inputs.region }}/${{ inputs.region }}.osm.pbf"
+
       - name: Build region pack
         run: |
           if [ "${{ inputs.skip_routing }}" = "true" ]; then
-            pwsh scripts/offline/build.ps1 -Region "${{ inputs.region }}" -SkipRouting
+            pwsh scripts/offline/build.ps1 -Region "${{ inputs.region }}" -SkipDownload -SkipRouting
           else
-            pwsh scripts/offline/build.ps1 -Region "${{ inputs.region }}"
+            pwsh scripts/offline/build.ps1 -Region "${{ inputs.region }}" -SkipDownload
           fi
 
       - name: Verify region pack

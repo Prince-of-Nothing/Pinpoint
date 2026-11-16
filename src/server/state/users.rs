@@ -100,8 +100,15 @@ impl AppState {
         // Deletions are explicit (`sql_delete_user` + handler retain) only.
         // Keep the sequence ahead of every id this tick wrote, so the next
         // `sql_insert_user` (NEXTVAL) can never collide with a persisted id.
+        // The sequence only exists after migration 11/12. Guard the lookup so
+        // a database that skipped those migrations still persists every other
+        // table in this transaction instead of aborting on a missing relation.
         let _ = sqlx::query(
-            "SELECT setval('pinpoint_user_id_seq', GREATEST((SELECT COALESCE(MAX(id), 0) + 1 FROM pinpoint_users), (SELECT last_value FROM pinpoint_user_id_seq) + 1), false)",
+            r#"DO $$ BEGIN
+                   IF to_regclass('pinpoint_user_id_seq') IS NOT NULL THEN
+                       EXECUTE 'SELECT setval(''pinpoint_user_id_seq'', GREATEST((SELECT COALESCE(MAX(id), 0) + 1 FROM pinpoint_users), (SELECT last_value FROM pinpoint_user_id_seq) + 1), false)';
+                   END IF;
+               END $$"#,
         )
         .execute(&mut **tx)
         .await;
@@ -124,6 +131,23 @@ impl AppState {
         if let Some(pool) = &self.pg {
             let row: Option<(i64,)> = sqlx::query_as(
                 "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, auth_method, public_key, recovery_code_hash, identity_subject) VALUES (NEXTVAL('pinpoint_user_id_seq'), $1, $2, $3, true, false, $4, 'email', NULL, NULL, NULL) RETURNING id",
+            )
+            .bind(email)
+            .bind(full_name)
+            .bind(role)
+            .bind(password_hash)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+            if let Some((id,)) = row {
+                return id;
+            }
+            // Migration 11/12 can be skipped when the service roles do not
+            // exist, leaving no sequence. Persist the row anyway with the next
+            // free id so registration never lives only in memory.
+            let row: Option<(i64,)> = sqlx::query_as(
+                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, auth_method, public_key, recovery_code_hash, identity_subject) VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM pinpoint_users), $1, $2, $3, true, false, $4, 'email', NULL, NULL, NULL) RETURNING id",
             )
             .bind(email)
             .bind(full_name)
@@ -176,30 +200,78 @@ impl AppState {
     }
 
     /// Direct user delete; no-op in in-memory mode (store handles it).
-    /// Delete a user and every row that references them. Runs in one
-    /// transaction and is safe even when the production schema has foreign
-    /// keys without `ON DELETE CASCADE`.
+    ///
+    /// Delete the account row and every row that references it. Statements run
+    /// independently on purpose: a restricted runtime role, an append-only
+    /// audit policy, or one optional table must never abort the cleanup and
+    /// leave the account usable. Failures are logged by domain only (never
+    /// credentials or coordinates). If the user row cannot be physically
+    /// removed because of a foreign key, its personal fields are scrubbed and
+    /// the account is disabled instead.
     pub async fn sql_delete_user(&self, id: i64) {
         let Some(pool) = &self.pg else { return };
-        let Ok(mut tx) = pool.begin().await else {
-            return;
-        };
         let statements = [
             // Shares owned by the user, or attached to a friendship involving
             // the user, must go before the friendship/user rows.
-            "DELETE FROM pinpoint_shares WHERE owner_id=$1 OR friendship_id IN (SELECT id FROM pinpoint_friendships WHERE requester_id=$1 OR receiver_id=$1)",
-            "DELETE FROM pinpoint_friendships WHERE requester_id=$1 OR receiver_id=$1",
-            "DELETE FROM pinpoint_locations WHERE user_id=$1",
-            "DELETE FROM pinpoint_checkins WHERE user_id=$1",
-            "DELETE FROM pinpoint_emergencies WHERE user_id=$1",
-            "DELETE FROM pinpoint_diagnostic_reports WHERE user_id=$1",
-            "DELETE FROM pinpoint_sessions WHERE user_id=$1",
-            "DELETE FROM pinpoint_admin_audit WHERE actor_id=$1",
-            "DELETE FROM pinpoint_users WHERE id=$1",
+            ("shares", "DELETE FROM pinpoint_shares WHERE owner_id=$1 OR friendship_id IN (SELECT id FROM pinpoint_friendships WHERE requester_id=$1 OR receiver_id=$1)"),
+            ("friendships", "DELETE FROM pinpoint_friendships WHERE requester_id=$1 OR receiver_id=$1"),
+            ("locations", "DELETE FROM pinpoint_locations WHERE user_id=$1"),
+            ("check-ins", "DELETE FROM pinpoint_checkins WHERE user_id=$1"),
+            ("emergencies", "DELETE FROM pinpoint_emergencies WHERE user_id=$1"),
+            ("diagnostic-reports", "DELETE FROM pinpoint_diagnostic_reports WHERE user_id=$1"),
+            ("sessions", "DELETE FROM pinpoint_sessions WHERE user_id=$1"),
+            ("admin-audit", "DELETE FROM pinpoint_admin_audit WHERE actor_id=$1"),
+            // The JSONB rollback snapshot can predate normalized deletes; drop
+            // it so a restart cannot restore the erased account.
+            ("rollback-snapshot", "DELETE FROM pinpoint_state WHERE id=1"),
+            ("user", "DELETE FROM pinpoint_users WHERE id=$1"),
         ];
-        for statement in statements {
-            let _ = sqlx::query(statement).bind(id).execute(&mut *tx).await;
+        for (domain, statement) in statements {
+            match sqlx::query(statement).bind(id).execute(pool).await {
+                Ok(result) if result.rows_affected() > 0 => {
+                    eprintln!("delete user {id}: {domain} rows={}", result.rows_affected());
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    eprintln!("delete user {id}: {domain} cleanup failed: {error}");
+                    // Least-privilege roles may hold UPDATE but not DELETE.
+                    let fallback = match domain {
+                        "sessions" => Some(
+                            "UPDATE pinpoint_sessions SET last_activity = to_timestamp(0) WHERE user_id=$1",
+                        ),
+                        "diagnostic-reports" => Some(
+                            "UPDATE pinpoint_diagnostic_reports SET user_id=NULL, username=NULL WHERE user_id=$1",
+                        ),
+                        "admin-audit" => Some(
+                            "UPDATE pinpoint_admin_audit SET actor_id=0, actor_username='deleted', detail=NULL WHERE actor_id=$1",
+                        ),
+                        "user" => Some(
+                            "UPDATE pinpoint_users SET email=concat('deleted-', id, '@erased.invalid'), full_name='Deleted user', role='resident', is_active=false, must_change_password=false, password_hash=NULL, totp_secret=NULL, mfa_enabled=false, mfa_last_step=0, failed_login_attempts=0, locked_until=NULL, auth_method='deleted', public_key=NULL, recovery_code_hash=NULL, identity_subject=NULL WHERE id=$1",
+                        ),
+                        _ => None,
+                    };
+                    if let Some(fallback) = fallback {
+                        match sqlx::query(fallback).bind(id).execute(pool).await {
+                            Ok(result) => eprintln!(
+                                "delete user {id}: {domain} fallback rows={}",
+                                result.rows_affected()
+                            ),
+                            Err(error) => {
+                                eprintln!("delete user {id}: {domain} fallback failed: {error}")
+                            }
+                        }
+                    }
+                }
+            }
         }
-        let _ = tx.commit().await;
+        match sqlx::query_as::<_, (i64,)>("SELECT id FROM pinpoint_users WHERE id=$1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+        {
+            Ok(Some(_)) => eprintln!("delete user {id}: user row retained after scrub"),
+            Ok(None) => {}
+            Err(error) => eprintln!("delete user {id}: verification failed: {error}"),
+        }
     }
 }

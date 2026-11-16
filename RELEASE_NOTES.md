@@ -1,3 +1,47 @@
+# Pinpoint 1.4.1 - Release Notes
+
+**Released:** 2026-11-16 - **Version:** `1.4.1` (from `1.4.0`) -
+**Status:** Android server URL setting; release default is the hosted Render backend.
+
+**Artifacts:** `pinpoint-android-1.4.1.apk` - **universal**: `arm64-v8a` and
+`armeabi-v7a` in one APK. GitHub also generates the source `zip`/`tar.gz`
+archives for the `v1.4.1` tag.
+
+Flags: `[FEATURE]` new capability - `[FIX]` bug fix - `[SECURITY]` hardening -
+`[DOCS]` documentation - `[INFRA]` build/deploy.
+
+---
+
+## 1.4.1 features
+
+- **Release default:** the Android release APK connects to
+  `https://pinpoint-uj4y.onrender.com` on first launch. Debug builds keep
+  `http://10.0.2.2:8080` for the emulator.
+- **Change servers in Settings:** **Profile & settings -> Server** shows the
+  current URL, a text field, **Save & reconnect**, and **Reset to default**.
+- **Recovery from a bad URL:** the sign-in and offline screens also expose the
+  Server section, so a custom URL cannot lock you out.
+- **HTTPS enforcement:** non-loopback plain HTTP is rejected per ADR-0006.
+- **Clean switch:** changing the server stops the old polling thread, clears the
+  persisted session and E2E key, and returns to login, so a cookie from one
+  server is never sent to another.
+- **Persisted choice:** the URL is stored in `prefs.json`; empty means the
+  platform default.
+
+## Known issues
+
+- Theme switcher is not included; it remains tracked in #58.
+- #49 server-side anonymous session scoping remains open.
+- MFA management in the web UI is not included; MFA-enabled accounts can still
+  sign in with a code.
+
+## Upgrade note
+
+If a locally built/debug APK with a different signature is installed, uninstall
+it once before installing this release.
+
+---
+
 # Pinpoint 1.4.0 - Release Notes
 
 **Released:** 2026-11-16 - **Version:** `1.4.0` (from `1.3.15`) -

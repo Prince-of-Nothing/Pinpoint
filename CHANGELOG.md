@@ -23,6 +23,7 @@ The per-item flagged list for this release is in
 - [INFRA] CI gates the offline pipeline with a fixture-based `offline-checks` job (search-index tests, clippy, PowerShell script tests) on relevant PRs, keeps the manual Monaco pack smoke separate and records ADR-0020 for the MapLibre/PMTiles/Valhalla map subsystem.
 ### Fixed
 - [FIX] Offline packs build in a staging work directory, verify there, and only then replace the published five-file pack, so a failed run never publishes a manifest or partial artifacts; downloads and container images are hash/digest pinned and manifests carry publish URLs.
+- [FEATURE] Web offline packs: a same-origin pack catalog, manifest and SHA-256 verification, OPFS storage, a Range-capable service worker, download/update/delete UI, and a headless OPFS smoke test.
 
 ## [1.5.3] - 2026-11-16
 ### Fixed

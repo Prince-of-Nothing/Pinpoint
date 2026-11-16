@@ -1,0 +1,305 @@
+/*
+ * Pinpoint offline search UI.
+ *
+ * Self-contained styles for `search-ui.js`. The component inherits the app's
+ * dark tokens when they exist, accepts a `data-theme="light"` ancestor (or a
+ * `data-theme` attribute on its own wrapper), and exposes `--pinpoint-search-*`
+ * custom properties for host-level overrides. No imports, fonts or remote
+ * assets.
+ */
+
+.pinpoint-search {
+  --pinpoint-search-bg: var(--panel, #0f172a);
+  --pinpoint-search-bg-raised: var(--panel-2, #111c33);
+  --pinpoint-search-border: var(--border, #1f2937);
+  --pinpoint-search-text: var(--text, #e5e7eb);
+  --pinpoint-search-muted: var(--muted, #9ca3af);
+  --pinpoint-search-accent: var(--accent, #34d399);
+  --pinpoint-search-danger: var(--danger, #f87171);
+  --pinpoint-search-hover: rgba(52, 211, 153, 0.1);
+  --pinpoint-search-focus-ring: rgba(52, 211, 153, 0.24);
+  --pinpoint-search-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+  --pinpoint-search-radius: 0.75rem;
+  --pinpoint-search-z: 1000;
+  position: relative;
+  width: 100%;
+  color: var(--pinpoint-search-text);
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.pinpoint-search *,
+.pinpoint-search *::before,
+.pinpoint-search *::after {
+  box-sizing: border-box;
+}
+
+.pinpoint-search[data-theme="light"],
+[data-theme="light"] .pinpoint-search:not([data-theme="dark"]) {
+  --pinpoint-search-bg: #ffffff;
+  --pinpoint-search-bg-raised: #eef2f7;
+  --pinpoint-search-border: #d5dde8;
+  --pinpoint-search-text: #111827;
+  --pinpoint-search-muted: #5b6576;
+  --pinpoint-search-accent: #0f766e;
+  --pinpoint-search-danger: #b91c1c;
+  --pinpoint-search-hover: rgba(15, 118, 110, 0.09);
+  --pinpoint-search-focus-ring: rgba(15, 118, 110, 0.2);
+  --pinpoint-search-shadow: 0 18px 40px rgba(15, 23, 42, 0.16);
+  color-scheme: light;
+}
+
+.pinpoint-search__bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  margin: 0;
+  padding: 0.2rem 0.3rem 0.2rem 0.8rem;
+  border: 1px solid var(--pinpoint-search-border);
+  border-radius: 999px;
+  background: var(--pinpoint-search-bg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.pinpoint-search__bar:focus-within {
+  border-color: var(--pinpoint-search-accent);
+  box-shadow:
+    0 0 0 3px var(--pinpoint-search-focus-ring),
+    0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+.pinpoint-search__icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  color: var(--pinpoint-search-muted);
+}
+
+.pinpoint-search__input {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.5rem 0.15rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--pinpoint-search-text);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.25;
+  appearance: none;
+}
+
+.pinpoint-search__input:focus {
+  outline: none;
+}
+
+.pinpoint-search__input::placeholder {
+  color: var(--pinpoint-search-muted);
+  opacity: 0.85;
+}
+
+.pinpoint-search__input::-webkit-search-cancel-button,
+.pinpoint-search__input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.pinpoint-search__clear {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--pinpoint-search-muted);
+  font: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.pinpoint-search__clear:hover {
+  background: var(--pinpoint-search-bg-raised);
+  color: var(--pinpoint-search-text);
+}
+
+.pinpoint-search__clear:focus-visible {
+  outline: 2px solid var(--pinpoint-search-accent);
+  outline-offset: 2px;
+}
+
+.pinpoint-search__clear[hidden] {
+  display: none;
+}
+
+.pinpoint-search__popover {
+  position: absolute;
+  z-index: var(--pinpoint-search-z);
+  top: calc(100% + 0.4rem);
+  right: 0;
+  left: 0;
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--pinpoint-search-border);
+  border-radius: var(--pinpoint-search-radius);
+  background: var(--pinpoint-search-bg);
+  box-shadow: var(--pinpoint-search-shadow);
+}
+
+.pinpoint-search__popover[hidden] {
+  display: none;
+}
+
+.pinpoint-search__list {
+  margin: 0;
+  padding: 0.3rem;
+  list-style: none;
+}
+
+.pinpoint-search__list[hidden] {
+  display: none;
+}
+
+.pinpoint-search__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.1rem 0.6rem;
+  align-items: baseline;
+  padding: 0.6rem 0.65rem;
+  border-left: 2px solid transparent;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.pinpoint-search__item + .pinpoint-search__item {
+  margin-top: 0.1rem;
+}
+
+.pinpoint-search__item:hover {
+  background: var(--pinpoint-search-hover);
+}
+
+.pinpoint-search__item.is-active,
+.pinpoint-search__item[aria-selected="true"] {
+  border-left-color: var(--pinpoint-search-accent);
+  background: var(--pinpoint-search-hover);
+}
+
+.pinpoint-search__name {
+  grid-column: 1;
+  min-width: 0;
+  color: var(--pinpoint-search-text);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.pinpoint-search__kind {
+  grid-column: 2;
+  justify-self: end;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--pinpoint-search-border);
+  border-radius: 999px;
+  color: var(--pinpoint-search-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.pinpoint-search__address {
+  grid-column: 1 / -1;
+  color: var(--pinpoint-search-muted);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.pinpoint-search__status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.85rem 0.9rem;
+  color: var(--pinpoint-search-muted);
+  font-size: 0.85rem;
+}
+
+.pinpoint-search__status[hidden] {
+  display: none;
+}
+
+.pinpoint-search__status[data-tone="error"] {
+  color: var(--pinpoint-search-danger);
+}
+
+.pinpoint-search__spinner {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--pinpoint-search-border);
+  border-top-color: var(--pinpoint-search-accent);
+  border-radius: 50%;
+  animation: pinpoint-search-spin 700ms linear infinite;
+}
+
+@keyframes pinpoint-search-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.pinpoint-search__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pinpoint-search__bar {
+    transition: none;
+  }
+
+  .pinpoint-search__spinner {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .pinpoint-search__popover {
+    max-height: 44vh;
+  }
+}
+
+@media (forced-colors: active) {
+  .pinpoint-search__bar,
+  .pinpoint-search__popover,
+  .pinpoint-search__kind {
+    border-color: CanvasText;
+  }
+
+  .pinpoint-search__item.is-active {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}

@@ -45,6 +45,7 @@ if ($DryRun) {
         Write-PlannedCommand "search" "pinpoint-offline-index --osm $osm --out $search"
     }
     if (-not $SkipRouting) {
+        Write-PlannedCommand "routing-config" "docker run --rm --entrypoint valhalla_build_config -v `"$packDir`:/data`" ghcr.io/valhalla/valhalla:latest --mjolnir-tile-dir /data/valhalla_tiles --mjolnir-tile-extract /data/$Region-valhalla.tar --mjolnir-timezone /data/valhalla_tiles/timezones.sqlite --mjolnir-admin /data/valhalla_tiles/admins.sqlite > $packDir/$Region-valhalla.json"
         Write-PlannedCommand "routing" "docker run --rm --entrypoint valhalla_build_tiles -v `"$packDir`:/data`" ghcr.io/valhalla/valhalla:latest -c /data/$Region-valhalla.json /data/$Region.osm.pbf"
     }
     return
@@ -57,5 +58,14 @@ if (-not $SkipDownload) {
     . "$PSScriptRoot/download.ps1"
     Get-OsmExtract -Region $cfg -Destination $osm | Out-Null
 }
+if (-not $SkipRouting) {
+    $config = Join-Path $packDir "$Region-valhalla.json"
+    & docker run --rm --entrypoint valhalla_build_config -v "${packDir}:/data" ghcr.io/valhalla/valhalla:latest --mjolnir-tile-dir /data/valhalla_tiles --mjolnir-tile-extract "/data/$Region-valhalla.tar" --mjolnir-timezone /data/valhalla_tiles/timezones.sqlite --mjolnir-admin /data/valhalla_tiles/admins.sqlite | Set-Content -Path $config -Encoding UTF8
+    if ($LASTEXITCODE -ne 0) { throw "valhalla_build_config failed" }
+    & docker run --rm --entrypoint valhalla_build_tiles -v "${packDir}:/data" ghcr.io/valhalla/valhalla:latest -c "/data/$Region-valhalla.json" "/data/$Region.osm.pbf"
+    if ($LASTEXITCODE -ne 0) { throw "valhalla_build_tiles failed" }
+    & tar -C $packDir -cf $valhalla "valhalla_tiles"
+    if ($LASTEXITCODE -ne 0) { throw "valhalla tar failed" }
+}
 
-throw "pipeline steps are added in Tasks 3-7"
+throw "pipeline steps are added in Task 7"

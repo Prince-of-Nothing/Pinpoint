@@ -107,36 +107,40 @@ impl PinpointAppUI {
                                 });
                         }
                         ui.add_space(6.0);
-                        if let Some(download) = latest.download_url() {
-                            if ui
-                                .add(
-                                    egui::Button::new(
-                                        RichText::new("Download APK").strong().color(Color32::WHITE),
+                        if cfg!(target_os = "android") {
+                            if let Some(download) = latest.download_url() {
+                                if ui
+                                    .add(
+                                        egui::Button::new(
+                                            RichText::new("Download APK")
+                                                .strong()
+                                                .color(Color32::WHITE),
+                                        )
+                                        .fill(accent),
                                     )
-                                    .fill(accent),
-                                )
-                                .clicked()
-                            {
-                                let _ = webbrowser::open(download);
-                            }
-                            if let Some(name) = latest.apk_name() {
-                                let size = latest
-                                    .assets
-                                    .iter()
-                                    .find(|asset| asset.name == name)
-                                    .map(|asset| asset.size)
-                                    .unwrap_or(0);
-                                ui.label(
-                                    RichText::new(format!(
-                                        "{name} · {:.1} MB · direct download",
-                                        size as f64 / 1_048_576.0
-                                    ))
-                                    .size(10.0)
-                                    .color(muted),
-                                );
-                            }
-                            if ui.button("Copy download link").clicked() {
-                                ctx.copy_text(download.to_string());
+                                    .clicked()
+                                {
+                                    let _ = webbrowser::open(download);
+                                }
+                                if let Some(name) = latest.apk_name() {
+                                    let size = latest
+                                        .assets
+                                        .iter()
+                                        .find(|asset| asset.name == name)
+                                        .map(|asset| asset.size)
+                                        .unwrap_or(0);
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{name} · {:.1} MB · direct download",
+                                            size as f64 / 1_048_576.0
+                                        ))
+                                        .size(10.0)
+                                        .color(muted),
+                                    );
+                                }
+                                if ui.button("Copy download link").clicked() {
+                                    ctx.copy_text(download.to_string());
+                                }
                             }
                         }
                         if ui.button("Open release page").clicked() {

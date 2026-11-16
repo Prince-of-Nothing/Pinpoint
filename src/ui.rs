@@ -466,9 +466,11 @@ impl PinpointAppUI {
                             .strong()
                             .color(Color32::from_rgb(253, 230, 138)),
                         );
-                        if let Some(download) = latest.download_url() {
-                            if ui.button("Download APK").clicked() {
-                                let _ = webbrowser::open(download);
+                        if cfg!(target_os = "android") {
+                            if let Some(download) = latest.download_url() {
+                                if ui.button("Download APK").clicked() {
+                                    let _ = webbrowser::open(download);
+                                }
                             }
                         }
                         if ui.button("What's new").clicked() {
@@ -555,17 +557,21 @@ impl PinpointAppUI {
                     });
                 ui.separator();
                 ui.horizontal_wrapped(|ui| {
-                    if let Some(download) = latest.download_url() {
-                        if ui
-                            .add(
-                                egui::Button::new(
-                                    RichText::new("Download APK").strong().color(Color32::BLACK),
+                    if cfg!(target_os = "android") {
+                        if let Some(download) = latest.download_url() {
+                            if ui
+                                .add(
+                                    egui::Button::new(
+                                        RichText::new("Download APK")
+                                            .strong()
+                                            .color(Color32::BLACK),
+                                    )
+                                    .fill(Color32::from_rgb(52, 211, 153)),
                                 )
-                                .fill(Color32::from_rgb(52, 211, 153)),
-                            )
-                            .clicked()
-                        {
-                            let _ = webbrowser::open(download);
+                                .clicked()
+                            {
+                                let _ = webbrowser::open(download);
+                            }
                         }
                     }
                     if ui.button("Open release page").clicked() {
@@ -575,21 +581,23 @@ impl PinpointAppUI {
                         close_and_dismiss = true;
                     }
                 });
-                if let Some(name) = latest.apk_name() {
-                    let size = latest
-                        .assets
-                        .iter()
-                        .find(|asset| asset.name == name)
-                        .map(|asset| asset.size)
-                        .unwrap_or(0);
-                    ui.label(
-                        RichText::new(format!(
-                            "{name} · {:.1} MB · direct download",
-                            size as f64 / 1_048_576.0
-                        ))
-                        .size(10.0)
-                        .color(Color32::from_rgb(148, 163, 184)),
-                    );
+                if cfg!(target_os = "android") {
+                    if let Some(name) = latest.apk_name() {
+                        let size = latest
+                            .assets
+                            .iter()
+                            .find(|asset| asset.name == name)
+                            .map(|asset| asset.size)
+                            .unwrap_or(0);
+                        ui.label(
+                            RichText::new(format!(
+                                "{name} · {:.1} MB · direct download",
+                                size as f64 / 1_048_576.0
+                            ))
+                            .size(10.0)
+                            .color(Color32::from_rgb(148, 163, 184)),
+                        );
+                    }
                 }
             });
         self.update_dialog_open = open && !close_and_dismiss;

@@ -155,10 +155,10 @@ impl PinpointApp {
         crate::bookmarks::BookmarkStore::default_location().map_pins()
     }
 
-    /// Fresh per-session data with demo friends and on-device bookmarks.
+    /// Fresh per-session data with on-device bookmarks. No demo friends:
+    /// real users publish and share their own locations.
     fn fresh_data() -> AppData {
         AppData {
-            locations: Self::demo_locations(),
             map_bookmark_pins: Self::bookmark_pins(),
             ..Default::default()
         }
@@ -171,39 +171,6 @@ impl PinpointApp {
             data.bookmarks_count = pins.len();
             data.map_bookmark_pins = pins;
         }
-    }
-
-    fn demo_locations() -> Vec<FriendLocation> {
-        let now = "2026-11-08T12:00:00Z".to_string();
-        vec![
-            FriendLocation {
-                user_id: 1001,
-                user_name: "Demo: Ana".to_string(),
-                latitude: 47.0105,
-                longitude: 28.8638,
-                precision_level: "exact".to_string(),
-                updated_at: now.clone(),
-                accuracy: Some(8.0),
-            },
-            FriendLocation {
-                user_id: 1002,
-                user_name: "Demo: Mihai".to_string(),
-                latitude: 47.0056,
-                longitude: 28.8575,
-                precision_level: "approximate".to_string(),
-                updated_at: now.clone(),
-                accuracy: Some(250.0),
-            },
-            FriendLocation {
-                user_id: 1003,
-                user_name: "Demo: Elena".to_string(),
-                latitude: 47.0240,
-                longitude: 28.8320,
-                precision_level: "city_only".to_string(),
-                updated_at: now,
-                accuracy: None,
-            },
-        ]
     }
 
     /// Create the app with any [`DynBackend`] implementation (REST v1 by default,

@@ -64,10 +64,8 @@ device validation. See the [roadmap](https://github.com/Prince-of-Nothing/Pinpoi
 
 ```bash
 cargo run --bin pinpoint-server
-# → http://127.0.0.1:8000/  (in-memory demo store, seeded Alice/Bob)
-# → http://127.0.0.1:8000/  (in-memory demo store, seeded Alice/Bob)
+http://127.0.0.1:8000/  (in-memory store; register an account)
 # → http://127.0.0.1:8000/status  (service + integration status, ADR-0016)
-# demo login: alice@example.com / DemoPass123!
 ```
 
 If port 8000 is taken (Docker), use `BIND_ADDR=127.0.0.1:8080`.

@@ -1,3 +1,48 @@
+# Pinpoint 1.5.1 - Release Notes
+
+**Released:** 2026-11-16 - **Version:** `1.5.1` (from `1.5.0`) -
+**Status:** Security and privacy patch. Replace 1.5.0 immediately.
+
+**Artifacts:** `pinpoint-android-1.5.1.apk` - **universal**: `arm64-v8a` and
+`armeabi-v7a` in one APK. GitHub also generates the source `zip`/`tar.gz`
+archives for the `v1.5.1` tag.
+
+## Security fixes
+
+- **Location consent:** `/api/v1/locations/friends` now requires an accepted
+  friendship **and** an active, non-expired share owned by the location owner,
+  with the share's precision applied. 1.5.0 returned every latest location to
+  any signed-in user. Update immediately.
+- **Erasure:** account deletion now deletes related shares, friendships,
+  locations, check-ins, emergencies, diagnostics, sessions and audit rows in one
+  transaction before the user row. In 1.5.0 a user with related rows could
+  remain in Postgres after the session was revoked.
+
+## Demo removal
+
+- No demo accounts are seeded. The login hint, demo friend pins, demo Compose
+  clients and demo credential docs are removed.
+- The seeded Alice/Bob/admin rows were removed from the hosted database; the
+  remaining accounts are real device accounts.
+- To create an administrator, register a real account and run in Supabase SQL:
+  `update pinpoint_users set role = 'administrator' where email = '<real email>';`
+
+## Upgrade note
+
+Install this APK over 1.5.0. The in-app checker may be throttled after the
+1.5.0 launch; use **About -> Check for updates** or the direct APK link. Do not
+announce 1.5.0: it contains the consent leak fixed here.
+
+## Known issues
+
+- #49 server-side anonymous session scoping remains open.
+- #50 MFA disable does not require a code yet.
+- #58 theme switcher not included; #56 OAuth2 not included.
+- E2E ciphertext-only location delivery is not complete; the hosted build stores
+  the latest location server-side, with no history.
+
+---
+
 # Pinpoint 1.5.0 - Release Notes
 
 **Released:** 2026-11-16 - **Version:** `1.5.0` (from `1.4.2`) -

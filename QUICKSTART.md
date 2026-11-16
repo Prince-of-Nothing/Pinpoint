@@ -62,17 +62,10 @@ cargo run --bin pinpoint-server
 ```
 
 The backend starts on **http://localhost:8000/** with:
-- Demo accounts pre-seeded
+- No demo accounts are seeded; register an account on the login screen
 - In-memory store (no database needed)
 - Pure-Rust Axum server (`src/server/`, `src/bin/server.rs`)
 
-### Demo Accounts
-
-| Email | Password | Role |
-|-------|----------|------|
-| alice@example.com | DemoPass123! | Resident |
-| bob@example.com | DemoPass456! | Resident |
-| admin@example.com | ChangeMe123! | Administrator (must change on first login) |
 ## Step 3: Open the Desktop Client
 
 The Rust client is GUI (`eframe`). Run it in a second terminal:
@@ -187,7 +180,7 @@ Access: http://localhost:8080/
 | Backend won't start | Check port 8000 is free: `netstat -ano \| findstr :8000` (Windows) or `lsof -i :8000` (Linux/Mac) |
 | Web client won't load | Make sure backend is running: `curl http://localhost:8000/health` |
 | Can't connect from phone | Ensure firewall allows port 8000; use your computer's IP, not localhost |
-| Login fails | Use demo accounts; admin@example.com requires password change on first login |
+| Login fails | Register a new account. Passwords need at least 8 characters and are case-sensitive. |
 | Map tiles don't load | Internet required for tile loading; attribution is shown per ODbL |
 | Search doesn't work | Nominatim rate limit (1 req/s); wait and try again |
 

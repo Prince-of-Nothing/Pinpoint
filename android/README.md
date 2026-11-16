@@ -183,7 +183,7 @@ in `Cargo.toml`.
   `PINPOINT_TILE_URL` remains the production path (ADR-0011); never use
   `tile.openstreetmap.org`.
 - The app no longer starts offline-first; it uses the live backend and falls
-  back to cached tiles. The `Demo:` pins remain visible without a session.
+  back to cached tiles. The map remains usable without a session; no demo pins are shown.
 
 ## UI
 

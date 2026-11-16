@@ -342,7 +342,7 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 
 ### Required (before sharing with friends)
 
-- [ ] Change demo seeding: `SEED_DEMO_DATA=false` in production.
+- [ ] No demo accounts are seeded; register real accounts and promote an admin deliberately.
 - [ ] Set `SECRET_KEY` to a long random value (64+ chars).
 - [ ] Set `COOKIE_INSECURE=false` (Secure flag) and serve over HTTPS.
 - [ ] Set `DB_DRIVER=postgres` with a proper `DATABASE_URL` (or keep `memory` for demos only).

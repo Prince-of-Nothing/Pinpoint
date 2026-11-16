@@ -193,7 +193,7 @@ impl PinpointAppUI {
                 ui.label(RichText::new("Project").size(17.0).strong());
                 ui.add_space(4.0);
                 ui.label(
-                    "Pinpoint is a privacy-first location-sharing demo: latest-only locations, \
+                    "Pinpoint is a privacy-first location-sharing app: latest-only locations, \
                           explicit revocable consent, no trackers and no third-party scripts.",
                 );
                 ui.add_space(4.0);

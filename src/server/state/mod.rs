@@ -146,7 +146,9 @@ impl AppState {
                 app
             }
             Err(e) => {
-                eprintln!("warning: Postgres unavailable ({e}); running in-memory demo mode");
+                eprintln!(
+                    "warning: Postgres unavailable ({e}); running in-memory mode (data is not persisted)"
+                );
                 Self::for_owner(owner)
             }
         }

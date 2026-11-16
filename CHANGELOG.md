@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.4.1] - 2026-11-16
 ### Added
 - [FEATURE] Android: release builds default to `https://pinpoint-uj4y.onrender.com`; Settings and the sign-in screen can change the server URL, with HTTPS enforcement and a forced sign-out/identity reset on change.
 

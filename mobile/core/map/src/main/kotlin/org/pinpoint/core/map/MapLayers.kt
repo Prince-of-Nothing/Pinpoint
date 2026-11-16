@@ -3,7 +3,7 @@ package org.pinpoint.core.map
 /**
  * Vector style layers available via OpenFreeMap over OSM data (ODbL).
  * Self-hosted deployments point [MapConfig] at their own Martin/TileServer GL
- * serving Geofabrik extracts instead — see docs/sdlc/07-openstreetmap-integration.md.
+ * serving Geofabrik extracts instead - see docs/OSM_POLICY.md.
  *
  * Data is OSM (© OpenStreetMap contributors). Attribution must stay visible:
  * MapLibre's built-in logo/attribution stays enabled in MapLibreIntegration.

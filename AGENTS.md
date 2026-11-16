@@ -13,17 +13,19 @@
   `platform` (all `cfg(target_os)`), `bookmarks` (on-device JSON).
 - `tests/contract.rs` pins the wire contract. CI `rust` job runs
   fmt/clippy/build/test/audit.
-- Docs in `docs/` (arc42 + Diátaxis + ADRs; SDLC set `docs/sdlc/00–17`
-  incl. the spiral execution plan; UML `docs/uml/01–15`).
+- Docs: current architecture, ADRs, security, privacy, API contract and
+  deployment stay in `docs/`; long-form design, SDLC, UML, component, tutorial
+  and thesis docs live in the
+  [Pinpoint wiki](https://github.com/Prince-of-Nothing/Pinpoint/wiki).
   Contribution rules in `CONTRIBUTING.md`.
 
 ## Repository history
 
 Only the active Rust stack is tracked. The historical Go/Python/Kotlin/web
 prototypes were removed from the working tree; consult git history or
-ADR-0007 when you need them. OSM maps policy lives in
-`docs/sdlc/07-openstreetmap-integration.md`; never use
-`tile.openstreetmap.org` (OSMF policy).
+ADR-0007 when you need them. OSM maps policy lives in the
+[SDLC OSM page](https://github.com/Prince-of-Nothing/Pinpoint/wiki/SDLC-07-Openstreetmap-Integration);
+never use `tile.openstreetmap.org` (OSMF policy).
 
 ## Commands (Rust — must pass before pushing)
 
@@ -133,7 +135,7 @@ Additive seams (never rewrite): new table → migration + domain module; new scr
 
 ## Docs conventions
 
-- Diagrams are Mermaid text, never binary images; keep the table in
-  `docs/uml/README.md` in sync with files that exist.
+- Diagrams are Mermaid text, never binary images; keep the wiki UML index in
+  sync with the pages that exist.
 - ADRs are immutable once accepted, named `NNNN-kebab-title.md`, indexed in
   `docs/adr/README.md`; architecture-significant changes need an ADR in the same PR.

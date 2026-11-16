@@ -95,7 +95,7 @@ powershell -ExecutionPolicy Bypass -File scripts/new-issue.ps1 `
 
 `-DryRun` prints the next ID and command without creating anything. The full
 rules, severity/priority definitions and label set are in
-[`docs/ISSUE_TAXONOMY.md`](./docs/ISSUE_TAXONOMY.md).
+[`docs/ISSUE_TAXONOMY.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/ISSUE_TAXONOMY.md).
 
 ## Code style
 

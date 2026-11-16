@@ -404,7 +404,7 @@ These credentials seed the Go API (`go run ./cmd/server`) with demo data when `S
 - **Postgres conformance verification**: only possible in CI (no local Docker; `C:\Program Files\PostgreSQL` only has `data`; machine uses Windows 10 amd64).
 - **Practice report** (`docs/PRACTICE_STATUS.md`): October 26–30 Sept MVP → current state; includes deployment checklist.
 - **ADRs** (`docs/adr/`): immutable content preserved; formatting only (Mermaid text, consistent headings).
-- **Docs conventions** (`docs/architecture/diagrams/README.md`, `docs/CONTRIBUTING.md`, `AGENTS.md`): consistent professional style applied.
+- **Docs conventions** ([wiki Architecture diagrams](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Architecture-Diagrams-Index), [wiki Contributing details](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Contributing-Details), `AGENTS.md`): consistent professional style applied.
 - **Security** (`docs/SECURITY.md`, `CONTRIBUTING.md`, `MobileApp.kt`, `SessionStore.kt`, `OfflineMapManager.kt`, `CrashReport.kt`): server-side enforcement; AES-GCM session storage; secure cookies; no Firebase/FCM/analytics SDKs; 0 trackers.
 - **Mobile module rules** (`mobile/gradle/deps`): `:feature:*` sees `:core:domain` only; Retrofit/OkHttp in `:core:network`; MapLibre in `:core:map` (`MapLibreIntegration.kt` + `OfflineMapManager.kt` import `org.maplibre.*`); new dependencies go in `libs.versions.toml`.
 - **MapLibre SDK**: `org.maplibre.gl:android-sdk:11.5.1` (Maven Central); no custom repository needed; `org.maplibre.android.maps.MapLibreMap` casing verified against 11.5.1 AAR (`javap` inspection); `org.maplibre.android.offline.OfflineRegion$OfflineRegionObserver` and `OfflineRegionStatusCallback` verified via bytecode.

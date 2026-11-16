@@ -62,7 +62,7 @@ ever goes public, this becomes the basis of the real privacy statement.)*
 
 ## Competitive context (why this model)
 
-See `docs/components/07-competitive-analysis.md` for the full analysis. The
+See the [wiki competitive analysis](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Components-07-Competitive-Analysis) for the full analysis. The
 short version:- **Life360-style harvesting** collects precise geolocation, driving events,
   motion activity and advertising identifiers, and discloses location/movement
   data to business partners for monetisation (with opt-outs). Pinpoint collects

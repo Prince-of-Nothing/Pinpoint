@@ -587,7 +587,7 @@ pub fn render_map_with(
                 }
             });
 
-            // Map provider buttons (OSM data — ODbL; see docs/sdlc/07-openstreetmap-integration.md)
+            // Map provider buttons (OSM data — ODbL; see docs/OSM_POLICY.md)
             if let Some(first_loc) = all_locations.first() {
                 ui.horizontal_wrapped(|ui| {
                     if ui.button("OpenStreetMap").clicked() {

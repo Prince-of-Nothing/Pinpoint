@@ -149,7 +149,7 @@ tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 tempfile = "3.6"
 tower = { version = "0.4", features = ["util"] }
 
-# Multiplatform targets (see docs/sdlc/06-technical-requirements.md):
+# Multiplatform targets (see the wiki SDLC-06 technical requirements page):
 # - Desktop: `cargo build --locked` (Windows/Linux/macOS)
 # - Android: `cargo apk build --lib --target x86_64-linux-android`
 #   (eframe/winit â†’ NativeActivity; see android/README.md)

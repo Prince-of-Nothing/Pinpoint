@@ -69,7 +69,7 @@ documented here in the same PR.
   must self-host OSRM (or Valhalla/GraphHopper) over OSM extracts.
 - **Overpass** (POI): AGPLv3 software, ODbL data. One query per tap,
   1.5 km radius, 60 max. Production should self-host/mirror.
-- Full integration guide: `docs/sdlc/07-openstreetmap-integration.md`.
+- Full integration guide: [wiki OSM page](https://github.com/Prince-of-Nothing/Pinpoint/wiki/SDLC-07-Openstreetmap-Integration) and `docs/OSM_POLICY.md`.
 
 ## SDKs and libraries
 

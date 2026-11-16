@@ -1,0 +1,254 @@
+{
+  "version": 8,
+  "name": "Pinpoint Offline Basemap",
+  "metadata": {
+    "pinpoint:attribution": "© OpenStreetMap contributors",
+    "pinpoint:license": "ODbL-1.0",
+    "pinpoint:license_url": "https://opendatacommons.org/licenses/odbl/1-0/",
+    "pinpoint:schema": "OpenMapTiles 3.16"
+  },
+  "sources": {
+    "basemap": {
+      "type": "vector",
+      "url": "pmtiles://fixtures/monaco.pmtiles",
+      "attribution": "<a href=\"https://www.openstreetmap.org/copyright\" target=\"_blank\" rel=\"noopener\">© OpenStreetMap contributors</a> <a href=\"https://www.openmaptiles.org/\" target=\"_blank\" rel=\"noopener\">OpenMapTiles</a> · ODbL 1.0",
+      "minzoom": 0,
+      "maxzoom": 12
+    }
+  },
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#f4f1ea"
+      }
+    },
+    {
+      "id": "landcover",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "landcover",
+      "filter": ["!=", ["get", "class"], "ice"],
+      "paint": {
+        "fill-color": "#dbe9d4",
+        "fill-opacity": 0.9
+      }
+    },
+    {
+      "id": "landuse-green",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "landuse",
+      "filter": [
+        "in",
+        ["get", "class"],
+        ["literal", [
+          "wood",
+          "grass",
+          "park",
+          "garden",
+          "cemetery",
+          "pitch",
+          "nature_reserve",
+          "forest",
+          "meadow",
+          "village_green",
+          "recreation_ground",
+          "golf_course"
+        ]]
+      ],
+      "paint": {
+        "fill-color": "#d7e7cf",
+        "fill-opacity": 0.9
+      }
+    },
+    {
+      "id": "landuse-urban",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "landuse",
+      "filter": [
+        "in",
+        ["get", "class"],
+        ["literal", [
+          "residential",
+          "commercial",
+          "industrial",
+          "retail",
+          "school",
+          "hospital",
+          "university",
+          "railway",
+          "military",
+          "quarry",
+          "brownfield",
+          "construction"
+        ]]
+      ],
+      "paint": {
+        "fill-color": "#e7e4de",
+        "fill-opacity": 0.75
+      }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "basemap",
+      "source-layer": "water",
+      "paint": {
+        "fill-color": "#a9d3e0"
+      }
+    },
+    {
+      "id": "waterway",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "waterway",
+      "paint": {
+        "line-color": "#8fc1d4",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.5, 12, 2.5]
+      }
+    },
+    {
+      "id": "boundary-country",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "boundary",
+      "filter": [
+        "all",
+        ["has", "admin_level"],
+        ["<=", ["to-number", ["get", "admin_level"], 99], 2]
+      ],
+      "paint": {
+        "line-color": "#8b7aa8",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 0, 0.5, 6, 1.2, 12, 2],
+        "line-opacity": 0.9
+      }
+    },
+    {
+      "id": "boundary-region",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "boundary",
+      "filter": [
+        "all",
+        ["has", "admin_level"],
+        [">=", ["to-number", ["get", "admin_level"], 99], 3],
+        ["<=", ["to-number", ["get", "admin_level"], 99], 6]
+      ],
+      "paint": {
+        "line-color": "#a393bd",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.4, 12, 1.4],
+        "line-dasharray": [3, 2],
+        "line-opacity": 0.8
+      }
+    },
+    {
+      "id": "rail",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "transportation",
+      "filter": ["==", ["get", "class"], "rail"],
+      "paint": {
+        "line-color": "#a9a39a",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 12, 1.5, 18, 3],
+        "line-dasharray": [2, 2]
+      }
+    },
+    {
+      "id": "road-major-casing",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "transportation",
+      "filter": [
+        "in",
+        ["get", "class"],
+        ["literal", ["motorway", "trunk", "primary"]]
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#c9c0b2",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1.5, 8, 3, 12, 9, 18, 22],
+        "line-opacity": 0.9
+      }
+    },
+    {
+      "id": "road-major",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "transportation",
+      "filter": [
+        "in",
+        ["get", "class"],
+        ["literal", ["motorway", "trunk", "primary"]]
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#f3b562",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 5, 0.8, 8, 2, 12, 7, 18, 18]
+      }
+    },
+    {
+      "id": "road-medium",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "transportation",
+      "filter": [
+        "in",
+        ["get", "class"],
+        ["literal", ["secondary", "tertiary"]]
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#f7d9a8",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 12, 4, 18, 10]
+      }
+    },
+    {
+      "id": "road-minor",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "transportation",
+      "filter": [
+        "in",
+        ["get", "class"],
+        ["literal", ["minor", "service", "track"]]
+      ],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#ffffff",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.4, 14, 2.5, 18, 6],
+        "line-opacity": 0.9
+      }
+    },
+    {
+      "id": "road-path",
+      "type": "line",
+      "source": "basemap",
+      "source-layer": "transportation",
+      "filter": ["==", ["get", "class"], "path"],
+      "layout": {
+        "line-cap": "round",
+        "line-join": "round"
+      },
+      "paint": {
+        "line-color": "#c9b99f",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 12, 0.3, 16, 1.2, 18, 2],
+        "line-dasharray": [2, 1.5]
+      }
+    }
+  ]
+}

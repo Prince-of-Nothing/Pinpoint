@@ -30,6 +30,8 @@ const WEB_ROOT = path.resolve(HERE, "../..");
 const FIXTURE = path.join(WEB_ROOT, "map", "fixtures", "monaco.pmtiles");
 const FIXTURE_BYTES = 94389;
 const FIXTURE_SHA256 = "a600dbfd9ddb25b82661f01d228a39d2b386dd13e401d2081b3ce7fd9c6de82f";
+// Built at runtime so this guard file itself never contains the mojibake text.
+const BROKEN_AC_ATTRIBUTION = "Ac" + " OpenStreetMap";
 const SCREENSHOT = process.env.PINPOINT_SCREENSHOT || path.join(tmpdir(), "web-foundation.png");
 const STATIC_ONLY = process.argv.includes("--static-only");
 const require = createRequire(import.meta.url);
@@ -141,10 +143,31 @@ try {
     String(style.sources?.basemap?.url ?? "").startsWith("pmtiles://"),
     "basemap source uses the pmtiles:// protocol",
   );
+  const metadataAttribution = String(style.metadata?.["pinpoint:attribution"] ?? "");
+  const sourceAttribution = String(style.sources?.basemap?.attribution ?? "");
+  const styleAttribution = `${metadataAttribution}\n${sourceAttribution}`;
+
   check(
-    String(style.sources?.basemap?.attribution ?? "").includes("OpenStreetMap"),
-    "basemap source carries OSM attribution",
+    metadataAttribution.includes("© OpenStreetMap contributors"),
+    "style metadata uses © OpenStreetMap contributors",
+    metadataAttribution,
   );
+  check(
+    sourceAttribution.includes("© OpenStreetMap contributors"),
+    "basemap source attribution uses © OpenStreetMap contributors",
+    sourceAttribution,
+  );
+  check(
+    styleAttribution.includes("OpenMapTiles") && styleAttribution.includes("ODbL 1.0"),
+    "style attribution names OpenMapTiles and ODbL 1.0",
+    styleAttribution,
+  );
+  for (const mojibake of [BROKEN_AC_ATTRIBUTION, "A\uFFFD", "\u00C2\u00A9", "\uFFFD"]) {
+    check(
+      !styleText.includes(mojibake),
+      `style.json has no mojibake ${JSON.stringify(mojibake)}`,
+    );
+  }
   check(
     JSON.stringify(style.metadata ?? {}).includes("ODbL-1.0"),
     "style metadata records ODbL-1.0",
@@ -160,11 +183,50 @@ try {
   check(indexHtml.includes("../vendor/maplibre-gl.css"), "preview loads local MapLibre CSS");
   check(indexHtml.includes("../vendor/pmtiles.js"), "preview loads local PMTiles JS");
   check(
-    indexHtml.includes("OpenStreetMap contributors") && indexHtml.includes("ODbL"),
-    "preview shows visible OSM/ODbL attribution",
+    indexHtml.includes("©") &&
+      indexHtml.includes("OpenStreetMap contributors") &&
+      indexHtml.includes("ODbL"),
+    "preview HTML shows visible © OpenStreetMap contributors / ODbL attribution",
+  );
+  check(
+    !indexHtml.includes(BROKEN_AC_ATTRIBUTION) &&
+      !indexHtml.includes("\uFFFD") &&
+      !indexHtml.includes("\u00C2\u00A9"),
+    "preview HTML has no attribution mojibake",
   );
   for (const forbidden of ["unpkg.com", "jsdelivr", "cdn.", "tile.openstreetmap.org"]) {
     check(!indexHtml.toLowerCase().includes(forbidden), `preview does not reference ${forbidden}`);
+  }
+
+  const utf8Files = [
+    "map/style.json",
+    "map/index.html",
+    "map/README.md",
+    "map/fixtures/README.md",
+  ];
+  for (const relative of utf8Files) {
+    const bytes = readFileSync(path.join(WEB_ROOT, relative));
+    check(
+      !(bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf),
+      `${relative} is UTF-8 without BOM`,
+    );
+
+    let decoded = "";
+    let validUtf8 = true;
+    try {
+      decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      validUtf8 = false;
+    }
+    check(validUtf8, `${relative} is valid UTF-8`);
+    if (validUtf8) {
+      check(
+        !decoded.includes(BROKEN_AC_ATTRIBUTION) &&
+          !decoded.includes("\uFFFD") &&
+          !decoded.includes("\u00C2\u00A9"),
+        `${relative} has no attribution mojibake`,
+      );
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -305,8 +367,16 @@ try {
         result.sourceUrl ?? "missing",
       );
       check(
-        result.attribution.includes("OpenStreetMap contributors"),
-        "attribution is visible in the rendered page",
+        result.attribution.includes("© OpenStreetMap contributors"),
+        "visible attribution contains © OpenStreetMap contributors",
+        result.attribution,
+      );
+      check(
+        !result.attribution.includes(BROKEN_AC_ATTRIBUTION) &&
+          !result.attribution.includes("\uFFFD") &&
+          !result.attribution.includes("\u00C2\u00A9"),
+        "visible attribution has no mojibake",
+        result.attribution,
       );
 
       await page.screenshot({ path: SCREENSHOT });

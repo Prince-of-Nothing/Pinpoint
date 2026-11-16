@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.4.2] - 2026-11-16
 ### Fixed
 - [FIX] Android: a newly installed app version now performs one launch update check before the 24h throttle applies, so an upgrade no longer hides the new release.
 

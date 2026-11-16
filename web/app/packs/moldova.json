@@ -1,0 +1,37 @@
+{
+  "id": "moldova",
+  "name": "Moldova",
+  "version": "moldova-20261116",
+  "built_at": "2026-11-16T23:16:09Z",
+  "bbox": [
+    26.6,
+    45.4,
+    30.2,
+    48.5
+  ],
+  "minzoom": 0,
+  "maxzoom": 14,
+  "files": [
+    {
+      "name": "moldova.pmtiles",
+      "url": "/offline/packs/moldova/moldova.pmtiles",
+      "bytes": 93172399,
+      "sha256": "7b27155519e3384e1520d1a3dc6488f93cf1e46292dae22129f972bc97524f2e"
+    },
+    {
+      "name": "moldova-search.sqlite",
+      "url": "/offline/packs/moldova/moldova-search.sqlite",
+      "bytes": 6770688,
+      "sha256": "c576be58672ab39118b4ae12b07600c2632b081945dfeb2be28f4820b8d78c82"
+    },
+    {
+      "name": "moldova-valhalla.tar",
+      "url": "/offline/packs/moldova/moldova-valhalla.tar",
+      "bytes": 120319488,
+      "sha256": "a9fce80fae0e6fea566ee215d916bf98a0af909253fe81b6dedc1c6383fe3fa8"
+    }
+  ],
+  "attribution": "© OpenStreetMap contributors",
+  "license": "ODbL-1.0",
+  "license_url": "https://opendatacommons.org/licenses/odbl/1-0/"
+}

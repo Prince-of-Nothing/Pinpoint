@@ -25,6 +25,7 @@ mod diagnostic_handlers;
 mod handlers;
 mod locations_handlers;
 mod migrations;
+mod offline_handlers;
 mod state;
 mod status;
 mod usernames;
@@ -154,6 +155,7 @@ pub fn router(state: AppState) -> Router {
         .merge(admin_router())
         .merge(diagnostic_router())
         .merge(status_routes())
+        .merge(offline_router())
         .route("/", get(web_handlers::index))
         .route("/privacy", get(web_handlers::privacy))
         .route("/app.js", get(web_handlers::app_js))
@@ -221,6 +223,13 @@ pub fn auth_router() -> Router<AppState> {
         .route("/api/v1/auth/mfa/verify", post(auth_handlers::mfa_verify))
         .route("/api/v1/auth/mfa/status", get(auth_handlers::mfa_status))
         .route("/api/v1/auth/mfa", delete(auth_handlers::mfa_disable))
+}
+
+/// Offline pack download routes (`/offline/packs/*`): the committed manifest
+/// plus a Range-capable, same-origin proxy of the published release assets.
+/// Isolated in its own merge so web-app router work does not conflict here.
+pub fn offline_router() -> Router<AppState> {
+    offline_handlers::routes()
 }
 
 /// Admin console routes (`/api/v1/admin/*`). Role-gated per handler so the

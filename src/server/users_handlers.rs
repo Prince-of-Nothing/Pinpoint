@@ -390,17 +390,12 @@ pub async fn delete_me(
                 .into_response();
         }
     }
-    let Some(handle) = purge_user(&state, cu.user_id).await else {
+    // Do not write a new audit row after erasure: the append-only audit table
+    // can reject the cleanup DELETE, so a row written here would outlive the
+    // account. Admin-initiated deletions are still audited under the admin.
+    if purge_user(&state, cu.user_id).await.is_none() {
         return error_envelope("USER_NOT_FOUND", "User not found.");
-    };
-    record_admin_action(
-        &state,
-        cu.user_id,
-        "user.self_delete",
-        &format!("user:{}", cu.user_id),
-        Some(&format!("@{handle} self-deleted")),
-    )
-    .await;
+    }
     let mut resp = (StatusCode::OK, Json(json!({"message": "Account deleted."}))).into_response();
     resp.headers_mut()
         .insert("Set-Cookie", clear_cookie().parse().unwrap());

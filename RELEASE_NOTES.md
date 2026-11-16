@@ -1,7 +1,60 @@
+# Pinpoint 1.5.2 - Release Notes
+
+**Released:** 2026-11-16 - **Version:** `1.5.2` (from `1.5.1`) -
+**Status:** Account-erasure and persistence patch. Use this build for launch.
+
+**Artifacts:** `pinpoint-android-1.5.2.apk` - **universal**: `arm64-v8a` and
+`armeabi-v7a` in one APK. GitHub also generates the source `zip`/`tar.gz`
+archives for the `v1.5.2` tag.
+
+## Fixes
+
+- **Account erasure on Postgres:** each cleanup step now runs independently, so
+  an append-only audit table (where the runtime role has `INSERT` but not
+  `DELETE`) can no longer abort the transaction before the user row is removed.
+  Audit entries are anonymised when they cannot be deleted, sessions are
+  expired when they cannot be deleted, and diagnostic reports are detached from
+  the account. If a foreign key still prevents physical removal, the row is
+  scrubbed (email, name, password hash, MFA and recovery data cleared) and
+  disabled instead of remaining usable.
+- **Rollback snapshot:** the legacy `pinpoint_state` JSONB snapshot is removed
+  on account deletion so a restart cannot restore an erased account.
+- **Persistence:** databases without `pinpoint_user_id_seq` no longer abort
+  every persist transaction. Migration 11/12 tolerates missing optional service
+  roles, and registration falls back to a direct insert if the sequence is
+  unavailable.
+- **Audit:** self-deletion no longer writes a fresh audit row after erasure.
+
+## Verification
+
+- Reproduced the production failure locally with a restricted Postgres role
+  (`DELETE` denied on `pinpoint_admin_audit`), then verified the account row,
+  location, emergency and diagnostic report are gone and login returns `401`.
+- Full gate: `cargo fmt`, `clippy -D warnings`, `build --locked`,
+  `test --locked` all pass.
+
+## Upgrade
+
+Install over 1.5.1. The Android client is unchanged; this is a server-side
+erasure fix, so the web app is fixed as soon as Render deploys 1.5.2.
+
+## Known issues
+
+- #49 server-side anonymous session scoping remains open.
+- #50 MFA disable does not require a code yet.
+- #58 theme switcher not included; #56 OAuth2 not included.
+- E2E ciphertext-only location delivery is not complete; the hosted build stores
+  the latest location server-side, with no history.
+
+---
+
 # Pinpoint 1.5.1 - Release Notes
 
-**Released:** 2026-11-16 - **Version:** `1.5.1` (from `1.5.0`) -
-**Status:** Security and privacy patch. Replace 1.5.0 immediately.
+**Status:** Superseded by 1.5.2. The 1.5.1 APK still works with the current
+server, but its Postgres account deletion could leave the user row behind when
+the audit table denied `DELETE`. Use 1.5.2 for launch.
+
+**Released:** 2026-11-16 - **Version:** `1.5.1` (from `1.5.0`).
 
 **Artifacts:** `pinpoint-android-1.5.1.apk` - **universal**: `arm64-v8a` and
 `armeabi-v7a` in one APK. GitHub also generates the source `zip`/`tar.gz`
@@ -14,24 +67,48 @@ archives for the `v1.5.1` tag.
   with the share's precision applied. 1.5.0 returned every latest location to
   any signed-in user. Update immediately.
 - **Erasure:** account deletion now deletes related shares, friendships,
-  locations, check-ins, emergencies, diagnostics, sessions and audit rows in one
-  transaction before the user row. In 1.5.0 a user with related rows could
-  remain in Postgres after the session was revoked.
+  locations, check-ins, emergencies, diagnostics, sessions and audit rows before
+  the user row. In 1.5.0 a user with related rows could remain in Postgres after
+  the session was revoked. 1.5.2 completes this fix for append-only audit
+  grants.
 
 ## Demo removal
 
 - No demo accounts are seeded. The login hint, demo friend pins, demo Compose
   clients and demo credential docs are removed.
-- The seeded Alice/Bob/admin rows were removed from the hosted database; the
-  remaining accounts are real device accounts.
+- The demo admin and Bob rows are gone. The legacy `alice@example.com` row has
+  its demo password disabled; run the cleanup SQL in the 1.5.1 GitHub release
+  body (or below) in Supabase to erase it and the stale state snapshot.
 - To create an administrator, register a real account and run in Supabase SQL:
   `update pinpoint_users set role = 'administrator' where email = '<real email>';`
 
+## Legacy demo data cleanup (run once in Supabase SQL)
+
+```sql
+do $$
+declare ids bigint[];
+begin
+  select array_agg(id) into ids from pinpoint_users
+   where email in ('alice@example.com','bob@example.com','admin@example.com');
+  if ids is null then return; end if;
+  delete from pinpoint_shares where owner_id = any(ids)
+     or friendship_id in (select id from pinpoint_friendships where requester_id = any(ids) or receiver_id = any(ids));
+  delete from pinpoint_friendships where requester_id = any(ids) or receiver_id = any(ids);
+  delete from pinpoint_locations where user_id = any(ids);
+  delete from pinpoint_checkins where user_id = any(ids);
+  delete from pinpoint_emergencies where user_id = any(ids);
+  delete from pinpoint_diagnostic_reports where user_id = any(ids);
+  delete from pinpoint_sessions where user_id = any(ids);
+  delete from pinpoint_admin_audit where actor_id = any(ids);
+  delete from pinpoint_users where id = any(ids);
+  delete from pinpoint_state where id = 1;
+end $$;
+```
+
 ## Upgrade note
 
-Install this APK over 1.5.0. The in-app checker may be throttled after the
-1.5.0 launch; use **About -> Check for updates** or the direct APK link. Do not
-announce 1.5.0: it contains the consent leak fixed here.
+Install the 1.5.2 APK over 1.5.0/1.5.1. Do not announce 1.5.0: it contains the
+consent leak fixed in 1.5.1.
 
 ## Known issues
 

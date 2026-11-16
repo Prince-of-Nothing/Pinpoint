@@ -67,15 +67,31 @@ pub const MIGRATIONS: &[(u32, &str, &[&str])] = &[
         &[
             "CREATE SEQUENCE IF NOT EXISTS pinpoint_user_id_seq",
             "SELECT setval('pinpoint_user_id_seq', COALESCE((SELECT MAX(id) FROM pinpoint_users), 0) + 1, false)",
-            "GRANT USAGE, SELECT ON SEQUENCE pinpoint_user_id_seq TO pinpoint_users, pinpoint_auth",
+            r#"DO $$ BEGIN
+                   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pinpoint_users') THEN
+                       EXECUTE 'GRANT USAGE, SELECT ON SEQUENCE pinpoint_user_id_seq TO pinpoint_users';
+                   END IF;
+                   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pinpoint_auth') THEN
+                       EXECUTE 'GRANT USAGE, SELECT ON SEQUENCE pinpoint_user_id_seq TO pinpoint_auth';
+                   END IF;
+               END $$"#,
         ],
     ),
     (
         12,
         "user_id_sequence_grant",
-        &[
-            "GRANT USAGE, SELECT ON SEQUENCE pinpoint_user_id_seq TO pinpoint_users, pinpoint_auth",
-        ],
+        &[r#"DO $$ BEGIN
+                   IF to_regclass('pinpoint_user_id_seq') IS NULL THEN
+                       EXECUTE 'CREATE SEQUENCE pinpoint_user_id_seq';
+                       EXECUTE 'SELECT setval(''pinpoint_user_id_seq'', COALESCE((SELECT MAX(id) FROM pinpoint_users), 0) + 1, false)';
+                   END IF;
+                   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pinpoint_users') THEN
+                       EXECUTE 'GRANT USAGE, SELECT ON SEQUENCE pinpoint_user_id_seq TO pinpoint_users';
+                   END IF;
+                   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'pinpoint_auth') THEN
+                       EXECUTE 'GRANT USAGE, SELECT ON SEQUENCE pinpoint_user_id_seq TO pinpoint_auth';
+                   END IF;
+               END $$"#],
     ),
     (
         13,
@@ -138,7 +154,8 @@ pub async fn apply_migrations(pool: &sqlx::PgPool) -> Vec<u32> {
         };
         let mut ok = true;
         for stmt in *statements {
-            if sqlx::query(stmt).execute(&mut *tx).await.is_err() {
+            if let Err(error) = sqlx::query(stmt).execute(&mut *tx).await {
+                eprintln!("migration {version} ({name}) failed at `{stmt}`: {error}");
                 ok = false;
                 break;
             }

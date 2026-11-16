@@ -12,6 +12,13 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-11-16
+### Fixed
+- [SECURITY] Postgres account erasure: each cleanup statement now runs independently, so an append-only audit table without `DELETE` permission can no longer abort the transaction before the user row is removed. Audit entries are anonymised, sessions expired and reports detached when deletion is denied; a user row blocked by a foreign key is scrubbed and disabled.
+- [FIX] Account deletion removes the legacy `pinpoint_state` JSONB rollback snapshot so a restart cannot restore an erased account.
+- [FIX] Persistence no longer aborts when `pinpoint_user_id_seq` is missing; migrations 11/12 tolerate absent optional service roles and registration falls back to a direct insert.
+- [FIX] Self-deletion no longer writes a new audit row after erasure.
+
 ## [1.5.1] - 2026-11-16
 ### Fixed
 - [SECURITY] Locations: `/api/v1/locations/friends` now requires an accepted friendship and an active, non-expired share owned by the location owner. Removed the demo bypass that returned every latest location to any signed-in user.

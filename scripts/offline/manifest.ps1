@@ -38,7 +38,7 @@ function New-OfflineManifest {
         minzoom = $Region.minzoom
         maxzoom = $Region.maxzoom
         files = @($entries)
-        attribution = "© OpenStreetMap contributors"
+        attribution = "$([char]0x00A9) OpenStreetMap contributors"
         license = "ODbL-1.0"
         license_url = "https://opendatacommons.org/licenses/odbl/1-0/"
     }
@@ -50,7 +50,8 @@ function New-OfflineManifest {
     $part = "$Output.part"
     Remove-Item $part -Force -ErrorAction SilentlyContinue
     try {
-        $document | ConvertTo-Json -Depth 6 | Set-Content -Path $part -Encoding UTF8
+        $json = $document | ConvertTo-Json -Depth 6
+        [System.IO.File]::WriteAllText($part, $json, (New-Object System.Text.UTF8Encoding($false)))
         Move-Item -Path $part -Destination $Output -Force
         return $Output
     } catch {

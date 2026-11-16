@@ -1,5 +1,6 @@
 param(
-    [Parameter(Mandatory = $true)][string]$PackDir
+    [Parameter(Mandatory = $true)][string]$PackDir,
+    [switch]$AllowMissingRouting
 )
 
 $ErrorActionPreference = "Stop"
@@ -54,12 +55,16 @@ if ($LASTEXITCODE -ne 0) { throw "search index verify failed: $verifyOutput" }
 Write-Host "search: $verifyOutput"
 
 $valhalla = $manifest.files | Where-Object { $_.name -like "*valhalla.tar" } | Select-Object -First 1
-if (-not $valhalla) { throw "manifest has no Valhalla routing tiles" }
-$valhallaPath = Join-Path $PackDir $valhalla.name
-$entries = & tar -tf $valhallaPath 2>&1
-if ($LASTEXITCODE -ne 0) { throw "routing tar unreadable: $entries" }
-if (-not ($entries | Where-Object { $_ -match '\.gph$' })) { throw "routing tar has no .gph tiles" }
-Write-Host "routing: ok"
+if (-not $valhalla) {
+    if (-not $AllowMissingRouting) { throw "manifest has no Valhalla routing tiles" }
+    Write-Host "routing: skipped"
+} else {
+    $valhallaPath = Join-Path $PackDir $valhalla.name
+    $entries = & tar -tf $valhallaPath 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "routing tar unreadable: $entries" }
+    if (-not ($entries | Where-Object { $_ -match '\.gph$' })) { throw "routing tar has no .gph tiles" }
+    Write-Host "routing: ok"
+}
 
 $attribution = Join-Path $PackDir "ATTRIBUTION.md"
 if (-not (Test-Path $attribution)) { throw "ATTRIBUTION.md missing" }

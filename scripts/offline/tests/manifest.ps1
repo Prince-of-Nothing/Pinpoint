@@ -29,6 +29,9 @@ try {
     if ($doc.files[0].bytes -ne 7) { throw "bytes mismatch" }
     if ($doc.files[0].sha256 -ne (Get-FileHash -Algorithm SHA256 -Path $a).Hash.ToLowerInvariant()) { throw "hash mismatch" }
     if ($doc.attribution -notmatch "OpenStreetMap") { throw "attribution missing" }
+    if (-not $doc.attribution.Contains([string][char]0x00A9)) { throw "attribution copyright symbol missing" }
+    $rawManifest = [IO.File]::ReadAllBytes($manifest)
+    if ($rawManifest.Length -ge 3 -and $rawManifest[0] -eq 0xEF -and $rawManifest[1] -eq 0xBB -and $rawManifest[2] -eq 0xBF) { throw "manifest has a UTF-8 BOM" }
     if ($doc.license -ne "ODbL-1.0") { throw "license mismatch" }
     Remove-Item $manifest -Force
 

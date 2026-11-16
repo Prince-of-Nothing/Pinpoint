@@ -489,6 +489,62 @@ impl PinpointAppUI {
         });
         ui.add_space(8.0);
 
+        ui.group(|ui| {
+            ui.label(
+                RichText::new("Danger zone")
+                    .size(14.0)
+                    .strong()
+                    .color(egui::Color32::from_rgb(248, 113, 113)),
+            );
+            ui.label(
+                "Deleting your account removes your profile, friendships, shares, current \
+                 location, check-ins, emergencies and sessions. This cannot be undone.",
+            );
+            ui.add(
+                egui::TextEdit::singleline(&mut self.delete_confirm)
+                    .hint_text("Type DELETE")
+                    .desired_width(160.0),
+            );
+            let anonymous = self
+                .app
+                .data()
+                .lock()
+                .unwrap()
+                .user
+                .as_ref()
+                .map(|u| u.auth_method == "anonymous")
+                .unwrap_or(false);
+            if !anonymous {
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.delete_password)
+                        .password(true)
+                        .hint_text("Current password")
+                        .desired_width(220.0),
+                );
+            }
+            if ui
+                .button(
+                    RichText::new("Delete my account")
+                        .color(egui::Color32::from_rgb(248, 113, 113)),
+                )
+                .clicked()
+            {
+                let confirm = self.delete_confirm.trim().to_string();
+                if confirm != "DELETE" {
+                    self.app
+                        .set_error(Some("Type DELETE to confirm account deletion.".to_string()));
+                } else {
+                    let password = if anonymous {
+                        None
+                    } else {
+                        Some(self.delete_password.clone())
+                    };
+                    self.spawn_action(PendingAction::DeleteAccount { confirm, password }, ctx);
+                }
+            }
+        });
+        ui.add_space(8.0);
+
         if ui.button("About & updates").clicked() {
             self.app.set_screen(crate::app::CurrentScreen::About);
         }

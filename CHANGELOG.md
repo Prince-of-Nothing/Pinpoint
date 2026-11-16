@@ -12,6 +12,13 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-16
+### Added
+- [FEATURE] Public privacy policy at `/privacy`, linked from web sign-in and the Android About screen.
+- [FEATURE] Self-service account deletion from Android and the web: typed `DELETE` confirmation, current-password proof for email accounts, session revocation and a full data cascade.
+### Fixed
+- [FIX] Android: anonymous sign-in is debounced while a request is in flight (partial #49).
+
 ## [1.4.2] - 2026-11-16
 ### Fixed
 - [FIX] Android: a newly installed app version now performs one launch update check before the 24h throttle applies, so an upgrade no longer hides the new release.

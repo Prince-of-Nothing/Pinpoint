@@ -9,6 +9,7 @@ use axum::http::{header, HeaderValue};
 use axum::response::{Html, IntoResponse, Response};
 
 const INDEX: &str = include_str!("../../web/app/index.html");
+const PRIVACY: &str = include_str!("../../web/privacy.html");
 const APP_JS: &str = include_str!("../../web/app/app.js");
 const MAP_JS: &str = include_str!("../../web/app/map.js");
 const NAV_JS: &str = include_str!("../../web/app/nav.js");
@@ -78,6 +79,14 @@ pub(crate) fn secure(mut resp: Response) -> Response {
 
 pub async fn index() -> Response {
     let mut resp = secure(Html(INDEX).into_response());
+    resp.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    resp
+}
+
+/// Public privacy policy. Same-origin, no scripts, no third-party assets.
+pub async fn privacy() -> Response {
+    let mut resp = secure(Html(PRIVACY).into_response());
     resp.headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     resp

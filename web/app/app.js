@@ -116,6 +116,8 @@ function resetToLogin() {
   clearPasswordFields();
   $("login-password").value = "";
   $("login-totp").value = "";
+  $("delete-confirm").value = "";
+  $("delete-password").value = "";
   renderAccount();
 }
 
@@ -167,6 +169,8 @@ function renderAccount() {
   const anonymous = user?.auth_method === "anonymous";
   show($("password-form"), !anonymous);
   show($("password-anonymous-note"), anonymous);
+  const deleteLabel = $("delete-password-label");
+  if (deleteLabel) show(deleteLabel, !anonymous);
 }
 
 function clearPasswordFields() {
@@ -219,6 +223,27 @@ async function changePassword() {
     setStatus("Password changed. Sign in again with the new password.");
   } catch (err) {
     clearPasswordFields();
+    setStatus(err.message, true);
+  }
+}
+
+async function deleteAccount() {
+  if (!state.user) return;
+  const confirm = $("delete-confirm").value.trim();
+  const password = $("delete-password").value;
+  if (confirm !== "DELETE") {
+    setStatus("Type DELETE to confirm account deletion.", true);
+    return;
+  }
+  if (!window.confirm("Delete your account permanently? This cannot be undone.")) return;
+  try {
+    await api("/api/v1/users/me", {
+      method: "DELETE",
+      body: { confirm, current_password: password || null },
+    });
+    resetToLogin();
+    setStatus("Account deleted.");
+  } catch (err) {
     setStatus(err.message, true);
   }
 }
@@ -768,6 +793,7 @@ $("password-form").addEventListener("submit", (e) => {
   e.preventDefault();
   changePassword();
 });
+$("delete-account").addEventListener("click", deleteAccount);
 $("crash-send").addEventListener("click", sendCrash);
 $("crash-dismiss").addEventListener("click", () => {
   show($("crash-banner"), false);

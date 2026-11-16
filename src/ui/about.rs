@@ -197,6 +197,13 @@ impl PinpointAppUI {
                           explicit revocable consent, no trackers and no third-party scripts.",
                 );
                 ui.add_space(4.0);
+                if ui.button("Privacy policy").clicked() {
+                    let url = format!(
+                        "{}/privacy",
+                        self.app.backend_url().trim_end_matches('/')
+                    );
+                    let _ = webbrowser::open(&url);
+                }
                 if ui.button("GitHub repository").clicked() {
                     let _ = webbrowser::open("https://github.com/Prince-of-Nothing/Pinpoint");
                 }

@@ -1,6 +1,6 @@
 ﻿[package]
 name = "pinpoint-desktop"
-version = "1.4.2"
+version = "1.5.0"
 edition = "2021"
 description = "Privacy-first location-sharing platform in pure Rust: multiplatform client + API server (desktop + Android + iOS, OSM maps)"
 publish = false

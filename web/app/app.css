@@ -217,6 +217,26 @@ button:hover { filter: brightness(1.05); }
 
 .card h3 { margin: 1rem 0 0.5rem; font-size: 0.95rem; }
 
+.danger-zone {
+  margin-top: 1rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.danger-zone summary {
+  cursor: pointer;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.danger-zone p { margin: 0.5rem 0; }
+
+button.danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
 .crash-banner {
   position: fixed;
   bottom: 4.5rem;

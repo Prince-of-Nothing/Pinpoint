@@ -30,7 +30,7 @@ fn session_cookie(session_id: &str) -> String {
     format!("session_id={session_id}; Path=/; HttpOnly; SameSite=Lax")
 }
 
-fn clear_cookie() -> String {
+pub(crate) fn clear_cookie() -> String {
     "session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0".to_string()
 }
 

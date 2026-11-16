@@ -60,6 +60,7 @@ header. The cookie value is stored server-side only as a SHA-256 hash.
 | GET | `/users/:id` | cookie | user by id |
 | PATCH | `/users/:id` | cookie + CSRF | update own profile / admin update |
 | DELETE | `/users/:id` | cookie + CSRF | delete (admin) |
+| DELETE | `/users/me` | cookie + CSRF | `{confirm:"DELETE", current_password?}` — delete own account and data (cascade) |
 | GET | `/users/search?q=` | cookie | search by email/name |
 | GET | `/friendships/` | cookie | list friendships involving the caller |
 | POST | `/friendships/` | cookie + CSRF | `{receiver_email}` → pending request |

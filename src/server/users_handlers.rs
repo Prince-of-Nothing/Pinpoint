@@ -7,6 +7,7 @@ use axum::{
 use serde_json::{json, Value};
 
 use super::admin_handlers::{record_admin_action, require_admin};
+use super::auth_handlers::clear_cookie;
 use super::handlers::{not_found, require_current_user, user_json};
 use super::state::AppState;
 use super::usernames::{find_user_by_username, public_json, username_for};
@@ -301,29 +302,12 @@ pub async fn update_user(
     (StatusCode::OK, Json(view)).into_response()
 }
 
-/// `DELETE /users/{id}` — admin removal (cascades friendships/shares/locations).
-pub async fn delete_user(
-    State(state): State<AppState>,
-    cu: Option<Extension<CurrentUser>>,
-    Path(id): Path<i64>,
-) -> impl IntoResponse {
-    let cu = match require_admin(&state, cu) {
-        Ok(cu) => cu,
-        Err(resp) => return resp,
-    };
+/// Remove a user and every row owned by them. Returns the public handle when
+/// the user existed. Sessions are revoked before the row is deleted.
+async fn purge_user(state: &AppState, id: i64) -> Option<String> {
     let handle = {
         let mut store = state.store.lock().unwrap();
-        let pos = match store.users.iter().position(|u| u.id == id) {
-            Some(p) => p,
-            None => return error_envelope("USER_NOT_FOUND", "User not found."),
-        };
-        let me = cu.user_id;
-        if me == id {
-            return error_envelope(
-                "VALIDATION_FAILED",
-                "Cannot delete your own account via admin endpoint.",
-            );
-        }
+        let pos = store.users.iter().position(|u| u.id == id)?;
         let handle = username_for(store.users[pos].id);
         store.users.remove(pos);
         store
@@ -335,8 +319,30 @@ pub async fn delete_user(
         store.emergencies.retain(|e| e.user_id != id);
         handle
     };
-    // DB mirror (Auth owns wipe-rewrites; delete the row directly).
+    state.delete_user_sessions(id).await;
     state.sql_delete_user(id).await;
+    Some(handle)
+}
+
+/// `DELETE /users/{id}` - admin removal (cascades friendships/shares/locations).
+pub async fn delete_user(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    let cu = match require_admin(&state, cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
+    if cu.user_id == id {
+        return error_envelope(
+            "VALIDATION_FAILED",
+            "Use the self-service account deletion endpoint.",
+        );
+    }
+    let Some(handle) = purge_user(&state, id).await else {
+        return error_envelope("USER_NOT_FOUND", "User not found.");
+    };
     record_admin_action(
         &state,
         cu.user_id,
@@ -346,6 +352,59 @@ pub async fn delete_user(
     )
     .await;
     (StatusCode::OK, Json(json!({"message": "User deleted."}))).into_response()
+}
+
+/// `DELETE /users/me` - delete the signed-in user's account and data.
+pub async fn delete_me(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
+    let confirm = body.get("confirm").and_then(Value::as_str).unwrap_or("");
+    if confirm != "DELETE" {
+        return error_envelope(
+            "VALIDATION_FAILED",
+            "Type DELETE to confirm account deletion.",
+        );
+    }
+    let hash = {
+        let store = state.store.lock().unwrap();
+        store
+            .find_user_by_id(cu.user_id)
+            .and_then(|u| u.password_hash.clone())
+    };
+    if let Some(hash) = hash {
+        let current = body
+            .get("current_password")
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        if current.is_empty() || !crate::security::password::verify_password(current, &hash) {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": {"code": "INVALID_CREDENTIALS", "message": "Current password is incorrect."}})),
+            )
+                .into_response();
+        }
+    }
+    let Some(handle) = purge_user(&state, cu.user_id).await else {
+        return error_envelope("USER_NOT_FOUND", "User not found.");
+    };
+    record_admin_action(
+        &state,
+        cu.user_id,
+        "user.self_delete",
+        &format!("user:{}", cu.user_id),
+        Some(&format!("@{handle} self-deleted")),
+    )
+    .await;
+    let mut resp = (StatusCode::OK, Json(json!({"message": "Account deleted."}))).into_response();
+    resp.headers_mut()
+        .insert("Set-Cookie", clear_cookie().parse().unwrap());
+    resp
 }
 
 /// `GET /users/search?q=` — admin-only substring search over handle/email/name.

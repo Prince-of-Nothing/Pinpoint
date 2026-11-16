@@ -917,6 +917,32 @@ impl PinpointApp {
         }
     }
 
+    /// Delete the signed-in user's account and all local identity material.
+    /// The server cascades profile, friendships, shares, current location,
+    /// check-ins, emergencies and sessions before responding.
+    pub async fn delete_my_account(
+        &self,
+        confirm: String,
+        current_password: Option<String>,
+    ) -> anyhow::Result<()> {
+        self.backend
+            .delete_my_account(&confirm, current_password.as_deref())
+            .await?;
+        *self.e2e_location_key.lock().unwrap() = None;
+        self.key_manager.delete_secret("e2e_location_key");
+        self.clear_persisted_session();
+        {
+            let mut data = self.data.lock().unwrap();
+            data.user = None;
+            data.sessions.clear();
+        }
+        self.pending_mutations.lock().unwrap().clear();
+        self.set_screen(CurrentScreen::Login);
+        self.set_offline_mode(true);
+        self.set_notice(Some("Account deleted.".to_string()));
+        Ok(())
+    }
+
     pub async fn submit_diagnostic(
         &self,
         category: String,

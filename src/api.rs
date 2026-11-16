@@ -745,6 +745,24 @@ impl ApiClient {
         Ok(())
     }
 
+    /// `DELETE /api/v1/users/me` - self-service account deletion.
+    pub async fn delete_my_account(
+        &self,
+        confirm: &str,
+        current_password: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let body = serde_json::json!({
+            "confirm": confirm,
+            "current_password": current_password,
+        });
+        let response = self
+            .request(reqwest::Method::DELETE, "/api/v1/users/me", Some(body))
+            .await?;
+        Self::check(response, "Failed to delete account").await?;
+        self.store_session(None);
+        Ok(())
+    }
+
     pub async fn admin_overview(&self) -> anyhow::Result<serde_json::Value> {
         let response = self
             .request(reqwest::Method::GET, "/api/v1/admin/overview", None)
@@ -1359,6 +1377,13 @@ impl crate::backend::Backend for ApiClient {
     }
     fn delete_user<'a>(&'a self, id: i64) -> crate::backend::BackendFuture<'a, ()> {
         Box::pin(async move { ApiClient::delete_user(self, id).await })
+    }
+    fn delete_my_account<'a>(
+        &'a self,
+        confirm: &'a str,
+        current_password: Option<&'a str>,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::delete_my_account(self, confirm, current_password).await })
     }
     fn admin_overview(&self) -> crate::backend::BackendFuture<'_, serde_json::Value> {
         Box::pin(async move { ApiClient::admin_overview(self).await })

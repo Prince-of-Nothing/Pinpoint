@@ -1,3 +1,67 @@
+# Pinpoint 1.5.0 - Release Notes
+
+**Released:** 2026-11-16 - **Version:** `1.5.0` (from `1.4.2`) -
+**Status:** Public launch readiness: privacy policy, account deletion, and the
+server-URL and update-check fixes from 1.4.1/1.4.2.
+
+**Artifacts:** `pinpoint-android-1.5.0.apk` - **universal**: `arm64-v8a` and
+`armeabi-v7a` in one APK. GitHub also generates the source `zip`/`tar.gz`
+archives for the `v1.5.0` tag.
+
+Flags: `[FEATURE]` new capability - `[FIX]` bug fix - `[SECURITY]` hardening -
+`[DOCS]` documentation - `[INFRA]` build/deploy.
+
+---
+
+## 1.5.0 launch features
+
+- **Public privacy policy:** `/privacy` on the backend, linked from web sign-in
+  and the Android About screen.
+- **Self-service account deletion:** Android Profile & settings -> Danger zone
+  and web Account -> Delete account. Type `DELETE`; email accounts also enter
+  the current password. The server removes profile, friendships, shares owned
+  by the user, current location, check-ins, emergencies and sessions, then
+  clears the cookie. The client removes the local session and E2E key.
+- **Android anonymous sign-in debounce:** a double tap cannot create two
+  accounts while a request is in flight (partial #49).
+- **Release default:** the APK connects to
+  `https://pinpoint-uj4y.onrender.com`; Settings and the sign-in screen can
+  change servers.
+- **Update check:** a newly installed version checks once after an upgrade,
+  then keeps the 24h throttle.
+
+## Privacy accuracy
+
+The current 1.5.0 hosted build stores the **latest** location server-side so it
+can enforce shares and precision; there is no location history. The app derives
+a per-user E2E key on the device, but ciphertext-only delivery is future work and
+is not a 1.5.0 guarantee. The public policy at `/privacy` states this explicitly.
+
+## Launch notes
+
+- Distribution: GitHub Releases APK + the Render web app at
+  `https://pinpoint-uj4y.onrender.com`. There is no Play Store listing yet.
+- Render Free sleeps after about 15 minutes idle; the first request can take up
+  to a minute. Upgrade the plan or add a keep-warm check before high traffic.
+- Family sharing, the theme switcher, OAuth2 and the MFA-management UI remain
+  post-launch.
+
+## Known issues
+
+- #49 server-side anonymous session scoping remains open; the client-side
+  duplicate-click guard is included here.
+- #50 MFA disable does not require a code yet.
+- #58 theme switcher not included.
+- #56 OAuth2/federated login not included.
+- E2E ciphertext-only location delivery is not complete.
+
+## Upgrade note
+
+If a locally built/debug APK with a different signature is installed, uninstall
+it once before installing this release.
+
+---
+
 # Pinpoint 1.4.2 - Release Notes
 
 **Released:** 2026-11-16 - **Version:** `1.4.2` (from `1.4.1`) -

@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pinpoint route UI demo</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="route.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --demo-bg: #070b14;
+        --demo-panel: #0f172a;
+        --demo-panel-2: #111c33;
+        --demo-border: #1f2937;
+        --demo-text: #e5e7eb;
+        --demo-muted: #9ca3af;
+        --demo-accent: #34d399;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 15% -10%, rgba(52, 211, 153, 0.12), transparent 45%),
+          var(--demo-bg);
+        color: var(--demo-text);
+        font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+
+      .demo {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 2.5rem 1.25rem 2rem;
+      }
+
+      .demo-eyebrow {
+        margin: 0 0 0.35rem;
+        color: var(--demo-accent);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .demo h1 {
+        margin: 0 0 0.5rem;
+        font-size: clamp(1.6rem, 3.2vw, 2.2rem);
+        letter-spacing: -0.02em;
+      }
+
+      .demo-lede {
+        max-width: 62ch;
+        margin: 0 0 1.75rem;
+        color: var(--demo-muted);
+      }
+
+      .demo-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+        gap: 1rem;
+        align-items: start;
+      }
+
+      @media (max-width: 820px) {
+        .demo-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      .demo-map {
+        display: grid;
+        gap: 0.6rem;
+        padding: 0.9rem;
+        border: 1px solid var(--demo-border);
+        border-radius: 0.75rem;
+        background: var(--demo-panel);
+      }
+
+      .demo-map-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+
+      .demo-map-head h2 {
+        margin: 0;
+        font-size: 0.95rem;
+      }
+
+      .demo-badge {
+        padding: 0.18rem 0.55rem;
+        border: 1px solid var(--demo-border);
+        border-radius: 999px;
+        color: var(--demo-muted);
+        font-size: 0.7rem;
+        font-weight: 650;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+      }
+
+      .demo-badge[data-state="ready"] {
+        border-color: rgba(52, 211, 153, 0.55);
+        color: var(--demo-accent);
+      }
+
+      .demo-badge[data-state="stopped"] {
+        border-color: rgba(250, 204, 21, 0.5);
+        color: #facc15;
+      }
+
+      .demo-canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        aspect-ratio: 21 / 16;
+        border: 1px solid var(--demo-border);
+        border-radius: 0.55rem;
+        background-color: #0a1220;
+        background-image:
+          linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+        background-size: 32px 32px;
+      }
+
+      .demo-canvas text {
+        fill: var(--demo-text);
+        font: 700 13px system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+
+      .demo-readout {
+        margin: 0;
+        color: var(--demo-text);
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+
+      .demo-hint {
+        margin: 0;
+        color: var(--demo-muted);
+        font-size: 0.75rem;
+      }
+
+      .demo-foot {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--demo-border);
+        color: var(--demo-muted);
+        font-size: 0.75rem;
+      }
+
+      .demo-foot p {
+        margin: 0 0 0.35rem;
+      }
+
+      .demo-foot a {
+        color: var(--demo-muted);
+      }
+
+      .demo-foot a:hover {
+        color: var(--demo-text);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="demo">
+      <header>
+        <p class="demo-eyebrow">Pinpoint · offline maps</p>
+        <h1>Route and turn-by-turn</h1>
+        <p class="demo-lede">
+          Component preview with a synthetic local router. Nothing leaves this page:
+          no online routing, no tiles, no fonts, no CDN, no external assets. The
+          injected router is the only thing the UI calls.
+        </p>
+      </header>
+
+      <div class="demo-grid">
+        <div id="route-ui"></div>
+
+        <section class="demo-map" aria-labelledby="preview-title">
+          <div class="demo-map-head">
+            <h2 id="preview-title">Route preview</h2>
+            <span class="demo-badge" id="route-state" data-state="empty">No route</span>
+          </div>
+          <svg
+            id="route-preview"
+            class="demo-canvas"
+            viewBox="0 0 420 320"
+            role="img"
+            aria-label="Synthetic route geometry from Chișinău to Bălți"
+          ></svg>
+          <p class="demo-readout" id="route-readout">
+            Fill in the coordinates and press Route.
+          </p>
+          <p class="demo-hint">
+            The geometry is a two-maneuver stub for UI tests, not a real road route.
+          </p>
+        </section>
+      </div>
+
+      <footer class="demo-foot">
+        <p>
+          Map data ©
+          <a href="https://www.openstreetmap.org/copyright" rel="noopener"
+            >OpenStreetMap contributors</a
+          >
+          ·
+          <a href="https://opendatacommons.org/licenses/odbl/1-0/" rel="noopener">ODbL 1.0</a>.
+          The demo geometry is synthetic and is not OSM data.
+        </p>
+        <p>Pinpoint · offline first · the page loads only local files.</p>
+      </footer>
+    </main>
+
+    <script type="module" src="route-demo.js"></script>
+  </body>
+</html>

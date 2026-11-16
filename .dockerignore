@@ -2,7 +2,6 @@
 .git/
 .github/
 .idea/
-archive/
 docs/
 downloads/
 msvc/

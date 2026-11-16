@@ -462,6 +462,7 @@ impl PinpointAppUI {
     /// [`crate::prefs::update_check_due`].
     fn request_update_check(&mut self, ctx: &egui::Context) {
         self.prefs.last_update_check_unix = crate::prefs::now_unix();
+        self.prefs.last_update_check_version = crate::update::current_version().to_string();
         self.save_prefs();
         self.spawn_action(PendingAction::CheckForUpdates, ctx);
     }
@@ -1587,9 +1588,11 @@ impl eframe::App for PinpointAppUI {
         if !self.update_check_started {
             self.update_check_started = true;
             if self.prefs.update_check_on_launch
-                && crate::prefs::update_check_due(
+                && crate::prefs::update_check_due_for(
                     self.prefs.last_update_check_unix,
                     crate::prefs::now_unix(),
+                    &self.prefs.last_update_check_version,
+                    crate::update::current_version(),
                 )
             {
                 self.request_update_check(ctx);

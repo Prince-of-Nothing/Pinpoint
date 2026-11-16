@@ -71,7 +71,7 @@ offline-build = ["dep:rusqlite", "dep:osmpbfreader"]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0"
-rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+rusqlite = { version = "0.41", features = ["bundled"], optional = true }
 osmpbfreader = { version = "0.19", optional = true }
 tracing = "0.1"
 tracing-subscriber = "0.3"

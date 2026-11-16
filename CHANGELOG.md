@@ -13,6 +13,9 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] Web map foundation: vendored MapLibre GL JS 6.18.0 and PMTiles 4.5.0, a no-CDN `web/map/` module and preview, and the 94 KB ODbL Monaco fixture with a headless smoke test.
+- [FEATURE] Offline map data pipeline and search CLI: `scripts/offline/` builds a versioned region pack (Planetiler/OpenMapTiles PMTiles basemap, `pinpoint-offline-index` SQLite FTS5 search index, Valhalla routing tiles, hashed manifest) and `pinpoint-offline-index` (`offline-build`) builds and verifies the search index.
+### Changed
+- [INFRA] CI gates the offline pipeline with a fixture-based `offline-checks` job (search-index tests, clippy, PowerShell script tests) on relevant PRs, keeps the manual Monaco pack smoke separate and records ADR-0020 for the MapLibre/PMTiles/Valhalla map subsystem.
 
 ## [1.5.3] - 2026-11-16
 ### Fixed

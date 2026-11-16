@@ -45,6 +45,7 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0017 | [Minimal Java Android Bridge for Share-In, Biometrics and Background Location](./0017-android-java-bridge.md) | Accepted |
 | 0018 | [One Update Check After Installing a New App Version](./0018-update-check-after-version-change.md) | Accepted |
 | 0019 | [Self-Service Account Deletion](./0019-self-service-account-deletion.md) | Accepted |
+| 0020 | [Hybrid MapLibre Offline Maps (PMTiles + SQLite FTS5 + Valhalla)](./0020-hybrid-maplibre-offline-maps.md) | Proposed |
 
 See the table above; the current architecture summary is in
 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). Design and SDLC context is in the

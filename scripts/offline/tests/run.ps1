@@ -7,7 +7,7 @@
 
 $ErrorActionPreference = "Stop"
 
-$tests = @("build-dryrun", "download", "manifest", "verify")
+$tests = @("build-dryrun", "download", "manifest", "verify", "atomic", "layout")
 
 function Get-PowerShellHost {
     foreach ($candidate in @(

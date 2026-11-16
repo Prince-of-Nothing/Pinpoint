@@ -68,8 +68,14 @@ try {
     $base = Join-Path $root "base"
     New-VerifyFixture -Dir $base
 
-    Assert-VerifyPasses -PackDir $base -AllowEmptyUrls
-    Assert-VerifyFails -PackDir $base -Expected "empty artifact url: moldova.pmtiles"
+    Assert-VerifyPasses -PackDir $base
+
+    $dir = Join-Path $root "empty-url"
+    Copy-Pack $base $dir
+    $doc = Read-Manifest $dir
+    $doc.files[0].url = ""
+    Write-Manifest $dir $doc
+    Assert-VerifyFails -PackDir $dir -Expected "empty artifact url: moldova.pmtiles"
 
     $dir = Join-Path $root "uppercase-hash"
     Copy-Pack $base $dir

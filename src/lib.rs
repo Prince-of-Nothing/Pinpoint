@@ -42,6 +42,17 @@ pub mod webapp;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod map;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod map_server;
+// The optional native map window needs `wry`/`tao`, which exist only for the
+// desktop targets (see the `map-webview` feature in Cargo.toml).
+#[cfg(all(
+    feature = "map-webview",
+    not(target_arch = "wasm32"),
+    not(target_os = "android"),
+    not(target_os = "ios")
+))]
+pub mod map_window;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod tilepacks;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ui;

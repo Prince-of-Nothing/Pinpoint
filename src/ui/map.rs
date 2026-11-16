@@ -11,6 +11,20 @@ impl PinpointAppUI {
             self.draw_mobile_map_screen(ui, ctx);
             return;
         }
+        if crate::platform::map_webview_supported() {
+            let visible = crate::platform::map_webview_visible();
+            ui.horizontal(|ui| {
+                let label = if visible {
+                    "Close offline map"
+                } else {
+                    "Offline map"
+                };
+                if ui.button(label).clicked() {
+                    self.toggle_webview_map();
+                }
+            });
+            ui.add_space(4.0);
+        }
         let lang = self.lang;
         ui.horizontal(|ui| {
             ui.with_layout(
@@ -447,6 +461,20 @@ impl PinpointAppUI {
         let height = (ui.available_height() - 26.0).max(320.0);
         let backend_url = self.app.backend_url();
         let online = !self.app.is_offline_mode();
+
+        // A click in the MapLibre WebView comes back through JNI. Follow it on
+        // the egui map and keep the point for the share control once the
+        // overlay is closed (the WebView covers egui while it is open).
+        if crate::platform::map_webview_supported() {
+            if let Some((lat, lon)) = crate::platform::take_map_webview_click() {
+                self.webview_map_click = Some((lat, lon));
+                let binding = self.app.data();
+                let mut data = binding.lock().unwrap();
+                data.map_center_lat = lat;
+                data.map_center_lon = lon;
+            }
+        }
+
         {
             let binding = self.app.data();
             let mut data = binding.lock().unwrap();
@@ -590,7 +618,10 @@ impl PinpointAppUI {
         let mut menu = false;
         let mut toggle_style = false;
         let mut open_route = false;
+        let mut toggle_webview = false;
+        let mut share_webview = false;
         let map_dark = self.app.data().lock().unwrap().map_dark;
+        let webview_visible = crate::platform::map_webview_visible();
         if !self.mobile_nav_open {
             egui::Area::new(egui::Id::new("mobile_map_controls"))
                 .order(egui::Order::Foreground)
@@ -653,6 +684,36 @@ impl PinpointAppUI {
                         {
                             open_route = true;
                         }
+                        if crate::platform::map_webview_supported() {
+                            if ui
+                                .add(
+                                    egui::Button::new(if webview_visible { "▣" } else { "▦" })
+                                        .min_size(egui::vec2(40.0, 40.0))
+                                        .corner_radius(egui::CornerRadius::same(20)),
+                                )
+                                .on_hover_text("Offline MapLibre map")
+                                .clicked()
+                            {
+                                toggle_webview = true;
+                            }
+                            if !webview_visible {
+                                if let Some((lat, lon)) = self.webview_map_click {
+                                    if ui
+                                        .add(
+                                            egui::Button::new("⌖")
+                                                .min_size(egui::vec2(40.0, 40.0))
+                                                .corner_radius(egui::CornerRadius::same(20)),
+                                        )
+                                        .on_hover_text(format!(
+                                            "Share WebView point ({lat:.4}, {lon:.4})"
+                                        ))
+                                        .clicked()
+                                    {
+                                        share_webview = true;
+                                    }
+                                }
+                            }
+                        }
                         if ui
                             .add(
                                 egui::Button::new("☰")
@@ -695,6 +756,19 @@ impl PinpointAppUI {
                         .unwrap_or((d.map_center_lat, d.map_center_lon, "Map centre".to_string()))
                 };
                 self.route_plan.origin = Some(crate::ui::route::RoutePoint::new(lat, lon, name));
+            }
+        }
+        if toggle_webview {
+            self.toggle_webview_map();
+        }
+        if share_webview {
+            if let Some((lat, lon)) = self.webview_map_click {
+                if let Err(error) =
+                    crate::platform::share_map_webview_point(lat, lon, "Pinpoint map")
+                {
+                    self.app
+                        .set_error(Some(format!("Could not share the map point: {error}")));
+                }
             }
         }
 
@@ -936,6 +1010,19 @@ impl PinpointAppUI {
 }
 
 impl PinpointAppUI {
+    /// Show or hide the Android MapLibre overlay from either map layout.
+    fn toggle_webview_map(&self) {
+        let result = if crate::platform::map_webview_visible() {
+            crate::platform::hide_map_webview()
+        } else {
+            crate::platform::show_map_webview()
+        };
+        if let Err(error) = result {
+            self.app
+                .set_error(Some(format!("Offline MapLibre map: {error}")));
+        }
+    }
+
     fn request_gps_publish(&mut self, ctx: &egui::Context) {
         match crate::platform::ensure_location_permission() {
             crate::platform::LocationPermission::Granted => {

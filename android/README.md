@@ -45,6 +45,9 @@ follow-up.
   force-stopping does not reset the delay.
 - **Android 15:** the mobile tab bar reserves the gesture-navigation inset.
 - **Pinch-to-zoom** works on the map.
+- **MapLibre WebView (prototype):** the compact map screen's **▦** control
+  starts a Rust loopback server and opens the shared `web/map/` MapLibre page
+  in a full-screen WebView. See [MapLibre WebView](#maplibre-webview-prototype).
 - **Saved places on the map:** bookmarks render as blue pins with their names.
   Tapping a pin opens its place sheet (Directions, Set as origin, Save, Copy,
   Share, map apps) without a network lookup. The Saved screen offers **Map**
@@ -53,6 +56,91 @@ follow-up.
 - **Debug UI automation:** debug builds skip FLAG_SECURE when
   `files/allow_screenshots` exists (`adb shell run-as com.pinpoint.desktop touch
   files/allow_screenshots`). Release builds ignore the marker.
+
+## MapLibre WebView (prototype)
+
+The merged `web/map/` foundation page also runs inside the Android app. The
+compact map screen has a **▦** control next to the zoom/locate/route controls;
+it opens a full-screen WebView over the egui surface with a **Close map** button
+(that button is the overlay's back control; the egui app stays underneath).
+
+### Why a loopback server
+
+ES modules, the MapLibre worker and PMTiles byte ranges need an HTTP origin, so
+`src/mobile/map_server.rs` runs a tiny Axum/Tokio server on `127.0.0.1:0` and
+loads `http://127.0.0.1:<ephemeral>/map/index.html`. It is started once per
+process and reused when the overlay is reopened.
+
+The server:
+
+- serves the unchanged `web/map/index.html`, `preview.css`, `map.js`,
+  `style.json` and `fixtures/monaco.pmtiles`, plus `web/vendor/maplibre-gl.js`,
+  `maplibre-gl-worker.mjs`, `maplibre-gl.css` and `pmtiles.js`, embedded in the
+  Rust binary at build time;
+- serves an **exact-path table only** (no directory listing, no path traversal)
+  with the same MIME map as `web/map/serve.mjs`;
+- advertises `Accept-Ranges: bytes` and implements single `bytes=` ranges with
+  `206 Partial Content` and `416 Range Not Satisfiable`, which PMTiles requires;
+- serves downloaded packs from `<files>/packs/<name>.pmtiles` at
+  `/packs/<name>.pmtiles`, canonicalised under the packs directory. A full
+  (non-range) response is capped at 64 MiB; larger packs must be read with
+  ranges (which is what PMTiles does);
+- never serves account data, session cookies or CSRF tokens.
+
+Adding a file to `web/map/index.html` also means adding it to the table in
+`src/mobile/map_server.rs`; the embedded copies are rebuilt with the app.
+
+### WebView security
+
+`PinpointActivity` creates the WebView with JavaScript and DOM storage enabled
+(the page keeps its theme in `localStorage`) but file/content access disabled,
+mixed content blocked, multiple windows disabled and geolocation disabled. The
+`WebViewClient` allowlist is the exact loopback host **and port**: only
+`http://127.0.0.1:<server port>/...` may navigate. Other `http`/`file`/
+`content`/`intent`/`javascript` URLs are blocked. The page's https attribution
+links (OSM, OpenMapTiles, ODbL) open in the system browser instead.
+
+The WebView has its own cookie jar and storage; it is never given the Rust
+session cookie or CSRF token. `PinpointBridge` is the only JavaScript interface
+and exposes just the two methods below.
+
+### Bridge contract
+
+| Direction | Contract |
+|---|---|
+| Page → Java | `PinpointBridge.onMapClick(latitude, longitude)` reports a map click. |
+| Page → Java | `PinpointBridge.onShareRequest(latitude, longitude, label)` opens the system share sheet with `geo:lat,lon?q=label`. |
+| Java → Rust | `nativeMapClick(double, double)` validates the point, stores it and wakes egui. `nativeMapWebViewClosed()` clears the open flag. |
+| Java → page | On `onPageFinished`, a fixed bootstrap subscribes to the preview's `window.__pinpointPreview.handle.onClick`; no page source is modified. A production page can call `PinpointBridge.onMapClick` from its own handler instead. |
+
+After the overlay closes, the compact map screen shows a **⌖** share control
+for the last WebView click and re-centres the egui map on it. No session or
+location data is passed into the WebView.
+
+### Build and verify
+
+```powershell
+cargo check --locked
+cargo test --locked map_server
+
+# Android target check (Gradle/cargo-apk normally adds the NDK clang to PATH):
+$env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"
+$env:ANDROID_NDK_HOME = "$env:ANDROID_HOME\ndk\27.2.12479018"
+$env:PATH = "$env:USERPROFILE\.cargo\bin;$env:ANDROID_NDK_HOME\toolchains\llvm\prebuilt\windows-x86_64\bin;$env:PATH"
+cargo check --locked --target aarch64-linux-android --lib
+
+cd android
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.0.13+9" # JDK 21, not 25
+.\gradlew.bat :app:assembleDebug -Pabi=arm64-v8a
+```
+
+The loopback server tests check the page/vendor MIME types, range requests
+(`206`/`416`), HEAD, traversal rejection and pack serving from a temporary
+`packs/` directory. The prototype was built as an arm64 debug APK; no emulator
+or phone was attached in this environment, so the on-device render is still a
+follow-up. Android Studio's emulator with host GPU is the recommended device
+check; a headless SwiftShader emulator can show the system-UI warning described
+under [Known limitations](#known-limitations).
 
 ## Prerequisites
 
@@ -195,8 +283,18 @@ and the admin console are reachable from the drawer and deep links
 
 ## Known limitations
 
-- Debug APK is ~185 MB (debug symbols, x86_64); the signed release APKs are
-  ~5 MB per ABI.
+- **MapLibre WebView prototype:** the page is the Monaco fixture, not a
+  downloaded pack picker. Packs must be copied to `files/packs/` for now
+  (`adb push`), and the page still asks for `fixtures/monaco.pmtiles`; wiring
+  `/packs/<name>.pmtiles` into the page is the next stream. The full-screen
+  overlay is Android-only; desktop/iOS keep the egui/native map.
+- The WebView bridge edits no `web/map/*` file: it binds the preview's existing
+  map handle. A production page should call `PinpointBridge.onMapClick` and
+  `PinpointBridge.onShareRequest` directly.
+- No device/emulator was attached when this prototype was built, so the
+  WebView render and the loopback server on-device were not exercised here.
+- Debug APK is ~130 MB for arm64 (and ~185 MB for x86_64 with debug symbols);
+  the signed release APKs are ~5 MB per ABI.
 - The arm64 build is linked with `-Wl,-z,max-page-size=16384` (see
   `.cargo/config.toml`) for Android 15+ 16 KB-page devices. A physical AArch64
   device run is still pending; an Android 15+ 16 KB device is the target for

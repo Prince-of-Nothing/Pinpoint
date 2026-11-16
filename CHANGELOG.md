@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Admin bootstrap: `pinpoint-admin --promote-email <email>` promotes one existing active account to the admin role using `DATABASE_URL`, without creating or seeding a user.
 - [FEATURE] Web map foundation: vendored MapLibre GL JS 6.18.0 and PMTiles 4.5.0, a no-CDN `web/map/` module and preview, and the 94 KB ODbL Monaco fixture with a headless smoke test.
 - [FEATURE] Offline map data pipeline and search CLI: `scripts/offline/` builds a versioned region pack (Planetiler/OpenMapTiles PMTiles basemap, `pinpoint-offline-index` SQLite FTS5 search index, Valhalla routing tiles, hashed manifest) and `pinpoint-offline-index` (`offline-build`) builds and verifies the search index.
 ### Changed

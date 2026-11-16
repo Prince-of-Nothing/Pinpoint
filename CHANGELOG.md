@@ -13,6 +13,8 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] Web map foundation: vendored MapLibre GL JS 6.18.0 and PMTiles 4.5.0, a no-CDN `web/map/` module and preview, and the 94 KB ODbL Monaco fixture with a headless smoke test.
+- [FEATURE] Web app map: `/map.js` is now a thin adapter over the shared MapLibre + PMTiles foundation, with same-origin `/map-assets/*` and `/vendor/*` routes, byte-range fixture serving, visible OSM/OpenMapTiles/ODbL attribution and a headless adapter test. Leaflet was removed from the web app.
+- [FEATURE] Offline app search: `web/app/offline-search.js` uses the installed pack's SQLite FTS5 index through the service worker and falls back to the existing server search when no pack is installed.
 - [FEATURE] Offline map data pipeline and search CLI: `scripts/offline/` builds a versioned region pack (Planetiler/OpenMapTiles PMTiles basemap, `pinpoint-offline-index` SQLite FTS5 search index, Valhalla routing tiles, hashed manifest) and `pinpoint-offline-index` (`offline-build`) builds and verifies the search index.
 - [FEATURE] Offline web search: vendored SQLite WASM 3.54.1 with FTS5, a same-origin `web/map/search.js` API over the M1 `places`/`places_fts` index, the ODbL Bălți/Кишинёв fixture and an HTTP/Chromium smoke test.
 ### Changed

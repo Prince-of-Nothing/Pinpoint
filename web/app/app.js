@@ -527,7 +527,7 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 // ---------------------------------------------------------------------------
-// Leaflet map (locally vendored; tiles via the same-origin proxy)
+// MapLibre/PMTiles map adapter (same-origin assets; app/map.js owns the map)
 // ---------------------------------------------------------------------------
 let mapApi = null;
 let nav = null;

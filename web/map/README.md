@@ -272,15 +272,21 @@ available, Node fallback otherwise). It asserts `balti` → Bălți,
 - **No offline packs yet.** This loads a local PMTiles file that is already on
   the origin. The download manager, manifest verification, SHA-256 check,
   atomic replace, progress UI, OPFS storage and service worker are the next
-  web stream.
+  web stream. The web app consumes this module through `web/app/map.js`; the
+  Rust server serves it under `/map-assets/*` and the vendored libraries under
+  `/vendor/*`.
 - **No labels.** Glyphs and sprites are deliberately absent. A production
   style needs vendored glyphs/sprites and a label layer pass.
-- **Search is a module, not a UI.** `search.js` searches the M1 SQLite index
-  on-device, but the preview page has no search box and `web/app/` is not
-  wired to it yet. Routing is still out of scope.
+- **Search is offline-first in the app.** `web/app/offline-search.js` opens the
+  installed pack's SQLite FTS5 index through the service worker and `nav.js`
+  falls back to the existing server search when no pack is installed. The
+  standalone preview page still has no search box.
+- **Routing UI is not wired to a local engine yet.** The map adapter draws
+  routes and the route UI component is ready, but the app still calls the
+  server route endpoint until the native/WebAssembly router is connected.
 - **No persistence of friend pins.** `web/app/app.js` still owns session-backed
-  friend data. Replacing `web/app/map.js` with this module and keeping the
-  existing pin/share behavior is part of the web-app integration stream.
+  friend data; the adapter maps `setFriendMarkers` onto `setLocations` and keeps
+  the existing auth, share and privacy behavior.
 - **Markers are not clustered.** `setLocations` renders one circle per valid
   location; large friend lists may need clustering later.
 - **Theme support is style-aware.** `setTheme` recolours the layer ids in this

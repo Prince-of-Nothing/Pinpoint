@@ -19,8 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
+COPY build.rs ./build.rs
 COPY src ./src
 COPY tests ./tests
+COPY web ./web
 
 RUN cargo build --locked --release --bin ${BIN}
 

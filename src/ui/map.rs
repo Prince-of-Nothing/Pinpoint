@@ -196,6 +196,14 @@ impl PinpointAppUI {
 
         ui.add_space(8.0);
 
+        #[cfg(all(
+            feature = "map-webview",
+            not(target_arch = "wasm32"),
+            not(target_os = "android"),
+            not(target_os = "ios")
+        ))]
+        self.draw_map_window_card(ui);
+
         // Map visualization + location list
         let backend_url = self.app.backend_url();
         let online = !self.app.is_offline_mode();
@@ -370,6 +378,60 @@ impl PinpointAppUI {
             }
             if let Some(err) = error {
                 ui.colored_label(Color32::RED, err);
+            }
+        });
+    }
+}
+
+#[cfg(all(
+    feature = "map-webview",
+    not(target_arch = "wasm32"),
+    not(target_os = "android"),
+    not(target_os = "ios")
+))]
+impl PinpointAppUI {
+    /// Visible entry point for the separate MapLibre WebView window. The
+    /// egui map below remains the fallback and keeps its own data/auth paths.
+    fn draw_map_window_card(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(8.0);
+        ui.group(|ui| {
+            ui.label(RichText::new("MapLibre map window").size(14.0).strong());
+            ui.label(
+                RichText::new(
+                    "Opens the shared web/map foundation in a separate native WebView, \
+                     served from 127.0.0.1 with HTTP Range for PMTiles. The egui map stays \
+                     available as the fallback.",
+                )
+                .size(12.0),
+            );
+            ui.add_space(4.0);
+            let running = self.map_window.is_running();
+            let label = if running {
+                "Map window open"
+            } else if self.map_window.browser_fallback() {
+                "Open map in browser"
+            } else {
+                "Open map window"
+            };
+            if ui.add_enabled(!running, egui::Button::new(label)).clicked() {
+                match self.map_window.open() {
+                    Ok(crate::map_window::LaunchOutcome::Started) => self.app.set_notice(Some(
+                        "Map window opened. It loads the local MapLibre page and fixture."
+                            .to_string(),
+                    )),
+                    Ok(crate::map_window::LaunchOutcome::BrowserFallback) => {
+                        self.app.set_notice(Some(
+                            "The native WebView runtime is unavailable, so the same loopback \
+                             page opened in your browser. The local server stops when Pinpoint \
+                             exits."
+                                .to_string(),
+                        ))
+                    }
+                    Ok(crate::map_window::LaunchOutcome::AlreadyRunning) => self
+                        .app
+                        .set_notice(Some("The map window is already open.".to_string())),
+                    Err(error) => self.app.set_error(Some(error)),
+                }
             }
         });
     }

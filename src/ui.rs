@@ -282,6 +282,14 @@ pub struct PinpointAppUI {
     pub(crate) kiosk_token_input: String,
     pub(crate) kiosk_note_input: String,
     pub(crate) kiosk_consent_accepted: bool,
+    // Optional native MapLibre map window (feature `map-webview`).
+    #[cfg(all(
+        feature = "map-webview",
+        not(target_arch = "wasm32"),
+        not(target_os = "android"),
+        not(target_os = "ios")
+    ))]
+    map_window: crate::map_window::MapWindowLauncher,
     // Route planner
     route_plan: RoutePlan,
     route_result_seq: u64,
@@ -390,6 +398,13 @@ impl PinpointAppUI {
             kiosk_token_input: String::new(),
             kiosk_note_input: String::new(),
             kiosk_consent_accepted: false,
+            #[cfg(all(
+                feature = "map-webview",
+                not(target_arch = "wasm32"),
+                not(target_os = "android"),
+                not(target_os = "ios")
+            ))]
+            map_window: crate::map_window::MapWindowLauncher::new(),
             route_plan: RoutePlan::default(),
             route_result_seq: 0,
             route_nav_last_fix: None,

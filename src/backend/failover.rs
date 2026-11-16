@@ -615,6 +615,22 @@ impl Backend for FailoverBackend {
         })
     }
 
+    fn delete_my_account<'a>(
+        &'a self,
+        confirm: &'a str,
+        current_password: Option<&'a str>,
+    ) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("delete_my_account", |b| {
+                let b = b.clone();
+                let confirm = confirm.to_string();
+                let current = current_password.map(str::to_string);
+                async move { b.delete_my_account(&confirm, current.as_deref()).await }
+            })
+            .await
+        })
+    }
+
     fn admin_overview(&self) -> BackendFuture<'_, serde_json::Value> {
         Box::pin(async move {
             self.try_all("admin_overview", |b| {

@@ -1,7 +1,6 @@
 # Privacy Policy & Consent Model
 
-*(Design document for an academic project — not a shipping legal policy. If this product
-ever goes public, this becomes the basis of the real privacy statement.)*
+*(Design document for an academic project. The public policy is served at `/privacy`; this file is the longer design and consent note.)*
 
 ## What we collect
 | Data                        | Why                                   | Retention                  |
@@ -69,6 +68,11 @@ ever goes public, this becomes the basis of the real privacy statement.)*
 ## Developer & deployment hygiene
 - Demo/seed identities are fictional; never test with real user data.
 - Logs must not include location coordinates or password material.
+- **Implementation status (1.5.0):** the hosted build stores the latest
+  location server-side so it can enforce shares and precision. The per-user E2E
+  key exists on the device, but ciphertext-only delivery is not complete; the
+  public policy at `/privacy` states this. Do not describe the current build as
+  E2E for server-delivered locations.
 - Any future feature that would extend collection (trails, regions, messaging) requires
   a written threat/privacy analysis in `docs/` **before** implementation (see ROADMAP gates).
 

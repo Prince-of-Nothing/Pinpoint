@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pinpoint — Privacy policy</title>
+  <link rel="stylesheet" href="/status.css" />
+</head>
+<body>
+<main>
+  <h1>Privacy policy</h1>
+  <p class="muted">Effective 16 November 2026 · Version 1.5.0 · Academic project, not a commercial service.</p>
+
+  <p>
+    Pinpoint is a privacy-first location-sharing project. This page explains what
+    the Android app and the web client at <a href="/">the same host</a> collect,
+    why, and how to remove it. The short version: no advertising, no trackers,
+    no third-party analytics, no data sales, and no location history.
+  </p>
+
+  <h2>What we collect</h2>
+  <table>
+    <tr><th>Data</th><th>Why</th><th>Retention</th></tr>
+    <tr><td>Email and Argon2id password hash</td><td>Sign-in and account identification</td><td>Until account deletion</td></tr>
+    <tr><td>Display name and public username</td><td>Shown to people you share with; the username is how friends find you</td><td>Until changed or deleted</td></tr>
+    <tr><td>Role and account flags</td><td>Access control and lockout</td><td>Until changed or deleted</td></tr>
+    <tr><td>Current location publish</td><td>Served only to recipients of an active, explicit share</td><td>Overwritten by the next publish; no history stored</td></tr>
+    <tr><td>Share permissions</td><td>The consent records themselves</td><td>Until revoked or expired</td></tr>
+    <tr><td>Friend relations</td><td>Precondition for sharing</td><td>Until removed</td></tr>
+    <tr><td>Session metadata</td><td>Keep you signed in and let you revoke devices</td><td>Until sign-out, revoke, expiry or account deletion</td></tr>
+    <tr><td>Diagnostic or crash report</td><td>Debugging, only when you press Send report</td><td>Until reviewed and removed</td></tr>
+  </table>
+
+  <h2>What we do not do</h2>
+  <ul>
+    <li>No advertising, profiling, third-party analytics or data sales.</li>
+    <li>No location history: the server stores only the latest publish.</li>
+    <li>No IP-based geolocation, WebRTC location, or tracking IP addresses for analytics.</li>
+    <li>No friend data sent to OpenStreetMap. Only your own searches, routes and map tiles reach the OSM services.</li>
+    <li>No hidden requests. The only automatic external request is at most one GitHub releases check a day for the same app version, plus one after installing a new version. It sends only <code>Pinpoint/&lt;version&gt;</code> as the User-Agent. GitHub sees the request IP, as with any HTTPS request. You can turn it off in Profile &amp; settings.</li>
+  </ul>
+
+  <h2>Location sharing and consent</h2>
+  <p>
+    A friendship alone grants no visibility. You create a directional share naming
+    one recipient, a precision level and an optional expiry. The server re-checks
+    the permission on every read. Pause, revoke or expiry takes effect immediately;
+    there is no grace period or cache. Location is latest-only.
+  </p>
+
+  <h2>Transport, storage and devices</h2>
+  <p>
+    Location updates travel over HTTPS. The backend stores only the latest
+    location record per user so it can deliver an active share; there is no
+    location history. In the current 1.5.0 hosted build the backend can read the
+    latest coordinates to enforce precision and consent — do not treat this build
+    as end-to-end encrypted for server-delivered locations. The app also derives
+    a per-user E2E key from your password and keeps it in the device keychain;
+    ciphertext-only delivery is future work, not a 1.5.0 guarantee. The app lock
+    PIN is stored only as an Argon2id hash on the device; biometrics never leave
+    the device. Signing out or deleting the account removes the local session
+    and the local key.
+  </p>
+
+  <h2>Diagnostics and crash reports</h2>
+  <p>
+    A crash report is sent only when you press <strong>Send report</strong>. It
+    contains the error name, message and a short stack, with URLs and
+    token/password-like fields redacted. It never contains your location, IP
+    address, email, session cookie, CSRF token or a device identifier. The manual
+    Help &amp; diagnostics form sends only the category and the message you type.
+  </p>
+
+  <h2>Your rights and choices</h2>
+  <ul>
+    <li><strong>Access / export:</strong> your profile and current sharing state are visible in the app; open a GitHub issue for a machine-readable export.</li>
+    <li><strong>Rectification:</strong> edit your display name in Profile &amp; settings or the web Account panel.</li>
+    <li><strong>Erasure:</strong> delete your account in Profile &amp; settings → Danger zone, or the web Account → Delete account. This immediately removes your profile, friendships, shares, current location, check-ins, emergencies and sessions.</li>
+    <li><strong>Objection / withdrawal:</strong> revoke a share or turn off the update check at any time.</li>
+  </ul>
+
+  <h2>Contact</h2>
+  <p>
+    This is an academic project. For privacy questions, data export or a deletion
+    request, open an issue at
+    <a href="https://github.com/Prince-of-Nothing/Pinpoint/issues">github.com/Prince-of-Nothing/Pinpoint/issues</a>.
+  </p>
+
+  <h2>OpenStreetMap</h2>
+  <p>
+    Map data is © OpenStreetMap contributors, available under the
+    <a href="https://www.openstreetmap.org/copyright">Open Database License</a>.
+    Pinpoint does not use the public OSM tile server; it uses a self-hosted tile
+    proxy or a configured provider.
+  </p>
+
+  <p class="muted">
+    <a href="/">Back to Pinpoint</a> ·
+    <a href="https://github.com/Prince-of-Nothing/Pinpoint">Source</a> ·
+    <a href="https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/PRIVACY.md">Design notes</a>
+  </p>
+</main>
+</body>
+</html>

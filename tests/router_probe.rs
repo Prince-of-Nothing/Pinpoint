@@ -771,3 +771,24 @@ async fn split_service_mounts_status_with_its_own_kind() {
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(json["service"], "auth");
 }
+
+#[tokio::test]
+async fn privacy_route_matches() {
+    let app = pinpoint_desktop::server::router(pinpoint_desktop::server::AppState::new());
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/privacy")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let html = String::from_utf8_lossy(&body);
+    assert!(html.contains("Privacy policy"));
+    assert!(html.to_ascii_lowercase().contains("delete your account"));
+}

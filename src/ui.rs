@@ -51,6 +51,10 @@ enum PendingAction {
     Logout,
     RestorePersistedSession,
     AnonymousSignIn,
+    DeleteAccount {
+        confirm: String,
+        password: Option<String>,
+    },
     RecoverAnonymous {
         code: String,
     },
@@ -263,6 +267,9 @@ pub struct PinpointAppUI {
     change_password_current: String,
     change_password_new: String,
     change_password_confirm: String,
+    // Account deletion
+    delete_confirm: String,
+    delete_password: String,
     // Crash reporting
     crash_dialog: Option<CrashDialog>,
     crash_checked: bool,
@@ -300,6 +307,8 @@ pub struct PinpointAppUI {
     biometric_auto_prompted: bool,
     /// Android `pinpoint://publish` requested before the first frame.
     pending_gps_publish_at: Option<std::time::Instant>,
+    /// Debounce the anonymous button so a double tap cannot create two accounts.
+    anonymous_busy_until: Option<std::time::Instant>,
     // Backend server setting (empty saved value = platform default)
     server_url_input: String,
     server_error: Option<String>,
@@ -370,6 +379,8 @@ impl PinpointAppUI {
             change_password_current: String::new(),
             change_password_new: String::new(),
             change_password_confirm: String::new(),
+            delete_confirm: String::new(),
+            delete_password: String::new(),
             crash_dialog: None,
             crash_checked: false,
             admin_search_query: String::new(),
@@ -399,6 +410,7 @@ impl PinpointAppUI {
             pin_setup_confirm: String::new(),
             biometric_auto_prompted: false,
             pending_gps_publish_at: None,
+            anonymous_busy_until: None,
             server_url_input: initial_server_url,
             server_error: None,
             prefs,
@@ -1080,6 +1092,11 @@ impl PinpointAppUI {
                 PendingAction::LogoutAll => {
                     let _ = app.logout_all().await;
                 }
+                PendingAction::DeleteAccount { confirm, password } => {
+                    if let Err(error) = app.delete_my_account(confirm, password).await {
+                        app.set_error(Some(error.to_string()));
+                    }
+                }
                 PendingAction::SubmitDiagnostic { category, message } => {
                     match app.submit_diagnostic(category, message).await {
                         Ok(id) => app.set_notice(Some(format!("Report #{id} sent. Thank you."))),
@@ -1578,6 +1595,10 @@ impl eframe::App for PinpointAppUI {
                 self.draw_lock_screen(ctx);
                 return;
             }
+        }
+        if !self.app.is_signed_in() {
+            self.delete_confirm.clear();
+            self.delete_password.clear();
         }
         if !self.crash_checked {
             self.crash_checked = true;

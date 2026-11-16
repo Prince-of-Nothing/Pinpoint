@@ -155,6 +155,7 @@ pub fn router(state: AppState) -> Router {
         .merge(diagnostic_router())
         .merge(status_routes())
         .route("/", get(web_handlers::index))
+        .route("/privacy", get(web_handlers::privacy))
         .route("/app.js", get(web_handlers::app_js))
         .route("/map.js", get(web_handlers::map_js))
         .route("/nav.js", get(web_handlers::nav_js))
@@ -261,6 +262,7 @@ pub fn users_router() -> Router<AppState> {
             "/api/v1/users/",
             get(users_handlers::list_users).post(users_handlers::create_user),
         )
+        .route("/api/v1/users/me", delete(users_handlers::delete_me))
         .route(
             "/api/v1/users/:id",
             get(users_handlers::get_user)

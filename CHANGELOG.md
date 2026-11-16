@@ -11,6 +11,11 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Added
+- [FEATURE] Public privacy policy at `/privacy`, linked from web sign-in and the Android About screen.
+- [FEATURE] Self-service account deletion from Android and the web: typed `DELETE` confirmation, current-password proof for email accounts, session revocation and a full data cascade.
+### Fixed
+- [FIX] Android: anonymous sign-in is debounced while a request is in flight (partial #49).
 
 ## [1.4.2] - 2026-11-16
 ### Fixed

@@ -58,6 +58,7 @@
           Privacy-first: no trackers, no third-party scripts, no IP geolocation.
           Location is shared only with explicit, revocable consent.
         </p>
+        <p class="muted"><a href="/privacy">Privacy policy</a></p>
       </section>
 
       <section id="recovery-panel" class="card warn hidden" aria-live="polite">
@@ -334,6 +335,17 @@
             <p class="muted hidden" id="password-anonymous-note">
               Anonymous accounts have no password. Create an email account to add one.
             </p>
+            <details class="danger-zone">
+              <summary>Delete account</summary>
+              <p class="muted">This permanently removes your profile, friendships, shares, current location, check-ins, emergencies and sessions.</p>
+              <label>Type DELETE
+                <input id="delete-confirm" type="text" autocomplete="off" />
+              </label>
+              <label id="delete-password-label">Current password
+                <input id="delete-password" type="password" autocomplete="current-password" />
+              </label>
+              <button type="button" id="delete-account" class="danger">Delete my account</button>
+            </details>
           </div>
 
           <div class="card">

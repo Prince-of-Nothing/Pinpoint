@@ -173,6 +173,13 @@ pub trait Backend: BackendBounds {
     fn search_users<'a>(&'a self, q: &'a str) -> BackendFuture<'a, Vec<User>>;
     fn update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()>;
     fn delete_user<'a>(&'a self, id: i64) -> BackendFuture<'a, ()>;
+    /// Delete the signed-in user's own account. `confirm` must be `"DELETE"`;
+    /// email accounts also pass `current_password`.
+    fn delete_my_account<'a>(
+        &'a self,
+        confirm: &'a str,
+        current_password: Option<&'a str>,
+    ) -> BackendFuture<'a, ()>;
     fn admin_overview(&self) -> BackendFuture<'_, serde_json::Value>;
     fn admin_users(&self) -> BackendFuture<'_, Vec<serde_json::Value>>;
     fn admin_update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()>;

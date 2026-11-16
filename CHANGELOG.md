@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [1.5.0] - 2026-11-16
 ### Added
 - [FEATURE] Public privacy policy at `/privacy`, linked from web sign-in and the Android About screen.
 - [FEATURE] Self-service account deletion from Android and the web: typed `DELETE` confirmation, current-password proof for email accounts, session revocation and a full data cascade.

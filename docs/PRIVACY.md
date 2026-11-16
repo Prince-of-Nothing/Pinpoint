@@ -34,6 +34,17 @@ ever goes public, this becomes the basis of the real privacy statement.)*
   short retention; it is pseudonymous, used only for abuse prevention, and never
   for location or profiling.
 
+## Diagnostics you choose to send
+- The web client keeps the latest uncaught error in memory only. Nothing is sent
+  until you press **Send report**.
+- A crash report contains the error name, message and a short stack, with URLs
+  and query strings removed and token/password-like fields redacted. It never
+  contains location, IP address, account email, session cookie, CSRF token or a
+  device identifier.
+- The manual **Help & diagnostics** form sends only the category and the message
+  you type.
+- Reports are used for debugging and abuse handling, not analytics or profiling.
+
 ## The consent lifecycle
 1. **Grant** — sharer creates a permission naming one recipient, one precision level,
    one purpose, optional expiry.

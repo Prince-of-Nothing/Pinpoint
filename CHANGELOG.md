@@ -11,11 +11,20 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Added
+- [FEATURE] Web account panel: edit the display name, change the password, manage active sessions and open the account area from the existing drawer.
+- [FEATURE] Web crash capture: uncaught errors stay in memory and are sent only when the user presses **Send report**, with URLs and token-like fields redacted.
+- [FEATURE] Web sign-in accepts an authenticator code for accounts with MFA enabled.
+
 ### Changed
 - [DOCS] Moved 146 non-essential design, SDLC, UML, component, tutorial, project and thesis docs to the [GitHub wiki](https://github.com/Prince-of-Nothing/Pinpoint/wiki) as 150 structured pages. Build/setup/testing/deployment, ADR, security, privacy, OSM policy and API-contract docs remain in `docs/`; cross-links and Map QA were updated.
 
 ### Removed
 - [INFRA] Removed the `archive/` tree (315 historical files) and its Docker/build ignore entries. The old Go/Python/Kotlin/web stacks remain available in git history and ADR-0007.
+
+### Fixed
+- [FIX] Auth: `POST /auth/password/change` now verifies the current password and rejects a missing or wrong value without revoking the session.
+- [FIX] Web: anonymous sign-in ignores repeated clicks while a request is in flight (partial #49).
 
 ## [1.3.15] - 2026-11-16
 ### Added

@@ -25,6 +25,9 @@
         <form id="login-form">
           <label>Email <input id="login-email" type="email" autocomplete="username" required /></label>
           <label>Password <input id="login-password" type="password" autocomplete="current-password" required /></label>
+          <label>Authenticator code (if MFA is on)
+            <input id="login-totp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" />
+          </label>
           <div class="row">
             <button type="submit">Sign in</button>
             <button type="button" id="register-toggle" class="secondary">Create account</button>
@@ -302,6 +305,37 @@
             </form>
           </div>
 
+          <div class="card" id="account-card">
+            <h2>Account</h2>
+            <p class="muted" id="account-email"></p>
+            <div class="row">
+              <span id="account-username" class="muted"></span>
+              <button type="button" id="account-copy-username" class="secondary">Copy username</button>
+            </div>
+            <form id="account-name-form">
+              <label>Display name
+                <input id="account-name" type="text" maxlength="100" autocomplete="name" />
+              </label>
+              <button type="submit">Save name</button>
+            </form>
+            <form id="password-form">
+              <h3>Change password</h3>
+              <label>Current password
+                <input id="password-current" type="password" autocomplete="current-password" />
+              </label>
+              <label>New password
+                <input id="password-new" type="password" autocomplete="new-password" />
+              </label>
+              <label>Confirm new password
+                <input id="password-confirm" type="password" autocomplete="new-password" />
+              </label>
+              <button type="submit">Change password</button>
+            </form>
+            <p class="muted hidden" id="password-anonymous-note">
+              Anonymous accounts have no password. Create an email account to add one.
+            </p>
+          </div>
+
           <div class="card">
             <h2>Active sessions</h2>
             <ul id="sessions-list" class="list"></ul>
@@ -323,6 +357,15 @@
         </aside>
       </section>
     </main>
+
+    <div id="crash-banner" class="crash-banner hidden" role="alert">
+      <strong>Something went wrong.</strong>
+      <p class="muted">Send a crash report? It includes only the error message and stack — no URL, location, IP address or device ID.</p>
+      <div class="row">
+        <button type="button" id="crash-send">Send report</button>
+        <button type="button" id="crash-dismiss" class="secondary">Dismiss</button>
+      </div>
+    </div>
 
     <div id="status" role="status" aria-live="polite"></div>
 

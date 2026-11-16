@@ -10,18 +10,18 @@
 #    mobile/app/build.gradle.kts: buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000/api/v1/\"")
 # 3. Start full stack
 cd backend && docker compose up --build
-#    → Go API on :8000, Python profile on :8001 (optional), web client on :8080, seeds demo accounts
+#    → Rust API on :8000 and the web client on the same origin; no demo accounts
 # 4. Run mobile (debug APK already at mobile/app/build/outputs/apk/debug/app-debug.apk)
 # 5. Test offline: download region in app (no server needed for map rendering after download)
 ```
 
 ### 1b. Docker-less path (verified on this machine, no Docker installed)
 
-Go API (in-memory DB, seeds demo accounts, serves the web client):
+Rust API (in-memory DB; register an account; serves the web client):
 
 ```powershell
 cd backend
-$env:DB_DRIVER="memory"; $env:PORT="8000"; $env:SEED_DEMO_DATA="true"
+$env:BIND_ADDR="127.0.0.1:8000"
 $env:WEB_ROOT="C:\Users\Unknown\Documents\Pinpoint\web\public"
 go run ./cmd/server
 # → GET http://localhost:8000/health          {"status":"healthy","version":"0.1.0"}
@@ -49,7 +49,7 @@ $env:RATE_LIMIT_BACKEND="memory"
 | Step | Endpoint | Result |
 |---|---|---|
 | Health | `GET /health` | `200 {"status":"healthy"}` |
-| Tester login | `POST /api/v1/auth/login` `user@user.user` / `user1234` | `200 role=resident` |
+| Register | `POST /api/v1/auth/register` with a real test account | `201` + session |
 | Auto sign-up | `POST /api/v1/auth/register` | `200` + session token |
 | Duplicate register | `POST /api/v1/auth/register` (same email) | `409 EMAIL_EXISTS` |
 | Login after register | `POST /api/v1/auth/login` | `200` |
@@ -60,12 +60,10 @@ login `200` (contract uses `{"login": ..., "password": ...}`).
 
 Notes:
 - `DB_DRIVER=memory` for quick tests (no Postgres needed); switch to `postgres` for persistent data.
-- `SEED_DEMO_DATA=true` creates `alice@example.com/DemoPass123!`,
-  `bob@example.com/DemoPass456!`, `admin@example.com/ChangeMe123!` and the
-  tester account `user@user.user/user1234`.
-  (Server policy requires ≥8-character passwords, so the tester password is
-  `user1234`, not `user` — the 8-char minimum is thesis-mandated and enforced
-  at `POST /auth/login` and `POST /auth/register`.)
+- **No demo accounts are seeded.** Register a real account on the login screen.
+  To make one an administrator, promote it in Supabase SQL:
+  `update pinpoint_users set role = 'administrator' where email = '<real email>';`
+  The server refreshes users from Postgres on the next request.
 - Combined sign-in/sign-up: mobile calls `auth/login` first; on `401` it calls
   `auth/register`; `409` means the account exists with a different password.
 - `local.properties` (mobile) points Android SDK; `JAVA_HOME` points to JDK 17 for Gradle build.
@@ -107,7 +105,6 @@ DATABASE_URL=postgresql://pinpoint:PinpointPass123@localhost:5432/pinpoint
 REDIS_URL=redis://localhost:6379/0
 SESSION_SECRET=$(openssl rand -base64 32)
 DB_DRIVER=postgres
-SEED_DEMO_DATA=true
 WEB_ROOT=/opt/pinpoint/web/public
 ```
 
@@ -227,8 +224,6 @@ services:
         sync: false
       - key: DB_DRIVER
         value: postgres
-      - key: SEED_DEMO_DATA
-        value: "true"
       - key: PORT
         value: "8000"
       - key: WEB_ROOT
@@ -379,14 +374,15 @@ target\x86_64-pc-windows-msvc\release\pinpoint-desktop.exe
 
 The CI release job (see below) builds the `--release` binary and packages it into `pinpoint-desktop.zip`. The zip is uploaded as a GitHub Actions artifact and can be downloaded from the workflow run. The exact path of the executable inside the zip is `pinpoint-desktop.exe`.
 
-### Demo Credentials (local only)
+### Administrator bootstrap
 
-- `alice@example.com` / `DemoPass123!`
-- `bob@example.com` / `DemoPass456!`
-- `admin@example.com` / `ChangeMe123!`
-- `user@user.user` / `user1234` (8-character minimum)
+No demo accounts are seeded. Register a real account, then promote it in Supabase SQL:
 
-These credentials seed the Go API (`go run ./cmd/server`) with demo data when `SEED_DEMO_DATA=true` is set.
+```sql
+update pinpoint_users set role = 'administrator' where email = '<real email>';
+```
+
+The running server refreshes users from Postgres on the next request.
 
 ---
 

@@ -30,5 +30,5 @@
 ## 4. Recovery & lessons
 
 - **Backups:** Postgres named volume `pinpoint-db-data`; restore via `docker compose` re-init from snapshot JSONB.
-- **Drill:** reproduce P1 with demo accounts quarterly; measure time-to-revoke.
+- **Drill:** reproduce P1 with dedicated test accounts quarterly; measure time-to-revoke.
 - **Post-mortem:** within 5 working days — timeline, root cause (map to STRIDE ID), fixes, retest evidence (`cargo test` + ZAP).

@@ -112,7 +112,7 @@ tests; leaf 1 is a **user-consent risk**, mitigated by UX (expiry, precision, on
 
 ## 7. Residual risks & honest gaps (thesis scope)
 
-- Seeded demo accounts use Argon2id hashes; production still needs `SEED_DEMO_DATA=false`.
+- No demo accounts are seeded; accounts are created by registration and use Argon2id hashes.
 - `pinpoint_state` JSONB snapshot → needs normalised tables + migrations + least-privilege DB user.
 - No MFA, no E2E encryption (server sees plaintext locations — accepted, documented).
 - Request signing exists client-side only; server verification + OS-keychain for bookmark keys pending.

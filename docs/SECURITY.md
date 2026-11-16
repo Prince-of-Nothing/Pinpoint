@@ -94,7 +94,7 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
 - Audit log exists as structured stdout logs, not a queryable table yet.
 
 ## Hardening checklist before any public deployment
-- [ ] Rotate all default/seed passwords; disable demo seeding (`SEED_DEMO_DATA=false`)
+- [ ] No demo accounts are seeded; register real accounts and promote an admin deliberately
 - [ ] HTTPS-only cookies; real domain for the CORS allowlist
 - [ ] Tighten `PINPOINT_SESSION_IDLE_MINUTES` (30) and add an absolute lifetime
 - [ ] Add rate limiting on login, `/auth/anonymous` and recovery

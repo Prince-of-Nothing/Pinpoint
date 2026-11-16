@@ -3,7 +3,52 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::get;
+use pinpoint_desktop::models::{Friendship, User};
 use tower::ServiceExt;
+
+/// Test-only fixture: the production store no longer seeds demo accounts.
+fn seed_test_users(state: &pinpoint_desktop::server::AppState) {
+    let mut store = state.store.lock().unwrap();
+    if !store.users.is_empty() {
+        return;
+    }
+    let mk = |id: i64, email: &str, name: &str, role: &str| User {
+        id,
+        username: String::new(),
+        email: email.to_string(),
+        full_name: name.to_string(),
+        role: role.to_string(),
+        is_active: true,
+        must_change_password: false,
+        password_hash: None,
+        totp_secret: None,
+        mfa_enabled: false,
+        mfa_last_step: 0,
+        failed_login_attempts: 0,
+        locked_until: None,
+        auth_method: "email".to_string(),
+        public_key: None,
+        recovery_code_hash: None,
+        identity_subject: None,
+    };
+    store.users = vec![
+        mk(1, "admin@example.com", "Administrator", "administrator"),
+        mk(2, "alice@example.com", "Alice Example", "resident"),
+        mk(3, "bob@example.com", "Bob Example", "resident"),
+    ];
+    store.friendships = vec![Friendship {
+        id: 1,
+        requester_id: 2,
+        receiver_id: 3,
+        requester_name: "Alice".into(),
+        receiver_name: "Bob".into(),
+        status: "accepted".into(),
+        created_at: Some("2026-01-01T00:00:00Z".into()),
+        responded_at: Some("2026-01-01T00:00:00Z".into()),
+    }];
+    store.next_user_id = 4;
+    store.next_friendship_id = 2;
+}
 
 #[tokio::test]
 async fn map_tile_route_matches() {
@@ -41,10 +86,12 @@ async fn minimal_param_route() {
 async fn users_by_id_route_matches() {
     let app = pinpoint_desktop::server::users_router()
         .with_state(pinpoint_desktop::server::AppState::new());
+    // A non-numeric id is rejected by the Path<i64> extractor (400), which
+    // still proves the route matched; the store no longer seeds demo users.
     let resp = app
         .oneshot(
             Request::builder()
-                .uri("/api/v1/users/2")
+                .uri("/api/v1/users/not-a-number")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -273,6 +320,7 @@ async fn admin_endpoints_require_admin_role() {
     use pinpoint_desktop::server::{router, AppState};
 
     let state = AppState::new();
+    seed_test_users(&state);
     // Seed: 1 = administrator, 2 = alice (resident).
     let (alice_sid, _) = state.create_session(2, "email", false).await;
     let (admin_sid, _) = state.create_session(1, "email", false).await;
@@ -309,6 +357,7 @@ async fn admin_delete_user_revokes_sessions() {
     use pinpoint_desktop::server::{router, AppState};
 
     let state = AppState::new();
+    seed_test_users(&state);
     let (admin_sid, admin_csrf) = state.create_session(1, "email", false).await;
     let (bob_sid, _) = state.create_session(3, "email", false).await;
     let app = router(state.clone());
@@ -335,6 +384,7 @@ async fn usernames_are_exact_lookup_and_profiles_are_private() {
     use pinpoint_desktop::server::{router, AppState};
 
     let state = AppState::new();
+    seed_test_users(&state);
     // Seed: 1 = administrator ("brave-badger-1"), 2 = Alice
     // ("bright-badger-2"), 3 = Bob ("calm-badger-3"); Alice and Bob are
     // accepted friends.
@@ -491,6 +541,7 @@ async fn diagnostics_reports_and_audit_are_role_gated() {
     use pinpoint_desktop::server::{router, AppState};
 
     let state = AppState::new();
+    seed_test_users(&state);
     let (alice_sid, alice_csrf) = state.create_session(2, "email", false).await;
     let (admin_sid, admin_csrf) = state.create_session(1, "email", false).await;
     let app = router(state);

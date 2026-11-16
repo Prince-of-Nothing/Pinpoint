@@ -16,7 +16,7 @@ async fn main() -> anyhow::Result<()> {
     if state.pg.is_some() {
         println!("Postgres persistence enabled (DATABASE_URL set)");
     } else {
-        println!("Running in-memory demo mode (no DATABASE_URL)");
+        println!("Running in-memory mode (no DATABASE_URL; data is not persisted)");
     }
 
     // Background snapshot-persist so in-memory mutations survive restarts

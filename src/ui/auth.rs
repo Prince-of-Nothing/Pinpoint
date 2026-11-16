@@ -10,8 +10,8 @@ impl PinpointAppUI {
                 ui.add_space(40.0);
                 ui.heading("Offline mode");
                 ui.label(
-                    "No backend is configured for this build. The map and demo data \
-                     are available, but sign-in is disabled.",
+                    "No backend is configured for this build. The map is \
+                     available, but sign-in is disabled.",
                 );
             });
             ui.add_space(8.0);
@@ -183,8 +183,8 @@ impl PinpointAppUI {
                 ui.add_space(40.0);
                 ui.heading("Offline mode");
                 ui.label(
-                    "No backend is configured for this build. The map and demo data \
-                     are available, but registration is disabled.",
+                    "No backend is configured for this build. The map is \
+                     available, but registration is disabled.",
                 );
             });
             ui.add_space(8.0);

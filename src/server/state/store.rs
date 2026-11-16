@@ -53,7 +53,7 @@ pub struct Store {
 
 impl Store {
     pub fn new() -> Self {
-        let mut s = Self {
+        Self {
             next_user_id: 1,
             next_friendship_id: 1,
             next_share_id: 1,
@@ -62,9 +62,7 @@ impl Store {
             next_report_id: 1,
             next_audit_id: 1,
             ..Default::default()
-        };
-        s.seed_demo();
-        s
+        }
     }
 
     /// Owned-field copy for the persist tick (lock released before I/O).
@@ -86,119 +84,6 @@ impl Store {
             next_report_id: self.next_report_id,
             next_audit_id: self.next_audit_id,
         }
-    }
-
-    /// Seed demo accounts (idempotent): alice, bob, admin.
-    pub fn seed_demo(&mut self) {
-        use crate::security::password::hash_password;
-        if !self.users.is_empty() {
-            return;
-        }
-        let admin = User {
-            id: self.next_user_id,
-            username: String::new(),
-            email: "admin@example.com".into(),
-            full_name: "Administrator".into(),
-            role: "administrator".into(),
-            is_active: true,
-            must_change_password: true,
-            password_hash: Some(hash_password(
-                "ChangeMe123!",
-                crate::security::password::DEFAULT_ITERS,
-            )),
-            totp_secret: None,
-            mfa_enabled: false,
-            mfa_last_step: 0,
-            failed_login_attempts: 0,
-            locked_until: None,
-            auth_method: "email".into(),
-            public_key: None,
-            recovery_code_hash: None,
-            identity_subject: None,
-        };
-        self.next_user_id += 1;
-        let alice = User {
-            id: self.next_user_id,
-            username: String::new(),
-            email: "alice@example.com".into(),
-            full_name: "Alice Example".into(),
-            role: "resident".into(),
-            is_active: true,
-            must_change_password: false,
-            password_hash: Some(hash_password(
-                "DemoPass123!",
-                crate::security::password::DEFAULT_ITERS,
-            )),
-            totp_secret: None,
-            mfa_enabled: false,
-            mfa_last_step: 0,
-            failed_login_attempts: 0,
-            locked_until: None,
-            auth_method: "email".into(),
-            public_key: None,
-            recovery_code_hash: None,
-            identity_subject: None,
-        };
-        self.next_user_id += 1;
-        let bob = User {
-            id: self.next_user_id,
-            username: String::new(),
-            email: "bob@example.com".into(),
-            full_name: "Bob Example".into(),
-            role: "resident".into(),
-            is_active: true,
-            must_change_password: false,
-            password_hash: Some(hash_password(
-                "DemoPass456!",
-                crate::security::password::DEFAULT_ITERS,
-            )),
-            totp_secret: None,
-            mfa_enabled: false,
-            mfa_last_step: 0,
-            failed_login_attempts: 0,
-            locked_until: None,
-            auth_method: "email".into(),
-            public_key: None,
-            recovery_code_hash: None,
-            identity_subject: None,
-        };
-        self.next_user_id += 1;
-
-        let friendship = Friendship {
-            id: self.next_friendship_id,
-            requester_id: alice.id,
-            receiver_id: bob.id,
-            requester_name: alice.full_name.clone(),
-            receiver_name: bob.full_name.clone(),
-            status: "accepted".into(),
-            created_at: Some("2026-01-01T00:00:00Z".into()),
-            responded_at: Some("2026-01-01T00:00:00Z".into()),
-        };
-        self.next_friendship_id += 1;
-
-        self.users = vec![admin, alice, bob];
-        self.friendships = vec![friendship];
-        // Demo locations (Chișinău, Moldova)
-        self.locations = vec![
-            FriendLocation {
-                user_id: self.users[1].id,
-                user_name: "Alice Example".into(),
-                latitude: 47.0105,
-                longitude: 28.8638,
-                precision_level: "exact".into(),
-                updated_at: "2026-11-08T12:00:00Z".into(),
-                accuracy: Some(8.0),
-            },
-            FriendLocation {
-                user_id: self.users[2].id,
-                user_name: "Bob Example".into(),
-                latitude: 47.0056,
-                longitude: 28.8575,
-                precision_level: "exact".into(),
-                updated_at: "2026-11-08T12:00:00Z".into(),
-                accuracy: Some(10.0),
-            },
-        ];
     }
 
     pub fn find_user_by_email(&self, email: &str) -> Option<&User> {

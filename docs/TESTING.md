@@ -33,7 +33,7 @@ For each case, assert status code AND payload shape (no leakage):
 ## Conventions
 - Table-driven tests, helper `newTestServer(t)` builds router with seeded isolated store.
 - Time-dependent tests inject a clock (no sleeps).
-- Test fixtures use fictional data only (`*_test.go` seeds mirror demo accounts).
+- Test fixtures use fictional data only; the server does not seed production accounts.
 - Race detector in CI: `go test -race ./...`.
 
 ## Running

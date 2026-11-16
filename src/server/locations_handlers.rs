@@ -7,8 +7,42 @@ use axum::{
 use serde_json::{json, Value};
 
 use super::handlers::{require_current_user, share_json};
-use super::state::AppState;
+use super::state::{AppState, Store};
 use super::{error_envelope, CurrentUser, IntoResponse};
+use crate::models::LocationShare;
+
+/// The active share that lets `viewer` see `owner`'s latest location.
+///
+/// Consent is fail-closed: an accepted friendship alone grants nothing. The
+/// location owner must have an active, non-expired `to_friend`/`mutual` share
+/// for that friendship.
+fn visible_share(store: &Store, viewer: i64, owner: i64) -> Option<&LocationShare> {
+    let friendship = store.friendships.iter().find(|f| {
+        f.status == "accepted"
+            && ((f.requester_id == viewer && f.receiver_id == owner)
+                || (f.requester_id == owner && f.receiver_id == viewer))
+    })?;
+    let now = chrono::Utc::now();
+    store.shares.iter().find(|s| {
+        s.friendship_id == friendship.id
+            && s.owner_id == owner
+            && s.is_active
+            && s.direction != "from_friend"
+            && s.expires_at.as_deref().is_none_or(|raw| {
+                chrono::DateTime::parse_from_rfc3339(raw)
+                    .map(|expiry| expiry.with_timezone(&chrono::Utc) > now)
+                    .unwrap_or(false)
+            })
+    })
+}
+
+fn round_for_precision(lat: f64, lon: f64, precision: &str) -> (f64, f64) {
+    match precision {
+        "approximate" => ((lat * 100.0).round() / 100.0, (lon * 100.0).round() / 100.0),
+        "city_only" => ((lat * 10.0).round() / 10.0, (lon * 10.0).round() / 10.0),
+        _ => (lat, lon),
+    }
+}
 
 /// `POST /locations/shares`.
 pub async fn create_share(
@@ -253,8 +287,8 @@ pub async fn publish_location(
 }
 
 /// `GET /locations/friends` — locations visible to the caller.
-/// Consent model: returns only locations for users with an accepted
-/// friendship + active share (or all demo users in the demo store).
+/// Consent model: only an accepted friendship plus an active, non-expired
+/// `to_friend`/`mutual` share owned by the location owner. Fail closed.
 pub async fn list_friend_locations(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -265,33 +299,22 @@ pub async fn list_friend_locations(
     };
     let store = state.store.lock().unwrap();
     let me = cu.user_id;
-    // Demo store: return all locations (seeded demo + published).
-    // Production would filter by accepted friendships + active shares.
     let locations: Vec<Value> = store
         .locations
         .iter()
-        .filter(|l| l.user_id != me || store.locations.len() <= 2)
-        .map(|l| {
-            let (lat, lon) = match l.precision_level.as_str() {
-                "exact" => (l.latitude, l.longitude),
-                "approximate" => (
-                    (l.latitude * 100.0).round() / 100.0,
-                    (l.longitude * 100.0).round() / 100.0,
-                ),
-                _ => (
-                    (l.latitude * 10.0).round() / 10.0,
-                    (l.longitude * 10.0).round() / 10.0,
-                ),
-            };
-            json!({
+        .filter(|l| l.user_id != me)
+        .filter_map(|l| {
+            let share = visible_share(&store, me, l.user_id)?;
+            let (lat, lon) = round_for_precision(l.latitude, l.longitude, &share.precision_level);
+            Some(json!({
                 "user_id": l.user_id,
                 "user_name": l.user_name,
                 "latitude": lat,
                 "longitude": lon,
                 "accuracy": l.accuracy,
                 "updated_at": l.updated_at,
-                "precision_level": l.precision_level,
-            })
+                "precision_level": share.precision_level,
+            }))
         })
         .collect();
     (StatusCode::OK, Json(locations)).into_response()

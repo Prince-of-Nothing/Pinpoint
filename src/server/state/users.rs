@@ -176,11 +176,30 @@ impl AppState {
     }
 
     /// Direct user delete; no-op in in-memory mode (store handles it).
+    /// Delete a user and every row that references them. Runs in one
+    /// transaction and is safe even when the production schema has foreign
+    /// keys without `ON DELETE CASCADE`.
     pub async fn sql_delete_user(&self, id: i64) {
         let Some(pool) = &self.pg else { return };
-        let _ = sqlx::query("DELETE FROM pinpoint_users WHERE id=$1")
-            .bind(id)
-            .execute(pool)
-            .await;
+        let Ok(mut tx) = pool.begin().await else {
+            return;
+        };
+        let statements = [
+            // Shares owned by the user, or attached to a friendship involving
+            // the user, must go before the friendship/user rows.
+            "DELETE FROM pinpoint_shares WHERE owner_id=$1 OR friendship_id IN (SELECT id FROM pinpoint_friendships WHERE requester_id=$1 OR receiver_id=$1)",
+            "DELETE FROM pinpoint_friendships WHERE requester_id=$1 OR receiver_id=$1",
+            "DELETE FROM pinpoint_locations WHERE user_id=$1",
+            "DELETE FROM pinpoint_checkins WHERE user_id=$1",
+            "DELETE FROM pinpoint_emergencies WHERE user_id=$1",
+            "DELETE FROM pinpoint_diagnostic_reports WHERE user_id=$1",
+            "DELETE FROM pinpoint_sessions WHERE user_id=$1",
+            "DELETE FROM pinpoint_admin_audit WHERE actor_id=$1",
+            "DELETE FROM pinpoint_users WHERE id=$1",
+        ];
+        for statement in statements {
+            let _ = sqlx::query(statement).bind(id).execute(&mut *tx).await;
+        }
+        let _ = tx.commit().await;
     }
 }

@@ -1,146 +1,237 @@
-# Local native routing spike (Wave 2)
+# Local native routing (Wave 4: maneuvers + graph cache)
 
-Status: **proof complete, local route works, Android arm64 cross-build works.**
-No online routing service is called anywhere in this crate.
+Status: **proof complete — local route with turn-by-turn maneuvers, persisted
+graph cache, measured on the M1 Moldova extract.** No online routing service is
+called anywhere in this crate.
 
 Design context: `docs/superpowers/specs/2026-11-16-offline-maps-design.md` §10
 chooses Valhalla C++ for native routing and names a Rust A* router over the same
-OSM graph as the fallback. This spike builds that fallback and measures it
-against the M1 Moldova extract.
+OSM graph as the fallback. Wave 2 built that fallback and measured it. Wave 4
+adds the two things it was missing for a usable phone client: road names and
+maneuvers, and a persisted graph so launch does not re-parse the PBF.
 
 Code: `tools/native-router/` (standalone crate, not part of the root workspace).
-Graph documentation: `tools/native-router/README.md`.
-Android notes: `tools/native-router/ANDROID.md`.
+Graph and JSON documentation: `tools/native-router/README.md`. Android notes:
+`tools/native-router/ANDROID.md`.
 
 ## What was built
 
-- `osmpbfreader` PBF ingest, two passes:
-  1. `iter_ways()` — keep `highway=*` car ways, parse access/oneway/maxspeed,
-     collect their node ids.
-  2. `iter_nodes()` — keep coordinates only for those ids.
-- Directed CSR graph: `Node { osm_id, lat, lon }` + `Edge { from, to,
-  distance_m, speed_kmh, class }`, offsets per node.
+Wave 2 base, still present:
+
+- `osmpbfreader` PBF ingest, two passes: ways first (keep car ways and collect
+  node ids), then nodes filtered to those ids.
+- Directed CSR graph `Node { osm_id, lat, lon }` + `Edge { from, to,
+  distance_m, speed_kmh, class }` with per-node offsets.
 - A* on travel time with a haversine / max-speed heuristic.
-- API: `route(&Graph, (lat, lon), (lat, lon), Profile::Car) ->
-  Route { distance_m, duration_s, points, nodes }`.
-- CLI: `native-router route --osm <pbf> --from lat,lon --to lat,lon
-  --profile car`, JSON on stdout, timings on stderr.
-- Tests: 25 unit/CLI tests, plus an opt-in real Moldova acceptance test.
+- `route(&Graph, (lat, lon), (lat, lon), Profile::Car) -> Route`.
 
-No HTTP client is a dependency. `Cargo.lock` is committed. The PBF is not.
+Wave 4 additions:
 
-## Moldova graph (M1 extract)
+- **Names.** The way parser captures `name`, falls back to `ref`, trims and
+  ignores empty values. Names are interned into one table per graph; each edge
+  stores a 4-byte table index (`NO_NAME` when absent). Moldova has 10,807 unique
+  names/refs.
+- **Roundabout flag.** `junction=roundabout|circular` is stored as bit 0 of
+  `Edge::flags`, for maneuver generation.
+- **Maneuvers.** `Route` gains `maneuvers: Vec<Maneuver>` with the exact field
+  shape used by the route UI contract: `instruction`, `kind`, `distance_m`,
+  `duration_s`, `point: [lat, lon]`, `point_index`. `points` and `nodes` are
+  unchanged. Generation uses the turn angle between consecutive segments with a
+  15° dead band, the outgoing edge name/ref, tag-based roundabout detection and
+  a depart/arrive pair. Distance and duration on each maneuver run to the next
+  maneuver; the final `arrive` is zero.
+- **Persisted graph.** `Graph::save` / `Graph::load` implement format version 1:
+  56-byte header (magic `PNPGRPH1`, version, counts, payload length, CRC-32),
+  then interned names, fixed-width nodes and edges. Save is atomic (temp file +
+  fsync + rename). Load validates the header, CRC and every structural
+  invariant, streams arrays into their final `Vec`s and allocates no per-edge
+  strings. Truncated and tampered files are rejected.
+- **CLI.** `build --osm <pbf> --out <graph.bin>` and `route --graph
+  <graph.bin> --from ... --to ...`; `--osm` remains as a one-shot fallback. The
+  CLI reports build/load/route timings and peak working set.
+- **Tests.** 51 tests without a PBF plus an opt-in Moldova test; the latter now
+  asserts maneuvers, names and a cached-graph route within 1 m / 1 s.
 
-Input: `moldova.osm.pbf`, 101,528,058 bytes (Geofabrik, M1 pack).
-SHA-256 and pack details: `docs/offline/moldova.md`.
+No HTTP client is a dependency. `Cargo.lock` is committed. The PBF and
+`graph.bin` are not.
+
+## Graph representation
 
 ```text
-graph: 1490268 nodes, 3117064 edges, max speed 120 km/h, loaded in 8.27 s
+nodes:   Vec<Node>   { osm_id: i64, lat: f64, lon: f64 }   24 B
+offsets: Vec<u32>    len = nodes.len() + 1
+edges:   Vec<Edge>   { from: u32, to: u32, distance_m: f32,
+                       speed_kmh: f32, class: u8, flags: u8,
+                       name: u32 }                          24 B
+names:   Vec<Box<str>>
 ```
 
-Peak working set during the build: **255.2 MiB** (measured with
-`PeakWorkingSet64` while the CLI ran). Final graph arrays are about 104 MB
-(1.49M × 24 B nodes + 3.12M × 20 B edges + offsets); the peak includes the
-temporary coordinate/index hash maps.
+A `String` per edge would be millions of heap allocations. Instead the name
+table owns one string per unique name/ref and the edge carries a `u32` id. The
+per-edge name cost is 4 bytes, 12.5 MB for Moldova's 3.12M directed edges; the
+table itself is a few hundred kilobytes. `Edge::name == NO_NAME` means the way
+carried neither `name` nor `ref`.
 
-The 8.27 s figure is a warm-cache, otherwise-idle run on the i5-13420H dev
-machine. Repeats while another worktree compiled the Android app (12 `rustc`
-processes, 100% CPU) took 41 s and 157 s for the same binary and file, so the
-build is CPU-bound and the number is load-sensitive. A cold first read of the
-101 MB file was slower again. **Do not parse the PBF at app launch on a phone:**
-build the graph once at pack install and persist it (see ANDROID.md).
+`graph.bin` stores these arrays in the same order, with `offsets` and
+`max_speed_kmh` rebuilt on load. The full header/payload layout and the
+versioning rule are in `tools/native-router/README.md` and `src/graph.rs`.
+
+## Moldova graph and measurements
+
+Input: `moldova.osm.pbf`, 101,528,058 bytes (Geofabrik, M1 pack). SHA-256 and
+pack details: `docs/offline/moldova.md`.
+
+```text
+graph: 1490268 nodes, 3117064 edges, 10807 names, max speed 120 km/h
+```
+
+Measured on the i5-13420H dev machine (Windows, MSVC, release). The host load
+varies; build time in particular is CPU-bound and was measured anywhere from
+8.3 s on an idle machine to 46 s while another worktree compiled an Android app.
+
+| Operation | Measurement |
+| --- | --- |
+| Build graph from PBF | 6.65–20.47 s across runs on this machine (load-dependent); 46.26 s under heavy CPU load |
+| Save `graph.bin` | 0.55–1.23 s |
+| `graph.bin` size | **110,858,815 bytes (105.7 MiB)** |
+| Load `graph.bin` | **0.265 s** (final CLI), **0.270 s** (final Moldova test), 0.282–0.604 s in earlier runs — target well under 2 s |
+| Route Chișinău→Bălți from cache | 125.0–364.7 ms |
+| Route from a fresh PBF parse | 137.1–355.4 ms after the parse |
+| Peak working set, build + save | **283.0 MiB** |
+| Peak working set, load + route | **149.1 MiB** |
+| Peak working set, one-shot PBF route | 282.6 MiB |
+
+The cache file is larger than the PBF (105.7 MiB vs 96.8 MiB) because PBF is
+compressed protobuf and the cache is a fixed-width array built for fast decode.
+The trade is deliberate: launch drops from a multi-second PBF parse and ~283 MiB
+peak to a sub-second load and ~149 MiB peak. The resident graph arrays are about
+106 MB; A* adds the working arrays on top.
 
 ## Real route: Chișinău → Bălți
 
-Command (PowerShell, release):
+Commands (PowerShell, release):
 
 ```powershell
-$env:PINPOINT_MOLDOVA_PBF = "C:\Users\Dinusauuuur\Desktop\git\Pinpoint\dist\offline\moldova\moldova.osm.pbf"
-cargo test --release --test moldova -- --ignored --nocapture
-```
-
-Output (load time from the run under the other worktree's CPU load; distance and
-ETA are stable):
-
-```text
-graph: nodes=1490268 edges=3117064 load_s=140.94
-route: distance_m=134109.5 duration_s=5836.8 nodes=2037 points=2037 query_ms=300.6
-test chisinau_to_balti_is_routed_locally ... ok
-```
-
-- **Distance: 134,109.5 m (134.1 km)**
-- **Duration: 5,836.8 s (97.3 min), ~82.7 km/h average**
-- **Nodes: 2,037; points: 2,037**
-- Query time: 232–463 ms in quiet runs, and 1.1–1.5 s while the other
-  worktree's Android build saturated all 12 hardware threads. This includes two
-  linear nearest-node scans over 1.49M nodes and A*.
-
-CLI (idle, warm cache) produced the same route:
-
-```powershell
-.\target\release\native-router.exe route `
+# Build once.
+.\target\release\native-router.exe build `
   --osm C:\Users\Dinusauuuur\Desktop\git\Pinpoint\dist\offline\moldova\moldova.osm.pbf `
+  --out C:\Users\Dinusauuuur\AppData\Local\Temp\opencode\moldova.graph.bin
+
+# Serve from the cache.
+.\target\release\native-router.exe route `
+  --graph C:\Users\Dinusauuuur\AppData\Local\Temp\opencode\moldova.graph.bin `
   --from 47.01,28.86 --to 47.76,27.93 --profile car
 ```
 
-```text
-graph: 1490268 nodes, 3117064 edges, max speed 120 km/h, loaded in 8.27 s
-route: 134.1 km, 97.3 min, 2037 points, 2037 nodes, solved in 232.5 ms
-```
-
-stdout is the `Route` JSON (`distance_m`, `duration_s`, `points`, `nodes`), about
-10,000 lines because every graph node is a point. The first/last points snap to
-47.0100856,28.8600694 and 47.7599660,27.9303167 (the test asserts both are
-within 5 km of the requested coordinates).
-
-## Android cross-compile
-
-NDK 27.2.12479018, Rust target `aarch64-linux-android` via rustup 1.100.0.
-VS Build Tools provides the host linker for build scripts. Exact command:
-
-```powershell
-$ndk = "$env:LOCALAPPDATA\Android\Sdk\ndk\27.2.12479018"
-$env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = `
-  "$ndk\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android24-clang.cmd"
-
-cargo build --release --target aarch64-linux-android --target-dir target-android
-```
-
-Result: **success**, exit 0.
+Measured output:
 
 ```text
-Compiling native-router v0.1.0 (...\tools\native-router)
-Finished `release` profile [optimized] target(s) in 1m 00s
+graph: 1490268 nodes, 3117064 edges, 10807 names, max speed 120 km/h, built from PBF in 6.65 s
+saved ...\moldova.graph.bin (110858815 bytes, 105.7 MiB) in 0.55 s
+peak working set: 282.8 MiB
+
+graph: 1490268 nodes, 3117064 edges, 10807 names, max speed 120 km/h, loaded from ...\moldova.graph.bin (105.7 MiB) in 0.265 s
+route: 134.1 km, 97.3 min, 2037 points, 2037 nodes, 53 maneuvers, solved in 125.0 ms
+peak working set: 149.1 MiB
 ```
 
-Artifact verification:
+Route result:
+
+- **Distance: 134,109.5 m (134.1 km)**
+- **Duration: 5,836.8 s (97.3 min), ~82.7 km/h average**
+- **Nodes/points: 2,037 each**
+- **Maneuvers: 53**, of which 48 carry a road name/ref
+- First point 47.0100856,28.8600694; last 47.7599660,27.9303167
+
+Sample instructions from the actual run (diacritics preserved):
 
 ```text
-target-android/aarch64-linux-android/release/native-router   1,093,040 bytes
-ELF64, little endian, Type DYN, Machine AArch64
-NEEDED: libdl.so, libm.so, libc.so
-target-android/aarch64-linux-android/release/libnative_router.rlib   219,888 bytes
+[      depart]   115.8 m      8 s  Head northwest on Bulevardul Iuri Gagarin
+[slight_left]    14.8 m      1 s  Keep left onto Bulevardul Iuri Gagarin
+[slight_right]  403.9 m     29 s  Keep right onto Bulevardul Iuri Gagarin
+[  roundabout]  144.6 m     10 s  At the roundabout, take the exit onto Strada Albișoara
+[       right]  865.1 m     62 s  Turn right onto Bulevardul Renașterii Naționale
+[  roundabout] 2033.7 m     92 s  At the roundabout, take the 4th exit onto Strada Florilor
+[      straight] 20848.8 m   844 s  Continue onto Tiraspol-Bălți
+[  sharp_left]  430.6 m     20 s  Turn sharp left onto Tiraspol-Bălți - Centura Chișinăului
+[        left]  173.2 m     10 s  Turn left onto Strada Mihai Viteazul
+[       right]  101.0 m     18 s  Turn right
+[      arrive]    0.0 m      0 s  Arrive at your destination
 ```
 
-**This is an Android ELF binary and rlib, not an APK.** No JNI wrapper, Java
-bridge, Gradle packaging or device run is part of this spike. The crate has no C
-dependencies; the NDK is used only as linker/sysroot. `ANDROID.md` describes the
-JNI shape and the graph-persistence work needed before an app can use it.
+The maneuver kinds observed on this route are `depart`, `arrive`, `straight`,
+`slight_left`, `slight_right`, `left`, `right`, `sharp_left` and `roundabout`.
+A `uturn` band exists but does not occur on this route.
 
-Environment note: the machine has a standalone Rust 1.99.1 first on `PATH`
-(no Android std) and rustup 1.100.0 with the target. Using a separate
-`--target-dir` avoids mixing artifacts from the two compilers. This is a local
-toolchain detail, not a crate requirement.
+The full JSON on stdout is the route UI contract: `distance_m`, `duration_s`,
+`points: [[lat, lon], ...]`, `nodes: [osm_id, ...]` (kept for compatibility) and
+`maneuvers: [{instruction, kind, distance_m, duration_s, point: [lat, lon],
+point_index}]`. The real run emits roughly ten thousand lines because every
+graph node is a point.
+
+Exit ordinals are deliberately conservative: a graph without turn restrictions
+cannot always count roundabout arms reliably. The counter deduplicates
+bidirectional arms and falls back to `take the exit onto <name>` above eight
+arms. That is why the Albișoara and Renașterii roundabouts above show a name-only
+exit while the simpler Strada Florilor one shows `4th exit`.
+
+## Mobile serving model
+
+**Recommendation: build `graph.bin` in the offline pack pipeline and ship it
+inside the Moldova pack.** The download manager already owns pack lifecycle and
+SHA-256 verification; `graph.bin` becomes another verified pack asset. On the
+phone the app calls `Graph::load` once and routes from memory.
+
+Why not generate the cache on first launch:
+
+- The desktop build takes 8–46 s and peaks at 283 MiB. A mid-range phone is
+  slower and has a tighter memory budget; doing it at first launch risks an ANR
+  or OOM.
+- It would require shipping both the 101.5 MB PBF and the 105.7 MB cache
+  (~207 MB) if the PBF is also kept for regeneration. Shipping only `graph.bin`
+  is smaller than shipping both.
+- A prebuilt cache is deterministic and testable: the pack's route is the route
+  the user gets.
+
+Rebuild `graph.bin` whenever the PBF changes. Bump `GRAPH_FORMAT_VERSION` when
+the format changes so a client can reject an incompatible cache and fetch/rebuild
+a new one instead of misreading it.
+
+## Android integration shape
+
+No JNI wrapper, Gradle packaging or APK change was done in this wave; this
+section describes the intended shape, not delivered code. See `ANDROID.md` for
+the cross-build prerequisites.
+
+1. Ship `graph.bin` inside `moldova.pack` (or as a sibling pack asset) and verify
+   it with the same manifest SHA-256 as the PBF. Copy/open it from app-private
+   storage.
+2. A thin JNI wrapper (or UniFFI) exposes:
+   - `nativeLoadGraph(path) -> handle`: calls `Graph::load`, boxes the graph.
+   - `nativeRoute(handle, fromLat, fromLon, toLat, toLon) -> JSON string`: calls
+     `route`, serializes the same `Route` JSON documented above.
+   - `nativeFreeGraph(handle)`.
+   Load once at startup or on first navigation request, off the main thread;
+   never per route. Wrap the native calls in `catch_unwind`.
+3. Parse the JSON in Kotlin/Java with the existing model, or return a small
+   object with `distance_m`, `duration_s`, `points` and `maneuvers`.
+
+The Wave 2 Android arm64 cross-build (NDK 27.2.12479018, `aarch64-linux-android`,
+1,093,040-byte ELF binary) predates the graph cache and maneuver code. The crate
+is still pure Rust and `Graph::save`/`load` only use `std::fs`, so no new C
+dependency was introduced, but **the cross-build was not re-run in this wave**.
+Treat the old artifact size as historical and re-measure before packaging.
 
 ## Rust router vs native Valhalla
 
-Measured facts for the Rust spike:
+Measured facts for the Rust path now:
 
-- One-time graph build: 8.3 s idle, 255 MiB peak, 104 MB resident graph.
-- Query: 0.23–0.46 s for a 134 km route on desktop.
-- No turn restrictions, no maneuvers, no names/refs, car only.
-- Rebuilding from PBF on a phone is not viable; a persisted/mmap'd graph is
-  required.
+- One-time graph build: 8.3–46 s desktop (load-dependent), 283 MiB peak.
+- Persisted `graph.bin`: 105.7 MiB, 0.28–0.60 s load, 149 MiB peak with A*.
+- Query: 0.14–0.36 s for a 134 km route on desktop.
+- Maneuvers: geometry + names/refs, roundabout tags; no turn restrictions, lane
+  guidance or exit signage.
+- Car only.
 
 M1's `moldova-valhalla.tar` already contains a Valhalla graph with **510,140
 nodes / 1,354,988 directed edges** for car, pedestrian and bicycle (114 s Docker
@@ -148,29 +239,42 @@ build). The design's NDK/CMake path would compile Valhalla for `arm64-v8a`, load
 the tar from app storage and expose routing + maneuvers through JNI. Pros:
 production routing semantics (turn restrictions, maneuvers), smaller graph than
 the 1.49M-node OSM graph, likely lower query latency. Cons: a C++ NDK build and
-a much larger native artifact, neither of which is proven on this machine yet.
+a much larger native artifact, neither proven on this machine yet.
 
-**Decision from this spike:** the Rust fallback is good enough to prove local
-routing and is the smaller integration, but it is not a turn-by-turn engine. The
-design's Valhalla choice stays the production target. If a route-only offline
-milestone is needed first, ship the Rust path **with a prebuilt, persisted graph**
-and keep the `Router` seam so Valhalla can replace it without touching the UI.
+**Decision unchanged:** Valhalla stays the production target for full
+turn-by-turn semantics. The Rust path is now viable as an interim offline
+route+maneuver engine because the graph cache removes the launch-time parse and
+the API already speaks the route UI contract. Keep the `Router` seam so Valhalla
+can replace it without touching the UI.
+
+## What was not verified
+
+- **No on-device run.** All numbers are desktop Windows/MSVC release numbers.
+  Android load time, peak memory and battery behaviour were not measured.
+- **No Android cross-build in Wave 4.** The Wave 2 arm64 compile predates the
+  graph cache/maneuvers; re-run it before claiming an Android artifact.
+- **No JNI/UniFFI wrapper, Gradle wiring or APK.** Nothing in this wave ships a
+  `.so` into an app.
+- **No turn restrictions.** The maneuver list can tell a driver to turn where
+  OSM forbids it; it is a proof, not a legal guidance product.
+- **No lane guidance, exit signs, traffic, closures or ferries.**
+- **No spatial index.** Snapping is a linear scan over 1.49M nodes.
+- **Memory-mapping was not implemented.** `graph.bin` is decoded into `Vec`s;
+  peak load+route working set is 149.1 MiB. mmap is the next optimization if
+  that budget is too high on a phone.
 
 ## Limits
 
 - Car only. No pedestrian/bicycle profiles.
-- No turn restrictions, turn penalties, lane guidance, traffic or closures.
-- No ferries, no `route=ferry`; `highway=*` ways only.
-- Linear nearest-node search; fine for Moldova, not for a continent.
+- Roundabout exit ordinals are a heuristic; complex junctions fall back to a
+  name-only exit instruction.
+- Turn instructions are angle-driven with a 15° dead band; they do not model
+  forks with equal-angle branches or turn restrictions.
+- Estimated speeds are routing defaults, not legal limits.
+- The PBF build is a pack-pipeline/desktop operation, not a phone operation.
 - Outside coverage (>25 km from the nearest graph node) returns
   `RouteError::OutsideCoverage`; callers must show "outside offline area" and
   must not silently call an online router.
-- Estimated speeds are routing defaults, not legal limits.
-- Memory is the main cost: 255 MiB peak during the build and about 104 MB for
-  the resident graph. A* itself needs roughly 30 MB of working arrays for 1.49M
-  nodes; one run under severe host memory pressure failed to allocate those
-  arrays even though the graph had loaded. A shipping client must budget this
-  and must not build the graph on a memory-constrained device at launch.
 
 ## Licence
 

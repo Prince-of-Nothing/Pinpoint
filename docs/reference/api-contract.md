@@ -41,8 +41,8 @@ the historical/target design and are **not** the current contract.
 | POST | `/auth/logout-all` | cookie + CSRF | revoke every session for the user |
 | GET | `/auth/sessions` | cookie | `{sessions:[{id, current, auth_method, mfa_pending, created_at, last_activity}]}` — `id` is an 8-hex prefix, never the full token |
 | DELETE | `/auth/sessions/:id` | cookie + CSRF | revoke one own session by prefix; clears the cookie if it was current |
-| POST | `/auth/password/change` | cookie + CSRF | `{new_password, confirm_password}`; revokes all sessions |
-| POST | `/auth/password/force-change` | cookie + CSRF | same handler, for `must_change_password` accounts |
+| POST | `/auth/password/change` | cookie + CSRF | `{current_password, new_password, confirm_password}`; revokes all sessions |
+| POST | `/auth/password/force-change` | cookie + CSRF | `{new_password, confirm_password}`; for `must_change_password` accounts, revokes all sessions |
 | POST | `/auth/mfa/enroll` | cookie | generate a TOTP secret + `otpauth_uri` |
 | POST | `/auth/mfa/verify` | cookie | `{code}` → enable MFA |
 | GET | `/auth/mfa/status` | cookie | `{mfa_enabled}` |

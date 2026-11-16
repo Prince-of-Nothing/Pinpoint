@@ -96,7 +96,9 @@ zeroize = "1.7"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time", "net", "macros", "sync"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+# `stream` keeps the offline-pack proxy from buffering a 220 MB artifact: the
+# GitHub release body is piped into the Axum response chunk by chunk.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 webbrowser = "1.2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 which = "6.0"

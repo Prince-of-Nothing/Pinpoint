@@ -4,6 +4,45 @@ use eframe::egui::{self, RichText};
 use std::sync::Arc;
 
 impl PinpointAppUI {
+    /// Backend URL editor shared by Settings and the sign-in screen.
+    pub fn draw_server_settings(&mut self, ui: &mut egui::Ui) {
+        ui.label(format!("Current: {}", self.app.backend_url()));
+        ui.add(
+            egui::TextEdit::singleline(&mut self.server_url_input)
+                .hint_text("https://pinpoint-uj4y.onrender.com")
+                .desired_width(300.0),
+        );
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Save & reconnect").clicked() {
+                let url = self.server_url_input.clone();
+                match self.switch_backend(&url) {
+                    Ok(()) => self
+                        .app
+                        .set_notice(Some(format!("Connected to {}", self.app.backend_url()))),
+                    Err(error) => self.server_error = Some(error),
+                }
+            }
+            if ui.button("Reset to default").clicked() {
+                match self.switch_backend("") {
+                    Ok(()) => self
+                        .app
+                        .set_notice(Some(format!("Connected to {}", self.app.backend_url()))),
+                    Err(error) => self.server_error = Some(error),
+                }
+            }
+        });
+        if let Some(error) = &self.server_error {
+            ui.colored_label(egui::Color32::from_rgb(248, 113, 113), error);
+        }
+        ui.label(
+            RichText::new(
+                "HTTPS is required for any server except localhost. Changing the server signs you out.",
+            )
+            .size(10.0)
+            .color(egui::Color32::from_rgb(148, 163, 184)),
+        );
+    }
+
     pub fn draw_profile_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         self.draw_main_toolbar(ui);
         if !self.sessions_requested {
@@ -45,6 +84,11 @@ impl PinpointAppUI {
                     ctx,
                 );
             }
+        });
+        ui.add_space(8.0);
+        ui.group(|ui| {
+            ui.label(RichText::new("Server").size(14.0).strong());
+            self.draw_server_settings(ui);
         });
         ui.add_space(8.0);
         ui.group(|ui| {

@@ -77,10 +77,19 @@ impl Platform {
     }
 }
 
-/// Default backend URL for local development on each platform.
-/// Production builds MUST be overridden with `--backend https://…`.
+/// Hosted backend used by Android release builds.
+pub const ANDROID_RELEASE_BACKEND: &str = "https://pinpoint-uj4y.onrender.com";
+
+/// Default backend URL for each platform. Android release builds use the
+/// hosted Render backend; debug builds keep the emulator loopback. Desktop
+/// and iOS keep local development defaults.
 pub fn default_backend_url() -> String {
-    match Platform::current() {
+    default_backend_url_for(Platform::current(), cfg!(debug_assertions))
+}
+
+fn default_backend_url_for(platform: Platform, debug_build: bool) -> String {
+    match platform {
+        Platform::Android if !debug_build => ANDROID_RELEASE_BACKEND.to_string(),
         Platform::Android => {
             // Android emulator routes host loopback through 10.0.2.2.
             // 8080 avoids the Docker gateway that often owns 8000.
@@ -94,7 +103,8 @@ pub fn default_backend_url() -> String {
 ///
 /// 1. explicit `--backend <url>` flag (caller passes it in),
 /// 2. `PINPOINT_BACKEND` env var (container / mobile / CI override),
-/// 3. per-platform [`default_backend_url`].
+/// 3. the URL saved in Settings (`prefs.server_url`),
+/// 4. per-platform [`default_backend_url`].
 ///
 /// Never returns a non-loopback `http://` URL — callers must still run it
 /// through `api::validate_backend_url` (ADR-0006).
@@ -104,6 +114,13 @@ pub fn backend_url_from_env_or_default() -> String {
         if !t.is_empty() {
             return t.to_string();
         }
+    }
+    let saved = crate::prefs::PrefsStore::default_location()
+        .load()
+        .server_url;
+    let saved = saved.trim();
+    if !saved.is_empty() {
+        return saved.to_string();
     }
     default_backend_url()
 }
@@ -603,11 +620,29 @@ pub fn copy_text(_text: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{backend_url_from_env_or_default, default_backend_url, Platform};
+    use super::{
+        backend_url_from_env_or_default, default_backend_url, default_backend_url_for, Platform,
+    };
 
     #[test]
     fn platform_current_never_panics() {
         let _ = Platform::current();
+    }
+
+    #[test]
+    fn android_release_defaults_to_render() {
+        assert_eq!(
+            default_backend_url_for(Platform::Android, false),
+            "https://pinpoint-uj4y.onrender.com"
+        );
+        assert_eq!(
+            default_backend_url_for(Platform::Android, true),
+            "http://10.0.2.2:8080"
+        );
+        assert_eq!(
+            default_backend_url_for(Platform::Windows, false),
+            "http://localhost:8000"
+        );
     }
 
     #[test]

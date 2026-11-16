@@ -14,6 +14,8 @@ impl PinpointAppUI {
                      are available, but sign-in is disabled.",
                 );
             });
+            ui.add_space(8.0);
+            ui.group(|ui| self.draw_server_settings(ui));
             return;
         }
         let compact = Self::is_compact(ctx);
@@ -109,6 +111,8 @@ impl PinpointAppUI {
                     });
                 });
             }
+            ui.add_space(8.0);
+            ui.collapsing("Server", |ui| self.draw_server_settings(ui));
         });
     }
 
@@ -174,6 +178,8 @@ impl PinpointAppUI {
                      are available, but registration is disabled.",
                 );
             });
+            ui.add_space(8.0);
+            ui.group(|ui| self.draw_server_settings(ui));
             return;
         }
         let compact = Self::is_compact(ctx);

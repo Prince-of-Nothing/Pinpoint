@@ -3,6 +3,7 @@ use crate::models::*;
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::patterns::state::StateContext;
 use crate::security::{AuditLogger, KeyManager, RateLimiter};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 /// A mutation that failed because all backends were unavailable.
@@ -125,6 +126,8 @@ pub struct PinpointApp {
     /// Per-user E2E location encryption key (`e2e$<salt>$<iters>$<key>`),
     /// derived on login/register and persisted in the OS keychain.
     e2e_location_key: Arc<Mutex<Option<String>>>,
+    /// Set when the UI swaps to a new backend; the polling thread exits.
+    auto_refresh_stop: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -246,6 +249,7 @@ impl PinpointApp {
             audit_logger: Arc::new(AuditLogger::with_console()),
             key_manager: Arc::new(key_manager),
             e2e_location_key: Arc::new(Mutex::new(persisted_e2e_key)),
+            auto_refresh_stop: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -281,6 +285,9 @@ impl PinpointApp {
             };
             rt.block_on(async move {
                 loop {
+                    if app.auto_refresh_stop.load(Ordering::Relaxed) {
+                        break;
+                    }
                     let interval = app
                         .data()
                         .lock()
@@ -293,12 +300,29 @@ impl PinpointApp {
                     }
                     let secs = interval.clamp(5, 3600);
                     tokio::time::sleep(std::time::Duration::from_secs(secs)).await;
+                    if app.auto_refresh_stop.load(Ordering::Relaxed) {
+                        break;
+                    }
                     if app.is_signed_in() && !app.is_offline_mode() {
                         let _ = app.refresh_all().await;
                     }
                 }
             });
         });
+    }
+
+    /// Stop the polling thread owned by this app instance. The UI calls this
+    /// before replacing the app on a backend switch.
+    pub fn stop_auto_refresh(&self) {
+        self.auto_refresh_stop.store(true, Ordering::Relaxed);
+    }
+
+    /// Drop the persisted session and per-user E2E key. Used when switching
+    /// backends so a cookie or key from one server is never reused on another.
+    pub fn forget_local_identity(&self) {
+        self.clear_persisted_session();
+        *self.e2e_location_key.lock().unwrap() = None;
+        self.key_manager.delete_secret("e2e_location_key");
     }
 
     pub fn set_loading(&self, loading: bool) {

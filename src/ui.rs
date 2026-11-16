@@ -300,6 +300,9 @@ pub struct PinpointAppUI {
     biometric_auto_prompted: bool,
     /// Android `pinpoint://publish` requested before the first frame.
     pending_gps_publish_at: Option<std::time::Instant>,
+    // Backend server setting (empty saved value = platform default)
+    server_url_input: String,
+    server_error: Option<String>,
     // On-device preferences and launch update check
     prefs: crate::prefs::LocalPrefs,
     prefs_store: crate::prefs::PrefsStore,
@@ -321,6 +324,11 @@ impl PinpointAppUI {
         let lock_remaining = lock_store.lockout_remaining();
         let prefs_store = crate::prefs::PrefsStore::default_location();
         let prefs = prefs_store.load();
+        let initial_server_url = if prefs.server_url.trim().is_empty() {
+            app.backend_url()
+        } else {
+            prefs.server_url.clone()
+        };
         Self {
             app,
             rt: Runtime::new().expect("Failed to create tokio runtime"),
@@ -391,6 +399,8 @@ impl PinpointAppUI {
             pin_setup_confirm: String::new(),
             biometric_auto_prompted: false,
             pending_gps_publish_at: None,
+            server_url_input: initial_server_url,
+            server_error: None,
             prefs,
             prefs_store,
             update_check_started: false,
@@ -409,6 +419,42 @@ impl PinpointAppUI {
     /// still applies for this session.
     fn save_prefs(&self) {
         let _ = self.prefs_store.save(&self.prefs);
+    }
+
+    /// Rebuild the app against `raw_url` and persist the choice. The old
+    /// session and E2E key are discarded so they never cross servers.
+    pub fn switch_backend(&mut self, raw_url: &str) -> Result<(), String> {
+        let trimmed = raw_url.trim();
+        let url = if trimmed.is_empty() {
+            crate::platform::default_backend_url()
+        } else {
+            trimmed.to_string()
+        };
+        let backend = crate::backend::build_default_backend(&url).map_err(|e| e.to_string())?;
+        let old = Arc::clone(&self.app);
+        old.stop_auto_refresh();
+        old.forget_local_identity();
+        let app = Arc::new(PinpointApp::new(backend, None));
+        #[cfg(target_os = "android")]
+        crate::platform::register_android_app(Arc::downgrade(&app));
+        PinpointApp::start_auto_refresh(Arc::clone(&app));
+        self.app = app;
+        self.session_restore_attempted = false;
+        self.sessions_requested = false;
+        self.login_password.clear();
+        self.login_totp.clear();
+        self.mfa_code.clear();
+        self.profile_name.clear();
+        self.prefs.server_url = if url == crate::platform::default_backend_url() {
+            String::new()
+        } else {
+            url.clone()
+        };
+        self.save_prefs();
+        self.server_url_input = url;
+        self.server_error = None;
+        self.app.set_screen(crate::app::CurrentScreen::Login);
+        Ok(())
     }
 
     /// Record the check time, persist it, and start a GitHub releases check.

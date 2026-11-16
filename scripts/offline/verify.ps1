@@ -19,17 +19,24 @@ Write-Host "manifest: $($manifest.id) $($manifest.version) ($($manifest.files.Co
 
 $repo = Resolve-Path (Join-Path $PSScriptRoot "../..")
 $index = $env:PINPOINT_OFFLINE_INDEX
-if (-not $index) {
-    $candidate = Get-ChildItem (Join-Path $repo "target/debug") -Filter "pinpoint-offline-index*" -File -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -eq "pinpoint-offline-index" -or $_.Name -eq "pinpoint-offline-index.exe" } |
-        Select-Object -First 1
-    if ($candidate) { $index = $candidate.FullName }
+if ($index -and -not (Test-Path $index)) {
+    throw "PINPOINT_OFFLINE_INDEX points to a missing binary: $index"
 }
-if (-not $index -or -not (Test-Path $index)) {
+if (-not $index) {
+    $candidate = @(
+        (Join-Path $repo "target/debug/pinpoint-offline-index.exe"),
+        (Join-Path $repo "target/debug/pinpoint-offline-index"),
+        (Join-Path $repo "target/release/pinpoint-offline-index.exe"),
+        (Join-Path $repo "target/release/pinpoint-offline-index")
+    ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if ($candidate) { $index = $candidate }
+}
+if (-not $index) {
     throw "offline index binary not found; build with cargo build --features offline-build --bin pinpoint-offline-index"
 }
 
 foreach ($file in $manifest.files) {
+    if ([string]::IsNullOrWhiteSpace($file.url)) { throw "manifest file has no URL: $($file.name)" }
     $path = Join-Path $PackDir $file.name
     if (-not (Test-Path $path)) { throw "missing artifact: $($file.name)" }
     $item = Get-Item $path

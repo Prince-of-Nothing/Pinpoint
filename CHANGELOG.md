@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Fixed
+- [FIX] Offline packs build in a staging work directory, verify there, and only then replace the published five-file pack, so a failed run never publishes a manifest or partial artifacts; downloads and container images are hash/digest pinned and manifests carry publish URLs.
 
 ## [1.5.3] - 2026-11-16
 ### Fixed

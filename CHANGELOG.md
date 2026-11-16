@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Admin bootstrap: `pinpoint-admin --promote-email <email>` promotes one existing active account to the admin role using `DATABASE_URL`, without creating or seeding a user.
 - [FEATURE] Web map foundation: vendored MapLibre GL JS 6.18.0 and PMTiles 4.5.0, a no-CDN `web/map/` module and preview, and the 94 KB ODbL Monaco fixture with a headless smoke test.
 - [FEATURE] Web app map: `/map.js` is now a thin adapter over the shared MapLibre + PMTiles foundation, with same-origin `/map-assets/*` and `/vendor/*` routes, byte-range fixture serving, visible OSM/OpenMapTiles/ODbL attribution and a headless adapter test. Leaflet was removed from the web app.
 - [FEATURE] Offline app search: `web/app/offline-search.js` uses the installed pack's SQLite FTS5 index through the service worker and falls back to the existing server search when no pack is installed.

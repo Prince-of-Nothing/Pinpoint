@@ -1,0 +1,53 @@
+name: Offline data
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: Region id from scripts/offline/regions.json
+        required: true
+        default: monaco
+      skip_routing:
+        description: Skip Valhalla routing tiles (fast smoke)
+        required: true
+        default: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Search-index unit tests
+        run: cargo test --features offline-build --bin pinpoint-offline-index
+
+      - name: Build offline index CLI
+        run: cargo build --features offline-build --bin pinpoint-offline-index
+
+      - name: Build region pack
+        run: |
+          if [ "${{ inputs.skip_routing }}" = "true" ]; then
+            pwsh scripts/offline/build.ps1 -Region "${{ inputs.region }}" -SkipRouting
+          else
+            pwsh scripts/offline/build.ps1 -Region "${{ inputs.region }}"
+          fi
+
+      - name: Verify region pack
+        run: |
+          if [ "${{ inputs.skip_routing }}" = "true" ]; then
+            pwsh scripts/offline/verify.ps1 -PackDir "dist/offline/${{ inputs.region }}" -AllowMissingRouting
+          else
+            pwsh scripts/offline/verify.ps1 -PackDir "dist/offline/${{ inputs.region }}"
+          fi
+
+      - name: Upload manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: offline-manifest-${{ inputs.region }}
+          path: dist/offline/${{ inputs.region }}/manifest.json
+          if-no-files-found: error

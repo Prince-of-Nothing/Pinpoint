@@ -38,6 +38,7 @@ impl AppState {
         if rows.is_empty() {
             return false;
         }
+        let deleted = self.deleted_users.lock().unwrap();
         for (
             id,
             email,
@@ -57,6 +58,9 @@ impl AppState {
             identity_subject,
         ) in rows
         {
+            if deleted.contains(&id) {
+                continue;
+            }
             store.next_user_id = store.next_user_id.max(id + 1);
             store.users.push(User {
                 id,
@@ -209,6 +213,9 @@ impl AppState {
     /// removed because of a foreign key, its personal fields are scrubbed and
     /// the account is disabled instead.
     pub async fn sql_delete_user(&self, id: i64) {
+        // Tombstone first: a persist that snapshotted the store just before
+        // this call must not upsert the account back afterwards.
+        self.deleted_users.lock().unwrap().insert(id);
         let Some(pool) = &self.pg else { return };
         let statements = [
             // Shares owned by the user, or attached to a friendship involving

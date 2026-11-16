@@ -1,7 +1,59 @@
+# Pinpoint 1.5.3 - Release Notes
+
+**Released:** 2026-11-16 - **Version:** `1.5.3` (from `1.5.2`) -
+**Status:** Final account-erasure patch. Use this build for launch.
+
+**Artifacts:** `pinpoint-android-1.5.3.apk` - **universal**: `arm64-v8a` and
+`armeabi-v7a` in one APK. GitHub also generates the source `zip`/`tar.gz`
+archives for the `v1.5.3` tag.
+
+## The bug 1.5.2 missed
+
+The live log showed `delete user 6: user rows=1`, then `CONVERGE persisted`,
+then a successful login with the erased account. The SQL delete worked, but the
+request's post-handler persist cloned a store that a concurrent refresh had
+reloaded just before the delete committed. Its `ON CONFLICT DO UPDATE` upsert
+re-inserted the account from that stale snapshot.
+
+## Fix
+
+- Tombstone every id passed to `sql_delete_user` before touching Postgres.
+- Filter tombstoned users and all related rows (friendships, shares, locations,
+  check-ins, emergencies, diagnostic reports and audit entries) out of every
+  persist snapshot, including `pinpoint_state`, before any INSERT/upsert.
+- `load_users` also ignores tombstoned ids, so a stale read cannot repopulate
+  the in-memory store.
+- Added a unit test covering all eight store domains.
+
+## Verification
+
+- Full gate: `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo build --locked`, `cargo test --locked` all pass.
+- Live test after deploy: delete returns success, login returns `401`, and the
+  row stays absent after multiple refresh cycles.
+
+## Upgrade
+
+Install over 1.5.2. The Android client is unchanged; the web app is fixed as
+soon as Render deploys 1.5.3.
+
+## Known issues
+
+- #49 server-side anonymous session scoping remains open.
+- #50 MFA disable does not require a code yet.
+- #58 theme switcher not included; #56 OAuth2 not included.
+- E2E ciphertext-only location delivery is not complete; the hosted build stores
+  the latest location server-side, with no history.
+
+---
+
 # Pinpoint 1.5.2 - Release Notes
 
-**Released:** 2026-11-16 - **Version:** `1.5.2` (from `1.5.1`) -
-**Status:** Account-erasure and persistence patch. Use this build for launch.
+**Status:** Superseded by 1.5.3. 1.5.2 removed the account row, but a
+concurrent persist could immediately re-insert it from a stale in-memory
+snapshot. The 1.5.2 APK still works with the 1.5.3 server.
+
+**Released:** 2026-11-16 - **Version:** `1.5.2` (from `1.5.1`).
 
 **Artifacts:** `pinpoint-android-1.5.2.apk` - **universal**: `arm64-v8a` and
 `armeabi-v7a` in one APK. GitHub also generates the source `zip`/`tar.gz`
@@ -25,18 +77,9 @@ archives for the `v1.5.2` tag.
   unavailable.
 - **Audit:** self-deletion no longer writes a fresh audit row after erasure.
 
-## Verification
-
-- Reproduced the production failure locally with a restricted Postgres role
-  (`DELETE` denied on `pinpoint_admin_audit`), then verified the account row,
-  location, emergency and diagnostic report are gone and login returns `401`.
-- Full gate: `cargo fmt`, `clippy -D warnings`, `build --locked`,
-  `test --locked` all pass.
-
 ## Upgrade
 
-Install over 1.5.1. The Android client is unchanged; this is a server-side
-erasure fix, so the web app is fixed as soon as Render deploys 1.5.2.
+Install over 1.5.1, or use 1.5.3 for the complete erasure fix.
 
 ## Known issues
 

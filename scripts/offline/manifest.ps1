@@ -10,6 +10,7 @@ function New-OfflineManifest {
     $ErrorActionPreference = "Stop"
     if ([string]::IsNullOrWhiteSpace($Region.id)) { throw "region id is missing" }
     if ([string]::IsNullOrWhiteSpace($Version)) { throw "version is missing" }
+    if ($Version -cnotmatch '^[a-z0-9-]+-\d{8}$') { throw "version must match <region>-YYYYMMDD: $Version" }
 
     $entries = @()
     foreach ($file in $Files) {

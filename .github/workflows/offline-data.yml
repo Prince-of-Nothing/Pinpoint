@@ -1,10 +1,17 @@
 name: Offline data
 
 on:
+  pull_request:
+    paths:
+      - scripts/offline/**
+      - src/bin/offline_index.rs
+      - Cargo.toml
+      - Cargo.lock
+      - .github/workflows/offline-data.yml
   workflow_dispatch:
     inputs:
       region:
-        description: Region id (the committed fixture is Monaco only)
+        description: Region id (the committed CI fixture is Monaco only)
         required: true
         default: monaco
       skip_routing:
@@ -16,8 +23,60 @@ permissions:
   contents: read
 
 jobs:
-  pack:
+  offline-checks:
+    # Pipeline + CLI gate: unit tests, lints and the committed-fixture script
+    # tests. No Docker, no network and no region pack build, so it is cheap
+    # enough to run on every pull request that can affect the pipeline.
+    name: Offline pipeline checks
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install system dependencies (egui/winit link, reqwest TLS)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libssl-dev libxcb-render0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libgl1-mesa-dev
+
+      - name: Cache cargo registry and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-offline-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Search-index unit tests
+        run: cargo test --features offline-build --bin pinpoint-offline-index
+
+      - name: Clippy (deny warnings)
+        run: cargo clippy --features offline-build --all-targets -- -D warnings
+
+      - name: Build offline index CLI (fixture and verify tests need it)
+        run: cargo build --features offline-build --bin pinpoint-offline-index
+
+      - name: Offline pipeline script tests
+        run: pwsh -NoProfile -File scripts/offline/tests/run.ps1
+
+  pack:
+    # Manual Monaco smoke: builds one real pack from the committed fixture.
+    # Kept separate from `offline-checks` because it needs Docker (Planetiler)
+    # and is far slower.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      OFFLINE_REGION: ${{ inputs.region }}
+      OFFLINE_SKIP_ROUTING: ${{ inputs.skip_routing }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,29 +88,30 @@ jobs:
       - name: Build offline index CLI
         run: cargo build --features offline-build --bin pinpoint-offline-index
 
-      - name: Prepare region fixture
+      - name: Reject unsupported fixture region
         run: |
-          if [ "${{ inputs.region }}" != "monaco" ]; then
-            echo "The committed CI fixture is Monaco only." >&2
+          if [ "$OFFLINE_REGION" != "monaco" ]; then
+            echo "The committed CI fixture is Monaco only; got '$OFFLINE_REGION'." >&2
             exit 1
           fi
-          mkdir -p "dist/offline/${{ inputs.region }}"
-          cp "scripts/offline/tests/fixtures/monaco.osm.pbf" "dist/offline/${{ inputs.region }}/${{ inputs.region }}.osm.pbf"
-
       - name: Build region pack
         run: |
-          if [ "${{ inputs.skip_routing }}" = "true" ]; then
-            pwsh scripts/offline/build.ps1 -Region "${{ inputs.region }}" -SkipDownload -SkipRouting
+          if [ "$OFFLINE_SKIP_ROUTING" = "true" ]; then
+            pwsh scripts/offline/build.ps1 -Region "$OFFLINE_REGION" \
+              -OsmPath "scripts/offline/tests/fixtures/monaco.osm.pbf" \
+              -SkipDownload -SkipRouting
           else
-            pwsh scripts/offline/build.ps1 -Region "${{ inputs.region }}" -SkipDownload
+            pwsh scripts/offline/build.ps1 -Region "$OFFLINE_REGION" \
+              -OsmPath "scripts/offline/tests/fixtures/monaco.osm.pbf" \
+              -SkipDownload
           fi
 
       - name: Verify region pack
         run: |
-          if [ "${{ inputs.skip_routing }}" = "true" ]; then
-            pwsh scripts/offline/verify.ps1 -PackDir "dist/offline/${{ inputs.region }}" -AllowMissingRouting
+          if [ "$OFFLINE_SKIP_ROUTING" = "true" ]; then
+            pwsh scripts/offline/verify.ps1 -PackDir "dist/offline/$OFFLINE_REGION" -AllowMissingRouting
           else
-            pwsh scripts/offline/verify.ps1 -PackDir "dist/offline/${{ inputs.region }}"
+            pwsh scripts/offline/verify.ps1 -PackDir "dist/offline/$OFFLINE_REGION"
           fi
 
       - name: Upload manifest

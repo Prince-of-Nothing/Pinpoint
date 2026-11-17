@@ -211,6 +211,7 @@ pub fn router(state: AppState) -> Router {
         // Pack-manager demo and its fixture, served under /app/ so the
         // service-worker precache and relative imports resolve.
         .route("/app/offline-demo.html", get(web_handlers::offline_demo))
+        .route("/app/offline-demo.js", get(web_handlers::offline_demo_js))
         .route("/app/offline.css", get(web_handlers::offline_css))
         .route("/app/offline.js", get(web_handlers::offline_js))
         .route(

@@ -36,6 +36,7 @@ The per-item flagged list for this release is in
 - [FIX] Search hardening: empty/truncated PBF rejection, punctuation-safe FTS queries, importance-weighted ranking and address-only nodes.
 - [FIX] Android: the WebView now enables geolocation and requests fine/coarse location and notification permissions at runtime, so the system dialog appears and GPS works; denial shows a visible message instead of silently stopping the location service.
 - [FIX] Offline pack fixture: pin `web/app/fixtures/offline-pack/LICENSE.txt` to LF so its 405 bytes and SHA-256 match the manifest on Windows checkouts; CRLF conversion previously made the real Monaco download fail verification.
+- [FIX] Web CSP: the offline demo module is now an external same-origin script and `style-src` permits MapLibre's inline control styles, so the real server installs the pack and serves `206` ranges without CSP console errors.
 ## [1.5.3] - 2026-11-16
 ### Fixed
 - [SECURITY] Account erasure: deleted user ids are tombstoned and filtered from every persist snapshot, so a concurrent background refresh can no longer upsert the account back after `DELETE FROM pinpoint_users` (1.5.2 removed the row, then the post-delete persist re-inserted it from a stale in-memory store).

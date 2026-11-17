@@ -47,6 +47,7 @@ const OFFLINE_SEARCH_JS: &str = include_str!("../../web/app/offline-search.js");
 const OFFLINE_JS: &str = include_str!("../../web/app/offline.js");
 const OFFLINE_CATALOG_JS: &str = include_str!("../../web/app/offline-catalog.js");
 const OFFLINE_DEMO: &str = include_str!("../../web/app/offline-demo.html");
+const OFFLINE_DEMO_JS: &str = include_str!("../../web/app/offline-demo.js");
 const OFFLINE_CSS: &str = include_str!("../../web/app/offline.css");
 const OFFLINE_MANIFEST: &str = include_str!("../../web/app/fixtures/offline-pack/manifest.json");
 const OFFLINE_MANIFEST_BROKEN: &str =
@@ -61,11 +62,14 @@ const SW_JS: &str = include_str!("../../web/sw.js");
 // `font-src` is explicit even though the UI uses system fonts, so a future
 // `@font-face` cannot silently pull a remote file. MapLibre's module worker is
 // same-origin, and PMTiles range requests stay under `connect-src 'self'`.
+// MapLibre positions its canvas and controls with inline style attributes, so
+// style-src must allow inline CSS. Scripts stay strict: only same-origin
+// modules and the SQLite WASM evaluator are allowed.
 const CSP: &str = "default-src 'self'; img-src 'self' data:; \
 script-src 'self' 'wasm-unsafe-eval'; \
-worker-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; \
-base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; \
-manifest-src 'self'";
+worker-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; \
+connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; \
+form-action 'self'; object-src 'none'; manifest-src 'self'";
 
 const PERMISSIONS_POLICY: &str = "geolocation=(self), camera=(), microphone=(), payment=(), usb=()";
 
@@ -300,6 +304,10 @@ pub async fn offline_demo() -> Response {
     resp.headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     secure(resp)
+}
+
+pub async fn offline_demo_js() -> Response {
+    module_js(OFFLINE_DEMO_JS)
 }
 
 pub async fn offline_css() -> Response {

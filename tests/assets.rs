@@ -366,6 +366,7 @@ async fn offline_app_assets_are_served() {
         ("/vendor/sqlite3.mjs", "text/javascript"),
         ("/vendor/sqlite3.wasm", "application/wasm"),
         ("/app/offline-demo.html", "text/html"),
+        ("/app/offline-demo.js", "text/javascript"),
         ("/app/offline.css", "text/css"),
         ("/app/offline.js", "text/javascript"),
         ("/app/offline-catalog.js", "text/javascript"),

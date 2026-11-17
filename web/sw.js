@@ -29,6 +29,7 @@ const PACK_ROUTES = [...new Set([new URL("offline-packs/", SCOPE).pathname, "/of
  */
 const PRECACHE = [
   "app/offline-demo.html",
+  "app/offline-demo.js",
   "app/offline.css",
   "app/offline.js",
   "app/offline-catalog.js",

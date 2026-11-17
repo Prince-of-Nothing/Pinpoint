@@ -27,7 +27,8 @@ function Assert-ManifestUrls([string]$BaseUrl) {
     }
     if ($doc.source_sha256 -ne $pbfHash) { throw "manifest source sha256 mismatch" }
     if ($doc.source_bytes -ne $pbfBytes) { throw "manifest source bytes mismatch" }
-    if ($doc.source_url -ne $pbfPath) { throw "manifest source url mismatch" }
+    $expectedSource = "local:" + (Split-Path -Leaf $pbfPath)
+    if ($doc.source_url -ne $expectedSource) { throw "manifest source url mismatch: $($doc.source_url) != $expectedSource" }
     if ($doc.downloaded_at -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$') {
         throw "manifest downloaded_at is not UTC"
     }

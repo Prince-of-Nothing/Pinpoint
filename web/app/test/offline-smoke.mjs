@@ -167,10 +167,15 @@ try {
   );
 
   const demo = readFileSync(path.join(WEB_ROOT, "app", "offline-demo.html"), "utf8");
+  const demoJs = readFileSync(path.join(WEB_ROOT, "app", "offline-demo.js"), "utf8");
   check(demo.includes("../vendor/maplibre-gl.css"), "demo loads local MapLibre CSS");
   check(demo.includes("../vendor/pmtiles.js"), "demo loads local PMTiles JS");
-  check(demo.includes('../map/map.js'), "demo uses the shared map module");
-  check(demo.includes('./offline.js'), "demo imports the offline manager");
+  check(
+    demo.includes('src="./offline-demo.js"'),
+    "demo module is external so the strict CSP can execute it",
+  );
+  check(demoJs.includes('../map/map.js'), "demo uses the shared map module");
+  check(demoJs.includes('./offline.js'), "demo imports the offline manager");
   check(
     demo.includes("© OpenStreetMap contributors") && demo.includes("ODbL"),
     "demo shows © OpenStreetMap contributors / ODbL",
@@ -221,14 +226,19 @@ try {
     "catalog contains no GitHub release URL",
   );
   check(
-    !demo.includes("releases/download") && !demo.includes("github.com/Prince-of-Nothing"),
+    !demo.includes("releases/download") && !demo.includes("github.com/Prince-of-Nothing") &&
+      !demoJs.includes("releases/download") && !demoJs.includes("github.com/Prince-of-Nothing"),
     "demo contains no GitHub release URL",
   );
-  check(demo.includes("offline-catalog.js"), "demo imports the same-origin catalog");
+  check(
+    demoJs.includes("offline-catalog.js"),
+    "demo imports the same-origin catalog",
+  );
 
   const newTextFiles = [
     "app/offline.js",
     "app/offline-catalog.js",
+    "app/offline-demo.js",
     "app/offline-demo.html",
     "app/offline.css",
     "app/README-offline.md",

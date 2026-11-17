@@ -40,10 +40,16 @@ function Assert-NewManifestFails {
 }
 
 try {
-    New-OfflineManifest -Region $region -Version "moldova-20260101" -Files @($a, $b) -Output $manifest -BaseUrl "https://example.test/packs/moldova" | Out-Null
+    $sourceSha = "a" * 64
+    New-OfflineManifest -Region $region -Version "moldova-20260101" -Files @($a, $b) -Output $manifest -BaseUrl "https://example.test/packs/moldova" `
+        -SourceSha256 $sourceSha -SourceBytes 12345 -SourceUrl "https://download.geofabrik.de/europe/moldova-latest.osm.pbf" -DownloadedAt "2026-11-17T12:00:00Z" | Out-Null
     if (-not (Test-Path $manifest)) { throw "manifest missing" }
     $doc = [IO.File]::ReadAllText($manifest, [Text.Encoding]::UTF8) | ConvertFrom-Json
     if ($doc.id -ne "moldova") { throw "id mismatch" }
+    if ($doc.source_sha256 -ne $sourceSha) { throw "source sha256 mismatch" }
+    if ($doc.source_bytes -ne 12345) { throw "source bytes mismatch" }
+    if ($doc.source_url -ne "https://download.geofabrik.de/europe/moldova-latest.osm.pbf") { throw "source url mismatch" }
+    if ($doc.downloaded_at -ne "2026-11-17T12:00:00Z") { throw "downloaded_at mismatch" }
     if ($doc.name -ne "Moldova") { throw "name mismatch" }
     if ($doc.version -ne "moldova-20260101") { throw "version mismatch" }
     if ($doc.files.Count -ne 2) { throw "file count mismatch" }

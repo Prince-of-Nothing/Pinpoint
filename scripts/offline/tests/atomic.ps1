@@ -14,7 +14,7 @@ try {
 
     $good = & "$PSScriptRoot/../build.ps1" -Region monaco -OutputRoot $root `
         -OsmPath $pbf -BasemapPath $fixturePmtiles `
-        -SkipDownload -SkipBasemap -SkipRouting 2>&1 | Out-String
+        -SkipDownload -SkipBasemap -SkipRouting -SkipGraph 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "good build failed: $good" }
     if (-not (Test-Path $manifest)) { throw "good build published no manifest" }
 
@@ -33,7 +33,7 @@ try {
     $failed = $false
     try {
         & "$PSScriptRoot/../build.ps1" -Region monaco -OutputRoot $root `
-            -OsmPath $empty -SkipDownload -SkipBasemap -SkipRouting 2>&1 | Out-String | Out-Null
+            -OsmPath $empty -SkipDownload -SkipBasemap -SkipRouting -SkipGraph 2>&1 | Out-String | Out-Null
     } catch {
         $failed = $true
     }
@@ -65,7 +65,7 @@ try {
     try {
         & "$PSScriptRoot/../build.ps1" -Region monaco -OutputRoot $root `
             -OsmPath $pbf -BasemapPath $badPmtiles `
-            -SkipDownload -SkipBasemap -SkipRouting 2>&1 | Out-String | Out-Null
+            -SkipDownload -SkipBasemap -SkipRouting -SkipGraph 2>&1 | Out-String | Out-Null
     } catch {
         $failed = $true
     }

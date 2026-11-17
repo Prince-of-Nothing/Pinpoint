@@ -10,6 +10,13 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [2.5.1] - 2026-11-17
+### Fixed
+- [FIX] Web: the anonymous recovery code panel now sits above the fixed map shell, so the code and “I saved it” are visible and clickable on desktop and mobile.
+- [FIX] Map: the local router resolves the catalog layout `packs/<region>/<region>.graph.bin` after an install (and still accepts the legacy root file), so `/map/route` works on a default map server without `PINPOINT_ROUTER_GRAPH`.
+- [FIX] Sharing: exact shares keep full coordinates; create/update/delete write shares directly to Postgres instead of a whole-store snapshot, so a stale replica cannot resurrect a paused or revoked share.
+- [FIX] Privacy: check-ins and emergency alerts require authentication and are owner-scoped; exact shares and the private-location paths now have regression tests.
+
 ## [2.5.0] - 2026-11-17
 ### Added
 - [FEATURE] Web sharing: a deliberate consent sheet with a named/precision/timed summary and confirmation before granting or widening a share; the "Who can see me" list shows friend, precision, active/paused/expired state and expiry, with one-click revoke and a "Share again" path for expired shares; editing precision preserves the existing expiry.

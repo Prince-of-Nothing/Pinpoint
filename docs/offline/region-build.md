@@ -118,9 +118,10 @@ Geofabrik snapshot must be used. Geofabrik's `-latest` files change whenever
 upstream updates, so scheduled weekly builds pass `-AllowUnpinnedSource` and
 publish the fresh extract. That flag is passed by the build workflow in the
 `pinpoint-maps` data repo (the workflow change lands there, not in this
-script). A local `-OsmPath` build records that path as `source_url`. The
-manifest's `source_sha256`, `source_bytes`, `source_url` and `downloaded_at`
-are the audit trail for that release; the catalog repeats `source_sha256`.
+script). A local `-OsmPath` build records `local:<filename>` as `source_url`
+so the build machine path is not published. The manifest's `source_sha256`,
+`source_bytes`, `source_url` and `downloaded_at` are the audit trail for that
+release; the catalog carries only the published file hashes.
 
 ## Limits
 

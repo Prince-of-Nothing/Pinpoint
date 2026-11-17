@@ -86,7 +86,7 @@ try {
     if (@($region.bbox).Count -ne 4) { throw "bbox mismatch" }
     if ($region.maxzoom -ne 14) { throw "maxzoom mismatch" }
     if ($region.version -ne "2026-11-17") { throw "version mismatch" }
-    if ($region.source_sha256 -ne ("b" * 64)) { throw "source sha256 mismatch" }
+    if ($null -ne $region.source_sha256) { throw "source_sha256 must stay in the manifest, not the catalog" }
     if (@($region.files).Count -ne 2) { throw "file count mismatch" }
 
     $basemap = @($region.files)[0]

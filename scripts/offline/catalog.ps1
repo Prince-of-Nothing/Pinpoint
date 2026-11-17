@@ -129,13 +129,6 @@ function Assert-CatalogRegion($Region) {
     }
     Assert-Bbox $Region.bbox
     [void](Assert-Maxzoom $Region.maxzoom)
-    $sourceSha = [string]$Region.source_sha256
-    if (-not [string]::IsNullOrWhiteSpace($sourceSha)) {
-        if ($sourceSha -cne $sourceSha.ToLowerInvariant()) {
-            throw "catalog region '$regionId' source_sha256 must be lowercase"
-        }
-        Assert-Sha256 $sourceSha "catalog region '$regionId' source_sha256"
-    }
 
     $files = @($Region.files)
     if ($files.Count -lt 1 -or $files.Count -gt $maxFilesPerRegion) {
@@ -226,13 +219,6 @@ $newRegion = [ordered]@{
     maxzoom = (Assert-Maxzoom $manifest.maxzoom)
     version = $Version
     files = @($basemapEntry, $graphEntry)
-}
-# Additive schema-1 field (design schema note): optional source_sha256 is the
-# audit hash of the PBF that produced this release; the design doc is unchanged.
-$sourceSha = ([string]$manifest.source_sha256).ToLowerInvariant()
-if (-not [string]::IsNullOrWhiteSpace($sourceSha)) {
-    Assert-Sha256 $sourceSha "region '$regionId' source_sha256"
-    $newRegion.source_sha256 = $sourceSha
 }
 Assert-CatalogRegion $newRegion
 

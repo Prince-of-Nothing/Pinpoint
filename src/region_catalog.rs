@@ -183,9 +183,9 @@ impl RegionCatalog {
             if !ids.insert(region.id.as_str()) {
                 return Err(format!("duplicate region id {:?}", region.id));
             }
-            if !valid_date(&region.version) {
+            if !valid_version(&region.version) {
                 return Err(format!(
-                    "region {:?} version {:?} is not YYYY-MM-DD",
+                    "region {:?} version {:?} is not a safe version string",
                     region.id, region.version
                 ));
             }
@@ -364,6 +364,9 @@ pub fn asset_redirect_allowed(url: &url::Url) -> bool {
             .host_str()
             .is_some_and(|host| ASSET_HOSTS.contains(&host))
         && url.port().is_none_or(|port| port == 443)
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.fragment().is_none()
 }
 
 /// A redirect hop for a catalog document. HTTPS and [`CATALOG_HOSTS`] only.
@@ -373,6 +376,9 @@ pub fn catalog_redirect_allowed(url: &url::Url) -> bool {
             .host_str()
             .is_some_and(|host| CATALOG_HOSTS.contains(&host))
         && url.port().is_none_or(|port| port == 443)
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.fragment().is_none()
 }
 
 fn valid_https_url(value: &str, hosts: &[&str]) -> bool {
@@ -406,8 +412,16 @@ fn valid_timestamp(value: &str) -> bool {
     chrono::DateTime::parse_from_rfc3339(value).is_ok()
 }
 
-fn valid_date(value: &str) -> bool {
-    chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
+/// Versions are opaque (string equality drives updates): accept the compact
+/// `YYYYMMDD` used by the release workflow and the `YYYY-MM-DD` used by the
+/// bundled catalog, plus future safe identifiers.
+fn valid_version(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+        && !value.contains("..")
 }
 
 /// Both hashes are mandatory lowercase SHA-256 hex.
@@ -810,7 +824,7 @@ mod tests {
             (
                 "version",
                 Box::new(|value| {
-                    value["regions"][0]["version"] = "17-11-2026".into();
+                    value["regions"][0]["version"] = "../2026-11-17".into();
                 }),
             ),
             (

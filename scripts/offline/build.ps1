@@ -26,6 +26,8 @@ if (-not (Test-Path $configPath)) { throw "region config not found: $configPath"
 $regions = Get-Content $configPath -Raw | ConvertFrom-Json
 $cfg = $regions.$Region
 if ($null -eq $cfg) { throw "unknown region: $Region" }
+$Region = [string]$cfg.id
+if ($Region -notmatch '^[a-z0-9-]{1,64}$') { throw "region id is invalid: $Region" }
 
 $basemapMaxzoom = [int]$cfg.maxzoom
 if (-not [string]::IsNullOrWhiteSpace($Maxzoom)) {
@@ -274,7 +276,7 @@ try {
     $sourceSha = (Get-FileHash -Algorithm SHA256 -Path $osm).Hash.ToLowerInvariant()
     $sourceBytes = (Get-Item $osm).Length
     $downloadedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    $sourceUrl = if ($OsmPath) { (Resolve-Path $OsmPath).Path } else { [string]$cfg.geofabrik }
+    $sourceUrl = if ($OsmPath) { "local:" + (Split-Path -Leaf $OsmPath) } else { [string]$cfg.geofabrik }
     Write-Output "source sha256: $sourceSha ($sourceBytes bytes)"
     if (-not $OsmPath -and [string]::IsNullOrWhiteSpace($pinnedSha)) {
         Write-Warning "region '$Region' has no pinned source sha256; downloaded unpinned"

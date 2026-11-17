@@ -21,6 +21,10 @@ COPY build.rs ./build.rs
 COPY src ./src
 COPY tests ./tests
 COPY web ./web
+# Path dependency used by the desktop/Android map windows. The server itself
+# does not enable local routing, but Cargo resolves the whole manifest.
+COPY tools/native-router/Cargo.toml tools/native-router/Cargo.lock ./tools/native-router/
+COPY tools/native-router/src ./tools/native-router/src
 
 RUN cargo build --locked --release --bin pinpoint-server
 

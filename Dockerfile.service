@@ -23,6 +23,10 @@ COPY build.rs ./build.rs
 COPY src ./src
 COPY tests ./tests
 COPY web ./web
+# Path dependency used by the desktop/Android map windows. Every service
+# resolves the root manifest, so the native-router source must be present.
+COPY tools/native-router/Cargo.toml tools/native-router/Cargo.lock ./tools/native-router/
+COPY tools/native-router/src ./tools/native-router/src
 
 RUN cargo build --locked --release --bin ${BIN}
 

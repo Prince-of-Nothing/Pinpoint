@@ -1286,6 +1286,7 @@ mod tests {
     use super::*;
     use axum::routing::get;
     use axum::Router;
+    use tokio::sync::Notify;
     use tower::ServiceExt;
 
     fn gzip(bytes: &[u8]) -> Vec<u8> {
@@ -1299,8 +1300,15 @@ mod tests {
 
     /// Local stand-in for the GitHub release. The graph is published gzip
     /// compressed, exactly like the real release asset. Bodies stream in
-    /// small chunks so status polling observes real progress.
-    async fn fixture_server(pack: Vec<u8>, graph_gz: Vec<u8>, chunk_delay: Duration) -> String {
+    /// small chunks so status polling observes real progress. An optional
+    /// hold pauses the graph after its first chunk until the test releases
+    /// it, making a partial transfer observable on any scheduler.
+    async fn fixture_server(
+        pack: Vec<u8>,
+        graph_gz: Vec<u8>,
+        chunk_delay: Duration,
+        graph_hold: Option<Arc<Notify>>,
+    ) -> String {
         async fn artifact(
             UrlPath(name): UrlPath<String>,
             axum::extract::State(state): axum::extract::State<Arc<FixtureArtifacts>>,
@@ -1312,11 +1320,17 @@ mod tests {
             };
             let total = bytes.len() as u64;
             let delay = state.delay;
+            let hold = state.graph_hold.clone().filter(|_| name == GRAPH_GZ_FILE);
             let (mut writer, reader) = tokio::io::duplex(8 * 1024);
             tokio::spawn(async move {
-                for chunk in bytes.chunks(1024) {
+                for (index, chunk) in bytes.chunks(1024).enumerate() {
                     if writer.write_all(chunk).await.is_err() {
                         return;
+                    }
+                    if index == 0 {
+                        if let Some(hold) = hold.as_ref() {
+                            hold.notified().await;
+                        }
                     }
                     if !delay.is_zero() {
                         tokio::time::sleep(delay).await;
@@ -1336,12 +1350,14 @@ mod tests {
             pack: Vec<u8>,
             graph_gz: Vec<u8>,
             delay: Duration,
+            graph_hold: Option<Arc<Notify>>,
         }
 
         let state = Arc::new(FixtureArtifacts {
             pack,
             graph_gz,
             delay: chunk_delay,
+            graph_hold,
         });
         let app = Router::new()
             .route("/:file", get(artifact))
@@ -1365,8 +1381,18 @@ mod tests {
 
     impl Fixture {
         async fn new(pack: Vec<u8>, graph: Vec<u8>, chunk_delay: Duration) -> Self {
+            Self::with_graph_hold(pack, graph, chunk_delay, None).await
+        }
+
+        async fn with_graph_hold(
+            pack: Vec<u8>,
+            graph: Vec<u8>,
+            chunk_delay: Duration,
+            graph_hold: Option<Arc<Notify>>,
+        ) -> Self {
             let graph_gz = gzip(&graph);
-            let base = fixture_server(pack.clone(), graph_gz.clone(), chunk_delay).await;
+            let base =
+                fixture_server(pack.clone(), graph_gz.clone(), chunk_delay, graph_hold).await;
             Self {
                 base,
                 pack,
@@ -1568,7 +1594,7 @@ mod tests {
         let graph = vec![5_u8; 64 * 1024];
         let graph_gz = gzip(&graph);
         let truncated = graph_gz[..graph_gz.len() - 8].to_vec();
-        let base = fixture_server(pack.clone(), truncated.clone(), Duration::ZERO).await;
+        let base = fixture_server(pack.clone(), truncated.clone(), Duration::ZERO, None).await;
         let dir = tempfile::tempdir().expect("temp dir");
         let old = b"old verified graph".to_vec();
         std::fs::write(dir.path().join(GRAPH_FILE), &old).unwrap();
@@ -1658,13 +1684,19 @@ mod tests {
     #[tokio::test]
     async fn status_reports_downloading_progress_then_installed() {
         let pack = vec![7_u8; 24 * 1024];
-        // Pseudo-random bytes do not gzip into a single chunk, so the poller
-        // can observe partial transfer progress for the graph too. Keep this
-        // large enough that a loaded CI machine cannot finish it between polls.
+        // Pseudo-random bytes gzip into several chunks, and the fixture holds
+        // the graph after its first chunk until the poller has seen progress.
         let graph = (0..64 * 1024_u32)
             .map(|index| (index.wrapping_mul(2_654_435_761) >> 13) as u8)
             .collect::<Vec<_>>();
-        let fixture = Fixture::new(pack.clone(), graph.clone(), Duration::from_millis(12)).await;
+        let graph_hold = Arc::new(Notify::new());
+        let fixture = Fixture::with_graph_hold(
+            pack.clone(),
+            graph.clone(),
+            Duration::from_millis(12),
+            Some(Arc::clone(&graph_hold)),
+        )
+        .await;
         let dir = tempfile::tempdir().expect("temp dir");
         let installer = Arc::new(OfflineInstaller::with_plan(
             Some(dir.path().to_path_buf()),
@@ -1687,12 +1719,14 @@ mod tests {
                 && status.graph.downloaded_bytes < fixture.graph_gz.len() as u64
             {
                 saw_graph_transfer_progress = true;
+                break;
             }
             if status.pack.installed && status.graph.installed {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
+        graph_hold.notify_one();
         let status = wait_finished(&installer).await;
 
         assert!(saw_downloading, "status must report the downloading phase");

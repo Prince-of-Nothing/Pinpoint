@@ -16,7 +16,7 @@ The per-item flagged list for this release is in
 ### Changed
 - [FEATURE] Mobile/desktop map: the routing graph is downloaded as `moldova.graph.bin.gz` (45,338,586 B) and decompressed while streaming, so the offline install transfers 139 MB instead of 204 MB while still installing the same 110,858,815-byte verified graph (204 MB on disk).
 ### Fixed
-- [FIX] Offline demo: an install is published only after the map reopens and the pack list refreshes, and errors from a map that was already replaced are ignored. This removes the race that made the update/reopen smoke test flaky.
+- [FIX] Offline demo: an install is published only after the map reopens and the pack list refreshes, and errors from a map that was already replaced are ignored. This removes the race that made the update/reopen smoke test flaky. The compressed-install progress test now holds the graph transfer open after its first chunk, so observing partial progress no longer depends on CI scheduling.
 
 ## [2.2.0] - 2026-11-17
 ### Added

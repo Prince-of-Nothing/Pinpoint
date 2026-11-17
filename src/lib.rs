@@ -36,6 +36,8 @@ pub mod osm;
 pub mod patterns;
 pub mod platform;
 pub mod prefs;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod region_catalog;
 pub mod security;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod server;

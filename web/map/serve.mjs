@@ -81,11 +81,13 @@ function sendMapServerPreview(response, pathname, method) {
       installed: false,
       bytes: 0,
       expected_bytes: 0,
+      download_bytes: 0,
+      downloaded_bytes: 0,
       progress_bytes: 0,
       phase: "idle",
       error: null,
     };
-    sendJson(response, { pack: idle, graph: idle }, method);
+    sendJson(response, { pack: idle, graph: idle, expected_download_bytes: 0 }, method);
     return true;
   }
   return false;

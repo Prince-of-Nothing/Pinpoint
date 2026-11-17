@@ -232,24 +232,27 @@ Both loopback map servers mount the same routes from
 | Route | Contract |
 |---|---|
 | `GET /map/config` | `{pmtilesUrl, graphInstalled, packInstalled}`. `/packs/moldova.pmtiles` once the archive is installed, otherwise `./fixtures/monaco.pmtiles`. |
-| `GET /map/offline/status` | `{pack, graph}`, each `{installed, bytes, expected_bytes, progress_bytes, phase, error}`. Pollable while a job runs. |
+| `GET /map/offline/status` | `{pack, graph, expected_download_bytes}`, each artifact `{installed, bytes, expected_bytes, download_bytes, downloaded_bytes, progress_bytes, phase, error}`. Pollable while a job runs. |
 | `POST /map/offline/download` | Starts the single background job. `202` with the current status, or `409` while another job is running. |
 | `GET\|HEAD /packs/<name>.pmtiles` | The installed archive with `Accept-Ranges: bytes`, `206`/`416` and streamed bodies. |
 
-The Rust process downloads `moldova.pmtiles` (93,172,399 B) and
-`moldova.graph.bin` (110,858,815 B; 204,031,214 B total, **204 MB**) from the
-immutable `data-moldova-20261116` release. `PINPOINT_OFFLINE_BASE_URL` points
-at a mirror or a local fixture server. Each response is streamed to
-`packs/.<name>.part`, hashed incrementally with SHA-256, checked against the
-exact byte length, and only then atomically renamed over the final file. A
-partial, corrupt or wrong-hash download leaves an existing installed file
-untouched. The page never fetches GitHub; the native process does, so CORS is
-irrelevant.
+The Rust process downloads `moldova.pmtiles` (93,172,399 B, uncompressed)
+and `moldova.graph.bin.gz` (45,338,586 B) from the immutable
+`data-moldova-20261116` release: **138,510,985 B / 139 MB** on the wire. The
+graph is decoded while streaming into `packs/.moldova.graph.bin.part`, and the
+installed pair occupies 204,031,214 B / 204 MB on disk.
+`PINPOINT_OFFLINE_BASE_URL` points at a mirror or a local fixture server. Each
+response is streamed to `packs/.<name>.part`, hashed incrementally with
+SHA-256 (the graph on the decompressed bytes, plus the compressed transfer),
+checked against the exact byte length, and only then atomically renamed over
+the final file. A partial, corrupt or wrong-hash download leaves an existing
+installed file untouched. The page never fetches GitHub; the native process
+does, so CORS is irrelevant.
 
-The **Offline map** card shows the total size, polls the status endpoint while
-downloading, reports phase/progress, and distinguishes **Routing graph
-installed** from **Download routing data**. When both artifacts are installed
-it fetches `/map/config` and recreates the MapLibre map with
+The **Offline map** card shows the computed transfer size, polls the status
+endpoint while downloading, reports phase/progress, and distinguishes
+**Routing graph installed** from **Download routing data**. When both artifacts
+are installed it fetches `/map/config` and recreates the MapLibre map with
 `/packs/moldova.pmtiles`. The route panel keeps using the local `/map/route`
 handler; `LocalRouter` reloads a changed `packs/moldova.graph.bin` on the next
 request, so the route works immediately after the download without restarting
@@ -257,7 +260,9 @@ the server.
 
 `installed` is the exact expected byte length at the final path. The SHA-256
 was verified when that file was installed; status polling never re-hashes a
-93/106 MB file. `PINPOINT_ROUTER_GRAPH` still overrides the graph path for
+93/106 MB file. `download_bytes`/`downloaded_bytes` report the compressed
+transfer, while `expected_bytes`/`progress_bytes` report the installed
+(decompressed) size. `PINPOINT_ROUTER_GRAPH` still overrides the graph path for
 tests and development.
 
 ## Offline search
@@ -366,9 +371,9 @@ cargo test --locked --test map_offline_e2e -- --ignored --nocapture
 It asserts streamed progress, the installed status, `/map/config` pointing at
 `/packs/moldova.pmtiles`, the map source reloading with `206` ranges, a working
 local route from the downloaded graph, and zero external requests, failed
-requests, page errors or console errors. The real 204 MB release is never
-committed; the test fixtures are the 94 KB Monaco archive and a few hundred
-bytes of synthetic graph.
+requests, page errors or console errors. The real 139 MB transfer (204 MB
+installed) is never committed; the test fixtures are the 94 KB Monaco archive
+and a small gzipped synthetic graph.
 
 The route panel has its own ignored Rust + Chromium E2E (synthetic graph by
 default, real Moldova cache with `PINPOINT_E2E_GRAPH`):

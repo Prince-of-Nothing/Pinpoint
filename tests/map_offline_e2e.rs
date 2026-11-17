@@ -2,10 +2,10 @@
 //!
 //! Starts the real desktop loopback [`MapServer`] with a temporary `packs/`
 //! directory and a local artifact host that streams the committed Monaco
-//! PMTiles fixture plus a synthetic `native_router` graph. The page clicks the
-//! **Offline map** download button and the test asserts progress, the installed
-//! state, `/map/config`, the reload onto `/packs/moldova.pmtiles`, and a local
-//! route from the downloaded graph.
+//! PMTiles fixture plus a gzip-compressed synthetic `native_router` graph. The
+//! page clicks the **Offline map** download button and the test asserts
+//! progress, the installed state, `/map/config`, the reload onto
+//! `/packs/moldova.pmtiles`, and a local route from the downloaded graph.
 //!
 //! Ignored because it needs Node, Puppeteer (`NODE_PATH`) and Chromium:
 //!
@@ -14,7 +14,8 @@
 //! cargo test --locked --test map_offline_e2e -- --ignored --nocapture
 //! ```
 //!
-//! The 93/106 MB release files and the temporary pack are never committed.
+//! The 139 MB transfer (204 MB installed) and temporary packs are never
+//! committed.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -28,11 +29,10 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
 use native_router::{haversine_m, Edge, Graph, Node, RoadClass};
-use sha2::{Digest, Sha256};
 use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
-use pinpoint_desktop::offline_install::{DownloadPlan, GRAPH_FILE, PACK_FILE};
+use pinpoint_desktop::offline_install::{DownloadPlan, GRAPH_FILE, GRAPH_GZ_FILE, PACK_FILE};
 
 const CHISINAU: (f64, f64) = (47.0105, 28.8638);
 const BALTI: (f64, f64) = (47.76, 27.93);
@@ -76,12 +76,13 @@ fn synthetic_moldova_graph() -> Graph {
     Graph::from_edges_with_names(nodes, edges, names)
 }
 
-fn hex(bytes: &[u8]) -> String {
-    let mut output = String::with_capacity(bytes.len() * 2);
-    for byte in bytes {
-        output.push_str(&format!("{byte:02x}"));
-    }
-    output
+fn gzip(bytes: &[u8]) -> Vec<u8> {
+    use flate2::write::GzEncoder;
+    use std::io::Write as _;
+
+    let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
+    encoder.write_all(bytes).expect("gzip synthetic graph");
+    encoder.finish().expect("gzip synthetic graph")
 }
 
 struct ArtifactHost {
@@ -92,13 +93,13 @@ struct ArtifactHost {
 
 struct HostState {
     pack: Vec<u8>,
-    graph: Vec<u8>,
+    graph_gz: Vec<u8>,
     delay: Duration,
 }
 
 /// A local stand-in for the GitHub data release. Bodies stream in 1 KiB
 /// chunks so the page has time to render a real progress bar.
-fn artifact_host(pack: Vec<u8>, graph: Vec<u8>) -> ArtifactHost {
+fn artifact_host(pack: Vec<u8>, graph_gz: Vec<u8>) -> ArtifactHost {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -106,7 +107,7 @@ fn artifact_host(pack: Vec<u8>, graph: Vec<u8>) -> ArtifactHost {
 
     let state = Arc::new(HostState {
         pack,
-        graph,
+        graph_gz,
         delay: Duration::from_millis(20),
     });
     let app = Router::new()
@@ -132,7 +133,7 @@ fn artifact_host(pack: Vec<u8>, graph: Vec<u8>) -> ArtifactHost {
 async fn artifact(State(state): State<Arc<HostState>>, Path(name): Path<String>) -> Response {
     let bytes = match name.as_str() {
         PACK_FILE => state.pack.clone(),
-        GRAPH_FILE => state.graph.clone(),
+        GRAPH_GZ_FILE => state.graph_gz.clone(),
         _ => return (StatusCode::NOT_FOUND, "Not Found").into_response(),
     };
     let total = bytes.len() as u64;
@@ -170,15 +171,10 @@ fn downloads_and_installs_the_offline_pack_from_the_page() {
         .save(&graph_path)
         .expect("save synthetic graph");
     let graph = std::fs::read(&graph_path).expect("read synthetic graph");
+    let graph_gz = gzip(&graph);
 
-    let host = artifact_host(pack.clone(), graph.clone());
-    let plan = DownloadPlan::fixture(
-        &host.base_url,
-        pack.len() as u64,
-        hex(&Sha256::digest(&pack)),
-        graph.len() as u64,
-        hex(&Sha256::digest(&graph)),
-    );
+    let host = artifact_host(pack.clone(), graph_gz.clone());
+    let plan = DownloadPlan::fixture_gzip(&host.base_url, &pack, &graph_gz, &graph);
 
     let packs = tempfile::tempdir().expect("packs temp dir");
     let server = pinpoint_desktop::map_server::MapServer::start_with_plan(
@@ -211,6 +207,15 @@ fn downloads_and_installs_the_offline_pack_from_the_page() {
     assert!(
         packs.path().join(GRAPH_FILE).is_file(),
         "the routing graph was installed"
+    );
+    assert_eq!(
+        std::fs::read(packs.path().join(GRAPH_FILE)).expect("installed graph"),
+        graph,
+        "the installed graph is the decompressed transfer"
+    );
+    assert!(
+        !packs.path().join(GRAPH_GZ_FILE).exists(),
+        "the gzip transfer is not installed"
     );
     drop(host);
 }

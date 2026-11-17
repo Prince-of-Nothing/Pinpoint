@@ -326,13 +326,20 @@
       lastStatus = status;
       const pack = status?.pack ?? {};
       const graph = status?.graph ?? {};
-      const expected = Number(pack.expected_bytes || 0) + Number(graph.expected_bytes || 0);
+      const installedBytes =
+        Number(pack.expected_bytes || 0) + Number(graph.expected_bytes || 0);
+      // The graph is transferred gzip-compressed, so the download total is
+      // smaller than the installed size. Always compute the label from the
+      // status the server reports instead of hard-coding a size.
+      const expected =
+        Number(pack.download_bytes || 0) + Number(graph.download_bytes || 0);
       const progress =
-        Number(pack.progress_bytes || 0) + Number(graph.progress_bytes || 0);
+        Number(pack.downloaded_bytes || 0) + Number(graph.downloaded_bytes || 0);
       const installed = pack.installed === true && graph.installed === true;
       const running = runningState(status);
       const error = String(pack.error || graph.error || "");
       const totalLabel = formatBytes(expected);
+      const diskLabel = formatBytes(installedBytes);
 
       // The static preview server reports expected_bytes: 0 because it has no
       // Rust download manager. Keep the card honest instead of offering a
@@ -364,7 +371,7 @@
         offlineDetail.textContent = "The installed offline map was kept.";
       } else if (installed) {
         offlineBadge.textContent = "Installed";
-        offlineDetail.textContent = `Moldova · ${totalLabel} on disk`;
+        offlineDetail.textContent = `Moldova · ${diskLabel} on disk`;
       } else if (running) {
         const phase = [pack.phase, graph.phase].includes("verifying")
           ? "Verifying"

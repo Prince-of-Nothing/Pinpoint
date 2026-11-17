@@ -10,6 +10,10 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [Unreleased]
+### Changed
+- [FEATURE] Mobile/desktop map: the routing graph is downloaded as `moldova.graph.bin.gz` (45,338,586 B) and decompressed while streaming, so the offline install transfers 139 MB instead of 204 MB while still installing the same 110,858,815-byte verified graph (204 MB on disk).
+
 ## [2.2.0] - 2026-11-17
 ### Added
 - [FEATURE] Mobile/desktop map: the map window downloads the published Moldova PMTiles archive and routing graph into the app's `packs/` directory through a shared native installer; both artifacts are streamed, SHA-256 verified and atomically installed, `/map/config` points the page at `/packs/moldova.pmtiles` after install, both servers stream pack ranges, and the route panel uses the downloaded graph.

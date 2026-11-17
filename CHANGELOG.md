@@ -24,6 +24,7 @@ The per-item flagged list for this release is in
 ### Fixed
 - [FIX] Offline packs build in a staging work directory, verify there, and only then replace the published five-file pack, so a failed run never publishes a manifest or partial artifacts; downloads and container images are hash/digest pinned and manifests carry publish URLs.
 - [FIX] Android: the WebView now enables geolocation and requests fine/coarse location and notification permissions at runtime, so the system dialog appears and GPS works; denial shows a visible message instead of silently stopping the location service.
+- [FIX] Offline pack fixture: pin `web/app/fixtures/offline-pack/LICENSE.txt` to LF so its 405 bytes and SHA-256 match the manifest on Windows checkouts; CRLF conversion previously made the real Monaco download fail verification.
 - [FEATURE] Web offline packs: a same-origin pack catalog, manifest and SHA-256 verification, OPFS storage, a Range-capable service worker, download/update/delete UI, and a headless OPFS smoke test.
 - [FEATURE] Desktop map window (opt-in `map-webview`): a loopback axum server with HTTP Range serves `web/map/` and `web/vendor/`, and a separate `wry` WebView process opens the same MapLibre page; the egui map stays as the fallback and a system-browser hand-off covers missing WebView2/WebKitGTK runtimes.
 - [FEATURE] Android: the shared MapLibre page now runs in a full-screen WebView, served from a loopback-only Axum server with HTTP Range support, a loopback navigation allowlist and a click/share JavaScript bridge.

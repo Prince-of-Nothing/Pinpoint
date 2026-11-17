@@ -1,3 +1,43 @@
+# Pinpoint 2.0.1 - Release Notes
+
+**Released:** 2026-11-17 - **Version:** `2.0.1` (from `2.0.0`) -
+**Status:** Registration persistence hotfix.
+
+**Artifacts:** `pinpoint-android-2.0.1.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source archives for the `v2.0.1` tag.
+
+## The bug
+
+Live 2.0.0 verification found that `POST /api/v1/auth/register` could return
+`201` with a user and session that existed only in the serving replica's
+memory. The five-second Postgres refresh could replace the store before the
+new row was persisted, so the next `/auth/me` or login returned `401` and the
+next registration reused the same id. Three consecutive registrations
+reproduced it.
+
+## Fix
+
+- Registration now allocates the id and inserts the user row directly into
+  Postgres before creating the session. A failed insert returns
+  `REGISTRATION_FAILED` instead of a false `201`.
+- The strict insert does not silently fall back to the in-memory counter when
+  Postgres is configured; in-memory mode still works for tests and demos.
+- Added a router test that registers, then uses the returned session cookie
+  for `/auth/me`.
+
+## Verification
+
+- `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`
+  and `cargo test --locked` pass; the new registration session test is green.
+- Live check after deploy: register -> `/auth/me` `200` -> login `200` ->
+  delete -> login `401`. Results are recorded in the PR.
+
+## Upgrade
+
+Install over 2.0.0. No client, map, pack or database migration changes are
+required.
+
+---
 # Pinpoint 2.0.0 - Release Notes
 
 **Released:** 2026-11-17 - **Version:** `2.0.0` (from `1.5.3`) -

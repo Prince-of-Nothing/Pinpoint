@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{
     AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
-    LocationShare, User,
+    LocationPoint, LocationShare, PlaceNote, User,
 };
 
 /// Per-domain slices of the shared aggregate. `Store` keeps them as
@@ -35,6 +35,13 @@ pub struct Store {
     pub diagnostic_reports: Vec<DiagnosticReport>,
     #[serde(default)]
     pub admin_audit: Vec<AdminAuditEntry>,
+    /// Private daily trail and place notes: never part of the shared JSON
+    /// snapshot (photos can be large); loaded from their own tables and
+    /// written directly.
+    #[serde(skip)]
+    pub location_history: Vec<LocationPoint>,
+    #[serde(skip)]
+    pub place_notes: Vec<PlaceNote>,
     #[serde(default)]
     pub next_user_id: i64,
     #[serde(default)]
@@ -49,6 +56,10 @@ pub struct Store {
     pub next_report_id: i64,
     #[serde(default)]
     pub next_audit_id: i64,
+    #[serde(skip)]
+    pub next_history_id: i64,
+    #[serde(skip)]
+    pub next_note_id: i64,
 }
 
 impl Store {
@@ -61,6 +72,8 @@ impl Store {
             next_emergency_id: 1,
             next_report_id: 1,
             next_audit_id: 1,
+            next_history_id: 1,
+            next_note_id: 1,
             ..Default::default()
         }
     }
@@ -83,6 +96,7 @@ impl Store {
             next_emergency_id: self.next_emergency_id,
             next_report_id: self.next_report_id,
             next_audit_id: self.next_audit_id,
+            ..Default::default()
         }
     }
 

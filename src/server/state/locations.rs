@@ -6,7 +6,9 @@
 //! they reference) for upserts, children-first for deletes.
 
 use super::{AppState, Store};
-use crate::models::{CheckIn, EmergencyAlert, FriendLocation, LocationShare};
+use crate::models::{
+    CheckIn, EmergencyAlert, FriendLocation, LocationPoint, LocationShare, PlaceNote,
+};
 
 impl AppState {
     pub(super) async fn load_locations_domain(&self, store: &mut Store) {
@@ -213,6 +215,85 @@ impl AppState {
         let Some(pool) = &self.pg else { return };
         let _ = sqlx::query("DELETE FROM pinpoint_emergencies WHERE id=$1")
             .bind(id)
+            .execute(pool)
+            .await;
+    }
+
+    /// Append one point to the owner's private daily trail. The store keeps a
+    /// short window for immediate reads; Postgres keeps seven days.
+    pub async fn record_location(
+        &self,
+        user_id: i64,
+        latitude: f64,
+        longitude: f64,
+        accuracy: Option<f64>,
+    ) {
+        let point = {
+            let mut store = self.store.lock().unwrap();
+            let id = store.next_history_id;
+            store.next_history_id += 1;
+            let point = LocationPoint {
+                id,
+                user_id,
+                latitude,
+                longitude,
+                accuracy,
+                recorded_at: chrono::Utc::now().to_rfc3339(),
+            };
+            if self.pg.is_none() {
+                store.location_history.push(point.clone());
+            }
+            point
+        };
+        let Some(pool) = &self.pg else { return };
+        let _ = sqlx::query(
+            "INSERT INTO pinpoint_location_history (user_id, latitude, longitude, accuracy, recorded_at) VALUES ($1,$2,$3,$4,$5)",
+        )
+        .bind(point.user_id)
+        .bind(point.latitude)
+        .bind(point.longitude)
+        .bind(point.accuracy)
+        .bind(&point.recorded_at)
+        .execute(pool)
+        .await;
+        let cutoff = (chrono::Utc::now() - chrono::Duration::days(7)).to_rfc3339();
+        let _ = sqlx::query(
+            "DELETE FROM pinpoint_location_history WHERE user_id=$1 AND recorded_at < $2",
+        )
+        .bind(user_id)
+        .bind(cutoff)
+        .execute(pool)
+        .await;
+    }
+
+    /// Insert a private note and return the durable id (the in-memory id when
+    /// no database is configured).
+    pub async fn sql_insert_note(&self, note: &PlaceNote) -> i64 {
+        let Some(pool) = &self.pg else {
+            return note.id;
+        };
+        let row: Option<(i64,)> = sqlx::query_as(
+            "INSERT INTO pinpoint_place_notes (user_id, latitude, longitude, label, message, photo, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
+        )
+        .bind(note.user_id)
+        .bind(note.latitude)
+        .bind(note.longitude)
+        .bind(&note.label)
+        .bind(&note.message)
+        .bind(&note.photo)
+        .bind(&note.created_at)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten();
+        row.map(|(id,)| id).unwrap_or(note.id)
+    }
+
+    pub async fn sql_delete_place_note(&self, id: i64, user_id: i64) {
+        let Some(pool) = &self.pg else { return };
+        let _ = sqlx::query("DELETE FROM pinpoint_place_notes WHERE id=$1 AND user_id=$2")
+            .bind(id)
+            .bind(user_id)
             .execute(pool)
             .await;
     }

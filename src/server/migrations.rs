@@ -129,6 +129,16 @@ pub const MIGRATIONS: &[(u32, &str, &[&str])] = &[
             "ALTER TABLE pinpoint_counters ADD COLUMN IF NOT EXISTS next_audit_id BIGINT DEFAULT 1",
         ],
     ),
+    (
+        16,
+        "daily_trail_and_place_notes",
+        &[
+            "CREATE TABLE IF NOT EXISTS pinpoint_location_history (id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, latitude DOUBLE PRECISION NOT NULL, longitude DOUBLE PRECISION NOT NULL, accuracy DOUBLE PRECISION, recorded_at TEXT NOT NULL)",
+            "CREATE INDEX IF NOT EXISTS idx_location_history_user_time ON pinpoint_location_history(user_id, recorded_at DESC)",
+            "CREATE TABLE IF NOT EXISTS pinpoint_place_notes (id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, latitude DOUBLE PRECISION NOT NULL, longitude DOUBLE PRECISION NOT NULL, label TEXT NOT NULL DEFAULT '', message TEXT NOT NULL, photo TEXT, created_at TEXT NOT NULL)",
+            "CREATE INDEX IF NOT EXISTS idx_place_notes_user_time ON pinpoint_place_notes(user_id, created_at DESC)",
+        ],
+    ),
 ];
 
 /// Apply all pending migrations (idempotent, recorded in version table).

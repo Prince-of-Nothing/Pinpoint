@@ -10,23 +10,29 @@
 //! * `GET|HEAD /packs/<name>.pmtiles` — the installed archive with HTTP
 //!   `Range` support (`206`/`416`), which PMTiles requires.
 //!
-//! The Rust process downloads the two data-release artifacts itself, streams
-//! each response into a sibling temp file, checks the exact byte length and an
-//! incremental SHA-256 digest, and only then atomically renames the temp file
-//! over the installed path. A failed or truncated download therefore never
-//! replaces a working pack. Nothing here calls a CDN, a geocoder or a routing
-//! service, and no session or account data is involved.
+//! The Rust process downloads the two data-release artifacts itself. The
+//! PMTiles archive is already compressed internally, so it is transferred
+//! as-is. The routing graph is published gzip-compressed and is streamed
+//! through an incremental decoder into a sibling temp `moldova.graph.bin`.
+//! Both artifacts are length-checked and SHA-256 verified (the graph on the
+//! decompressed bytes, plus the compressed transfer), and only then is the
+//! temp file atomically renamed over the installed path. A failed, truncated
+//! or corrupt download therefore never replaces a working pack. Nothing here
+//! calls a CDN, a geocoder or a routing service, and no session or account
+//! data is involved.
 //!
 //! Release artifacts (immutable `data-moldova-20261116` tag):
 //!
-//! | file | bytes | SHA-256 |
-//! |---|---:|---|
-//! | `moldova.pmtiles` | 93,172,399 | `7b2715…24f2e` |
-//! | `moldova.graph.bin` | 110,858,815 | `8cdbb0…0e75` |
+//! | transfer | bytes | SHA-256 | installed | bytes | SHA-256 |
+//! |---|---:|---|---|---:|---|
+//! | `moldova.pmtiles` | 93,172,399 | `7b2715…24f2e` | `moldova.pmtiles` | 93,172,399 | `7b2715…24f2e` |
+//! | `moldova.graph.bin.gz` | 45,338,586 | `276d0d…c9087` | `moldova.graph.bin` | 110,858,815 | `8cdbb0…0e75` |
 //!
-//! `PINPOINT_OFFLINE_BASE_URL` overrides the release host for local tests and
-//! offline mirrors. Both map servers share the module, but each server owns an
-//! installer bound to its own `packs/` directory, so tests can use temp dirs.
+//! The expected transfer is 138,510,985 bytes (**139 MB**); the installed
+//! files occupy 204,031,214 bytes. `PINPOINT_OFFLINE_BASE_URL` overrides the
+//! release host for local tests and offline mirrors. Both map servers share
+//! the module, but each server owns an installer bound to its own `packs/`
+//! directory, so tests can use temp dirs.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -37,6 +43,7 @@ use axum::extract::{Extension, Path as UrlPath};
 use axum::http::{header, HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
+use flate2::{Decompress, FlushDecompress, Status};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
@@ -61,6 +68,18 @@ pub const PACK_SHA256: &str = "7b27155519e3384e1520d1a3dc6488f93cf1e46292dae2212
 pub const GRAPH_BYTES: u64 = 110_858_815;
 pub const GRAPH_SHA256: &str = "8cdbb0cb1d61c2d5857cb2677ab1343968223e4ae10892f0268c8feb0eb50e75";
 
+/// Published gzip transfer of the routing graph.
+pub const GRAPH_GZ_FILE: &str = "moldova.graph.bin.gz";
+pub const GRAPH_GZ_BYTES: u64 = 45_338_586;
+pub const GRAPH_GZ_SHA256: &str =
+    "276d0ddd3058524038f53a6562c86a12c408693a1e84bbb316c9db16badc9087";
+
+/// Expected bytes on the wire for both artifacts (139 MB decimal).
+pub const DOWNLOAD_BYTES: u64 = PACK_BYTES + GRAPH_GZ_BYTES;
+
+/// Expected bytes on disk after decompression (204 MB decimal).
+pub const INSTALLED_BYTES: u64 = PACK_BYTES + GRAPH_BYTES;
+
 /// The Monaco fixture used until the Moldova pack is installed. It matches
 /// `web/map/fixtures/monaco.pmtiles` and is served by both map servers.
 pub const FIXTURE_URL: &str = "./fixtures/monaco.pmtiles";
@@ -68,28 +87,59 @@ pub const FIXTURE_URL: &str = "./fixtures/monaco.pmtiles";
 const MIME_PMTILES: &str = "application/octet-stream";
 const MIME_TEXT: &str = "text/plain; charset=utf-8";
 
+/// Decoded output is written to disk in 64 KiB pieces; neither the 45 MB
+/// transfer nor the 111 MB graph is buffered in memory.
+const DECOMPRESS_BUFFER_BYTES: usize = 64 * 1024;
+
+/// How a published artifact is encoded on the wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Compression {
+    /// The transfer bytes are the installed file.
+    Identity,
+    /// A gzip stream that is decoded into the installed file.
+    Gzip,
+}
+
 /// One release artifact and the metadata a successful install must match.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArtifactSpec {
+    /// Published asset name below the release base URL.
+    pub transfer_name: &'static str,
+    /// Exact transfer (compressed) byte length.
+    pub transfer_bytes: u64,
+    /// SHA-256 of the transfer bytes.
+    pub transfer_sha256: String,
+    /// Installed file name below `packs/`.
     pub name: &'static str,
+    /// Exact installed (decompressed) byte length.
     pub expected_bytes: u64,
+    /// SHA-256 of the installed (decompressed) bytes.
     pub sha256: String,
+    pub compression: Compression,
 }
 
 impl ArtifactSpec {
     fn pack() -> Self {
         Self {
+            transfer_name: PACK_FILE,
+            transfer_bytes: PACK_BYTES,
+            transfer_sha256: PACK_SHA256.to_string(),
             name: PACK_FILE,
             expected_bytes: PACK_BYTES,
             sha256: PACK_SHA256.to_string(),
+            compression: Compression::Identity,
         }
     }
 
     fn graph() -> Self {
         Self {
+            transfer_name: GRAPH_GZ_FILE,
+            transfer_bytes: GRAPH_GZ_BYTES,
+            transfer_sha256: GRAPH_GZ_SHA256.to_string(),
             name: GRAPH_FILE,
             expected_bytes: GRAPH_BYTES,
             sha256: GRAPH_SHA256.to_string(),
+            compression: Compression::Gzip,
         }
     }
 }
@@ -118,26 +168,53 @@ impl Default for DownloadPlan {
 }
 
 impl DownloadPlan {
+    /// Total transfer bytes both artifacts are expected to download.
+    pub fn expected_download_bytes(&self) -> u64 {
+        self.pack
+            .transfer_bytes
+            .saturating_add(self.graph.transfer_bytes)
+    }
+
+    /// Total installed (decompressed) bytes both artifacts are expected to
+    /// occupy.
+    pub fn expected_installed_bytes(&self) -> u64 {
+        self.pack
+            .expected_bytes
+            .saturating_add(self.graph.expected_bytes)
+    }
+
     /// Build a fixture plan with the production file names and custom
-    /// metadata. Both names stay fixed, so a plan can never escape `packs/`.
-    pub fn fixture(
+    /// payloads. The graph is served gzip-compressed from `graph_gz` and must
+    /// decode to `graph`. Both names stay fixed, so a plan can never escape
+    /// `packs/`.
+    pub fn fixture_gzip(
         base_url: impl Into<String>,
-        pack_bytes: u64,
-        pack_sha256: impl Into<String>,
-        graph_bytes: u64,
-        graph_sha256: impl Into<String>,
+        pack: &[u8],
+        graph_gz: &[u8],
+        graph: &[u8],
     ) -> Self {
+        let pack_sha256 = hex(&Sha256::digest(pack));
+        let graph_sha256 = hex(&Sha256::digest(graph));
+        let graph_gz_sha256 = hex(&Sha256::digest(graph_gz));
         Self {
             base_url: Some(base_url.into()),
             pack: ArtifactSpec {
+                transfer_name: PACK_FILE,
+                transfer_bytes: pack.len() as u64,
+                transfer_sha256: pack_sha256.clone(),
                 name: PACK_FILE,
-                expected_bytes: pack_bytes,
-                sha256: pack_sha256.into(),
+                expected_bytes: pack.len() as u64,
+                sha256: pack_sha256,
+                compression: Compression::Identity,
             },
             graph: ArtifactSpec {
+                transfer_name: GRAPH_GZ_FILE,
+                transfer_bytes: graph_gz.len() as u64,
+                transfer_sha256: graph_gz_sha256,
                 name: GRAPH_FILE,
-                expected_bytes: graph_bytes,
-                sha256: graph_sha256.into(),
+                expected_bytes: graph.len() as u64,
+                sha256: graph_sha256,
+                compression: Compression::Gzip,
             },
         }
     }
@@ -175,10 +252,18 @@ pub struct FileStatus {
     /// length is checked on every status call; the SHA-256 was checked when
     /// the file was installed.
     pub installed: bool,
-    /// Current installed file length, or `0` when absent.
+    /// Current installed (decompressed) file length, or `0` when absent.
     pub bytes: u64,
+    /// Expected installed (decompressed) file length.
     pub expected_bytes: u64,
-    /// Download progress for the running job, or the installed size at rest.
+    /// Expected transfer length of the published artifact. The graph is gzip
+    /// on the wire, so this is smaller than `expected_bytes`.
+    pub download_bytes: u64,
+    /// Transfer bytes received by the running job, or the full transfer
+    /// length when the artifact is installed.
+    pub downloaded_bytes: u64,
+    /// Decompressed bytes written by the running job, or the installed size
+    /// at rest.
     pub progress_bytes: u64,
     pub phase: Phase,
     /// Failure detail. `null` when there is no error.
@@ -190,6 +275,8 @@ pub struct FileStatus {
 pub struct OfflineStatus {
     pub pack: FileStatus,
     pub graph: FileStatus,
+    /// Total transfer bytes expected for both artifacts (139 MB).
+    pub expected_download_bytes: u64,
 }
 
 /// Config body for `GET /map/config`.
@@ -213,6 +300,9 @@ pub enum StartOutcome {
 #[derive(Debug, Clone)]
 struct FileState {
     phase: Phase,
+    /// Transfer bytes received for the current job.
+    downloaded_bytes: u64,
+    /// Decompressed bytes written for the current job.
     progress_bytes: u64,
     error: Option<String>,
 }
@@ -221,6 +311,7 @@ impl FileState {
     fn idle() -> Self {
         Self {
             phase: Phase::Idle,
+            downloaded_bytes: 0,
             progress_bytes: 0,
             error: None,
         }
@@ -301,7 +392,11 @@ impl OfflineInstaller {
         let graph = self
             .file_status(&self.plan.graph, &graph_state, running)
             .await;
-        OfflineStatus { pack, graph }
+        OfflineStatus {
+            pack,
+            graph,
+            expected_download_bytes: self.plan.expected_download_bytes(),
+        }
     }
 
     async fn file_status(
@@ -324,18 +419,18 @@ impl OfflineInstaller {
             Phase::Idle if installed => Phase::Installed,
             other => other,
         };
-        let progress_bytes = if running {
-            state.progress_bytes
-        } else if phase == Phase::Installed {
-            bytes
+        let (progress_bytes, downloaded_bytes) = if !running && phase == Phase::Installed {
+            (bytes, spec.transfer_bytes)
         } else {
-            state.progress_bytes
+            (state.progress_bytes, state.downloaded_bytes)
         };
 
         FileStatus {
             installed,
             bytes,
             expected_bytes: spec.expected_bytes,
+            download_bytes: spec.transfer_bytes,
+            downloaded_bytes,
             progress_bytes,
             phase,
             error: state.error.clone(),
@@ -380,6 +475,13 @@ impl OfflineInstaller {
                 "the offline download plan names an unsupported artifact".to_string(),
             );
         }
+        if !valid_transfer_name(self.plan.pack.transfer_name)
+            || !valid_transfer_name(self.plan.graph.transfer_name)
+        {
+            return StartOutcome::Unavailable(
+                "the offline download plan names an unsupported transfer".to_string(),
+            );
+        }
 
         {
             let mut job = self.job.lock().unwrap_or_else(|poison| poison.into_inner());
@@ -389,11 +491,13 @@ impl OfflineInstaller {
             job.running = true;
             job.pack = FileState {
                 phase: Phase::Downloading,
+                downloaded_bytes: 0,
                 progress_bytes: 0,
                 error: None,
             };
             job.graph = FileState {
                 phase: Phase::Downloading,
+                downloaded_bytes: 0,
                 progress_bytes: 0,
                 error: None,
             };
@@ -439,8 +543,11 @@ impl OfflineInstaller {
         base: &str,
         spec: &ArtifactSpec,
     ) -> Result<(), String> {
-        if !valid_artifact_name(spec.name) {
-            return Err(format!("unsupported artifact name {:?}", spec.name));
+        if !valid_artifact_name(spec.name) || !valid_transfer_name(spec.transfer_name) {
+            return Err(format!(
+                "unsupported artifact {:?} / transfer {:?}",
+                spec.name, spec.transfer_name
+            ));
         }
         let dir = self
             .packs_dir
@@ -456,92 +563,30 @@ impl OfflineInstaller {
         // valid install and must not be resumed blindly.
         let _ = tokio::fs::remove_file(&temp).await;
 
-        let url = format!("{base}/{}", spec.name);
-        let response = client
-            .get(&url)
-            .header(header::ACCEPT_ENCODING, "identity")
-            .send()
-            .await
-            .map_err(|error| format!("could not download {url}: {error}"))?;
-        if !response.status().is_success() {
-            return Err(format!(
-                "{url} returned HTTP {} instead of a successful artifact",
-                response.status()
-            ));
-        }
-        if let Some(length) = response.content_length() {
-            if length != spec.expected_bytes {
-                return Err(format!(
-                    "{url} declared {length} bytes but {} is expected",
-                    spec.expected_bytes
-                ));
-            }
-        }
-
-        let mut file = tokio::fs::File::create(&temp)
-            .await
-            .map_err(|error| format!("could not create {}: {error}", temp.display()))?;
-        let mut hasher = Sha256::new();
-        let mut written = 0_u64;
-        let mut body = response;
-
-        loop {
-            let chunk = match body.chunk().await {
-                Ok(chunk) => chunk,
-                Err(error) => {
-                    drop(file);
-                    let _ = tokio::fs::remove_file(&temp).await;
-                    return Err(format!("download of {url} failed: {error}"));
-                }
-            };
-            let Some(chunk) = chunk else {
-                break;
-            };
-            if written.saturating_add(chunk.len() as u64) > spec.expected_bytes {
-                drop(file);
+        let url = format!("{base}/{}", spec.transfer_name);
+        let (digest, transfer_digest) = match self.stream_artifact(client, spec, &url, &temp).await
+        {
+            Ok(digests) => digests,
+            Err(error) => {
                 let _ = tokio::fs::remove_file(&temp).await;
-                return Err(format!(
-                    "{url} sent more than the expected {} bytes",
-                    spec.expected_bytes
-                ));
+                return Err(error);
             }
-            if let Err(error) = file.write_all(&chunk).await {
-                drop(file);
-                let _ = tokio::fs::remove_file(&temp).await;
-                return Err(format!("could not write {}: {error}", temp.display()));
-            }
-            hasher.update(&chunk);
-            written += chunk.len() as u64;
-            self.set_progress(spec.name, written);
-        }
-
-        if let Err(error) = file.flush().await {
-            drop(file);
-            let _ = tokio::fs::remove_file(&temp).await;
-            return Err(format!("could not flush {}: {error}", temp.display()));
-        }
-        if let Err(error) = file.sync_all().await {
-            drop(file);
-            let _ = tokio::fs::remove_file(&temp).await;
-            return Err(format!("could not sync {}: {error}", temp.display()));
-        }
-        drop(file);
-
-        if written != spec.expected_bytes {
-            let _ = tokio::fs::remove_file(&temp).await;
-            return Err(format!(
-                "{url} ended after {written} bytes; {} were expected",
-                spec.expected_bytes
-            ));
-        }
+        };
 
         self.set_phase(spec.name, Phase::Verifying);
-        let digest = hex(&hasher.finalize());
         if digest != spec.sha256.to_ascii_lowercase() {
             let _ = tokio::fs::remove_file(&temp).await;
             return Err(format!(
-                "{url} failed SHA-256 verification (got {digest}, expected {})",
+                "{url} failed installed SHA-256 verification (got {digest}, expected {})",
                 spec.sha256
+            ));
+        }
+        let expected_transfer = spec.transfer_sha256.to_ascii_lowercase();
+        if !expected_transfer.is_empty() && transfer_digest != expected_transfer {
+            let _ = tokio::fs::remove_file(&temp).await;
+            return Err(format!(
+                "{url} failed transfer SHA-256 verification (got {transfer_digest}, expected {})",
+                spec.transfer_sha256
             ));
         }
 
@@ -556,17 +601,214 @@ impl OfflineInstaller {
             let mut job = self.job.lock().unwrap_or_else(|poison| poison.into_inner());
             let state = job.state_mut(spec.name);
             state.phase = Phase::Installed;
+            state.downloaded_bytes = spec.transfer_bytes;
             state.progress_bytes = spec.expected_bytes;
             state.error = None;
         }
         Ok(())
     }
 
-    fn set_progress(&self, name: &str, progress: u64) {
+    /// Stream one response into `temp`, decoding gzip as it arrives. Returns
+    /// `(installed_sha256, transfer_sha256)`. The caller removes `temp` on
+    /// any error, so a partial or corrupt transfer never reaches `packs/`.
+    async fn stream_artifact(
+        &self,
+        client: &reqwest::Client,
+        spec: &ArtifactSpec,
+        url: &str,
+        temp: &Path,
+    ) -> Result<(String, String), String> {
+        let response = client
+            .get(url)
+            .header(header::ACCEPT_ENCODING, "identity")
+            .send()
+            .await
+            .map_err(|error| format!("could not download {url}: {error}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "{url} returned HTTP {} instead of a successful artifact",
+                response.status()
+            ));
+        }
+        if let Some(length) = response.content_length() {
+            if length != spec.transfer_bytes {
+                return Err(format!(
+                    "{url} declared {length} bytes but {} are expected",
+                    spec.transfer_bytes
+                ));
+            }
+        }
+
+        let mut file = tokio::fs::File::create(temp)
+            .await
+            .map_err(|error| format!("could not create {}: {error}", temp.display()))?;
+        let mut installed_hasher = Sha256::new();
+        let mut transfer_hasher = Sha256::new();
+        let mut downloaded = 0_u64;
+        let mut written = 0_u64;
+        let identity = spec.compression == Compression::Identity;
+        // flate2's pure-Rust backend inflates raw DEFLATE; the gzip wrapper
+        // is parsed incrementally here, so a 45 MB transfer is never buffered.
+        let mut decoder = (!identity).then(|| Decompress::new(false));
+        let mut header = (!identity).then(GzipHeaderParser::new);
+        let mut finished = identity;
+        let mut trailer = Vec::with_capacity(8);
+        let mut buffered = Vec::new();
+        let mut buffer = vec![0_u8; DECOMPRESS_BUFFER_BYTES];
+        let mut body = response;
+
+        loop {
+            let chunk = body
+                .chunk()
+                .await
+                .map_err(|error| format!("download of {url} failed: {error}"))?;
+            let Some(chunk) = chunk else {
+                break;
+            };
+            if downloaded.saturating_add(chunk.len() as u64) > spec.transfer_bytes {
+                return Err(format!(
+                    "{url} sent more than the expected {} bytes",
+                    spec.transfer_bytes
+                ));
+            }
+            transfer_hasher.update(&chunk);
+            downloaded += chunk.len() as u64;
+
+            if identity {
+                write_installed(
+                    &mut file,
+                    &mut installed_hasher,
+                    &mut written,
+                    spec.expected_bytes,
+                    url,
+                    &chunk,
+                )
+                .await?;
+                self.set_progress(spec.name, downloaded, written);
+                continue;
+            }
+
+            if finished {
+                trailer.extend_from_slice(&chunk);
+                if trailer.len() > 8 {
+                    return Err(format!("{url} sent bytes after the gzip trailer"));
+                }
+                self.set_progress(spec.name, downloaded, written);
+                continue;
+            }
+
+            let mut header_len = 0;
+            let mut parsed_header = false;
+            if let Some(parser) = header.as_mut() {
+                match parser.push(&chunk)? {
+                    Some(len) => {
+                        let mut parser = header.take().expect("gzip header parser");
+                        buffered = std::mem::take(&mut parser.bytes);
+                        header_len = len;
+                        parsed_header = true;
+                    }
+                    None => {
+                        self.set_progress(spec.name, downloaded, written);
+                        continue;
+                    }
+                }
+            }
+
+            let mut input: &[u8] = if parsed_header {
+                &buffered[header_len..]
+            } else {
+                &chunk
+            };
+            while !input.is_empty() {
+                let decoder = decoder.as_mut().expect("gzip decoder");
+                let before_in = decoder.total_in();
+                let before_out = decoder.total_out();
+                let status = decoder
+                    .decompress(input, &mut buffer, FlushDecompress::None)
+                    .map_err(|error| format!("{url} gzip decompression failed: {error}"))?;
+                let consumed = (decoder.total_in() - before_in) as usize;
+                let produced = (decoder.total_out() - before_out) as usize;
+                if produced > 0 {
+                    write_installed(
+                        &mut file,
+                        &mut installed_hasher,
+                        &mut written,
+                        spec.expected_bytes,
+                        url,
+                        &buffer[..produced],
+                    )
+                    .await?;
+                }
+                input = &input[consumed..];
+                if status == Status::StreamEnd {
+                    finished = true;
+                    trailer.extend_from_slice(input);
+                    if trailer.len() > 8 {
+                        return Err(format!("{url} sent bytes after the gzip trailer"));
+                    }
+                    break;
+                }
+                if input.is_empty() {
+                    // A full output buffer may still hold pending decoded
+                    // bytes; keep draining with empty input.
+                    if produced > 0 && produced == buffer.len() {
+                        continue;
+                    }
+                    break;
+                }
+                if consumed == 0 && produced == 0 {
+                    return Err(format!("{url} gzip decoder made no progress"));
+                }
+            }
+            self.set_progress(spec.name, downloaded, written);
+        }
+
+        if downloaded != spec.transfer_bytes {
+            return Err(format!(
+                "{url} ended after {downloaded} transfer bytes; {} were expected",
+                spec.transfer_bytes
+            ));
+        }
+        if !identity {
+            if !finished {
+                return Err(format!("{url} gzip stream ended before its trailer"));
+            }
+            if trailer.len() != 8 {
+                return Err(format!("{url} gzip trailer is incomplete"));
+            }
+            let declared = u32::from_le_bytes([trailer[4], trailer[5], trailer[6], trailer[7]]);
+            if declared != written as u32 {
+                return Err(format!(
+                    "{url} gzip size trailer is {declared} but {written} bytes were decoded"
+                ));
+            }
+        }
+        if written != spec.expected_bytes {
+            return Err(format!(
+                "{url} produced {written} bytes after decompression; {} were expected",
+                spec.expected_bytes
+            ));
+        }
+        file.flush()
+            .await
+            .map_err(|error| format!("could not flush {}: {error}", temp.display()))?;
+        file.sync_all()
+            .await
+            .map_err(|error| format!("could not sync {}: {error}", temp.display()))?;
+        drop(file);
+
+        Ok((
+            hex(&installed_hasher.finalize()),
+            hex(&transfer_hasher.finalize()),
+        ))
+    }
+
+    fn set_progress(&self, name: &str, downloaded: u64, written: u64) {
         let mut job = self.job.lock().unwrap_or_else(|poison| poison.into_inner());
         let state = job.state_mut(name);
         state.phase = Phase::Downloading;
-        state.progress_bytes = progress;
+        state.downloaded_bytes = downloaded;
+        state.progress_bytes = written;
     }
 
     fn set_phase(&self, name: &str, phase: Phase) {
@@ -597,9 +839,11 @@ impl OfflineInstaller {
         job.running = false;
         if success {
             job.pack.phase = Phase::Installed;
+            job.pack.downloaded_bytes = self.plan.pack.transfer_bytes;
             job.pack.progress_bytes = self.plan.pack.expected_bytes;
             job.pack.error = None;
             job.graph.phase = Phase::Installed;
+            job.graph.downloaded_bytes = self.plan.graph.transfer_bytes;
             job.graph.progress_bytes = self.plan.graph.expected_bytes;
             job.graph.error = None;
         } else {
@@ -617,9 +861,108 @@ fn settle_unstarted(state: &mut FileState) {
     }
 }
 
+async fn write_installed(
+    file: &mut tokio::fs::File,
+    hasher: &mut Sha256,
+    written: &mut u64,
+    limit: u64,
+    url: &str,
+    bytes: &[u8],
+) -> Result<(), String> {
+    if written.saturating_add(bytes.len() as u64) > limit {
+        return Err(format!(
+            "{url} decompressed to more than the expected {limit} bytes"
+        ));
+    }
+    file.write_all(bytes)
+        .await
+        .map_err(|error| format!("could not write the downloaded artifact: {error}"))?;
+    hasher.update(bytes);
+    *written += bytes.len() as u64;
+    Ok(())
+}
+
+/// Optional gzip header fields (FEXTRA/FNAME/FCOMMENT) are capped so a
+/// malformed stream cannot grow the header buffer without bound.
+const MAX_GZIP_HEADER_BYTES: usize = 1024 * 1024;
+
+/// Incremental RFC 1952 header parser. flate2's pure-Rust backend inflates
+/// raw DEFLATE, so the gzip wrapper is stripped before the decoder sees it.
+struct GzipHeaderParser {
+    bytes: Vec<u8>,
+}
+
+impl GzipHeaderParser {
+    fn new() -> Self {
+        Self { bytes: Vec::new() }
+    }
+
+    /// Append one transfer chunk. `Some(offset)` means the header is complete
+    /// and the DEFLATE payload starts at `offset` within [`Self::bytes`].
+    fn push(&mut self, chunk: &[u8]) -> Result<Option<usize>, String> {
+        self.bytes.extend_from_slice(chunk);
+        match self.header_len()? {
+            Some(offset) => Ok(Some(offset)),
+            None if self.bytes.len() > MAX_GZIP_HEADER_BYTES => Err(format!(
+                "gzip header is larger than {MAX_GZIP_HEADER_BYTES} bytes"
+            )),
+            None => Ok(None),
+        }
+    }
+
+    fn header_len(&self) -> Result<Option<usize>, String> {
+        let bytes = &self.bytes;
+        if bytes.len() < 10 {
+            return Ok(None);
+        }
+        if bytes[0] != 0x1f || bytes[1] != 0x8b {
+            return Err("the transfer is not a gzip stream".to_string());
+        }
+        if bytes[2] != 8 {
+            return Err(format!("unsupported gzip method {}", bytes[2]));
+        }
+        let flags = bytes[3];
+        if flags & 0xe0 != 0 {
+            return Err("gzip header has reserved flags set".to_string());
+        }
+
+        let mut offset = 10;
+        if flags & 0x04 != 0 {
+            if bytes.len() < offset + 2 {
+                return Ok(None);
+            }
+            let extra = u16::from_le_bytes([bytes[offset], bytes[offset + 1]]) as usize;
+            offset += 2 + extra;
+            if bytes.len() < offset {
+                return Ok(None);
+            }
+        }
+        for flag in [0x08_u8, 0x10] {
+            if flags & flag != 0 {
+                let Some(end) = bytes[offset..].iter().position(|byte| *byte == 0) else {
+                    return Ok(None);
+                };
+                offset += end + 1;
+            }
+        }
+        if flags & 0x02 != 0 {
+            offset += 2;
+            if bytes.len() < offset {
+                return Ok(None);
+            }
+        }
+        Ok(Some(offset))
+    }
+}
+
 /// Only the two published artifact names may be joined with `packs/`.
 fn valid_artifact_name(name: &str) -> bool {
     name == PACK_FILE || name == GRAPH_FILE
+}
+
+/// Only the published transfer names may be appended to the release URL.
+fn valid_transfer_name(name: &str) -> bool {
+    name == PACK_FILE || name == GRAPH_GZ_FILE
 }
 
 fn build_client() -> Result<reqwest::Client, String> {
@@ -943,41 +1286,51 @@ mod tests {
     use super::*;
     use axum::routing::get;
     use axum::Router;
+    use tokio::sync::Notify;
     use tower::ServiceExt;
 
-    fn sha256_hex(bytes: &[u8]) -> String {
-        hex(&Sha256::digest(bytes))
+    fn gzip(bytes: &[u8]) -> Vec<u8> {
+        use flate2::write::GzEncoder;
+        use std::io::Write as _;
+
+        let mut encoder = GzEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(bytes).expect("gzip fixture");
+        encoder.finish().expect("gzip fixture")
     }
 
-    fn fixture_plan(base: &str, pack: &[u8], graph: &[u8]) -> DownloadPlan {
-        DownloadPlan::fixture(
-            base,
-            pack.len() as u64,
-            sha256_hex(pack),
-            graph.len() as u64,
-            sha256_hex(graph),
-        )
-    }
-
-    /// Local stand-in for the GitHub release. The body is streamed in small
-    /// chunks so status polling observes real progress instead of one jump.
-    async fn fixture_server(pack: Vec<u8>, graph: Vec<u8>, chunk_delay: Duration) -> String {
+    /// Local stand-in for the GitHub release. The graph is published gzip
+    /// compressed, exactly like the real release asset. Bodies stream in
+    /// small chunks so status polling observes real progress. An optional
+    /// hold pauses the graph after its first chunk until the test releases
+    /// it, making a partial transfer observable on any scheduler.
+    async fn fixture_server(
+        pack: Vec<u8>,
+        graph_gz: Vec<u8>,
+        chunk_delay: Duration,
+        graph_hold: Option<Arc<Notify>>,
+    ) -> String {
         async fn artifact(
             UrlPath(name): UrlPath<String>,
             axum::extract::State(state): axum::extract::State<Arc<FixtureArtifacts>>,
         ) -> Response {
             let bytes = match name.as_str() {
                 PACK_FILE => state.pack.clone(),
-                GRAPH_FILE => state.graph.clone(),
+                GRAPH_GZ_FILE => state.graph_gz.clone(),
                 _ => return text_response(StatusCode::NOT_FOUND, "Not Found"),
             };
             let total = bytes.len() as u64;
             let delay = state.delay;
+            let hold = state.graph_hold.clone().filter(|_| name == GRAPH_GZ_FILE);
             let (mut writer, reader) = tokio::io::duplex(8 * 1024);
             tokio::spawn(async move {
-                for chunk in bytes.chunks(1024) {
+                for (index, chunk) in bytes.chunks(1024).enumerate() {
                     if writer.write_all(chunk).await.is_err() {
                         return;
+                    }
+                    if index == 0 {
+                        if let Some(hold) = hold.as_ref() {
+                            hold.notified().await;
+                        }
                     }
                     if !delay.is_zero() {
                         tokio::time::sleep(delay).await;
@@ -995,14 +1348,16 @@ mod tests {
 
         struct FixtureArtifacts {
             pack: Vec<u8>,
-            graph: Vec<u8>,
+            graph_gz: Vec<u8>,
             delay: Duration,
+            graph_hold: Option<Arc<Notify>>,
         }
 
         let state = Arc::new(FixtureArtifacts {
             pack,
-            graph,
+            graph_gz,
             delay: chunk_delay,
+            graph_hold,
         });
         let app = Router::new()
             .route("/:file", get(artifact))
@@ -1015,6 +1370,40 @@ mod tests {
             let _ = axum::serve(listener, app).await;
         });
         format!("http://{address}")
+    }
+
+    struct Fixture {
+        base: String,
+        pack: Vec<u8>,
+        graph: Vec<u8>,
+        graph_gz: Vec<u8>,
+    }
+
+    impl Fixture {
+        async fn new(pack: Vec<u8>, graph: Vec<u8>, chunk_delay: Duration) -> Self {
+            Self::with_graph_hold(pack, graph, chunk_delay, None).await
+        }
+
+        async fn with_graph_hold(
+            pack: Vec<u8>,
+            graph: Vec<u8>,
+            chunk_delay: Duration,
+            graph_hold: Option<Arc<Notify>>,
+        ) -> Self {
+            let graph_gz = gzip(&graph);
+            let base =
+                fixture_server(pack.clone(), graph_gz.clone(), chunk_delay, graph_hold).await;
+            Self {
+                base,
+                pack,
+                graph,
+                graph_gz,
+            }
+        }
+
+        fn plan(&self) -> DownloadPlan {
+            DownloadPlan::fixture_gzip(&self.base, &self.pack, &self.graph_gz, &self.graph)
+        }
     }
 
     async fn wait_finished(installer: &Arc<OfflineInstaller>) -> OfflineStatus {
@@ -1031,14 +1420,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn installs_both_artifacts_with_verified_bytes_and_no_temp_files() {
+    async fn installs_the_gzip_graph_with_verified_bytes_and_no_temp_files() {
         let pack = b"PMTiles fixture pack".to_vec();
         let graph = b"synthetic graph bytes".to_vec();
-        let base = fixture_server(pack.clone(), graph.clone(), Duration::from_millis(2)).await;
+        let fixture = Fixture::new(pack.clone(), graph.clone(), Duration::from_millis(2)).await;
         let dir = tempfile::tempdir().expect("temp dir");
         let installer = Arc::new(OfflineInstaller::with_plan(
             Some(dir.path().to_path_buf()),
-            fixture_plan(&base, &pack, &graph),
+            fixture.plan(),
         ));
 
         assert_eq!(installer.start(), StartOutcome::Started);
@@ -1052,6 +1441,14 @@ mod tests {
         assert_eq!(status.graph.phase, Phase::Installed);
         assert_eq!(status.pack.progress_bytes, pack.len() as u64);
         assert_eq!(status.graph.progress_bytes, graph.len() as u64);
+        assert_eq!(status.pack.downloaded_bytes, pack.len() as u64);
+        assert_eq!(status.graph.downloaded_bytes, fixture.graph_gz.len() as u64);
+        assert_eq!(status.pack.download_bytes, pack.len() as u64);
+        assert_eq!(status.graph.download_bytes, fixture.graph_gz.len() as u64);
+        assert_eq!(
+            status.expected_download_bytes,
+            pack.len() as u64 + fixture.graph_gz.len() as u64
+        );
         assert_eq!(status.pack.error, None);
         assert_eq!(status.graph.error, None);
         assert_eq!(
@@ -1062,7 +1459,11 @@ mod tests {
         assert_eq!(
             std::fs::read(dir.path().join(GRAPH_FILE)).unwrap(),
             graph,
-            "installed graph bytes"
+            "installed graph bytes are decompressed"
+        );
+        assert!(
+            !dir.path().join(GRAPH_GZ_FILE).exists(),
+            "the compressed transfer is not installed"
         );
         assert!(!dir.path().join(format!(".{PACK_FILE}.part")).exists());
         assert!(!dir.path().join(format!(".{GRAPH_FILE}.part")).exists());
@@ -1072,12 +1473,12 @@ mod tests {
     async fn wrong_hash_is_rejected_and_never_replaces_an_installed_file() {
         let pack = b"new pack bytes".to_vec();
         let graph = b"graph".to_vec();
-        let base = fixture_server(pack.clone(), graph.clone(), Duration::ZERO).await;
+        let fixture = Fixture::new(pack.clone(), graph.clone(), Duration::ZERO).await;
         let dir = tempfile::tempdir().expect("temp dir");
         let old = b"old verified pack".to_vec();
         std::fs::write(dir.path().join(PACK_FILE), &old).unwrap();
 
-        let mut plan = fixture_plan(&base, &pack, &graph);
+        let mut plan = fixture.plan();
         plan.pack.sha256 = "00".repeat(32);
         let installer = Arc::new(OfflineInstaller::with_plan(
             Some(dir.path().to_path_buf()),
@@ -1108,16 +1509,139 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_wrong_compressed_hash_is_rejected_and_keeps_the_old_graph() {
+        let pack = b"pack bytes".to_vec();
+        let graph = b"synthetic graph for the compressed-hash check".to_vec();
+        let fixture = Fixture::new(pack.clone(), graph.clone(), Duration::ZERO).await;
+        let dir = tempfile::tempdir().expect("temp dir");
+        let old = b"old verified graph".to_vec();
+        std::fs::write(dir.path().join(GRAPH_FILE), &old).unwrap();
+
+        let mut plan = fixture.plan();
+        plan.graph.transfer_sha256 = "00".repeat(32);
+        let installer = Arc::new(OfflineInstaller::with_plan(
+            Some(dir.path().to_path_buf()),
+            plan,
+        ));
+
+        assert_eq!(installer.start(), StartOutcome::Started);
+        let status = wait_finished(&installer).await;
+
+        assert!(status.pack.installed, "{status:?}");
+        assert_eq!(status.graph.phase, Phase::Failed);
+        assert!(!status.graph.installed);
+        assert!(
+            status
+                .graph
+                .error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("transfer SHA-256"),
+            "error must name the compressed hash: {:?}",
+            status.graph.error
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join(GRAPH_FILE)).unwrap(),
+            old,
+            "a failed compressed transfer must leave the old graph untouched"
+        );
+        assert!(!dir.path().join(format!(".{GRAPH_FILE}.part")).exists());
+    }
+
+    #[tokio::test]
+    async fn a_wrong_uncompressed_hash_is_rejected_and_keeps_the_old_graph() {
+        let pack = b"pack bytes".to_vec();
+        let graph = b"synthetic graph for the decompressed-hash check".to_vec();
+        let fixture = Fixture::new(pack.clone(), graph.clone(), Duration::ZERO).await;
+        let dir = tempfile::tempdir().expect("temp dir");
+        let old = b"old verified graph".to_vec();
+        std::fs::write(dir.path().join(GRAPH_FILE), &old).unwrap();
+
+        let mut plan = fixture.plan();
+        plan.graph.sha256 = "00".repeat(32);
+        let installer = Arc::new(OfflineInstaller::with_plan(
+            Some(dir.path().to_path_buf()),
+            plan,
+        ));
+
+        assert_eq!(installer.start(), StartOutcome::Started);
+        let status = wait_finished(&installer).await;
+
+        assert!(status.pack.installed, "{status:?}");
+        assert_eq!(status.graph.phase, Phase::Failed);
+        assert!(!status.graph.installed);
+        assert!(
+            status
+                .graph
+                .error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("installed SHA-256"),
+            "error must name the decompressed hash: {:?}",
+            status.graph.error
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join(GRAPH_FILE)).unwrap(),
+            old,
+            "a wrong decompressed hash must leave the old graph untouched"
+        );
+        assert!(!dir.path().join(format!(".{GRAPH_FILE}.part")).exists());
+    }
+
+    #[tokio::test]
+    async fn a_truncated_gzip_stream_is_rejected_and_keeps_the_old_graph() {
+        let pack = b"pack bytes".to_vec();
+        let graph = vec![5_u8; 64 * 1024];
+        let graph_gz = gzip(&graph);
+        let truncated = graph_gz[..graph_gz.len() - 8].to_vec();
+        let base = fixture_server(pack.clone(), truncated.clone(), Duration::ZERO, None).await;
+        let dir = tempfile::tempdir().expect("temp dir");
+        let old = b"old verified graph".to_vec();
+        std::fs::write(dir.path().join(GRAPH_FILE), &old).unwrap();
+
+        // The plan matches the truncated transfer, so only the gzip stream and
+        // the uncompressed length can reject it.
+        let plan = DownloadPlan::fixture_gzip(&base, &pack, &truncated, &graph);
+        let installer = Arc::new(OfflineInstaller::with_plan(
+            Some(dir.path().to_path_buf()),
+            plan,
+        ));
+
+        assert_eq!(installer.start(), StartOutcome::Started);
+        let status = wait_finished(&installer).await;
+
+        assert!(status.pack.installed, "{status:?}");
+        assert_eq!(status.graph.phase, Phase::Failed);
+        assert!(!status.graph.installed);
+        assert!(
+            status
+                .graph
+                .error
+                .as_deref()
+                .unwrap_or_default()
+                .contains("gzip"),
+            "error must name the truncated gzip stream: {:?}",
+            status.graph.error
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join(GRAPH_FILE)).unwrap(),
+            old,
+            "a truncated gzip stream must leave the old graph untouched"
+        );
+        assert!(!dir.path().join(format!(".{GRAPH_FILE}.part")).exists());
+    }
+
+    #[tokio::test]
     async fn a_verified_redownload_replaces_the_old_file() {
         let pack = b"replacement pack".to_vec();
         let graph = b"replacement graph".to_vec();
-        let base = fixture_server(pack.clone(), graph.clone(), Duration::ZERO).await;
+        let fixture = Fixture::new(pack.clone(), graph.clone(), Duration::ZERO).await;
         let dir = tempfile::tempdir().expect("temp dir");
         std::fs::write(dir.path().join(PACK_FILE), b"old pack").unwrap();
         std::fs::write(dir.path().join(GRAPH_FILE), b"old graph").unwrap();
         let installer = Arc::new(OfflineInstaller::with_plan(
             Some(dir.path().to_path_buf()),
-            fixture_plan(&base, &pack, &graph),
+            fixture.plan(),
         ));
 
         assert_eq!(installer.start(), StartOutcome::Started);
@@ -1131,10 +1655,10 @@ mod tests {
     async fn a_short_artifact_is_rejected_and_keeps_the_old_file() {
         let pack = b"short".to_vec();
         let graph = b"graph".to_vec();
-        let base = fixture_server(pack.clone(), graph.clone(), Duration::ZERO).await;
+        let fixture = Fixture::new(pack.clone(), graph.clone(), Duration::ZERO).await;
         let dir = tempfile::tempdir().expect("temp dir");
         std::fs::write(dir.path().join(PACK_FILE), b"old pack").unwrap();
-        let mut plan = fixture_plan(&base, &pack, &graph);
+        let mut plan = fixture.plan();
         // Ask for more bytes than the fixture host declares and sends.
         plan.pack.expected_bytes = pack.len() as u64 + 100;
         let installer = Arc::new(OfflineInstaller::with_plan(
@@ -1160,17 +1684,29 @@ mod tests {
     #[tokio::test]
     async fn status_reports_downloading_progress_then_installed() {
         let pack = vec![7_u8; 24 * 1024];
-        let graph = vec![9_u8; 8 * 1024];
-        let base = fixture_server(pack.clone(), graph.clone(), Duration::from_millis(8)).await;
+        // Pseudo-random bytes gzip into several chunks, and the fixture holds
+        // the graph after its first chunk until the poller has seen progress.
+        let graph = (0..64 * 1024_u32)
+            .map(|index| (index.wrapping_mul(2_654_435_761) >> 13) as u8)
+            .collect::<Vec<_>>();
+        let graph_hold = Arc::new(Notify::new());
+        let fixture = Fixture::with_graph_hold(
+            pack.clone(),
+            graph.clone(),
+            Duration::from_millis(12),
+            Some(Arc::clone(&graph_hold)),
+        )
+        .await;
         let dir = tempfile::tempdir().expect("temp dir");
         let installer = Arc::new(OfflineInstaller::with_plan(
             Some(dir.path().to_path_buf()),
-            fixture_plan(&base, &pack, &graph),
+            fixture.plan(),
         ));
 
         assert_eq!(installer.start(), StartOutcome::Started);
         let mut saw_downloading = false;
         let mut saw_progress = false;
+        let mut saw_graph_transfer_progress = false;
         for _ in 0..500 {
             let status = installer.status().await;
             if status.pack.phase == Phase::Downloading {
@@ -1179,28 +1715,44 @@ mod tests {
             if status.pack.progress_bytes > 0 && status.pack.progress_bytes < pack.len() as u64 {
                 saw_progress = true;
             }
+            if status.graph.downloaded_bytes > 0
+                && status.graph.downloaded_bytes < fixture.graph_gz.len() as u64
+            {
+                saw_graph_transfer_progress = true;
+                break;
+            }
             if status.pack.installed && status.graph.installed {
                 break;
             }
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
+        graph_hold.notify_one();
         let status = wait_finished(&installer).await;
 
         assert!(saw_downloading, "status must report the downloading phase");
         assert!(saw_progress, "status must report partial progress bytes");
+        assert!(
+            saw_graph_transfer_progress,
+            "status must report compressed transfer progress for the graph"
+        );
         assert!(status.pack.installed);
         assert!(status.graph.installed);
+        assert_eq!(
+            status.expected_download_bytes,
+            pack.len() as u64 + fixture.graph_gz.len() as u64
+        );
+        assert_eq!(status.graph.downloaded_bytes, status.graph.download_bytes);
     }
 
     #[tokio::test]
     async fn a_second_start_while_running_is_rejected() {
         let pack = vec![1_u8; 16 * 1024];
         let graph = vec![2_u8; 4 * 1024];
-        let base = fixture_server(pack.clone(), graph.clone(), Duration::from_millis(10)).await;
+        let fixture = Fixture::new(pack, graph, Duration::from_millis(10)).await;
         let dir = tempfile::tempdir().expect("temp dir");
         let installer = Arc::new(OfflineInstaller::with_plan(
             Some(dir.path().to_path_buf()),
-            fixture_plan(&base, &pack, &graph),
+            fixture.plan(),
         ));
 
         assert_eq!(installer.start(), StartOutcome::Started);
@@ -1213,11 +1765,11 @@ mod tests {
     async fn download_route_returns_202_then_409() {
         let pack = vec![3_u8; 16 * 1024];
         let graph = vec![4_u8; 4 * 1024];
-        let base = fixture_server(pack.clone(), graph.clone(), Duration::from_millis(10)).await;
+        let fixture = Fixture::new(pack, graph, Duration::from_millis(10)).await;
         let dir = tempfile::tempdir().expect("temp dir");
         let installer = Arc::new(OfflineInstaller::with_plan(
             Some(dir.path().to_path_buf()),
-            fixture_plan(&base, &pack, &graph),
+            fixture.plan(),
         ));
         let app = Router::new()
             .route("/map/offline/download", axum::routing::post(download))
@@ -1405,17 +1957,39 @@ mod tests {
     }
 
     #[test]
-    fn plan_keeps_only_the_two_published_file_names() {
+    fn plan_keeps_only_the_published_file_names() {
         let plan = DownloadPlan::default();
         assert_eq!(plan.pack.name, PACK_FILE);
         assert_eq!(plan.graph.name, GRAPH_FILE);
-        let fixture = DownloadPlan::fixture("http://127.0.0.1:1", 1, "aa", 2, "bb");
-        assert_eq!(fixture.for_file(PACK_FILE).expected_bytes, 1);
-        assert_eq!(fixture.for_file(GRAPH_FILE).expected_bytes, 2);
+        assert_eq!(plan.pack.transfer_name, PACK_FILE);
+        assert_eq!(plan.graph.transfer_name, GRAPH_GZ_FILE);
+        let fixture =
+            DownloadPlan::fixture_gzip("http://127.0.0.1:1", b"pack", b"gzip graph", b"graph");
+        assert_eq!(fixture.for_file(PACK_FILE).expected_bytes, 4);
+        assert_eq!(fixture.for_file(GRAPH_FILE).expected_bytes, 5);
+        assert_eq!(fixture.for_file(GRAPH_FILE).transfer_name, GRAPH_GZ_FILE);
+        assert!(valid_transfer_name(PACK_FILE));
+        assert!(valid_transfer_name(GRAPH_GZ_FILE));
+        assert!(!valid_transfer_name(GRAPH_FILE));
         assert!(!valid_pack_name("../")); // sanity: the scorer cannot join paths
         assert!(valid_pack_name(PACK_FILE));
         assert!(!valid_pack_name("notes.txt"));
         assert!(!valid_pack_name(".hidden.pmtiles"));
         assert!(!valid_pack_name("nested/pack.pmtiles"));
+    }
+
+    #[test]
+    fn production_plan_transfers_139_mb_and_installs_204_mb() {
+        let plan = DownloadPlan::default();
+        assert_eq!(plan.graph.compression, Compression::Gzip);
+        assert_eq!(plan.pack.compression, Compression::Identity);
+        assert_eq!(plan.graph.transfer_bytes, 45_338_586);
+        assert_eq!(plan.graph.transfer_sha256, GRAPH_GZ_SHA256);
+        assert_eq!(plan.graph.expected_bytes, 110_858_815);
+        assert_eq!(plan.graph.sha256, GRAPH_SHA256);
+        assert_eq!(plan.expected_download_bytes(), 138_510_985);
+        assert_eq!(plan.expected_installed_bytes(), 204_031_214);
+        assert_eq!(DOWNLOAD_BYTES, 138_510_985);
+        assert_eq!(INSTALLED_BYTES, 204_031_214);
     }
 }

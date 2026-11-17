@@ -121,11 +121,15 @@ try {
 
   await page.goto(indexUrl, { waitUntil: "load", timeout: 20000 });
   await page.waitForFunction(() => window.__pinpointMapReady === true);
+  await page.waitForFunction(() => Boolean(window.__pinpointOffline));
   check(true, "initial MapLibre map loaded");
 
   const initial = await page.evaluate(async () => {
     const config = await fetch("/map/config", { cache: "no-store" }).then((r) =>
       r.json(),
+    );
+    const status = await fetch("/map/offline/status", { cache: "no-store" }).then(
+      (r) => r.json(),
     );
     return {
       config,
@@ -136,8 +140,9 @@ try {
       buttonHidden: document.querySelector("#offline-download")?.hidden ?? null,
       buttonText: document.querySelector("#offline-download")?.textContent ?? "",
       source: window.__pinpointPreview?.source?.pmtilesUrl ?? "",
-      status: await fetch("/map/offline/status", { cache: "no-store" }).then((r) =>
-        r.json(),
+      status,
+      expectedLabel: window.__pinpointOffline.formatBytes(
+        Number(status.expected_download_bytes),
       ),
     };
   });
@@ -160,9 +165,9 @@ try {
   check(initial.panel === "idle", "offline panel starts idle", initial.panel);
   check(
     initial.buttonHidden === false &&
-      initial.buttonText.startsWith("Download Moldova map ("),
-    "download button is visible with the size label",
-    `${initial.buttonHidden} ${initial.buttonText}`,
+      initial.buttonText === `Download Moldova map (${initial.expectedLabel})`,
+    "download button shows the computed transfer size",
+    `${initial.buttonHidden} ${initial.buttonText} (expected ${initial.expectedLabel})`,
   );
   check(
     initial.graph === "Download routing data",
@@ -175,6 +180,13 @@ try {
     "status publishes expected artifact sizes",
     JSON.stringify(initial.status),
   );
+  check(
+    Number(initial.status.expected_download_bytes) ===
+      Number(initial.status.pack.download_bytes) +
+        Number(initial.status.graph.download_bytes),
+    "status publishes the compressed transfer total",
+    JSON.stringify(initial.status),
+  );
 
   await page.click("#offline-download");
 
@@ -185,13 +197,16 @@ try {
     },
     { timeout: 15000 },
   );
-  const during = await page.evaluate(() => ({
+  const during = await page.evaluate(async () => ({
     state: document.querySelector("#offline-panel")?.dataset.state ?? "",
     badge: document.querySelector("#offline-badge")?.textContent ?? "",
     detail: document.querySelector("#offline-detail")?.textContent ?? "",
     progress: Number(document.querySelector("#offline-progress")?.value ?? 0),
     expected: Number(document.querySelector("#offline-progress")?.max ?? 0),
     buttonHidden: document.querySelector("#offline-download")?.hidden ?? null,
+    status: await fetch("/map/offline/status", { cache: "no-store" }).then((r) =>
+      r.json(),
+    ),
   }));
   check(
     during.state === "downloading",
@@ -202,6 +217,11 @@ try {
     during.progress > 0 && during.progress <= during.expected,
     "progress bar advances within the expected size",
     `${during.progress}/${during.expected}`,
+  );
+  check(
+    during.expected === Number(during.status.expected_download_bytes),
+    "progress bar maximum is the compressed transfer total",
+    `${during.expected} vs ${during.status.expected_download_bytes}`,
   );
   check(
     /Downloading|Verifying/.test(during.detail),
@@ -248,6 +268,16 @@ try {
       installed.status.pack.bytes === installed.status.pack.expected_bytes &&
       installed.status.graph.bytes === installed.status.graph.expected_bytes,
     "status reports exact installed sizes",
+    JSON.stringify(installed.status),
+  );
+  check(
+    installed.status.pack.downloaded_bytes === installed.status.pack.download_bytes &&
+      installed.status.graph.downloaded_bytes ===
+        installed.status.graph.download_bytes &&
+      installed.status.expected_download_bytes ===
+        installed.status.pack.download_bytes +
+          installed.status.graph.download_bytes,
+    "status reports the completed compressed transfer",
     JSON.stringify(installed.status),
   );
 

@@ -39,8 +39,8 @@ const PRECISION_LABELS = {
  * Route line colours for the casing and the line layer.
  */
 const ROUTE_PAINT = {
-  light: { casing: "#ffffff", line: "#0f9d6e" },
-  dark: { casing: "#0b0f14", line: "#34d399" },
+  light: { casing: "#ffffff", line: "#a8641f" },
+  dark: { casing: "#0b0f14", line: "#e3a458" },
 };
 
 /**

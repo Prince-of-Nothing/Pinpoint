@@ -1,32 +1,35 @@
 :root {
   color-scheme: light;
-  --page-bg: #ebe7de;
+  --page-bg: #efe9dd;
   --glow-a: #fff8e8;
   --glow-b: #dbe8e2;
-  --panel: #fbfaf6;
+  --panel: #fbf8f1;
   --panel-border: #d8d2c5;
-  --text: #1c2430;
+  --text: #1c241f;
   --muted: #667085;
   --control-bg: #ffffff;
   --control-border: #d5d0c4;
   --control-hover: #f3efe6;
-  --accent: #2f7d6a;
+  --accent: #a8641f;
+  --accent-ink: #241708;
+  --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
   --shadow: 0 24px 70px rgb(40 34 20 / 16%);
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --page-bg: #0b1015;
-  --glow-a: #15222a;
-  --glow-b: #1a1f2b;
-  --panel: #121922;
-  --panel-border: #27313d;
-  --text: #eef2f6;
-  --muted: #9aa7b6;
-  --control-bg: #17202a;
-  --control-border: #303b48;
-  --control-hover: #1e2a36;
-  --accent: #6fd3b6;
+  --page-bg: #0c1512;
+  --glow-a: #16261f;
+  --glow-b: #1a2a22;
+  --panel: #12201b;
+  --panel-border: #2a3c33;
+  --text: #f0eadc;
+  --muted: #a5b2a6;
+  --control-bg: #172a22;
+  --control-border: #2a3c33;
+  --control-hover: #1e3329;
+  --accent: #e3a458;
+  --accent-ink: #241708;
   --shadow: 0 24px 70px rgb(0 0 0 / 45%);
 }
 
@@ -96,17 +99,17 @@ body {
 .eyebrow {
   margin: 0 0 2px;
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 h1 {
   margin: 0;
-  font-size: clamp(20px, 2.4vw, 28px);
-  font-weight: 680;
-  letter-spacing: -0.02em;
+  font-family: var(--serif);
+  font-size: clamp(22px, 2.5vw, 30px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   line-height: 1.05;
 }
 
@@ -121,7 +124,7 @@ h1 {
 button {
   appearance: none;
   border: 1px solid var(--control-border);
-  border-radius: 999px;
+  border-radius: 0.55rem;
   background: var(--control-bg);
   color: var(--text);
   padding: 9px 14px;
@@ -288,10 +291,9 @@ main {
 .offline-panel__kicker {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
 .offline-badge {
@@ -311,8 +313,8 @@ main {
 }
 
 .offline-panel[data-state="installed"] .offline-badge {
-  background: color-mix(in srgb, #34d399 20%, transparent);
-  color: #1c7a58;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
 }
 
 .offline-panel[data-state="error"] .offline-badge {
@@ -395,14 +397,24 @@ main {
 }
 
 .route-panel__kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--panel-border);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.route-panel__note {
   color: var(--muted);
   font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .route-panel .pinpoint-route {

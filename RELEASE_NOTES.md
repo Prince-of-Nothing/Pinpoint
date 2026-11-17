@@ -1,3 +1,59 @@
+# Pinpoint 2.3.0 - Release Notes
+
+**Released:** 2026-11-17 - **Version:** `2.3.0` (from `2.2.0`) -
+**Status:** Smaller mobile install and a refreshed interface.
+
+**Artifacts:** `pinpoint-android-2.3.0.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source archives for the `v2.3.0` tag.
+
+## What is new
+
+- The routing graph is downloaded as `moldova.graph.bin.gz`
+  (45,338,586 B) and decompressed while streaming. The mobile install now
+  transfers **138,510,985 B (139 MB)** instead of 204 MB, while installing the
+  same verified 110,858,815-byte graph (204 MB on disk). The installer checks
+  the compressed transfer, the gzip trailer, the uncompressed length and the
+  uncompressed SHA-256, and never replaces a good graph with a partial one.
+- A cartographic visual refresh: forest/amber palette, serif Pinpoint
+  wordmark, a split sign-in field with a coordinate motif and the line
+  "The map that only shares when you do", a compact mobile sign-in sheet, a
+  cleaner map-window header, normal-case labels, an amber route line and no
+  stray empty status pill.
+
+## Verification
+
+- `scripts/v2/check.ps1`: **17/17** — Rust fmt/clippy/build/test, offline
+  feature tests, the offline index binary, six pipeline tests, native-router
+  tests, and seven web suites.
+- Offline/route browser E2E: **37 checks passed**; map smoke, search, search UI,
+  route UI and map adapter suites all pass with zero external/failed requests
+  and zero console/page errors.
+- Real 139 MB install verified through the production installer:
+  transfer `138,510,985 B`, installed `93,172,399 + 110,858,815 B`, both
+  SHA-256 values verified.
+- Android `aarch64-linux-android` check passes; the arm64 APK is rebuilt with
+  the compressed installer and refreshed UI (size reported with the release
+  artifact).
+
+## Known limitations
+
+- No physical Android device/emulator run; the arm64 APK is built and
+  statically inspected.
+- The PMTiles basemap remains 93 MB; it is already gzip-compressed internally,
+  so it is not recompressed. Routing graph compression is the meaningful win.
+- Car routing only; no turn restrictions, lane guidance, traffic, closures or
+  ferries.
+- The UI refresh is verified with browser screenshots and the existing
+  functional suites, not pixel-diff automation.
+- iOS not checked.
+
+## Upgrade
+
+Install over 2.2.0. The first offline install now transfers 139 MB instead of
+204 MB; the installed map and routing graph are unchanged.
+
+---
+
 # Pinpoint 2.2.0 - Release Notes
 
 **Released:** 2026-11-17 - **Version:** `2.2.0` (from `2.1.0`) -

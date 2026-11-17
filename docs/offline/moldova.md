@@ -50,11 +50,13 @@ Total: **220,262,575 bytes (210 MB)**.
   no UTF-8 BOM. Rebuilds derive every `files[].url` from `base_url`.
 
 The same data release also carries the compact native routing cache produced
-from the Moldova PBF:
+from the Moldova PBF. The app downloads it gzip-compressed and installs the
+decompressed graph:
 
 | File | Bytes | SHA-256 |
 |---|---:|---|
-| `moldova.graph.bin` | 110,858,815 | `8cdbb0cb1d61c2d5857cb2677ab1343968223e4ae10892f0268c8feb0eb50e75` |
+| `moldova.graph.bin.gz` (transfer) | 45,338,586 | `276d0ddd3058524038f53a6562c86a12c408693a1e84bbb316c9db16badc9087` |
+| `moldova.graph.bin` (installed) | 110,858,815 | `8cdbb0cb1d61c2d5857cb2677ab1343968223e4ae10892f0268c8feb0eb50e75` |
 
 ## App install (Android and desktop map window)
 
@@ -67,19 +69,25 @@ directory:
 <app data>/packs/moldova.graph.bin  110,858,815 B
 ```
 
-The total is 204,031,214 bytes (**204 MB**). Both files come from
+The transfer is 138,510,985 bytes (**139 MB**: 93,172,399 B for the PMTiles
+archive plus 45,338,586 B for the gzip graph); the installed files occupy
+204,031,214 bytes (**204 MB**). Both artifacts come from
 `https://github.com/Prince-of-Nothing/Pinpoint/releases/download/data-moldova-20261116/`
 unless `PINPOINT_OFFLINE_BASE_URL` points at a mirror or a test fixture host.
 The page never downloads from GitHub; the Rust process streams each response
-to `packs/.<name>.part`, hashes it incrementally, checks the exact byte length
-and SHA-256, and only then atomically renames it into place. A failed,
-truncated or wrong-hash download leaves the previously installed file intact.
+to `packs/.<name>.part`. The PMTiles archive is written as-is; the graph is
+fed through an incremental gzip decoder into `packs/.moldova.graph.bin.part`.
+Both files are hashed with SHA-256 while streaming (the graph on the
+decompressed bytes, plus the compressed transfer), checked against the exact
+byte length, and only then atomically renamed into place. A failed, truncated
+or wrong-hash download leaves the previously installed file intact.
 
 The map servers expose `GET /map/offline/status`,
 `POST /map/offline/download`, `GET /map/config` and
 `GET|HEAD /packs/<name>.pmtiles` (Range `206`/`416`). The map page shows the
-size, polls progress, reports **Routing graph installed** vs **Download
-routing data**, and reloads onto `/packs/moldova.pmtiles` after an install.
+**"Download Moldova map (139 MB)"** transfer size, polls progress, reports
+**Routing graph installed** vs **Download routing data**, and reloads onto
+`/packs/moldova.pmtiles` after an install.
 The route engine stays local: `/map/route` reads the downloaded graph through
 `native_router`; there is no online routing fallback or geocoder.
 

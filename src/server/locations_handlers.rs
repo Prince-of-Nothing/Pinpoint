@@ -315,7 +315,7 @@ pub async fn publish_location(
             "latitude must be -90..90, longitude -180..180",
         );
     }
-    let shares_updated = {
+    let (shares_updated, location) = {
         let mut store = state.store.lock().unwrap();
         let user_id = cu.user_id;
         let user_name = store
@@ -338,8 +338,18 @@ pub async fn publish_location(
                 accuracy,
             });
         }
-        store.shares.iter().filter(|s| s.is_active).count()
+        (
+            store.shares.iter().filter(|s| s.is_active).count(),
+            store
+                .locations
+                .iter()
+                .find(|l| l.user_id == user_id)
+                .cloned(),
+        )
     };
+    if let Some(location) = &location {
+        state.sql_upsert_location(location).await;
+    }
     state.record_location(cu.user_id, lat, lon, accuracy).await;
     (
         StatusCode::OK,

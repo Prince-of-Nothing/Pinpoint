@@ -109,6 +109,11 @@ if (-not $SkipRust) {
 
 if (-not $SkipOffline) {
     $runner = Assert-TestFile "scripts/offline/tests/run.ps1"
+    # verify.ps1 resolves target/debug/pinpoint-offline-index.exe; the test
+    # build above produces a test harness, not the runnable binary.
+    Invoke-GateStep "Offline index binary" {
+        Invoke-Cargo $root @("build", "--features", "offline-build", "--bin", "pinpoint-offline-index")
+    }
     Invoke-GateStep "Offline pipeline tests" {
         & powershell -NoProfile -ExecutionPolicy Bypass -File $runner
     }

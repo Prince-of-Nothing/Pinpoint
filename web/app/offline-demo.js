@@ -448,6 +448,8 @@
 
         state.mapHandle?.destroy();
         state.mapHandle = null;
+        state.mapToken = (state.mapToken || 0) + 1;
+        const token = state.mapToken;
         state.mapReady = false;
         state.mapError = null;
         window.__offlineMapReady = false;
@@ -481,6 +483,7 @@
             else map?.once("idle", markReady);
           },
           onError: (error) => {
+            if (state.mapToken !== token) return;
             const message = error?.message || String(error);
             state.mapError = message;
             window.__offlineMapError = message;
@@ -534,6 +537,11 @@
           },
         });
 
+        // Publish the install only after the map has reopened and the pack list
+        // has refreshed: lastInstall then means "ready to use".
+        await openPackMap(installed.id);
+        await refreshPacks();
+        setBusy(false);
         state.lastInstall = {
           id: installed.id,
           version: installed.version,
@@ -543,9 +551,6 @@
           installedAt: installed.installedAt,
           updated: installed.updated,
         };
-        await refreshPacks();
-        setBusy(false);
-        await openPackMap(installed.id);
       } catch (error) {
         state.progress = null;
         els.progress.hidden = true;
@@ -569,6 +574,7 @@
         if (removed && state.mapHandle) {
           state.mapHandle.destroy();
           state.mapHandle = null;
+          state.mapToken = (state.mapToken || 0) + 1;
           state.mapReady = false;
           window.__offlineMapReady = false;
           els.mapEmpty.hidden = false;

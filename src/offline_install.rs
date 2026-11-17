@@ -1659,11 +1659,12 @@ mod tests {
     async fn status_reports_downloading_progress_then_installed() {
         let pack = vec![7_u8; 24 * 1024];
         // Pseudo-random bytes do not gzip into a single chunk, so the poller
-        // can observe partial transfer progress for the graph too.
-        let graph = (0..8 * 1024_u32)
+        // can observe partial transfer progress for the graph too. Keep this
+        // large enough that a loaded CI machine cannot finish it between polls.
+        let graph = (0..64 * 1024_u32)
             .map(|index| (index.wrapping_mul(2_654_435_761) >> 13) as u8)
             .collect::<Vec<_>>();
-        let fixture = Fixture::new(pack.clone(), graph.clone(), Duration::from_millis(8)).await;
+        let fixture = Fixture::new(pack.clone(), graph.clone(), Duration::from_millis(12)).await;
         let dir = tempfile::tempdir().expect("temp dir");
         let installer = Arc::new(OfflineInstaller::with_plan(
             Some(dir.path().to_path_buf()),

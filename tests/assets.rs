@@ -16,6 +16,7 @@ const MAP_ADAPTER: &str = include_str!("../web/app/map.js");
 const MAP_FOUNDATION: &str = include_str!("../web/map/map.js");
 const ROUTE_UI: &str = include_str!("../web/app/route-ui.js");
 const ROUTE_CSS: &str = include_str!("../web/app/route.css");
+const SERVICE_WORKER: &str = include_str!("../web/sw.js");
 
 const ATTRIBUTION_URLS: &[&str] = &[
     "https://www.openstreetmap.org/copyright",
@@ -35,6 +36,36 @@ const BANNED_HOSTS: &[&str] = &[
     "google-analytics",
     "googletagmanager",
 ];
+
+#[test]
+fn today_and_notes_assets_are_wired() {
+    for needle in [
+        "id=\"today-card\"",
+        "id=\"trail-toggle\"",
+        "id=\"note-form\"",
+        "id=\"note-photo\"",
+        "id=\"notes-list\"",
+        "id=\"map-empty-state\"",
+    ] {
+        assert!(HTML.contains(needle), "index.html lacks {needle}");
+    }
+    for needle in [
+        "/api/v1/locations/history",
+        "/api/v1/locations/notes",
+        "function renderToday",
+        "function renderNotes",
+        "function updateMapEmptyState",
+    ] {
+        assert!(JS.contains(needle), "app.js lacks {needle}");
+    }
+    for needle in ["setNoteMarkers", "drawTrail", "clearTrail"] {
+        assert!(MAP_ADAPTER.contains(needle), "map.js lacks {needle}");
+    }
+    assert!(
+        SERVICE_WORKER.contains("!url.pathname.startsWith(\"/api/\")"),
+        "the service worker must not cache API responses"
+    );
+}
 
 #[test]
 fn shipped_web_assets_have_no_third_party_hosts() {

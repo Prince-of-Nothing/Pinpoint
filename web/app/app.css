@@ -524,20 +524,52 @@ header { height: 60px; }
 
 .drawer {
   position: absolute;
-  top: 1rem;
-  right: 1rem;
-  width: 340px;
-  max-height: calc(100% - 2rem);
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 380px;
+  max-height: none;
   overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  padding: 0 1rem 1.25rem;
+  background: rgba(12, 21, 18, 0.98);
+  border-left: 1px solid var(--border);
+  box-shadow: -18px 0 50px rgb(0 0 0 / 28%);
   z-index: 900;
+  overscroll-behavior: contain;
+}
+.drawer-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 0 0.85rem;
+  background: rgba(12, 21, 18, 0.98);
+  border-bottom: 1px solid var(--border);
+}
+.drawer-head h2 {
+  margin: 0.1rem 0 0;
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.eyebrow {
+  display: block;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 .drawer .card {
   margin: 0;
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(8px);
+  background: var(--panel);
+  backdrop-filter: none;
 }
 .drawer.closed { display: none; }
 
@@ -1296,10 +1328,18 @@ header { height: 60px; }
 .icon-btn,
 .search-results,
 .maplibregl-ctrl-group,
-.drawer .card,
-.sheet,
-.offline-map-banner {
+.sheet {
   background: rgba(12, 21, 18, 0.95);
+  border-color: var(--border);
+}
+
+.drawer .card {
+  background: var(--panel);
+  border-color: var(--border);
+}
+
+.offline-map-banner {
+  background: var(--panel-2);
   border-color: var(--border);
 }
 
@@ -1323,4 +1363,199 @@ header { height: 60px; }
 
 .rp-node.done {
   color: var(--accent-ink);
+}
+
+/* Empty first map: privacy-preserving onboarding instead of a blank surface. */
+.map-empty-state {
+  position: absolute;
+  inset: 0;
+  z-index: 800;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 40%, rgba(18, 32, 27, 0.35), rgba(10, 15, 28, 0.86));
+}
+.map-empty-card {
+  pointer-events: auto;
+  width: min(30rem, 100%);
+  padding: 1.4rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: rgba(12, 21, 18, 0.97);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
+}
+.map-empty-card h2 {
+  font-family: var(--serif);
+  font-size: 1.45rem;
+  font-weight: 600;
+  margin: 0.2rem 0 0.6rem;
+}
+.map-empty-card .small { font-size: 0.78rem; }
+
+/* Offline prompt now lives in the side panel, not over the map cards. */
+.drawer .offline-map-banner {
+  position: static;
+  inset: auto;
+  z-index: auto;
+  max-width: none;
+  margin: 0;
+  padding: 0.75rem 0.85rem;
+  flex-direction: column;
+  align-items: stretch;
+}
+.drawer .offline-map-banner .offline-map-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+.drawer .offline-map-banner button { width: 100%; }
+
+/* Today trail */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+.card-head h2 { margin: 0; }
+.trail-list {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  max-height: 12rem;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+}
+.trail-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.82rem;
+}
+.trail-list time { color: var(--muted); white-space: nowrap; }
+.trail-list .coords { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* Private notes */
+.note-preview {
+  display: block;
+  width: 100%;
+  max-height: 11rem;
+  object-fit: cover;
+  margin: 0.4rem 0 0.7rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--border);
+}
+.notes-list { margin-top: 0.75rem; }
+.notes-list li {
+  display: block;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.notes-list summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.notes-list summary::-webkit-details-marker { display: none; }
+.notes-list summary::after { content: "+"; color: var(--accent); font-weight: 700; }
+.notes-list details[open] summary::after { content: "–"; }
+.note-body { margin-top: 0.5rem; color: var(--muted); font-size: 0.85rem; }
+.note-body img {
+  display: block;
+  width: 100%;
+  max-height: 16rem;
+  object-fit: cover;
+  margin-top: 0.5rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--border);
+}
+.note-actions { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+.note-marker {
+  width: 2.1rem;
+  height: 2.1rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px 999px 999px 0.3rem;
+  border: 2px solid var(--accent-ink);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 1rem;
+  font-weight: 800;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 35%);
+  cursor: pointer;
+}
+.note-marker:hover { filter: brightness(1.08); }
+
+/* Larger, visible targets and focus. */
+button, .button, summary, .icon-btn { min-height: 44px; }
+.icon-btn { width: 44px; height: 44px; }
+a:focus-visible, summary:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+textarea {
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+}
+input[type="file"] {
+  display: block;
+  width: 100%;
+  padding: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.45rem;
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+}
+input[type="file"]::file-selector-button {
+  margin-right: 0.6rem;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: 0.35rem;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 650;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+@media (max-width: 900px) {
+  .map-topbar { right: 1rem; }
+  .drawer { width: min(380px, 100%); }
+}
+@media (max-width: 720px) {
+  #user-email { display: none; }
+  #session-bar { gap: 0.4rem; min-width: 0; }
+  #user-handle {
+    max-width: 7.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #session-bar button { padding: 0.4rem 0.65rem; min-height: 40px; }
+  .drawer {
+    left: 0;
+    width: 100%;
+    border-left: 0;
+    padding: 0 0.9rem 1.2rem;
+  }
+  .drawer.closed { display: none; }
+  .map-empty-card { padding: 1.1rem; }
+  .map-empty-card h2 { font-size: 1.25rem; }
 }

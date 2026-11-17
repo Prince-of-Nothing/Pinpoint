@@ -382,6 +382,18 @@ pub fn locations_router() -> Router<AppState> {
             get(locations_handlers::list_friend_locations),
         )
         .route(
+            "/api/v1/locations/history",
+            get(locations_handlers::list_history),
+        )
+        .route(
+            "/api/v1/locations/notes",
+            get(locations_handlers::list_notes).post(locations_handlers::create_note),
+        )
+        .route(
+            "/api/v1/locations/notes/:id",
+            delete(locations_handlers::delete_note),
+        )
+        .route(
             "/api/v1/locations/check-ins",
             get(locations_handlers::list_check_ins).post(locations_handlers::create_check_in),
         )

@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use super::handlers::{require_current_user, share_json};
 use super::state::{AppState, Store};
 use super::{error_envelope, CurrentUser, IntoResponse};
-use crate::models::LocationShare;
+use crate::models::{LocationPoint, LocationShare, PlaceNote};
 
 /// The active share that lets `viewer` see `owner`'s latest location.
 ///
@@ -271,7 +271,7 @@ pub async fn update_share(
     (StatusCode::OK, Json(view)).into_response()
 }
 
-/// `DELETE /locations/shares/{id}` — revoke a share permanently.
+/// `DELETE /locations/shares/{id}` â€” revoke a share permanently.
 pub async fn delete_share(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -296,7 +296,7 @@ pub async fn delete_share(
     (StatusCode::OK, Json(json!({"message": "Share deleted."}))).into_response()
 }
 
-/// `POST /locations/me` — publish current location.
+/// `POST /locations/me` â€” publish current location.
 pub async fn publish_location(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -315,29 +315,32 @@ pub async fn publish_location(
             "latitude must be -90..90, longitude -180..180",
         );
     }
-    let mut store = state.store.lock().unwrap();
-    let user_id = cu.user_id;
-    let user_name = store
-        .find_user_by_id(user_id)
-        .map(|u| u.full_name.clone())
-        .unwrap_or_default();
-    if let Some(loc) = store.locations.iter_mut().find(|l| l.user_id == user_id) {
-        loc.latitude = lat;
-        loc.longitude = lon;
-        loc.accuracy = accuracy;
-        loc.updated_at = chrono::Utc::now().to_rfc3339();
-    } else {
-        store.locations.push(crate::models::FriendLocation {
-            user_id,
-            user_name,
-            latitude: lat,
-            longitude: lon,
-            precision_level: "exact".into(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
-            accuracy,
-        });
-    }
-    let shares_updated = store.shares.iter().filter(|s| s.is_active).count();
+    let shares_updated = {
+        let mut store = state.store.lock().unwrap();
+        let user_id = cu.user_id;
+        let user_name = store
+            .find_user_by_id(user_id)
+            .map(|u| u.full_name.clone())
+            .unwrap_or_default();
+        if let Some(loc) = store.locations.iter_mut().find(|l| l.user_id == user_id) {
+            loc.latitude = lat;
+            loc.longitude = lon;
+            loc.accuracy = accuracy;
+            loc.updated_at = chrono::Utc::now().to_rfc3339();
+        } else {
+            store.locations.push(crate::models::FriendLocation {
+                user_id,
+                user_name,
+                latitude: lat,
+                longitude: lon,
+                precision_level: "exact".into(),
+                updated_at: chrono::Utc::now().to_rfc3339(),
+                accuracy,
+            });
+        }
+        store.shares.iter().filter(|s| s.is_active).count()
+    };
+    state.record_location(cu.user_id, lat, lon, accuracy).await;
     (
         StatusCode::OK,
         Json(json!({"message": "Location updated.", "shares_updated": shares_updated})),
@@ -345,7 +348,224 @@ pub async fn publish_location(
         .into_response()
 }
 
-/// `GET /locations/friends` — locations visible to the caller.
+/// `GET /locations/history?hours=24` - the owner's own trail only.
+pub async fn list_history(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
+    let cutoff = (chrono::Utc::now() - chrono::Duration::hours(24)).to_rfc3339();
+    if let Some(pool) = &state.pg {
+        let rows: Vec<HistoryRow> = sqlx::query_as(
+            "SELECT id, user_id, latitude, longitude, accuracy, recorded_at FROM pinpoint_location_history WHERE user_id=$1 AND recorded_at >= $2 ORDER BY recorded_at",
+        )
+        .bind(cu.user_id)
+        .bind(&cutoff)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+        let points: Vec<LocationPoint> = rows
+            .into_iter()
+            .map(
+                |(id, user_id, latitude, longitude, accuracy, recorded_at)| LocationPoint {
+                    id,
+                    user_id,
+                    latitude,
+                    longitude,
+                    accuracy,
+                    recorded_at,
+                },
+            )
+            .collect();
+        return (StatusCode::OK, Json(points)).into_response();
+    }
+    let store = state.store.lock().unwrap();
+    let points: Vec<LocationPoint> = store
+        .location_history
+        .iter()
+        .filter(|p| p.user_id == cu.user_id)
+        .filter(|p| {
+            chrono::DateTime::parse_from_rfc3339(&p.recorded_at)
+                .map(|at| at.with_timezone(&chrono::Utc).to_rfc3339() >= cutoff)
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+    (StatusCode::OK, Json(points)).into_response()
+}
+
+const MAX_PHOTO_CHARS: usize = 900_000;
+type HistoryRow = (i64, i64, f64, f64, Option<f64>, String);
+type NoteRow = (i64, i64, f64, f64, String, String, Option<String>, String);
+
+fn valid_note_photo(photo: &str) -> bool {
+    photo.len() <= MAX_PHOTO_CHARS
+        && (photo.starts_with("data:image/jpeg;base64,")
+            || photo.starts_with("data:image/png;base64,"))
+}
+
+/// `POST /locations/notes` - a private text/photo note attached to a place.
+pub async fn create_note(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
+    let lat = body.get("latitude").and_then(Value::as_f64).unwrap_or(0.0);
+    let lon = body.get("longitude").and_then(Value::as_f64).unwrap_or(0.0);
+    if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
+        return error_envelope(
+            "VALIDATION_FAILED",
+            "latitude must be -90..90, longitude -180..180",
+        );
+    }
+    let label = body
+        .get("label")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if label.chars().count() > 120 {
+        return error_envelope("VALIDATION_FAILED", "label must be at most 120 characters");
+    }
+    let message = body
+        .get("message")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if message.is_empty() || message.chars().count() > 2000 {
+        return error_envelope("VALIDATION_FAILED", "message must be 1..2000 characters");
+    }
+    let photo = body
+        .get("photo")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string);
+    if let Some(photo) = &photo {
+        if !valid_note_photo(photo) {
+            return error_envelope(
+                "VALIDATION_FAILED",
+                "photo must be a JPEG or PNG data URL under 675 KB",
+            );
+        }
+    }
+    let note = {
+        let mut store = state.store.lock().unwrap();
+        let id = store.next_note_id;
+        store.next_note_id += 1;
+        PlaceNote {
+            id,
+            user_id: cu.user_id,
+            latitude: lat,
+            longitude: lon,
+            label,
+            message,
+            photo,
+            created_at: chrono::Utc::now().to_rfc3339(),
+        }
+    };
+    let Some(id) = state.sql_insert_note(&note).await else {
+        return error_envelope("NOTE_SAVE_FAILED", "Could not save the note.");
+    };
+    let saved = PlaceNote { id, ..note };
+    if state.pg.is_none() {
+        let mut store = state.store.lock().unwrap();
+        store.place_notes.push(saved.clone());
+    }
+    (StatusCode::CREATED, Json(saved)).into_response()
+}
+
+/// `GET /locations/notes` - the owner's private notes only.
+pub async fn list_notes(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
+    if let Some(pool) = &state.pg {
+        let rows: Vec<NoteRow> = sqlx::query_as(
+            "SELECT id, user_id, latitude, longitude, label, message, photo, created_at FROM pinpoint_place_notes WHERE user_id=$1 ORDER BY created_at",
+        )
+        .bind(cu.user_id)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+        let notes: Vec<PlaceNote> = rows
+            .into_iter()
+            .map(
+                |(id, user_id, latitude, longitude, label, message, photo, created_at)| PlaceNote {
+                    id,
+                    user_id,
+                    latitude,
+                    longitude,
+                    label,
+                    message,
+                    photo,
+                    created_at,
+                },
+            )
+            .collect();
+        return (StatusCode::OK, Json(notes)).into_response();
+    }
+    let store = state.store.lock().unwrap();
+    let notes: Vec<PlaceNote> = store
+        .place_notes
+        .iter()
+        .filter(|n| n.user_id == cu.user_id)
+        .cloned()
+        .collect();
+    (StatusCode::OK, Json(notes)).into_response()
+}
+
+/// `DELETE /locations/notes/{id}` - owner only.
+pub async fn delete_note(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+    Path(id): Path<i64>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
+    if let Some(pool) = &state.pg {
+        return match sqlx::query("DELETE FROM pinpoint_place_notes WHERE id=$1 AND user_id=$2")
+            .bind(id)
+            .bind(cu.user_id)
+            .execute(pool)
+            .await
+        {
+            Ok(result) if result.rows_affected() > 0 => {
+                (StatusCode::OK, Json(json!({"message": "Note deleted."}))).into_response()
+            }
+            _ => error_envelope("NOTE_NOT_FOUND", "Note not found."),
+        };
+    }
+    {
+        let mut store = state.store.lock().unwrap();
+        let pos = match store
+            .place_notes
+            .iter()
+            .position(|n| n.id == id && n.user_id == cu.user_id)
+        {
+            Some(pos) => pos,
+            None => return error_envelope("NOTE_NOT_FOUND", "Note not found."),
+        };
+        store.place_notes.remove(pos);
+    }
+    state.sql_delete_place_note(id, cu.user_id).await;
+    (StatusCode::OK, Json(json!({"message": "Note deleted."}))).into_response()
+}
+
+/// `GET /locations/friends` â€” locations visible to the caller.
 /// Consent model: only an accepted friendship plus an active, non-expired
 /// `to_friend`/`mutual` share owned by the location owner. Fail closed.
 pub async fn list_friend_locations(
@@ -379,7 +599,7 @@ pub async fn list_friend_locations(
     (StatusCode::OK, Json(locations)).into_response()
 }
 
-/// `GET /locations/me` — my own latest published location (or 404).
+/// `GET /locations/me` â€” my own latest published location (or 404).
 pub async fn get_my_location(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -404,7 +624,7 @@ pub async fn get_my_location(
     }
 }
 
-/// `POST /locations/check-ins` — create a check-in (manual/scheduled/trip).
+/// `POST /locations/check-ins` â€” create a check-in (manual/scheduled/trip).
 pub async fn create_check_in(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -467,7 +687,7 @@ pub async fn create_check_in(
         .into_response()
 }
 
-/// `GET /locations/check-ins` — all check-ins (newest first).
+/// `GET /locations/check-ins` â€” all check-ins (newest first).
 pub async fn list_check_ins(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -519,7 +739,7 @@ pub async fn delete_check_in(
         .into_response()
 }
 
-/// `POST /locations/emergency` — panic share: records an alert + activates all shares.
+/// `POST /locations/emergency` â€” panic share: records an alert + activates all shares.
 pub async fn trigger_emergency(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -586,7 +806,7 @@ pub async fn trigger_emergency(
         .into_response()
 }
 
-/// `GET /locations/emergency` — all emergency alerts (newest first).
+/// `GET /locations/emergency` â€” all emergency alerts (newest first).
 pub async fn list_emergencies(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -612,7 +832,7 @@ pub async fn list_emergencies(
     (StatusCode::OK, Json(items)).into_response()
 }
 
-/// `PATCH /locations/emergency/{id}` — resolve / re-open an alert.
+/// `PATCH /locations/emergency/{id}` â€” resolve / re-open an alert.
 pub async fn resolve_emergency(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,

@@ -1,3 +1,59 @@
+# Pinpoint 2.6.0 - Release Notes
+
+**Released:** 2026-11-18 - **Version:** `2.6.0` (from `2.5.2`) -
+**Status:** Private daily trail, place notes and a presentation-quality shell.
+
+**Artifacts:** `pinpoint-android-2.6.0.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source archives for the `v2.6.0` tag.
+
+## What is new
+
+- **Today** records each location you publish into a private 24-hour trail.
+  The side panel lists the points and can draw them as a line on the map.
+  The trail is owner-only and never exposed to friends.
+- **Private notes** attach a label, a message and an optional JPEG/PNG photo
+  to a place. Notes appear as map markers and in the side panel; only the
+  owner can read or delete them. Photos are downscaled in the browser,
+  bounded to 675 KB and stored on your account, not a third party.
+
+## What is fixed
+
+- The service worker no longer caches `/api/` or `/map/` GET responses. A
+  pause, revoke, new share, friend location or trail point is visible on the
+  next refresh instead of a stale cached reply.
+- The first map is a clear “Choose a map” card with online/offline choices,
+  not a blank surface.
+- The side panel is a solid, scrollable surface; the offline prompt lives
+  inside it instead of overlapping the cards.
+- The mobile header no longer overflows, and buttons/inputs meet a 44 px
+  touch target.
+
+## Verification
+
+- `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo test --locked`: pass.
+- `tests/today.rs`: **2 passed** (owner-only trail, owner-only notes,
+  validation, unauthorised rejection).
+- `tests/assets.rs`: **11 passed** (new UI wiring, service-worker cache rule).
+- Local browser flow: **9/9** (empty map, online map, two-point trail,
+  trail toggle, photo preview, note save + map marker, mobile no-overflow).
+
+## Known limitations
+
+- The trail records only locations you explicitly publish (or the GPS fix
+  that publishes one), not continuous background tracking.
+- Notes are private to the owner in this release; friend-visible notes are
+  not implemented.
+- Offline web Directions remains unavailable; map and search work offline.
+- Admin console still needs a promoted account and `DATABASE_URL`.
+
+## Upgrade
+
+Install over 2.5.2. Existing accounts, friendships, shares, packs and
+sessions are preserved. Migration 16 adds the two new tables.
+
+---
+
 # Pinpoint 2.5.2 - Release Notes
 
 **Released:** 2026-11-17 - **Version:** `2.5.2` (from `2.5.1`) -

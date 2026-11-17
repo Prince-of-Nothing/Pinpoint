@@ -10,10 +10,15 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
-## [Unreleased]
-### Changed
+## [2.6.0] - 2026-11-18
+### Added
 - [FEATURE] Native UI: one shared dark theme from the web palette, a compact top bar with a scrollable screen tab row, filled/padded cards, 44 pt touch targets, and a map-first map screen shared by desktop and Android.
-
+- [FEATURE] Today: a private 24-hour location trail recorded from your own published locations, shown as a list and a map line. Owner-only; no friend access.
+- [FEATURE] Private notes: text and an optional JPEG/PNG photo attached to a place, stored on your account and shown as map markers. Owner-only; photo size is bounded and validated.
+### Fixed
+- [FIX] Web: the service worker no longer caches `/api/` or `/map/` GET responses, so shares, friend locations and the trail update immediately after a change instead of serving a stale cached reply.
+- [FIX] Web: the app opens with a clear “Choose a map” prompt instead of a blank surface; the drawer is a solid, scrollable panel with the offline prompt inside it, and the mobile header no longer overflows.
+ 
 ## [2.5.2] - 2026-11-17
 ### Fixed
 - [FIX] Friends: friend requests, accepts and removals now write directly to Postgres instead of a whole-store snapshot. On the multi-replica deployment a request could be acknowledged and then wiped before it was persisted, so the receiver never saw it.

@@ -28,6 +28,7 @@ fn visible_share(store: &Store, viewer: i64, owner: i64) -> Option<&LocationShar
             && s.owner_id == owner
             && s.is_active
             && s.direction != "from_friend"
+            && ["exact", "approximate", "city_only"].contains(&s.precision_level.as_str())
             && s.expires_at.as_deref().is_none_or(|raw| {
                 chrono::DateTime::parse_from_rfc3339(raw)
                     .map(|expiry| expiry.with_timezone(&chrono::Utc) > now)
@@ -40,7 +41,9 @@ fn round_for_precision(lat: f64, lon: f64, precision: &str) -> (f64, f64) {
     match precision {
         "approximate" => ((lat * 100.0).round() / 100.0, (lon * 100.0).round() / 100.0),
         "city_only" => ((lat * 10.0).round() / 10.0, (lon * 10.0).round() / 10.0),
-        _ => (lat, lon),
+        // Defense in depth for legacy/corrupt rows: an unknown level must
+        // never fall through to exact coordinates.
+        _ => ((lat * 10.0).round() / 10.0, (lon * 10.0).round() / 10.0),
     }
 }
 
@@ -160,7 +163,7 @@ pub async fn list_shares(
     let shares: Vec<Value> = store
         .shares
         .iter()
-        .filter(|s| s.owner_id == cu.user_id)
+        .filter(|s| s.owner_id == cu.user_id && s.direction != "from_friend")
         .map(share_json)
         .collect();
     (StatusCode::OK, Json(shares)).into_response()
@@ -178,14 +181,21 @@ pub async fn update_share(
         Err(resp) => return resp,
     };
     let mut store = state.store.lock().unwrap();
-    let share = match store.shares.iter_mut().find(|s| s.id == id) {
-        Some(s) if s.owner_id == cu.user_id => s,
-        Some(_) => return error_envelope("SHARE_NOT_FOUND", "Share not found."),
-        None => return error_envelope("SHARE_NOT_FOUND", "Share not found."),
+    let pos = match store.shares.iter().position(|s| s.id == id) {
+        Some(p) if store.shares[p].owner_id == cu.user_id => p,
+        _ => return error_envelope("SHARE_NOT_FOUND", "Share not found."),
     };
-    if let Some(active) = body.get("is_active").and_then(Value::as_bool) {
-        share.is_active = active;
+
+    // Validate every supplied field before mutating the stored share: a
+    // rejected PATCH must not flip is_active or silently widen precision.
+    let mut next_active = None;
+    if let Some(active) = body.get("is_active") {
+        let Some(active) = active.as_bool() else {
+            return error_envelope("VALIDATION_FAILED", "is_active must be a boolean");
+        };
+        next_active = Some(active);
     }
+    let mut next_precision = None;
     if let Some(p) = body.get("precision_level").and_then(Value::as_str) {
         if !["exact", "approximate", "city_only"].contains(&p) {
             return error_envelope(
@@ -193,8 +203,9 @@ pub async fn update_share(
                 "precision_level must be exact, approximate, or city_only",
             );
         }
-        share.precision_level = p.to_string();
+        next_precision = Some(p.to_string());
     }
+    let mut next_direction = None;
     if let Some(d) = body.get("direction").and_then(Value::as_str) {
         if !["to_friend", "from_friend", "mutual"].contains(&d) {
             return error_envelope(
@@ -202,26 +213,48 @@ pub async fn update_share(
                 "direction must be to_friend, from_friend, or mutual",
             );
         }
-        share.direction = d.to_string();
+        next_direction = Some(d.to_string());
     }
-    if let Some(l) = body.get("label").and_then(Value::as_str) {
-        share.label = Some(l.to_string());
-    }
-    if let Some(h) = body.get("duration_hours").and_then(Value::as_i64) {
+    let next_label = body
+        .get("label")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let next_expiry = if body.get("expires_at").is_some() {
+        let Some(raw) = body.get("expires_at").and_then(Value::as_str) else {
+            return error_envelope("VALIDATION_FAILED", "expires_at must be a string");
+        };
+        if chrono::DateTime::parse_from_rfc3339(raw).is_err() {
+            return error_envelope("VALIDATION_FAILED", "expires_at must be RFC 3339");
+        }
+        Some(Some(raw.to_string()))
+    } else if let Some(h) = body.get("duration_hours").and_then(Value::as_i64) {
         if h < 0 {
             return error_envelope("VALIDATION_FAILED", "duration_hours must be >= 0");
         }
-        share.expires_at = if h == 0 {
+        Some(if h == 0 {
             None
         } else {
             Some((chrono::Utc::now() + chrono::Duration::hours(h)).to_rfc3339())
-        };
+        })
+    } else {
+        None
+    };
+
+    let share = &mut store.shares[pos];
+    if let Some(active) = next_active {
+        share.is_active = active;
     }
-    if body.get("expires_at").is_some() {
-        share.expires_at = body
-            .get("expires_at")
-            .and_then(Value::as_str)
-            .map(str::to_string);
+    if let Some(p) = next_precision {
+        share.precision_level = p;
+    }
+    if let Some(d) = next_direction {
+        share.direction = d;
+    }
+    if let Some(l) = next_label {
+        share.label = Some(l);
+    }
+    if let Some(e) = next_expiry {
+        share.expires_at = e;
     }
     (StatusCode::OK, Json(share_json(share))).into_response()
 }

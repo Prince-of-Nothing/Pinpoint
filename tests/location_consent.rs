@@ -465,3 +465,163 @@ async fn expired_share_is_not_revived_by_is_active_patch() {
         "the list must report the expired share as inactive"
     );
 }
+
+#[tokio::test]
+async fn patch_preserves_expiry_and_is_owner_only() {
+    let state = pinpoint_desktop::server::AppState::new();
+    let app = pinpoint_desktop::server::router(state);
+    let (alice_cookie, alice_csrf, _, _) =
+        register(&app, "patch-alice@example.invalid", "Alice").await;
+    let (bob_cookie, bob_csrf, _, bob_username) =
+        register(&app, "patch-bob@example.invalid", "Bob").await;
+    let friendship_id = accepted_friendship(
+        &app,
+        &alice_cookie,
+        &alice_csrf,
+        &bob_cookie,
+        &bob_csrf,
+        &bob_username,
+    )
+    .await;
+    let expires = "2099-01-01T00:00:00Z";
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/shares",
+            &bob_cookie,
+            &bob_csrf,
+            &format!(
+                r#"{{"friendship_id":{friendship_id},"precision_level":"exact","expires_at":"{expires}"}}"#
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let share_id = body_json(resp).await["id"].as_i64().expect("share id");
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "PATCH",
+            &format!("/api/v1/locations/shares/{share_id}"),
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"precision_level":"approximate"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let updated = body_json(resp).await;
+    assert_eq!(updated["expires_at"], expires);
+    assert_eq!(updated["precision_level"], "approximate");
+
+    // Another user cannot PATCH the owner's share.
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "PATCH",
+            &format!("/api/v1/locations/shares/{share_id}"),
+            &alice_cookie,
+            &alice_csrf,
+            r#"{"precision_level":"city_only"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let shares = get_json(&app, "/api/v1/locations/shares", &bob_cookie).await;
+    assert_eq!(shares[0]["precision_level"], "approximate");
+    assert_eq!(shares[0]["expires_at"], expires);
+}
+
+#[tokio::test]
+async fn patch_validation_does_not_mutate_the_share() {
+    let state = pinpoint_desktop::server::AppState::new();
+    let app = pinpoint_desktop::server::router(state);
+    let (alice_cookie, alice_csrf, _, _) =
+        register(&app, "validation-alice@example.invalid", "Alice").await;
+    let (bob_cookie, bob_csrf, _, bob_username) =
+        register(&app, "validation-bob@example.invalid", "Bob").await;
+    let friendship_id = accepted_friendship(
+        &app,
+        &alice_cookie,
+        &alice_csrf,
+        &bob_cookie,
+        &bob_csrf,
+        &bob_username,
+    )
+    .await;
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/shares",
+            &bob_cookie,
+            &bob_csrf,
+            &format!(r#"{{"friendship_id":{friendship_id},"precision_level":"approximate"}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let share_id = body_json(resp).await["id"].as_i64().expect("share id");
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "PATCH",
+            &format!("/api/v1/locations/shares/{share_id}"),
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"is_active":false,"precision_level":"bogus"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let shares = get_json(&app, "/api/v1/locations/shares", &bob_cookie).await;
+    assert_eq!(
+        shares[0]["is_active"], true,
+        "rejected PATCH must not pause"
+    );
+    assert_eq!(shares[0]["precision_level"], "approximate");
+}
+
+#[tokio::test]
+async fn list_hides_from_friend_shares() {
+    let state = pinpoint_desktop::server::AppState::new();
+    let app = pinpoint_desktop::server::router(state);
+    let (alice_cookie, alice_csrf, _, _) =
+        register(&app, "direction-alice@example.invalid", "Alice").await;
+    let (bob_cookie, bob_csrf, _, bob_username) =
+        register(&app, "direction-bob@example.invalid", "Bob").await;
+    let friendship_id = accepted_friendship(
+        &app,
+        &alice_cookie,
+        &alice_csrf,
+        &bob_cookie,
+        &bob_csrf,
+        &bob_username,
+    )
+    .await;
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/shares",
+            &bob_cookie,
+            &bob_csrf,
+            &format!(r#"{{"friendship_id":{friendship_id},"direction":"from_friend"}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let shares = get_json(&app, "/api/v1/locations/shares", &bob_cookie).await;
+    assert_eq!(
+        shares,
+        json!([]),
+        "an incoming share is not a grant from this user"
+    );
+    let visible = get_json(&app, "/api/v1/locations/friends", &alice_cookie).await;
+    assert_eq!(visible, json!([]));
+}

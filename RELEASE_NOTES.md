@@ -1,3 +1,79 @@
+# Pinpoint 2.4.0 - Release Notes
+
+**Released:** 2026-11-17 - **Version:** `2.4.0` (from `2.3.0`) -
+**Status:** Global maps v1: worldwide online viewing and per-country offline
+packs.
+
+**Artifacts:** `pinpoint-android-2.4.0.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source archives for the `v2.4.0` tag.
+
+## What is new
+
+- A runtime region catalog at `pinpoint-maps/catalog.json`, fetched by the app,
+  cached for an hour and validated (ids, HTTPS release hosts, sizes, SHA-256).
+  A bundled Moldova entry keeps the first run working offline.
+- A manifest-driven multi-region installer: packs live in `packs/<region>/`,
+  one download at a time, transfer and installed hashes/lengths are verified,
+  `.part` files are atomically renamed, and a failure never replaces a good
+  pack. Existing 2.3.0 root-level Moldova files migrate without re-downloading.
+- A region picker in the Android/desktop map window with transfer size,
+  installed/update state, download/update/show, progress and errors.
+  `/packs/<region>/<file>` serves Range requests; the legacy `/packs/<name>`
+  path still works.
+- An opt-in **Online map** toggle using OpenFreeMap Liberty. It is off by
+  default, fetches the style with a 10 s timeout, falls back to the local pack
+  on any failure, and never retries in a loop. The privacy note and the
+  OpenFreeMap credit appear only while online; the CSP allows exactly
+  `https://tiles.openfreemap.org` for images and connections and keeps fonts
+  local.
+- The data pipeline builds the native routing graph, gzips it, records the
+  source SHA-256/size, and merges a schema-1 catalog entry. `pinpoint-maps`
+  publishes releases and owns `build-region.yml` (weekly Moldova + Romania,
+  Ukraine dispatch-only because of the 14 GB runner, plus a dry-run mode).
+- Moldova is the ready v1 pack; Romania and Ukraine are built by the data
+  workflow. The 2.3.0 compressed install remains: 139 MB transfer / 204 MB
+  installed for Moldova.
+
+## Verification
+
+- `cargo fmt --all -- --check` and `cargo clippy --all-targets -- -D warnings`
+  pass.
+- `cargo test --locked --lib`: **325 passed**; `--test assets`: **10 passed**.
+- `web/map/test/smoke.mjs`: **130 checks**; the `web/app` suite passes,
+  including the new mocked online-map test.
+- Offline scripts: **7/7** (`build-dryrun`, `download`, `manifest`, `verify`,
+  `atomic`, `layout`, `catalog`). The data workflow dry run on ubuntu-latest
+  passed with the app scripts; the first real Moldova build is tracked in
+  `pinpoint-maps`.
+- `pinpoint-maps`: catalog validator **5/5**, workflow parses with PyYAML and
+  actionlint.
+
+## Known limitations
+
+- Remote-only regions are not persisted across a restart after a failed remote
+  catalog fetch; installed packs stay on disk but are served only while the
+  last good in-memory catalog lives. Catalog persistence is a follow-up.
+- Legacy adoption verifies the file length, not its SHA-256 (hashing 204 MB on
+  every status/config is too expensive).
+- GitHub Releases is not a CDN and has no SLA; the catalog makes a later R2
+  move a URL/config change (the app's asset-host allowlist also needs an
+  entry).
+- Web per-region offline packs are not in v1; the web app gets the online
+  basemap, while the OPFS single-pack demo is unchanged.
+- Ukraine is dispatch-only on the 14 GB runner; Romania is capped at z13,
+  Moldova at z14.
+- Car routing only; cross-border routing across packs is not implemented.
+- No physical Android device/emulator run; the APK is built and statically
+  checked. iOS is not checked.
+
+## Upgrade
+
+Install over 2.3.0. The first launch moves the existing Moldova pack into
+`packs/moldova/`; no re-download is needed. The online basemap stays off until
+the user enables it.
+
+---
+
 # Pinpoint 2.3.0 - Release Notes
 
 **Released:** 2026-11-17 - **Version:** `2.3.0` (from `2.2.0`) -

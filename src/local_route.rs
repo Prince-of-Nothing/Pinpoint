@@ -250,7 +250,7 @@ impl LocalRouter {
         if std::env::var_os(GRAPH_ENV).is_some() {
             return Self::from_environment();
         }
-        Self::new(packs_dir.map(|dir| dir.join(DEFAULT_GRAPH_FILE)))
+        Self::new(packs_dir.and_then(resolve_packs_graph))
     }
 
     /// Build a router for an explicit graph path (used by unit tests).
@@ -369,7 +369,47 @@ pub fn resolve_graph_path() -> Option<PathBuf> {
             return Some(path);
         }
     }
-    crate::platform::app_data_dir().map(|dir| dir.join("packs").join(DEFAULT_GRAPH_FILE))
+    crate::platform::app_data_dir()
+        .map(|dir| dir.join("packs"))
+        .and_then(|packs| resolve_packs_graph(&packs))
+}
+
+/// Resolve the installed routing graph for the catalog layout.
+///
+/// The v2.4+ installer writes `packs/<region>/<region>.graph.bin`; v2.3
+/// installed `packs/moldova.graph.bin` at the root. Prefer the region layout,
+/// then the legacy root, then the first installed region directory so a
+/// single-region install still routes.
+fn resolve_packs_graph(packs_dir: &Path) -> Option<PathBuf> {
+    let preferred = packs_dir.join("moldova").join(DEFAULT_GRAPH_FILE);
+    if preferred.is_file() {
+        return Some(preferred);
+    }
+    let legacy = packs_dir.join(DEFAULT_GRAPH_FILE);
+    if legacy.is_file() {
+        return Some(legacy);
+    }
+    let mut regions: Vec<_> = std::fs::read_dir(packs_dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .collect();
+    regions.sort_by_key(|entry| entry.file_name());
+    for entry in regions {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        let candidate = entry
+            .path()
+            .join(format!("{}.graph.bin", name.to_string_lossy()));
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 /// `GET /map/route` handler mounted by the Android and desktop map servers.
@@ -609,5 +649,25 @@ mod tests {
                 .contains("graph"),
             "error message should name the missing graph: {error}"
         );
+    }
+
+    #[test]
+    fn packs_graph_resolution_prefers_the_catalog_layout() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let catalog = dir.path().join("moldova").join(DEFAULT_GRAPH_FILE);
+        std::fs::create_dir_all(catalog.parent().expect("region dir")).expect("create region");
+        std::fs::write(&catalog, b"graph").expect("write graph");
+        assert_eq!(resolve_packs_graph(dir.path()), Some(catalog.clone()));
+
+        std::fs::remove_file(&catalog).expect("remove catalog graph");
+        let legacy = dir.path().join(DEFAULT_GRAPH_FILE);
+        std::fs::write(&legacy, b"legacy").expect("write legacy");
+        assert_eq!(resolve_packs_graph(dir.path()), Some(legacy));
+
+        let other = tempfile::tempdir().expect("other temp dir");
+        let romania = other.path().join("romania").join("romania.graph.bin");
+        std::fs::create_dir_all(romania.parent().expect("region dir")).expect("create other");
+        std::fs::write(&romania, b"romania").expect("write other");
+        assert_eq!(resolve_packs_graph(other.path()), Some(romania));
     }
 }

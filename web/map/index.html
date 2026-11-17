@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>Pinpoint · Offline map foundation</title>
+  <title>Pinpoint · Offline map</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231c2430'/%3E%3Cpath d='M16 25s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z' fill='none' stroke='%23f4f1ea' stroke-width='2'/%3E%3Ccircle cx='16' cy='12.5' r='2.4' fill='%236fd3b6'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="../vendor/maplibre-gl.css">
   <link rel="stylesheet" href="./preview.css">
@@ -24,7 +24,7 @@
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
       <div>
-        <p class="eyebrow">Pinpoint · web map foundation</p>
+        <p class="eyebrow">Pinpoint · offline map</p>
         <h1>Offline vector map</h1>
       </div>
     </div>
@@ -39,14 +39,26 @@
 
   <main>
     <div class="map-frame">
-      <div id="map" role="application" aria-label="Offline Monaco vector map"></div>
+      <div id="map" role="application" aria-label="Offline vector map"></div>
 
       <div id="status" class="map-status" data-state="loading" role="status">
         <span class="status-dot" aria-hidden="true"></span>
-        <span id="status-text">Loading Monaco fixture…</span>
+        <span id="status-text">Loading map…</span>
       </div>
 
-      <div class="map-meta">Monaco fixture · z0–12 · 94 KB</div>
+      <div class="map-meta" id="map-meta">Checking offline packs…</div>
+
+      <aside class="offline-panel" id="offline-panel" data-state="checking" aria-label="Offline map">
+        <div class="offline-panel__row">
+          <p class="offline-panel__kicker">Offline map</p>
+          <span id="offline-badge" class="offline-badge">Checking…</span>
+        </div>
+        <p id="offline-detail" class="offline-panel__detail">Moldova map and routing graph</p>
+        <p id="offline-graph" class="offline-panel__graph" data-installed="false">Routing graph: checking…</p>
+        <progress id="offline-progress" class="offline-progress" max="1" value="0" hidden></progress>
+        <button id="offline-download" class="offline-button" type="button" hidden>Download Moldova map</button>
+        <p id="offline-error" class="offline-panel__error" role="alert" hidden></p>
+      </aside>
 
       <aside class="route-panel" aria-label="Offline routing">
         <p class="route-panel__kicker">Offline car routing · car only · no network</p>
@@ -71,13 +83,77 @@
     import { createMap } from "./map.js";
     import { createRouteUI } from "../app/route-ui.js";
 
-    const MONACO_CENTER = [7.4246, 43.7384];
-    const MONACO_ZOOM = 13.2;
-    // Real Moldova coordinates exercise the on-device graph. The fixture map
-    // only has Monaco tiles, so the fitted view may be blank outside Monaco;
-    // the route line and panel remain local and usable.
+    const MONACO = {
+      id: "monaco",
+      label: "Monaco fixture",
+      pmtilesUrl: "./fixtures/monaco.pmtiles",
+      center: [7.4246, 43.7384],
+      zoom: 13.2,
+      meta: "Monaco fixture · ODbL · 94 KB",
+      ready: "Monaco fixture · vector tiles ready",
+    };
+    const MOLDOVA = {
+      id: "moldova",
+      label: "Moldova",
+      pmtilesUrl: "/packs/moldova.pmtiles",
+      center: [28.8638, 47.0105],
+      zoom: 7.2,
+      meta: "Moldova · z0–14 · ODbL",
+      ready: "Moldova · vector tiles ready",
+    };
+
+    // Real Moldova coordinates exercise the on-device graph.
     const DEFAULT_FROM = "47.0105, 28.8638"; // Chișinău
     const DEFAULT_TO = "47.76, 27.93"; // Bălți
+
+    const SAMPLE_LOCATIONS = [
+      {
+        user_id: 1,
+        user_name: "Ana",
+        latitude: 43.7384,
+        longitude: 7.4246,
+        precision_level: "exact",
+      },
+      {
+        user_id: 2,
+        user_name: "Mihai",
+        latitude: 43.7311,
+        longitude: 7.4197,
+        precision_level: "approximate",
+      },
+      {
+        user_id: 3,
+        user_name: "Elena",
+        latitude: 43.7451,
+        longitude: 7.4302,
+        precision_level: "city_only",
+      },
+    ];
+
+    const statusEl = document.getElementById("status");
+    const statusTextEl = document.getElementById("status-text");
+    const mapMetaEl = document.getElementById("map-meta");
+    const themeButton = document.getElementById("theme");
+    const resetButton = document.getElementById("reset");
+    const markersButton = document.getElementById("markers");
+    const clickReadout = document.getElementById("click-readout");
+    const offlinePanel = document.getElementById("offline-panel");
+    const offlineBadge = document.getElementById("offline-badge");
+    const offlineDetail = document.getElementById("offline-detail");
+    const offlineGraph = document.getElementById("offline-graph");
+    const offlineProgress = document.getElementById("offline-progress");
+    const offlineDownload = document.getElementById("offline-download");
+    const offlineError = document.getElementById("offline-error");
+
+    let theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+    let markersVisible = true;
+    let handle = null;
+    let activeSource = null;
+    let routeUI = null;
+    let lastStatus = null;
+    let pollTimer = null;
+    let refreshInFlight = false;
+    let reloadPromise = null;
 
     /**
      * Injected local router for createRouteUI. It fetches only this loopback
@@ -120,42 +196,6 @@
       };
     }
 
-    // Demo data only. Real friend locations arrive through setLocations().
-    const SAMPLE_LOCATIONS = [
-      {
-        user_id: 1,
-        user_name: "Ana",
-        latitude: 43.7384,
-        longitude: 7.4246,
-        precision_level: "exact",
-      },
-      {
-        user_id: 2,
-        user_name: "Mihai",
-        latitude: 43.7311,
-        longitude: 7.4197,
-        precision_level: "approximate",
-      },
-      {
-        user_id: 3,
-        user_name: "Elena",
-        latitude: 43.7451,
-        longitude: 7.4302,
-        precision_level: "city_only",
-      },
-    ];
-
-    const statusEl = document.getElementById("status");
-    const statusTextEl = document.getElementById("status-text");
-    const themeButton = document.getElementById("theme");
-    const resetButton = document.getElementById("reset");
-    const markersButton = document.getElementById("markers");
-    const clickReadout = document.getElementById("click-readout");
-
-    let theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-    let markersVisible = true;
-    let handle = null;
-
     function setStatus(text, state) {
       statusTextEl.textContent = text;
       statusEl.dataset.state = state;
@@ -166,75 +206,336 @@
       themeButton.setAttribute("aria-pressed", String(theme === "dark"));
     }
 
-    syncThemeButton();
+    function formatBytes(bytes) {
+      const value = Number(bytes);
+      if (!Number.isFinite(value) || value <= 0) return "0 KB";
+      const mb = value / 1_000_000;
+      if (mb >= 10) return `${Math.round(mb)} MB`;
+      if (mb >= 1) return `${mb.toFixed(1)} MB`;
+      return `${Math.max(1, Math.round(value / 1_000))} KB`;
+    }
 
-    try {
-      handle = createMap({
+    async function fetchJson(url, options) {
+      const response = await fetch(url, {
+        cache: "no-store",
+        ...options,
+      });
+      if (!response.ok) {
+        const error = new Error(`HTTP ${response.status} from ${url}`);
+        error.status = response.status;
+        throw error;
+      }
+      return response.json();
+    }
+
+    /** Config is served by the Rust map servers; a static preview falls back. */
+    async function fetchConfig() {
+      try {
+        const config = await fetchJson("/map/config");
+        return {
+          pmtilesUrl: String(config?.pmtilesUrl || MONACO.pmtilesUrl),
+          graphInstalled: config?.graphInstalled === true,
+          packInstalled: config?.packInstalled === true,
+        };
+      } catch {
+        return {
+          pmtilesUrl: MONACO.pmtilesUrl,
+          graphInstalled: false,
+          packInstalled: false,
+        };
+      }
+    }
+
+    function createPreviewMap(source) {
+      setStatus(`Loading ${source.label}…`, "loading");
+      window.__pinpointMapReady = false;
+      mapMetaEl.textContent = source.meta;
+
+      let created = null;
+      created = createMap({
         container: "#map",
         styleUrl: "./style.json",
-        pmtilesUrl: "./fixtures/monaco.pmtiles",
-        center: MONACO_CENTER,
-        zoom: MONACO_ZOOM,
-        onLoad: () => {
-          setStatus("Monaco · vector tiles ready", "ready");
+        pmtilesUrl: source.pmtilesUrl,
+        center: source.center,
+        zoom: source.zoom,
+        onLoad: (loadedHandle) => {
+          if (created !== handle) return;
+          setStatus(source.ready, "ready");
           window.__pinpointMapReady = true;
+          handle?.setTheme(theme);
+          handle?.setLocations(markersVisible ? SAMPLE_LOCATIONS : []);
+          const route = routeUI?.getRoute?.();
+          if (route) loadedHandle.drawRoute(route);
         },
         onError: (error) => {
+          if (created !== handle) return;
           const message = error?.message || String(error);
+          // MapLibre cancels in-flight PMTiles reads when the page replaces a
+          // map after installing the pack. That is not a map error.
+          if (/abort|cancel/i.test(message)) return;
           setStatus(`Map error: ${message}`, "error");
           window.__pinpointMapError = message;
-          console.error("[map preview]", error);
         },
       });
+      return created;
+    }
 
-      handle.setTheme(theme);
-      handle.setLocations(SAMPLE_LOCATIONS);
+    /** Replace the map when the install changes the PMTiles URL. */
+    function installMap(source) {
+      const previous = handle;
+      handle = null;
+      if (previous) previous.destroy();
+      activeSource = source;
+      handle = createPreviewMap(source);
       handle.onClick(({ lat, lon }) => {
         clickReadout.textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
       });
-
       window.__pinpointPreview = {
         handle,
         locations: SAMPLE_LOCATIONS,
+        get source() {
+          return activeSource;
+        },
         get map() {
-          return handle.getMap();
+          return handle?.getMap() ?? null;
         },
       };
-    } catch (error) {
-      const message = error?.message || String(error);
-      setStatus(`Map error: ${message}`, "error");
-      window.__pinpointMapError = message;
-      console.error("[map preview]", error);
     }
 
-    // Local route panel. The provider talks only to this origin's /map/route.
-    const routeUI = createRouteUI({
-      container: "#route-panel",
-      route: requestLocalRoute,
-      onRoute: ({ route }) => {
-        handle?.drawRoute(route);
-      },
-      onCancel: ({ reason }) => {
-        if (reason === "clear") handle?.clearRoute();
-      },
-    });
-
-    const fromInput = routeUI.element.querySelector('input[name="from"]');
-    const toInput = routeUI.element.querySelector('input[name="to"]');
-    if (fromInput) fromInput.value = DEFAULT_FROM;
-    if (toInput) toInput.value = DEFAULT_TO;
-
-    for (const button of routeUI.element.querySelectorAll(".pinpoint-route__profile")) {
-      if (button.dataset.profile === "auto") continue;
-      button.disabled = true;
-      button.title = "Only the offline car profile is available.";
+    function successState(status) {
+      return status?.pack?.installed === true && status?.graph?.installed === true;
     }
 
-    window.__pinpointRoute = {
-      ui: routeUI,
-      route: requestLocalRoute,
-      defaults: { from: DEFAULT_FROM, to: DEFAULT_TO },
-    };
+    function runningState(status) {
+      const phases = [status?.pack?.phase, status?.graph?.phase];
+      return phases.includes("downloading") || phases.includes("verifying");
+    }
+
+    function renderOfflineUnavailable() {
+      offlinePanel.dataset.state = "unavailable";
+      offlineBadge.textContent = "Local server only";
+      offlineDetail.textContent = "Install state is unavailable on this preview server.";
+      offlineGraph.textContent = "Routing graph: local server only";
+      offlineGraph.dataset.installed = "false";
+      offlineProgress.hidden = true;
+      offlineDownload.hidden = true;
+      offlineError.hidden = true;
+    }
+
+    function renderOffline(status) {
+      lastStatus = status;
+      const pack = status?.pack ?? {};
+      const graph = status?.graph ?? {};
+      const expected = Number(pack.expected_bytes || 0) + Number(graph.expected_bytes || 0);
+      const progress =
+        Number(pack.progress_bytes || 0) + Number(graph.progress_bytes || 0);
+      const installed = pack.installed === true && graph.installed === true;
+      const running = runningState(status);
+      const error = String(pack.error || graph.error || "");
+      const totalLabel = formatBytes(expected);
+
+      // The static preview server reports expected_bytes: 0 because it has no
+      // Rust download manager. Keep the card honest instead of offering a
+      // download that cannot work there.
+      if (expected === 0 && !installed && !running && !error) {
+        offlinePanel.dataset.state = "unavailable";
+        offlineBadge.textContent = "Preview";
+        offlineDetail.textContent = "Open the app's map window to install offline data.";
+        offlineGraph.textContent = "Routing graph: app server only";
+        offlineGraph.dataset.installed = "false";
+        offlineProgress.hidden = true;
+        offlineDownload.hidden = true;
+        offlineError.hidden = true;
+        return;
+      }
+
+      const installedWithError = installed && Boolean(error);
+      offlinePanel.dataset.state =
+        installedWithError || (!installed && !running && error)
+          ? "error"
+          : installed
+            ? "installed"
+            : running
+              ? "downloading"
+              : "idle";
+
+      if (installedWithError) {
+        offlineBadge.textContent = "Update failed";
+        offlineDetail.textContent = "The installed offline map was kept.";
+      } else if (installed) {
+        offlineBadge.textContent = "Installed";
+        offlineDetail.textContent = `Moldova · ${totalLabel} on disk`;
+      } else if (running) {
+        const phase = [pack.phase, graph.phase].includes("verifying")
+          ? "Verifying"
+          : "Downloading";
+        offlineBadge.textContent = phase;
+        offlineDetail.textContent = `${phase} ${formatBytes(progress)} of ${totalLabel}`;
+      } else if (error) {
+        offlineBadge.textContent = "Failed";
+        offlineDetail.textContent = "The offline map was not installed.";
+      } else {
+        offlineBadge.textContent = "Not installed";
+        offlineDetail.textContent = `Moldova map and routing graph · ${totalLabel}`;
+      }
+
+      offlineGraph.textContent = graph.installed
+        ? "Routing graph installed"
+        : "Download routing data";
+      offlineGraph.dataset.installed = graph.installed ? "true" : "false";
+
+      offlineProgress.hidden = !running;
+      offlineProgress.max = Math.max(1, expected);
+      offlineProgress.value = Math.min(expected || 1, progress);
+      offlineProgress.dataset.progress = String(progress);
+      offlineProgress.dataset.expected = String(expected);
+
+      offlineDownload.hidden = (installed && !error) || running;
+      offlineDownload.disabled = running;
+      offlineDownload.textContent = error
+        ? `Retry download (${totalLabel})`
+        : `Download Moldova map (${totalLabel})`;
+
+      offlineError.hidden = !error;
+      offlineError.textContent = error;
+
+      if (installed && activeSource?.pmtilesUrl !== MOLDOVA.pmtilesUrl) {
+        void reloadWithInstalledPack();
+      }
+    }
+
+    async function refreshStatus({ render = true } = {}) {
+      if (refreshInFlight) return lastStatus;
+      refreshInFlight = true;
+      try {
+        const status = await fetchJson("/map/offline/status");
+        if (render) renderOffline(status);
+        return status;
+      } catch {
+        if (render && !lastStatus) renderOfflineUnavailable();
+        return null;
+      } finally {
+        refreshInFlight = false;
+      }
+    }
+
+    function reloadWithInstalledPack() {
+      if (reloadPromise) return reloadPromise;
+      reloadPromise = (async () => {
+        const config = await fetchConfig();
+        if (!config.packInstalled) return;
+        if (activeSource?.pmtilesUrl !== MOLDOVA.pmtilesUrl) {
+          installMap(MOLDOVA);
+        }
+      })().finally(() => {
+        reloadPromise = null;
+      });
+      return reloadPromise;
+    }
+
+    function schedulePoll(delay = 450) {
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = setTimeout(async () => {
+        pollTimer = null;
+        const status = await refreshStatus();
+        if (status && runningState(status)) {
+          schedulePoll();
+        } else if (status && successState(status)) {
+          await reloadWithInstalledPack();
+          if (lastStatus && successState(lastStatus)) {
+            offlineBadge.textContent = "Installed";
+            offlineDetail.textContent = `Moldova · ${formatBytes(
+              Number(lastStatus.pack.expected_bytes || 0) +
+                Number(lastStatus.graph.expected_bytes || 0),
+            )} on disk`;
+          }
+        }
+      }, delay);
+    }
+
+    async function startDownload() {
+      offlineDownload.disabled = true;
+      offlineError.hidden = true;
+      offlineBadge.textContent = "Starting…";
+      try {
+        const response = await fetch("/map/offline/download", {
+          method: "POST",
+          cache: "no-store",
+        });
+        let payload = null;
+        try {
+          payload = await response.json();
+        } catch {
+          payload = null;
+        }
+        if (response.status !== 202 && response.status !== 409) {
+          throw new Error(
+            payload?.message || `Download failed (HTTP ${response.status}).`,
+          );
+        }
+        if (payload) renderOffline(payload);
+        schedulePoll(120);
+      } catch (error) {
+        offlineDownload.disabled = false;
+        offlinePanel.dataset.state = "error";
+        offlineBadge.textContent = "Failed";
+        offlineDetail.textContent = "The offline map was not downloaded.";
+        offlineError.hidden = false;
+        offlineError.textContent =
+          error?.message || "The offline map download could not start.";
+      }
+    }
+
+    function setupRouteUI() {
+      routeUI = createRouteUI({
+        container: "#route-panel",
+        route: requestLocalRoute,
+        onRoute: ({ route }) => {
+          handle?.drawRoute(route);
+        },
+        onCancel: ({ reason }) => {
+          if (reason === "clear") handle?.clearRoute();
+        },
+      });
+
+      const fromInput = routeUI.element.querySelector('input[name="from"]');
+      const toInput = routeUI.element.querySelector('input[name="to"]');
+      if (fromInput) fromInput.value = DEFAULT_FROM;
+      if (toInput) toInput.value = DEFAULT_TO;
+
+      for (const button of routeUI.element.querySelectorAll(".pinpoint-route__profile")) {
+        if (button.dataset.profile === "auto") continue;
+        button.disabled = true;
+        button.title = "Only the offline car profile is available.";
+      }
+
+      window.__pinpointRoute = {
+        ui: routeUI,
+        route: requestLocalRoute,
+        defaults: { from: DEFAULT_FROM, to: DEFAULT_TO },
+      };
+    }
+
+    async function boot() {
+      syncThemeButton();
+
+      const config = await fetchConfig();
+      installMap(config.packInstalled ? MOLDOVA : MONACO);
+      setupRouteUI();
+
+      const status = await refreshStatus();
+      if (status && runningState(status)) schedulePoll(150);
+
+      window.__pinpointOffline = {
+        get status() {
+          return lastStatus;
+        },
+        refresh: () => refreshStatus(),
+        panel: offlinePanel,
+        button: offlineDownload,
+        formatBytes,
+      };
+    }
 
     themeButton.addEventListener("click", () => {
       theme = theme === "dark" ? "light" : "dark";
@@ -249,7 +550,12 @@
     });
 
     resetButton.addEventListener("click", () => {
-      handle?.getMap()?.flyTo({ center: MONACO_CENTER, zoom: MONACO_ZOOM, duration: 650 });
+      if (!activeSource) return;
+      handle?.getMap()?.flyTo({
+        center: activeSource.center,
+        zoom: activeSource.zoom,
+        duration: 650,
+      });
     });
 
     markersButton.addEventListener("click", () => {
@@ -258,6 +564,12 @@
       markersButton.textContent = markersVisible ? "Hide markers" : "Show markers";
       markersButton.setAttribute("aria-pressed", String(markersVisible));
     });
+
+    offlineDownload.addEventListener("click", () => {
+      void startDownload();
+    });
+
+    void boot();
   </script>
 </body>
 </html>

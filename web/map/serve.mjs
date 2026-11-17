@@ -46,6 +46,51 @@ function sendError(response, status, message, headers = {}) {
   response.end(message);
 }
 
+function sendJson(response, body, method = "GET") {
+  const payload = JSON.stringify(body);
+  response.writeHead(200, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(payload),
+    "Cache-Control": "no-store",
+  });
+  if (method === "HEAD") response.end();
+  else response.end(payload);
+}
+
+/**
+ * Preview-only stubs for the two endpoints the Rust loopback map servers
+ * implement. They keep the page free of 404 console noise when it is opened
+ * with this static development server. The download action itself belongs to
+ * the app server; a static preview never installs data.
+ */
+function sendMapServerPreview(response, pathname, method) {
+  if (pathname === "/map/config") {
+    sendJson(
+      response,
+      {
+        pmtilesUrl: "./fixtures/monaco.pmtiles",
+        graphInstalled: false,
+        packInstalled: false,
+      },
+      method,
+    );
+    return true;
+  }
+  if (pathname === "/map/offline/status") {
+    const idle = {
+      installed: false,
+      bytes: 0,
+      expected_bytes: 0,
+      progress_bytes: 0,
+      phase: "idle",
+      error: null,
+    };
+    sendJson(response, { pack: idle, graph: idle }, method);
+    return true;
+  }
+  return false;
+}
+
 /**
  * Create (but do not start) a static server rooted at `web/`.
  *
@@ -69,6 +114,8 @@ export function createStaticServer({ root = WEB_ROOT } = {}) {
       sendError(response, 400, "Bad Request");
       return;
     }
+
+    if (sendMapServerPreview(response, pathname, method)) return;
 
     const parts = pathname.split(/[\\/]+/).filter(Boolean);
     if (parts.some((part) => part === "." || part === ".." || part.includes(":"))) {

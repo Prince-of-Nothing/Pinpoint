@@ -103,10 +103,13 @@ zeroize = "1.7"
 # cache with road names and maneuvers. It has no HTTP client and no online
 # fallback; the map servers only hand it coordinates (ADR: local routing).
 native-router = { path = "tools/native-router" }
-tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time", "net", "macros", "sync", "fs"] }
+tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time", "net", "macros", "sync", "fs", "io-util"] }
 # `stream` keeps the offline-pack proxy from buffering a 220 MB artifact: the
-# GitHub release body is piped into the Axum response chunk by chunk.
+# GitHub release body is piped into the Axum response chunk by chunk. The map
+# server uses `tokio-util`'s `ReaderStream` so a downloaded 93 MB PMTiles pack
+# is streamed back with byte ranges instead of being read into memory.
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+tokio-util = { version = "0.7", features = ["io"] }
 webbrowser = "1.2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 which = "6.0"

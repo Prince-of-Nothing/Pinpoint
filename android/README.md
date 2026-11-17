@@ -82,9 +82,15 @@ The server:
 - advertises `Accept-Ranges: bytes` and implements single `bytes=` ranges with
   `206 Partial Content` and `416 Range Not Satisfiable`, which PMTiles requires;
 - serves downloaded packs from `<files>/packs/<name>.pmtiles` at
-  `/packs/<name>.pmtiles`, canonicalised under the packs directory. A full
-  (non-range) response is capped at 64 MiB; larger packs must be read with
-  ranges (which is what PMTiles does);
+  `/packs/<name>.pmtiles`, canonicalised under the packs directory. Bodies
+  (full or ranged) are streamed, so serving the 93 MB Moldova archive never
+  buffers it in memory; single `bytes=` ranges still win for PMTiles;
+- mounts the shared native installer from `src/offline_install.rs`:
+  `GET /map/offline/status`, `POST /map/offline/download` and
+  `GET /map/config`. The Rust process streams both release artifacts to
+  `packs/.<name>.part`, verifies exact bytes + incremental SHA-256, then
+  atomically renames them. The page shows progress and reloads onto
+  `/packs/moldova.pmtiles`; there is no GitHub fetch from the WebView;
 - never serves account data, session cookies or CSRF tokens.
 
 Adding a file to `web/map/index.html` also means adding it to the table in
@@ -136,9 +142,11 @@ $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21.0.13+9" # JDK 21, not
 
 The loopback server tests check the page/vendor MIME types, range requests
 (`206`/`416`), HEAD, traversal rejection and pack serving from a temporary
-`packs/` directory. The prototype was built as an arm64 debug APK; no emulator
-or phone was attached in this environment, so the on-device render is still a
-follow-up. Android Studio's emulator with host GPU is the recommended device
+`packs/` directory. The installer has fixture tests for a successful stream +
+SHA-256 install, a wrong-hash rejection that leaves the old file untouched,
+status transitions and `409` while running. The prototype was built as an
+arm64 debug APK; no emulator or phone was attached in this environment, so the
+on-device render is still a follow-up. Android Studio's emulator with host GPU is the recommended device
 check; a headless SwiftShader emulator can show the system-UI warning described
 under [Known limitations](#known-limitations).
 
@@ -283,11 +291,12 @@ and the admin console are reachable from the drawer and deep links
 
 ## Known limitations
 
-- **MapLibre WebView prototype:** the page is the Monaco fixture, not a
-  downloaded pack picker. Packs must be copied to `files/packs/` for now
-  (`adb push`), and the page still asks for `fixtures/monaco.pmtiles`; wiring
-  `/packs/<name>.pmtiles` into the page is the next stream. The full-screen
-  overlay is Android-only; desktop/iOS keep the egui/native map.
+- **MapLibre WebView prototype:** the page starts on the Monaco fixture and
+  has an **Offline map** card that downloads the Moldova PMTiles archive and
+  routing graph into `files/packs/` through the Rust process. It reloads onto
+  `/packs/moldova.pmtiles` after install; there is no pack picker or delete
+  control yet. The full-screen overlay is Android-only; desktop/iOS keep the
+  egui/native map.
 - The WebView bridge edits no `web/map/*` file: it binds the preview's existing
   map handle. A production page should call `PinpointBridge.onMapClick` and
   `PinpointBridge.onShareRequest` directly.

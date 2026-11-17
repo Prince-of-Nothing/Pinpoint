@@ -12,16 +12,19 @@
 //!   assets), with path-traversal and symlink-escape checks;
 //! * supports single `Range` requests with `206` and `Content-Range`, and
 //!   answers unsatisfiable ranges with `416`, matching `web/map/serve.mjs`;
-//! * sends `Accept-Ranges: bytes` and correct MIME types for the page.
+//! * sends `Accept-Ranges: bytes` and correct MIME types for the page;
+//! * mounts the shared offline installer (`/map/offline/*`, `/map/config`) and
+//!   streams installed `packs/<name>.pmtiles` archives with Range support.
 //!
 //! This is not the production pack server. It exposes only public, bundled
-//! ODbL map assets to the local machine and holds no session or friend data.
+//! ODbL map assets and downloaded public pack files to the local machine and
+//! holds no session or friend data.
 
 use axum::body::{Body, Bytes};
-use axum::extract::{Request, State};
+use axum::extract::{Extension, Request, State};
 use axum::http::{header, HeaderValue, Method, StatusCode};
 use axum::response::Response;
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -29,6 +32,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
+
+use crate::offline_install::{DownloadPlan, OfflineInstaller};
 
 /// Directory under a repository/packaging root that contains `map/` and
 /// `vendor/`.
@@ -48,7 +53,27 @@ pub struct MapServer {
 }
 
 impl MapServer {
+    /// Start the server with the app's own `<app data>/packs` directory.
     pub fn start(web_root: impl AsRef<Path>) -> anyhow::Result<Self> {
+        let packs = crate::platform::app_data_dir().map(|dir| dir.join("packs"));
+        Self::start_with_packs(web_root, packs)
+    }
+
+    /// Start the server with an explicit packs directory (tests and tooling).
+    pub fn start_with_packs(
+        web_root: impl AsRef<Path>,
+        packs_dir: Option<PathBuf>,
+    ) -> anyhow::Result<Self> {
+        Self::start_with_plan(web_root, packs_dir, DownloadPlan::default())
+    }
+
+    /// Start with explicit artifact metadata. Only used by fixture tests; the
+    /// production path is [`Self::start`].
+    pub fn start_with_plan(
+        web_root: impl AsRef<Path>,
+        packs_dir: Option<PathBuf>,
+        plan: DownloadPlan,
+    ) -> anyhow::Result<Self> {
         use anyhow::Context as _;
 
         let root = std::fs::canonicalize(web_root.as_ref())
@@ -62,6 +87,10 @@ impl MapServer {
         let assets = MapAssets {
             root: Arc::new(root),
         };
+        let installer = Arc::new(OfflineInstaller::with_plan(packs_dir.clone(), plan));
+        let router = Arc::new(crate::local_route::LocalRouter::for_packs_dir(
+            packs_dir.as_deref(),
+        ));
 
         std::thread::Builder::new()
             .name("pinpoint-map-server".to_string())
@@ -101,7 +130,16 @@ impl MapServer {
 
                     let app = Router::new()
                         .route("/map/route", get(crate::local_route::map_route))
+                        .route("/map/config", get(crate::offline_install::config))
+                        .route("/map/offline/status", get(crate::offline_install::status))
+                        .route(
+                            "/map/offline/download",
+                            post(crate::offline_install::download),
+                        )
+                        .route("/packs/:name", get(crate::offline_install::serve_pack))
                         .fallback(serve_asset)
+                        .layer(Extension(installer))
+                        .layer(Extension(router))
                         .with_state(assets);
 
                     if ready_tx.send(Ok(addr)).is_err() {
@@ -518,6 +556,7 @@ pub fn find_web_root() -> anyhow::Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::{find_web_root, MapServer};
+    use crate::offline_install::PACK_BYTES;
     use std::path::PathBuf;
 
     fn repo_web_root() -> PathBuf {
@@ -634,6 +673,87 @@ mod tests {
             format!("bytes {}-{}/{total}", total - 16, total - 1)
         );
         assert_eq!(suffix.bytes().await.expect("suffix body").len(), 16);
+
+        drop(client);
+        server.shutdown();
+    }
+
+    #[tokio::test]
+    async fn config_and_installed_packs_are_served_from_the_packs_directory() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let server = MapServer::start_with_packs(repo_web_root(), Some(dir.path().to_path_buf()))
+            .expect("server");
+        let client = reqwest::Client::new();
+
+        let config: serde_json::Value = client
+            .get(format!("{}map/config", server.base_url()))
+            .send()
+            .await
+            .expect("config request")
+            .json()
+            .await
+            .expect("config JSON");
+        assert_eq!(config["pmtilesUrl"], "./fixtures/monaco.pmtiles");
+        assert_eq!(config["packInstalled"], false);
+        assert_eq!(config["graphInstalled"], false);
+
+        // A sparse file with the production length is enough for the length
+        // check; the real SHA-256 is verified by the download manager.
+        std::fs::File::create(dir.path().join("moldova.pmtiles"))
+            .expect("sparse pack")
+            .set_len(PACK_BYTES)
+            .expect("pack length");
+
+        let config: serde_json::Value = client
+            .get(format!("{}map/config", server.base_url()))
+            .send()
+            .await
+            .expect("config request")
+            .json()
+            .await
+            .expect("config JSON");
+        assert_eq!(config["pmtilesUrl"], "/packs/moldova.pmtiles");
+        assert_eq!(config["packInstalled"], true);
+        assert_eq!(config["graphInstalled"], false);
+
+        let status: serde_json::Value = client
+            .get(format!("{}map/offline/status", server.base_url()))
+            .send()
+            .await
+            .expect("status request")
+            .json()
+            .await
+            .expect("status JSON");
+        assert_eq!(status["pack"]["installed"], true);
+        assert_eq!(status["pack"]["bytes"], PACK_BYTES);
+        assert_eq!(status["pack"]["expected_bytes"], PACK_BYTES);
+        assert_eq!(status["pack"]["phase"], "installed");
+        assert_eq!(status["graph"]["installed"], false);
+
+        let ranged = client
+            .get(format!("{}packs/moldova.pmtiles", server.base_url()))
+            .header(reqwest::header::RANGE, "bytes=0-15")
+            .send()
+            .await
+            .expect("pack range");
+        assert_eq!(ranged.status(), reqwest::StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            ranged.headers()["content-range"],
+            format!("bytes 0-15/{PACK_BYTES}")
+        );
+        assert_eq!(ranged.bytes().await.expect("range body").len(), 16);
+
+        let invalid = client
+            .get(format!("{}packs/moldova.pmtiles", server.base_url()))
+            .header(reqwest::header::RANGE, format!("bytes={PACK_BYTES}-"))
+            .send()
+            .await
+            .expect("invalid range");
+        assert_eq!(invalid.status(), reqwest::StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(
+            invalid.headers()["content-range"],
+            format!("bytes */{PACK_BYTES}")
+        );
 
         drop(client);
         server.shutdown();

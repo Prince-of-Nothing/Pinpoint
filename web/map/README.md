@@ -7,9 +7,12 @@ desktop WebView will consume.
 
 This is a **foundation**, not the finished offline feature. The preview now
 wires the on-device `native_router` car route to a panel and `/map/route` on
-both loopback map servers. The pack download manager, OPFS storage and
-service worker live in the web-app stream; the `search.js` module already
-searches the M1 `places`/`places_fts` SQLite index on-device (see
+both loopback map servers. The Android/desktop map servers also own the native
+pack download manager: the **Offline map** card installs the real Moldova
+PMTiles archive and routing graph into `packs/`, verifies both SHA-256 digests
+and reloads the page onto the installed archive. The web app keeps its own
+OPFS storage and service-worker stream; the `search.js` module already searches
+the M1 `places`/`places_fts` SQLite index on-device (see
 [`search.md`](search.md)).
 
 ## Run the preview
@@ -37,6 +40,11 @@ Everything the page loads is local: MapLibre, its worker, PMTiles, the style
 and the fixture. There are no runtime CDN imports and the style has no glyphs,
 sprites or remote tile URLs.
 
+`serve.mjs` answers `/map/config` and `/map/offline/status` with preview stubs
+so a static preview renders without 404 console noise. It has no download
+manager; the Offline map card says so and the install action belongs to the
+Rust map servers.
+
 ## Files
 
 | Path | Purpose |
@@ -56,6 +64,7 @@ sprites or remote tile URLs.
 | `web/map/test/smoke.mjs` | Static + headless-browser map smoke test |
 | `web/map/test/search-smoke.mjs` | HTTP + Chromium/Node offline-search smoke test |
 | `web/map/test/route-e2e.mjs` | Chromium E2E for the local route panel, run by `tests/map_route_e2e.rs` |
+| `web/map/test/offline-e2e.mjs` | Chromium E2E for the native offline install, run by `tests/map_offline_e2e.rs` |
 | `web/vendor/maplibre-gl.js` | MapLibre GL JS 6.18.0 ES module |
 | `web/vendor/maplibre-gl-worker.mjs` | MapLibre 6.18.0 worker (required sibling) |
 | `web/vendor/maplibre-gl.css` | MapLibre 6.18.0 stylesheet |
@@ -215,6 +224,42 @@ $env:PINPOINT_ROUTER_GRAPH="C:\path\to\moldova.graph.bin"
 # start the desktop map server, then open its /map/index.html
 ```
 
+## Native offline pack (Android + desktop map servers)
+
+Both loopback map servers mount the same routes from
+`src/offline_install.rs`:
+
+| Route | Contract |
+|---|---|
+| `GET /map/config` | `{pmtilesUrl, graphInstalled, packInstalled}`. `/packs/moldova.pmtiles` once the archive is installed, otherwise `./fixtures/monaco.pmtiles`. |
+| `GET /map/offline/status` | `{pack, graph}`, each `{installed, bytes, expected_bytes, progress_bytes, phase, error}`. Pollable while a job runs. |
+| `POST /map/offline/download` | Starts the single background job. `202` with the current status, or `409` while another job is running. |
+| `GET\|HEAD /packs/<name>.pmtiles` | The installed archive with `Accept-Ranges: bytes`, `206`/`416` and streamed bodies. |
+
+The Rust process downloads `moldova.pmtiles` (93,172,399 B) and
+`moldova.graph.bin` (110,858,815 B; 204,031,214 B total, **204 MB**) from the
+immutable `data-moldova-20261116` release. `PINPOINT_OFFLINE_BASE_URL` points
+at a mirror or a local fixture server. Each response is streamed to
+`packs/.<name>.part`, hashed incrementally with SHA-256, checked against the
+exact byte length, and only then atomically renamed over the final file. A
+partial, corrupt or wrong-hash download leaves an existing installed file
+untouched. The page never fetches GitHub; the native process does, so CORS is
+irrelevant.
+
+The **Offline map** card shows the total size, polls the status endpoint while
+downloading, reports phase/progress, and distinguishes **Routing graph
+installed** from **Download routing data**. When both artifacts are installed
+it fetches `/map/config` and recreates the MapLibre map with
+`/packs/moldova.pmtiles`. The route panel keeps using the local `/map/route`
+handler; `LocalRouter` reloads a changed `packs/moldova.graph.bin` on the next
+request, so the route works immediately after the download without restarting
+the server.
+
+`installed` is the exact expected byte length at the final path. The SHA-256
+was verified when that file was installed; status polling never re-hashes a
+93/106 MB file. `PINPOINT_ROUTER_GRAPH` still overrides the graph path for
+tests and development.
+
 ## Offline search
 
 `web/map/search.js` is a separate ES module for the M1 SQLite search index. It
@@ -308,6 +353,23 @@ fixture, then runs the real search module (Chromium when Puppeteer is
 available, Node fallback otherwise). It asserts `balti` → Bălți,
 `кишин` → Кишинёв, punctuation-only → `[]`, and local-only traffic.
 
+The native offline install has an ignored Rust + Chromium E2E. It starts the
+desktop map server with a temp `packs/` directory and a local fixture host
+serving the committed Monaco PMTiles plus a synthetic `native_router` graph,
+then presses the Offline map button:
+
+```powershell
+$env:NODE_PATH="C:\Users\Dinusauuuur\AppData\Local\Temp\opencode\node_modules"
+cargo test --locked --test map_offline_e2e -- --ignored --nocapture
+```
+
+It asserts streamed progress, the installed status, `/map/config` pointing at
+`/packs/moldova.pmtiles`, the map source reloading with `206` ranges, a working
+local route from the downloaded graph, and zero external requests, failed
+requests, page errors or console errors. The real 204 MB release is never
+committed; the test fixtures are the 94 KB Monaco archive and a few hundred
+bytes of synthetic graph.
+
 The route panel has its own ignored Rust + Chromium E2E (synthetic graph by
 default, real Moldova cache with `PINPOINT_E2E_GRAPH`):
 
@@ -322,12 +384,12 @@ external/failed request, page error or console error.
 
 ## Limitations and follow-up stream
 
-- **No offline packs yet.** This loads a local PMTiles file that is already on
-  the origin. The download manager, manifest verification, SHA-256 check,
-  atomic replace, progress UI, OPFS storage and service worker are the next
-  web stream. The web app consumes this module through `web/app/map.js`; the
-  Rust server serves it under `/map-assets/*` and the vendored libraries under
-  `/vendor/*`.
+- **Native install is not the web-app pack store.** The Android/desktop map
+  servers install into the app's `packs/` directory. The web app still uses
+  its own manifest/OPFS/service-worker stream in `web/app/offline.js`; the
+  static `serve.mjs` preview cannot install anything. The web app consumes
+  this module through `web/app/map.js`; the Rust server serves it under
+  `/map-assets/*` and the vendored libraries under `/vendor/*`.
 - **No labels.** Glyphs and sprites are deliberately absent. A production
   style needs vendored glyphs/sprites and a label layer pass.
 - **Search is offline-first in the app.** `web/app/offline-search.js` opens the

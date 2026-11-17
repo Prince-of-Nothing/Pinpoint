@@ -15,19 +15,25 @@
 //!
 //! PMTiles reads through HTTP Range requests, so every response advertises
 //! `Accept-Ranges: bytes` and supports `206 Partial Content` and `416`.
+//!
+//! `/map/offline/status`, `/map/offline/download` and `/map/config` come from
+//! [`crate::offline_install`], the same module the desktop server mounts.
+//! Downloaded artifacts land in `<app data>/packs/` and are served at
+//! `/packs/<name>.pmtiles` with the same Range semantics.
 
-use std::io::{Read, Seek, SeekFrom};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 
 use axum::body::{Body, Bytes};
-use axum::extract::{Path as UrlPath, State};
+use axum::extract::{Extension, Path as UrlPath};
 use axum::http::{header, HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use tokio::sync::oneshot;
+
+use crate::offline_install::{DownloadPlan, OfflineInstaller};
 
 const MIME_HTML: &str = "text/html; charset=utf-8";
 const MIME_CSS: &str = "text/css; charset=utf-8";
@@ -35,11 +41,6 @@ const MIME_JS: &str = "text/javascript; charset=utf-8";
 const MIME_JSON: &str = "application/json; charset=utf-8";
 const MIME_PMTILES: &str = "application/octet-stream";
 const MIME_TEXT: &str = "text/plain; charset=utf-8";
-
-/// Largest single HTTP response the server buffers for a downloaded pack.
-/// PMTiles clients use ranges; a client that asks for a whole large pack is
-/// told to use a range instead of allocating the file twice.
-const MAX_BUFFERED_PACK_BYTES: u64 = 64 * 1024 * 1024;
 
 const MAP_INDEX: &[u8] = include_bytes!("../../web/map/index.html");
 const MAP_PREVIEW_CSS: &[u8] = include_bytes!("../../web/map/preview.css");
@@ -122,10 +123,6 @@ const ASSETS: &[EmbeddedAsset] = &[
     },
 ];
 
-struct ServerState {
-    packs_dir: Option<PathBuf>,
-}
-
 /// A running loopback map server. Dropping it shuts the thread down.
 pub struct MapServer {
     origin: String,
@@ -138,10 +135,21 @@ impl MapServer {
     /// Bind `127.0.0.1:0` and serve the embedded map assets plus, optionally,
     /// `*.pmtiles` files from `packs_dir` at `/packs/<name>.pmtiles`.
     pub fn start(packs_dir: Option<PathBuf>) -> std::io::Result<Self> {
+        Self::start_with_plan(packs_dir, DownloadPlan::default())
+    }
+
+    /// Fixture/test variant with explicit artifact metadata.
+    pub fn start_with_plan(
+        packs_dir: Option<PathBuf>,
+        plan: DownloadPlan,
+    ) -> std::io::Result<Self> {
         let listener = std::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))?;
         listener.set_nonblocking(true)?;
         let address = listener.local_addr()?;
-        let state = Arc::new(ServerState { packs_dir });
+        let installer = Arc::new(OfflineInstaller::with_plan(packs_dir.clone(), plan));
+        let local_router = Arc::new(crate::local_route::LocalRouter::for_packs_dir(
+            packs_dir.as_deref(),
+        ));
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
         let thread = std::thread::Builder::new()
@@ -165,7 +173,7 @@ impl MapServer {
                             return;
                         }
                     };
-                    let app = router(state);
+                    let app = router(installer, local_router);
                     let served = axum::serve(listener, app)
                         .with_graceful_shutdown(async move {
                             let _ = shutdown_rx.await;
@@ -231,23 +239,29 @@ pub fn shared() -> Result<&'static MapServer, String> {
         .ok_or_else(|| "the loopback map server did not start".to_string())
 }
 
-fn router(state: Arc<ServerState>) -> Router {
+fn router(
+    installer: Arc<OfflineInstaller>,
+    local_router: Arc<crate::local_route::LocalRouter>,
+) -> Router {
     Router::new()
         .route("/map/route", get(crate::local_route::map_route))
+        .route("/map/config", get(crate::offline_install::config))
+        .route("/map/offline/status", get(crate::offline_install::status))
+        .route(
+            "/map/offline/download",
+            post(crate::offline_install::download),
+        )
+        .route("/packs/:name", get(crate::offline_install::serve_pack))
         .route(
             "/",
             get(|| async { Redirect::temporary("/map/index.html") }),
         )
         .route("/*path", get(serve))
-        .with_state(state)
+        .layer(Extension(installer))
+        .layer(Extension(local_router))
 }
 
-async fn serve(
-    State(state): State<Arc<ServerState>>,
-    method: Method,
-    headers: HeaderMap,
-    UrlPath(path): UrlPath<String>,
-) -> Response {
+async fn serve(method: Method, headers: HeaderMap, UrlPath(path): UrlPath<String>) -> Response {
     if method != Method::GET && method != Method::HEAD {
         return (
             StatusCode::METHOD_NOT_ALLOWED,
@@ -267,10 +281,6 @@ async fn serve(
 
     if let Some(asset) = ASSETS.iter().find(|asset| asset.path == path) {
         return embedded_response(asset, range.as_deref(), &method);
-    }
-
-    if let Some(name) = path.strip_prefix("packs/") {
-        return pack_response(&state, name, range.as_deref(), &method).await;
     }
 
     text_response(StatusCode::NOT_FOUND, "Not Found")
@@ -300,111 +310,6 @@ fn embedded_response(asset: &EmbeddedAsset, range: Option<&str>, method: &Method
         }
         RangeSelection::Unsatisfiable => range_not_satisfiable(size),
     }
-}
-
-async fn pack_response(
-    state: &ServerState,
-    name: &str,
-    range: Option<&str>,
-    method: &Method,
-) -> Response {
-    let Some(file_name) = valid_pack_name(name) else {
-        return text_response(StatusCode::NOT_FOUND, "Not Found");
-    };
-    let Some(packs_dir) = state.packs_dir.as_ref() else {
-        return text_response(StatusCode::NOT_FOUND, "No offline pack directory");
-    };
-
-    let root = packs_dir.clone();
-    let path = packs_dir.join(file_name);
-    let resolved = tokio::task::spawn_blocking(move || -> std::io::Result<(PathBuf, u64)> {
-        let root = std::fs::canonicalize(&root)?;
-        let path = std::fs::canonicalize(&path)?;
-        if !path.starts_with(&root) || !path.is_file() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                "pack outside the packs directory",
-            ));
-        }
-        let size = std::fs::metadata(&path)?.len();
-        Ok((path, size))
-    })
-    .await;
-
-    let (path, size) = match resolved {
-        Ok(Ok(value)) => value,
-        Ok(Err(error)) => {
-            tracing::debug!(%error, pack = file_name, "map server: pack unavailable");
-            return text_response(StatusCode::NOT_FOUND, "Not Found");
-        }
-        Err(error) => {
-            tracing::warn!(%error, "map server: pack lookup task failed");
-            return text_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error");
-        }
-    };
-
-    let (start, end) = match select_range(range, size) {
-        RangeSelection::Full => {
-            if size > MAX_BUFFERED_PACK_BYTES {
-                return pack_range_required(size);
-            }
-            (0, size.saturating_sub(1))
-        }
-        RangeSelection::Partial { start, end } => (start, end),
-        RangeSelection::Unsatisfiable => return range_not_satisfiable(size),
-    };
-    let length = end.saturating_sub(start) + 1;
-    if length > MAX_BUFFERED_PACK_BYTES {
-        return pack_range_required(size);
-    }
-
-    match read_pack_range(path, start, length).await {
-        Ok(bytes) => body_response(
-            if range.is_some() {
-                StatusCode::PARTIAL_CONTENT
-            } else {
-                StatusCode::OK
-            },
-            MIME_PMTILES,
-            length,
-            range.map(|_| format!("bytes {start}-{end}/{size}")),
-            method,
-            Body::from(bytes),
-        ),
-        Err(error) => {
-            tracing::warn!(%error, pack = file_name, "map server: pack read failed");
-            text_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
-        }
-    }
-}
-
-async fn read_pack_range(path: PathBuf, start: u64, length: u64) -> std::io::Result<Vec<u8>> {
-    tokio::task::spawn_blocking(move || -> std::io::Result<Vec<u8>> {
-        let mut file = std::fs::File::open(path)?;
-        file.seek(SeekFrom::Start(start))?;
-        let mut buffer = vec![0u8; length as usize];
-        file.read_exact(&mut buffer)?;
-        Ok(buffer)
-    })
-    .await
-    .map_err(|error| std::io::Error::other(format!("pack read task failed: {error}")))?
-}
-
-/// Only a single, non-hidden `*.pmtiles` file name is accepted. The caller
-/// still canonicalises the joined path to reject symlinks and `..`.
-fn valid_pack_name(name: &str) -> Option<&str> {
-    if name.is_empty()
-        || name == "."
-        || name == ".."
-        || name.starts_with('.')
-        || !name.ends_with(".pmtiles")
-        || name
-            .chars()
-            .any(|c| c.is_control() || c.is_whitespace() || matches!(c, '/' | '\\' | ':'))
-    {
-        return None;
-    }
-    Some(name)
 }
 
 enum RangeSelection {
@@ -510,18 +415,6 @@ fn range_not_satisfiable(size: u64) -> Response {
             (header::CONTENT_RANGE, format!("bytes */{size}")),
         ],
         "Range Not Satisfiable",
-    )
-        .into_response()
-}
-
-fn pack_range_required(size: u64) -> Response {
-    (
-        StatusCode::RANGE_NOT_SATISFIABLE,
-        [
-            (header::CONTENT_TYPE, MIME_TEXT.to_string()),
-            (header::CONTENT_RANGE, format!("bytes */{size}")),
-        ],
-        "Use a byte range to read this offline pack",
     )
         .into_response()
 }

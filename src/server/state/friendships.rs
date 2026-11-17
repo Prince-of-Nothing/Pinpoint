@@ -40,20 +40,30 @@ impl AppState {
 
     pub(super) async fn persist_friendships(
         &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-        store: &Store,
+        _tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        _store: &Store,
     ) {
-        if !self.owner.owns_friendships() {
-            return;
+        // Friendships are written by sql_upsert_friendship/sql_delete_friendship
+        // only. A whole-store snapshot would resurrect a removed friendship
+        // (or a request another replica just accepted) after the explicit write.
+    }
+
+    pub async fn sql_upsert_friendship(&self, f: &Friendship) {
+        let Some(pool) = &self.pg else { return };
+        if let Err(error) = sqlx::query("INSERT INTO pinpoint_friendships (id, requester_id, receiver_id, requester_name, receiver_name, status, created_at, responded_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO UPDATE SET requester_id = EXCLUDED.requester_id, receiver_id = EXCLUDED.receiver_id, requester_name = EXCLUDED.requester_name, receiver_name = EXCLUDED.receiver_name, status = EXCLUDED.status, created_at = EXCLUDED.created_at, responded_at = EXCLUDED.responded_at")
+            .bind(f.id)
+            .bind(f.requester_id)
+            .bind(f.receiver_id)
+            .bind(&f.requester_name)
+            .bind(&f.receiver_name)
+            .bind(&f.status)
+            .bind(&f.created_at)
+            .bind(&f.responded_at)
+            .execute(pool)
+            .await
+        {
+            eprintln!("pinpoint_friendships upsert failed: {error}");
         }
-        for f in &store.friendships {
-            let _ = sqlx::query("INSERT INTO pinpoint_friendships (id, requester_id, receiver_id, requester_name, receiver_name, status, created_at, responded_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO UPDATE SET requester_id = EXCLUDED.requester_id, receiver_id = EXCLUDED.receiver_id, requester_name = EXCLUDED.requester_name, receiver_name = EXCLUDED.receiver_name, status = EXCLUDED.status, created_at = EXCLUDED.created_at, responded_at = EXCLUDED.responded_at")
-                .bind(f.id).bind(f.requester_id).bind(f.receiver_id).bind(&f.requester_name).bind(&f.receiver_name).bind(&f.status).bind(&f.created_at).bind(&f.responded_at)
-                .execute(&mut **tx).await;
-        }
-        // No delete-missing: deletions go through sql_delete_friendship()
-        // (explicit) so a stale snapshot can never erase a row another
-        // replica just committed.
     }
 
     pub async fn sql_delete_friendship(&self, id: i64) {

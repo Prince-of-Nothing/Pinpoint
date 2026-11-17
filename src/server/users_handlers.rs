@@ -452,62 +452,66 @@ pub async fn create_friendship(
         .get("receiver_email")
         .and_then(Value::as_str)
         .unwrap_or("");
-    let mut store = state.store.lock().unwrap();
-    let receiver = if !receiver_username.is_empty() {
-        match find_user_by_username(&store.users, &receiver_username) {
-            Some(u) => u.clone(),
-            None => return error_envelope("USER_NOT_FOUND", "No account with that username."),
+    let friendship = {
+        let mut store = state.store.lock().unwrap();
+        let receiver = if !receiver_username.is_empty() {
+            match find_user_by_username(&store.users, &receiver_username) {
+                Some(u) => u.clone(),
+                None => return error_envelope("USER_NOT_FOUND", "No account with that username."),
+            }
+        } else if !receiver_email.is_empty() {
+            match store.find_user_by_email(receiver_email) {
+                Some(u) => u.clone(),
+                None => return error_envelope("USER_NOT_FOUND", "User not found."),
+            }
+        } else {
+            return error_envelope(
+                "VALIDATION_FAILED",
+                "receiver_username is required (receiver_email is legacy).",
+            );
+        };
+        if !receiver.is_active {
+            return error_envelope("USER_NOT_FOUND", "User not found.");
         }
-    } else if !receiver_email.is_empty() {
-        match store.find_user_by_email(receiver_email) {
-            Some(u) => u.clone(),
+        let requester = match store.find_user_by_id(cu.user_id).cloned() {
+            Some(u) => u,
             None => return error_envelope("USER_NOT_FOUND", "User not found."),
+        };
+        if requester.id == receiver.id {
+            return error_envelope(
+                "VALIDATION_FAILED",
+                "Cannot send a friend request to yourself.",
+            );
         }
-    } else {
-        return error_envelope(
-            "VALIDATION_FAILED",
-            "receiver_username is required (receiver_email is legacy).",
-        );
+        let existing = store.friendships.iter().any(|f| {
+            f.status != "rejected"
+                && ((f.requester_id == requester.id && f.receiver_id == receiver.id)
+                    || (f.requester_id == receiver.id && f.receiver_id == requester.id))
+        });
+        if existing {
+            return error_envelope(
+                "FRIENDSHIP_EXISTS",
+                "A friendship or pending request already exists.",
+            );
+        }
+        let id = store.next_friendship_id;
+        store.next_friendship_id += 1;
+        // Handles, not legal names: a pending request must not reveal the
+        // requester's real name before the receiver accepts.
+        let friendship = crate::models::Friendship {
+            id,
+            requester_id: requester.id,
+            receiver_id: receiver.id,
+            requester_name: username_for(requester.id),
+            receiver_name: username_for(receiver.id),
+            status: "pending".into(),
+            created_at: Some(chrono::Utc::now().to_rfc3339()),
+            responded_at: None,
+        };
+        store.friendships.push(friendship.clone());
+        friendship
     };
-    if !receiver.is_active {
-        return error_envelope("USER_NOT_FOUND", "User not found.");
-    }
-    let requester = match store.find_user_by_id(cu.user_id).cloned() {
-        Some(u) => u,
-        None => return error_envelope("USER_NOT_FOUND", "User not found."),
-    };
-    if requester.id == receiver.id {
-        return error_envelope(
-            "VALIDATION_FAILED",
-            "Cannot send a friend request to yourself.",
-        );
-    }
-    let existing = store.friendships.iter().any(|f| {
-        f.status != "rejected"
-            && ((f.requester_id == requester.id && f.receiver_id == receiver.id)
-                || (f.requester_id == receiver.id && f.receiver_id == requester.id))
-    });
-    if existing {
-        return error_envelope(
-            "FRIENDSHIP_EXISTS",
-            "A friendship or pending request already exists.",
-        );
-    }
-    let id = store.next_friendship_id;
-    store.next_friendship_id += 1;
-    // Handles, not legal names: a pending request must not reveal the
-    // requester's real name before the receiver accepts.
-    let friendship = crate::models::Friendship {
-        id,
-        requester_id: requester.id,
-        receiver_id: receiver.id,
-        requester_name: username_for(requester.id),
-        receiver_name: username_for(receiver.id),
-        status: "pending".into(),
-        created_at: Some(chrono::Utc::now().to_rfc3339()),
-        responded_at: None,
-    };
-    store.friendships.push(friendship.clone());
+    state.sql_upsert_friendship(&friendship).await;
     (
         StatusCode::CREATED,
         Json(json!({
@@ -562,25 +566,29 @@ pub async fn respond_friendship(
         Err(resp) => return resp,
     };
     let action = body.get("action").and_then(Value::as_str).unwrap_or("");
-    let mut store = state.store.lock().unwrap();
-    let friendship = match store.friendships.iter_mut().find(|f| f.id == id) {
-        Some(f) if f.receiver_id == cu.user_id => f,
-        Some(_) => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
-        None => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
+    let updated = {
+        let mut store = state.store.lock().unwrap();
+        let friendship = match store.friendships.iter_mut().find(|f| f.id == id) {
+            Some(f) if f.receiver_id == cu.user_id => f,
+            Some(_) => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
+            None => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
+        };
+        friendship.status = match action {
+            "accept" => "accepted".into(),
+            "reject" => "rejected".into(),
+            _ => return error_envelope("VALIDATION_FAILED", "action must be accept or reject"),
+        };
+        friendship.responded_at = Some(chrono::Utc::now().to_rfc3339());
+        friendship.clone()
     };
-    friendship.status = match action {
-        "accept" => "accepted".into(),
-        "reject" => "rejected".into(),
-        _ => return error_envelope("VALIDATION_FAILED", "action must be accept or reject"),
-    };
-    friendship.responded_at = Some(chrono::Utc::now().to_rfc3339());
+    state.sql_upsert_friendship(&updated).await;
     let resp = json!({
-        "id": friendship.id,
-        "requester_id": friendship.requester_id,
-        "receiver_id": friendship.receiver_id,
-        "requester_name": friendship.requester_name,
-        "receiver_name": friendship.receiver_name,
-        "status": friendship.status,
+        "id": updated.id,
+        "requester_id": updated.requester_id,
+        "receiver_id": updated.receiver_id,
+        "requester_name": updated.requester_name,
+        "receiver_name": updated.receiver_name,
+        "status": updated.status,
     });
     (StatusCode::OK, Json(resp)).into_response()
 }

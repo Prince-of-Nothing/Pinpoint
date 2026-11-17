@@ -4,13 +4,7 @@
 import { createMap } from "./map.js";
 import { initNavigation } from "./nav.js";
 import { createAdminConsole } from "./admin.js";
-import {
-  expiryText,
-  friendName,
-  initSharing,
-  precisionLabel,
-  shareStatus,
-} from "./sharing.js";
+import { friendName, initSharing, shareRowModel } from "./sharing.js";
 import { initAppearance } from "./appearance.js";
 
 const state = {
@@ -322,36 +316,39 @@ function renderFriends(items) {
 function renderShares(items, friendships = []) {
   const ul = $("shares-list");
   ul.innerHTML = "";
-  if (!items.length) {
+  const rows = items
+    .map((share) => ({ share, model: shareRowModel(share) }))
+    .filter(({ model }) => model.isGrant);
+  if (!rows.length) {
     ul.innerHTML = '<li class="muted">You are not sharing your location.</li>';
     return;
   }
-  for (const s of items) {
+  for (const { share: s, model } of rows) {
     const friendship =
       friendships.find((f) => f.id === s.friendship_id) || { id: s.friendship_id };
-    const status = shareStatus(s);
-    const badge = status === "active" ? "accepted" : status === "expired" ? "rejected" : "pending";
+    const badge =
+      model.status === "active" ? "accepted" : model.status === "expired" ? "rejected" : "pending";
     const li = document.createElement("li");
     li.innerHTML = `<span>${escapeHtml(friendName(friendship, state.user?.id))} · ${escapeHtml(
-      precisionLabel(s.precision_level),
-    )} · ${escapeHtml(expiryText(s))}</span>
-      <span class="badge ${badge}">${status}</span>`;
+      model.precision,
+    )} · ${escapeHtml(model.expiry)}</span>
+      <span class="badge ${badge}">${model.status}</span>`;
     const revoke = document.createElement("button");
     revoke.textContent = "Revoke";
     revoke.className = "secondary";
     revoke.onclick = () => revokeShare(s.id);
     li.appendChild(revoke);
-    if (status === "expired") {
+    if (model.canShareAgain) {
       const again = document.createElement("button");
       again.textContent = "Share again";
       again.className = "secondary";
       again.onclick = () => sharing?.open(friendship);
       li.appendChild(again);
-    } else {
+    } else if (model.canPauseResume) {
       const toggle = document.createElement("button");
-      toggle.textContent = s.is_active ? "Pause" : "Resume";
+      toggle.textContent = model.status === "active" ? "Pause" : "Resume";
       toggle.className = "secondary";
-      toggle.onclick = () => toggleShare(s.id, !s.is_active);
+      toggle.onclick = () => toggleShare(s.id, model.status !== "active");
       li.appendChild(toggle);
     }
     ul.appendChild(li);

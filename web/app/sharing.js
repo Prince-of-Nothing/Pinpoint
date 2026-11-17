@@ -9,6 +9,8 @@ const PRECISION_LABELS = {
   city_only: "City only",
 };
 
+const PRECISION_RANK = { city_only: 0, approximate: 1, exact: 2 };
+
 export function friendName(friendship, me) {
   if (!friendship) return "this friend";
   const name =
@@ -26,6 +28,15 @@ function expiryDate(share) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function requestedExpiry(current, form, now = Date.now()) {
+  if (form?.duration === "keep") return expiryDate(current);
+  const hours = Number(form?.duration);
+  if (!Number.isFinite(hours)) return undefined;
+  if (hours <= 0) return null;
+  const at = now instanceof Date ? now.getTime() : Number(now);
+  return new Date(at + hours * 3_600_000);
+}
+
 export function shareStatus(share, now = Date.now()) {
   if (!share) return "paused";
   const expiry = expiryDate(share);
@@ -34,11 +45,63 @@ export function shareStatus(share, now = Date.now()) {
   return share.is_active ? "active" : "paused";
 }
 
-export function expiryText(share) {
+export function expiryText(share, now = Date.now()) {
   if (!share?.expires_at) return "no expiry";
   const expiry = expiryDate(share);
   if (!expiry) return "expiry unknown";
-  return `${expiry.getTime() <= Date.now() ? "expired" : "expires"} ${expiry.toLocaleString()}`;
+  const at = now instanceof Date ? now.getTime() : Number(now);
+  return `${expiry.getTime() <= at ? "expired" : "expires"} ${expiry.toLocaleString()}`;
+}
+
+/** True when the requested form grants more than the stored share. */
+export function shareWidens(current, form, now = Date.now()) {
+  if (!current) return false;
+  const currentRank = PRECISION_RANK[current.precision_level] ?? PRECISION_RANK.exact;
+  const requestedRank = PRECISION_RANK[form?.precision] ?? currentRank;
+  if (requestedRank > currentRank) return true;
+  const stored = expiryDate(current);
+  if (!stored) return false;
+  const requested = requestedExpiry(current, form, now);
+  if (requested === undefined) return false;
+  if (requested === null) return true;
+  return requested.getTime() > stored.getTime();
+}
+
+/**
+ * The PATCH/POST body for the sheet form. Pausing sends only `is_active`, so
+ * precision and expiry are never rewritten by a pause; a null result means
+ * there is nothing to send.
+ */
+export function shareRequestBody(current, form) {
+  if (!form?.enabled) {
+    if (!current || shareStatus(current) === "expired") return null;
+    return { is_active: false };
+  }
+  const body = {
+    friendship_id: form.friendshipId,
+    direction: current?.direction || "to_friend",
+    precision_level: form.precision,
+    is_active: true,
+  };
+  if (form.duration === "keep") {
+    if (current?.expires_at) body.expires_at = current.expires_at;
+    else body.duration_hours = 0;
+  } else {
+    body.duration_hours = Number(form.duration);
+  }
+  return body;
+}
+
+export function shareRowModel(share, now = Date.now()) {
+  const status = shareStatus(share, now);
+  return {
+    isGrant: Boolean(share) && share.direction !== "from_friend",
+    status,
+    precision: precisionLabel(share?.precision_level),
+    expiry: expiryText(share, now),
+    canPauseResume: status !== "expired",
+    canShareAgain: status === "expired",
+  };
 }
 
 export function initSharing({ api, setStatus, getUser, onChanged }) {
@@ -60,6 +123,15 @@ export function initSharing({ api, setStatus, getUser, onChanged }) {
       friendship,
       getUser?.()?.id,
     )} · ${until ? `until ${until.toLocaleString()}` : "no expiry"}`;
+  }
+
+  function confirmText() {
+    const until = selectedExpiry();
+    const precision = precisionLabel($("share-precision").value).toLowerCase();
+    const friend = friendName(friendship, getUser?.()?.id);
+    return until
+      ? `Share ${precision} location with ${friend} until ${until.toLocaleString()}?`
+      : `Share ${precision} location with ${friend} until you turn it off?`;
   }
 
   function refreshSummary() {
@@ -115,40 +187,26 @@ export function initSharing({ api, setStatus, getUser, onChanged }) {
 
   async function save() {
     if (!friendship) return;
-    const enabled = $("share-enabled").checked;
-    const precision = $("share-precision").value;
-    const status = shareStatus(current);
-
-    if (!current && !enabled) {
+    const form = {
+      friendshipId: friendship.id,
+      enabled: $("share-enabled").checked,
+      precision: $("share-precision").value,
+      duration: $("share-duration").value,
+    };
+    const body = shareRequestBody(current, form);
+    if (!body) {
       setStatus("Nothing was shared.");
       close();
       return;
     }
-    const granting = enabled && status !== "active";
-    const widening =
-      enabled &&
-      status === "active" &&
-      current.precision_level !== "exact" &&
-      precision === "exact";
-    if ((granting || widening) && !window.confirm(summary())) return;
+    const granting = body.is_active === true && (!current || shareStatus(current) !== "active");
+    const widening = body.is_active === true && shareWidens(current, form);
+    if ((granting || widening) && !window.confirm(confirmText())) return;
 
-    const body = {
-      friendship_id: friendship.id,
-      direction: "to_friend",
-      precision_level: precision,
-      is_active: enabled,
-    };
-    const duration = $("share-duration").value;
-    if (duration === "keep") {
-      // Keep the existing expiry instead of restarting the clock.
-      body.expires_at = current.expires_at;
-    } else {
-      body.duration_hours = Number(duration);
-    }
     try {
       if (current) {
         await api(`/api/v1/locations/shares/${current.id}`, { method: "PATCH", body });
-        setStatus(enabled ? "Sharing updated." : "Sharing paused.");
+        setStatus(body.is_active ? "Sharing updated." : "Sharing paused.");
       } else {
         await api("/api/v1/locations/shares", { method: "POST", body });
         setStatus("Sharing started.");

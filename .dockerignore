@@ -6,4 +6,9 @@ docs/
 downloads/
 msvc/
 target/
+tools/native-router/target/
+tools/valhalla-web/node_modules/
+tools/valhalla-web/.data/
+dist/
+graphify-out/
 *.log

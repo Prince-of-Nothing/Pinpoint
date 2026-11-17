@@ -306,6 +306,54 @@ async function runMapsPanelChecks(browser) {
     JSON.stringify(rows),
   );
 
+  const coverage = await page.evaluate(() => {
+    const coverageAt = window.__pinpointMaps.coverageAt;
+    const read = () => {
+      const panel = document.querySelector("#maps-coverage");
+      const button = panel?.querySelector("button");
+      return {
+        hidden: panel?.hidden ?? null,
+        text: panel?.textContent.replace(/\s+/g, " ").trim() ?? "",
+        action: button?.dataset.action ?? null,
+        label: button?.getAttribute("aria-label") ?? null,
+      };
+    };
+    coverageAt(24.9, 45.9);
+    const romania = read();
+    coverageAt(7.42, 43.74);
+    const moldova = read();
+    coverageAt(0, 0);
+    const empty = read();
+    coverageAt(-100, 40);
+    const ocean = read();
+    return { romania, moldova, empty, ocean };
+  });
+
+  check(
+    coverage.romania.hidden === false &&
+      coverage.romania.text.includes("Romania") &&
+      coverage.romania.text.includes("550 MB") &&
+      coverage.romania.action === "download" &&
+      coverage.romania.label?.includes("Romania"),
+    "coverage hint offers the uncovered region with its size",
+    JSON.stringify(coverage.romania),
+  );
+  check(
+    coverage.moldova.hidden === true,
+    "coverage hint hides for the active source",
+    JSON.stringify(coverage.moldova),
+  );
+  check(
+    coverage.empty.hidden === true,
+    "coverage hint hides when no region covers the centre",
+    JSON.stringify(coverage.empty),
+  );
+  check(
+    coverage.ocean.hidden === true,
+    "coverage hint hides over open water",
+    JSON.stringify(coverage.ocean),
+  );
+
   const initial = await page.evaluate(() => ({
     sourceId: window.__pinpointPreview?.source?.id ?? null,
     meta: document.querySelector("#map-meta")?.textContent ?? "",

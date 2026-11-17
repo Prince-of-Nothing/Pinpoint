@@ -394,6 +394,21 @@ main {
   display: none;
 }
 
+/* "This area" hint under the panel head. Not aria-live: it changes on pan. */
+.maps-coverage {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.maps-coverage[hidden] {
+  display: none;
+}
+
 .region-list {
   display: flex;
   flex-direction: column;

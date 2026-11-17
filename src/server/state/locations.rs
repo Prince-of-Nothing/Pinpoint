@@ -268,9 +268,9 @@ impl AppState {
 
     /// Insert a private note and return the durable id (the in-memory id when
     /// no database is configured).
-    pub async fn sql_insert_note(&self, note: &PlaceNote) -> i64 {
+    pub async fn sql_insert_note(&self, note: &PlaceNote) -> Option<i64> {
         let Some(pool) = &self.pg else {
-            return note.id;
+            return Some(note.id);
         };
         let row: Option<(i64,)> = sqlx::query_as(
             "INSERT INTO pinpoint_place_notes (user_id, latitude, longitude, label, message, photo, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id",
@@ -286,7 +286,7 @@ impl AppState {
         .await
         .ok()
         .flatten();
-        row.map(|(id,)| id).unwrap_or(note.id)
+        row.map(|(id,)| id)
     }
 
     pub async fn sql_delete_place_note(&self, id: i64, user_id: i64) {

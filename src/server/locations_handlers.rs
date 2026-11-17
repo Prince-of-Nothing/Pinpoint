@@ -471,7 +471,9 @@ pub async fn create_note(
             created_at: chrono::Utc::now().to_rfc3339(),
         }
     };
-    let id = state.sql_insert_note(&note).await;
+    let Some(id) = state.sql_insert_note(&note).await else {
+        return error_envelope("NOTE_SAVE_FAILED", "Could not save the note.");
+    };
     let saved = PlaceNote { id, ..note };
     if state.pg.is_none() {
         let mut store = state.store.lock().unwrap();

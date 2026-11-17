@@ -10,6 +10,16 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [2.4.0] - 2026-11-17
+### Added
+- [FEATURE] Map data: a runtime region catalog (`catalog.json` in `pinpoint-maps`) and a manifest-driven multi-region installer replace the hardcoded Moldova pack, so a country can be added without an app release; GitHub Releases hosts assets (2 GiB cap, `maxzoom` reduced when needed), legacy root-level Moldova files migrate into `packs/moldova/`, and an opt-in OpenFreeMap basemap provides worldwide online viewing (ADR-0021).
+- [FEATURE] Mobile/desktop map: a region picker lists catalog regions with transfer size and installed/update state, downloads one region at a time, serves `/packs/<region>/<file>` with Range requests, and shows the active pack from `/map/config`.
+- [FEATURE] Data pipeline: `build.ps1` builds and gzips the native routing graph and records the source SHA-256/size; `catalog.ps1` merges schema-1 entries; `pinpoint-maps` publishes releases, `catalog.json`, a JSON Schema/validator and `build-region.yml` (weekly Moldova + Romania, Ukraine dispatch-only, `dry_run` support).
+### Changed
+- [FEATURE] Android WebView: the online tile cache is enabled (`LOAD_DEFAULT`) so OpenFreeMap's `max-age` works; loopback assets still revalidate.
+### Fixed
+- [FIX] Map data: catalog versions accept both `YYYYMMDD` and `YYYY-MM-DD`, the source SHA-256 stays in the manifest rather than the catalog, local builds publish `local:<filename>` instead of the build path, and the free-space check compiles cleanly on 64-bit Unix.
+
 ## [2.3.0] - 2026-11-17
 ### Added
 - [FEATURE] UI: a cartographic forest/amber visual refresh — serif Pinpoint wordmark, a split auth field panel with coordinates and the "only shares when you do" line, a compact mobile auth sheet, consistent map-window header and route panel, and an amber route line.

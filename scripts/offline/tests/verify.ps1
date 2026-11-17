@@ -7,12 +7,14 @@ $odblAttribution = "$([char]0x00A9) OpenStreetMap contributors"
 function Invoke-Verify {
     param(
         [Parameter(Mandatory = $true)][string]$PackDir,
-        [switch]$AllowEmptyUrls
+        [switch]$AllowEmptyUrls,
+        [switch]$SkipGraph
     )
 
     $verifyArgs = @{
         PackDir = $PackDir
         AllowEmptyUrls = [bool]$AllowEmptyUrls
+        SkipGraph = [bool]$SkipGraph
     }
     & "$PSScriptRoot/../verify.ps1" @verifyArgs
 }
@@ -20,11 +22,12 @@ function Invoke-Verify {
 function Assert-VerifyPasses {
     param(
         [Parameter(Mandatory = $true)][string]$PackDir,
-        [switch]$AllowEmptyUrls
+        [switch]$AllowEmptyUrls,
+        [switch]$SkipGraph
     )
 
     try {
-        Invoke-Verify -PackDir $PackDir -AllowEmptyUrls:$AllowEmptyUrls
+        Invoke-Verify -PackDir $PackDir -AllowEmptyUrls:$AllowEmptyUrls -SkipGraph:$SkipGraph
     } catch {
         throw "verify rejected a good pack: $($_.Exception.Message)"
     }
@@ -34,12 +37,13 @@ function Assert-VerifyFails {
     param(
         [Parameter(Mandatory = $true)][string]$PackDir,
         [Parameter(Mandatory = $true)][string]$Expected,
-        [switch]$AllowEmptyUrls
+        [switch]$AllowEmptyUrls,
+        [switch]$SkipGraph
     )
 
     $message = $null
     try {
-        Invoke-Verify -PackDir $PackDir -AllowEmptyUrls:$AllowEmptyUrls
+        Invoke-Verify -PackDir $PackDir -AllowEmptyUrls:$AllowEmptyUrls -SkipGraph:$SkipGraph
     } catch {
         $message = $_.Exception.Message
     }
@@ -163,6 +167,40 @@ try {
     $doc.license_url = "https://example.test/licenses/odbl"
     Write-Manifest $dir $doc
     Assert-VerifyFails -PackDir $dir -AllowEmptyUrls -Expected "ODbL license URL must be $licenseUrl"
+
+    $dir = Join-Path $root "graph-transfer-missing"
+    Copy-Pack $base $dir
+    Remove-Item (Join-Path $dir "moldova.graph.bin.gz") -Force
+    Assert-VerifyFails -PackDir $dir -AllowEmptyUrls -Expected "missing artifact: moldova.graph.bin.gz"
+
+    $dir = Join-Path $root "graph-installed-missing"
+    Copy-Pack $base $dir
+    Remove-Item (Join-Path $dir "moldova.graph.bin") -Force
+    Assert-VerifyFails -PackDir $dir -AllowEmptyUrls -Expected "missing graph: moldova.graph.bin"
+
+    $dir = Join-Path $root "graph-installed-tampered"
+    Copy-Pack $base $dir
+    $graph = Join-Path $dir "moldova.graph.bin"
+    $bytes = [IO.File]::ReadAllBytes($graph)
+    $bytes[0] = $bytes[0] -bxor 0xFF
+    [IO.File]::WriteAllBytes($graph, $bytes)
+    Assert-VerifyFails -PackDir $dir -AllowEmptyUrls -Expected "graph SHA-256 mismatch: moldova.graph.bin"
+
+    $dir = Join-Path $root "graph-installed-size"
+    Copy-Pack $base $dir
+    $doc = Read-Manifest $dir
+    $graphEntry = $doc.files | Where-Object { $_.role -eq "graph" }
+    $graphEntry.installed_bytes = $graphEntry.installed_bytes + 1
+    Write-Manifest $dir $doc
+    Assert-VerifyFails -PackDir $dir -AllowEmptyUrls -Expected "graph size mismatch: moldova.graph.bin"
+
+    $dir = Join-Path $root "graph-entry-missing"
+    Copy-Pack $base $dir
+    $doc = Read-Manifest $dir
+    $doc.files = @($doc.files | Where-Object { $_.name -ne "moldova.graph.bin.gz" })
+    Write-Manifest $dir $doc
+    Assert-VerifyFails -PackDir $dir -AllowEmptyUrls -Expected "manifest has no routing graph"
+    Assert-VerifyPasses -PackDir $dir -AllowEmptyUrls -SkipGraph
 
     Write-Host "verify ok"
 } finally {

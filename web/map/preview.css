@@ -12,6 +12,7 @@
   --control-hover: #f3efe6;
   --accent: #a8641f;
   --accent-ink: #241708;
+  --danger: #b42318;
   --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
   --shadow: 0 24px 70px rgb(40 34 20 / 16%);
 }
@@ -30,6 +31,7 @@
   --control-hover: #1e3329;
   --accent: #e3a458;
   --accent-ink: #241708;
+  --danger: #fca5a5;
   --shadow: 0 24px 70px rgb(0 0 0 / 45%);
 }
 
@@ -163,6 +165,49 @@ button[aria-pressed="true"] {
   white-space: nowrap;
 }
 
+.online-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  background: var(--control-bg);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.online-toggle:hover {
+  border-color: var(--accent);
+}
+
+.online-toggle:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.online-toggle input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.online-toggle:has(input:checked) {
+  border-color: var(--accent);
+}
+
+.online-error {
+  max-width: 240px;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.online-error[hidden] {
+  display: none;
+}
+
 main {
   flex: 1;
   min-height: 0;
@@ -265,6 +310,190 @@ main {
   opacity: 0.55;
 }
 
+.online-credit {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid rgb(255 255 255 / 16%);
+  color: #a7e8d6;
+  font-size: 10px;
+}
+
+.online-credit[hidden] {
+  display: none;
+}
+
+.online-credit__privacy {
+  display: block;
+  color: rgb(243 246 248 / 72%);
+}
+
+/* Compact multi-region manager. One row per catalog region; the page owns the
+   data and the map server owns the downloads. */
+.maps-panel {
+  position: absolute;
+  z-index: 6;
+  top: 54px;
+  right: 14px;
+  width: min(320px, calc(100% - 28px));
+  max-height: calc(100% - 96px);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 11px 12px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 18%);
+}
+
+.maps-panel[hidden] {
+  display: none;
+}
+
+.maps-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+
+.maps-panel__kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.maps-panel__hint {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.maps-panel__empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.maps-panel__empty[hidden] {
+  display: none;
+}
+
+.maps-panel__error {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.maps-panel__error[hidden] {
+  display: none;
+}
+
+.region-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.region {
+  padding: 8px 9px;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  background: var(--control-bg);
+}
+
+.region__info {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.region__name {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.region__size {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.region__state {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.region[data-state="installed"] .region__state {
+  color: var(--accent);
+}
+
+.region[data-state="update"] .region__state {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.region__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.region-button {
+  padding: 5px 9px;
+  border-radius: 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.region-button[data-action="download"],
+.region-button[data-action="update"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--control-bg));
+}
+
+.region-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.maps-progress {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--panel-border);
+}
+
+.maps-progress[hidden] {
+  display: none;
+}
+
+.maps-progress__text {
+  margin: 0 0 5px;
+  color: var(--text);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.maps-progress__bar {
+  display: block;
+  width: 100%;
+  height: 6px;
+  accent-color: var(--accent);
+}
+
 /* Compact offline-pack card. It only talks to the local map server and never
    fetches a release asset from the page itself. */
 .offline-panel {
@@ -346,7 +575,7 @@ main {
 
 .offline-panel__error {
   margin-top: 6px;
-  color: #b42318;
+  color: var(--danger);
   overflow-wrap: anywhere;
 }
 
@@ -467,6 +696,16 @@ main {
     top: 58px;
     right: 10px;
     width: min(270px, calc(100% - 20px));
+  }
+
+  .maps-panel {
+    top: 58px;
+    right: 10px;
+    width: min(300px, calc(100% - 20px));
+  }
+
+  .online-error {
+    max-width: 100%;
   }
 
   .route-panel {

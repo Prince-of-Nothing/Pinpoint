@@ -276,7 +276,8 @@ public class PinpointActivity extends NativeActivity {
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         settings.setSaveFormData(false);
         settings.setSavePassword(false);
-        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        // OFM sends Cache-Control: max-age=86400, loopback map assets send no-cache, so HTTP caching stays correct without disabling tile caching.
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setSupportZoom(true);
         settings.setBuiltInZoomControls(false);
         web.setBackgroundColor(Color.rgb(244, 241, 234));

@@ -4,11 +4,14 @@ param(
     [string]$BaseUrl,
     [string]$OsmPath,
     [Alias("PmtilesPath")][string]$BasemapPath,
+    [string]$Maxzoom,
     [switch]$DryRun,
     [switch]$SkipDownload,
     [switch]$SkipBasemap,
     [switch]$SkipSearch,
-    [switch]$SkipRouting
+    [switch]$SkipRouting,
+    [switch]$SkipGraph,
+    [switch]$AllowUnpinnedSource
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,6 +26,20 @@ if (-not (Test-Path $configPath)) { throw "region config not found: $configPath"
 $regions = Get-Content $configPath -Raw | ConvertFrom-Json
 $cfg = $regions.$Region
 if ($null -eq $cfg) { throw "unknown region: $Region" }
+$Region = [string]$cfg.id
+if ($Region -notmatch '^[a-z0-9-]{1,64}$') { throw "region id is invalid: $Region" }
+
+$basemapMaxzoom = [int]$cfg.maxzoom
+if (-not [string]::IsNullOrWhiteSpace($Maxzoom)) {
+    if ($Maxzoom -notmatch '^\d{1,2}$') {
+        throw "-Maxzoom must be an integer from 0 to 14: $Maxzoom"
+    }
+    $basemapMaxzoom = [int]$Maxzoom
+}
+if ($basemapMaxzoom -gt 14) {
+    throw "maxzoom $basemapMaxzoom exceeds the cap of 14; lower -Maxzoom so each release asset stays under the 2 GiB limit"
+}
+$cfg.maxzoom = $basemapMaxzoom
 
 if ([string]::IsNullOrWhiteSpace($BaseUrl)) { $BaseUrl = $cfg.base_url }
 if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
@@ -43,8 +60,11 @@ $pmtiles = Join-Path $workDir "$Region.pmtiles"
 $search = Join-Path $workDir "$Region-search.sqlite"
 $valhalla = Join-Path $workDir "$Region-valhalla.tar"
 $valhallaConfig = Join-Path $workDir "$Region-valhalla.json"
+$graph = Join-Path $workDir "$Region.graph.bin"
+$graphGz = Join-Path $workDir "$Region.graph.bin.gz"
 $manifest = Join-Path $workDir "manifest.json"
 $attribution = Join-Path $workDir "ATTRIBUTION.md"
+$nativeRouterDir = Join-Path $repoRoot "tools/native-router"
 
 function Write-PlannedCommand([string]$label, [string]$command) {
     Write-Output "  $label"
@@ -70,6 +90,52 @@ function Find-OfflineIndexBinary([string]$Root) {
         if (Test-Path $candidate) { return $candidate }
     }
     return $null
+}
+
+function Find-NativeRouterBinary {
+    $candidates = @(
+        (Join-Path $nativeRouterDir "target/release/native-router.exe"),
+        (Join-Path $nativeRouterDir "target/release/native-router")
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) { return $candidate }
+    }
+    return $null
+}
+
+function Resolve-NativeRouterBinary {
+    $cargo = Get-Command cargo -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($cargo) {
+        Write-Host "native-router: cargo build --release --locked --manifest-path tools/native-router/Cargo.toml"
+        $code = Invoke-NativeCommand { & $cargo.Source build --release --locked --manifest-path (Join-Path $nativeRouterDir "Cargo.toml") }
+        if ($code -ne 0) { throw "native-router release build failed" }
+        $binary = Find-NativeRouterBinary
+        if ($binary) { return $binary }
+        throw "cargo build succeeded but native-router was not found in tools/native-router/target/release"
+    }
+    $binary = Find-NativeRouterBinary
+    if ($binary) {
+        Write-Host "native-router: using prebuilt $binary (cargo not found)"
+        return $binary
+    }
+    throw "cargo not found and no prebuilt native-router in tools/native-router/target/release"
+}
+
+function Compress-GzipFile([string]$Source, [string]$Destination) {
+    # .NET GZipStream writes a fixed zero timestamp, but deflate bytes can still
+    # differ between .NET Framework and .NET; the manifest hash pins one build.
+    $inputStream = [IO.File]::OpenRead($Source)
+    try {
+        $outputStream = [IO.File]::Create($Destination)
+        try {
+            $gzip = New-Object System.IO.Compression.GZipStream($outputStream, [System.IO.Compression.CompressionMode]::Compress)
+            try { $inputStream.CopyTo($gzip) } finally { $gzip.Dispose() }
+        } finally {
+            $outputStream.Dispose()
+        }
+    } finally {
+        $inputStream.Dispose()
+    }
 }
 
 . "$PSScriptRoot/download.ps1"
@@ -98,17 +164,25 @@ if ($DryRun) {
     Write-Output "DRY RUN - no files will be written"
     Write-Output "region: $($cfg.name)"
     Write-Output "bbox: $($cfg.bbox -join ',')"
+    Write-Output "maxzoom: $basemapMaxzoom"
+    Write-Output "allow unpinned source: $AllowUnpinnedSource"
     Write-Output "base url: $BaseUrl"
     Write-Output "staging work dir: $workDir"
     Write-Output "publish: $packDir"
-    Write-Output "publish files: $Region.pmtiles $Region-search.sqlite $Region-valhalla.tar manifest.json ATTRIBUTION.md"
+    $publishNames = @("$Region.pmtiles", "$Region-search.sqlite", "$Region-valhalla.tar")
+    if (-not $SkipGraph) {
+        $publishNames += @("$Region.graph.bin", "$Region.graph.bin.gz")
+    }
+    $publishNames += @("manifest.json", "ATTRIBUTION.md")
+    Write-Output "publish files: $($publishNames -join ' ')"
     if (-not $SkipDownload) {
-        Write-PlannedCommand "download" "curl -4 -L --fail --connect-timeout 30 --max-time 3600 $($cfg.geofabrik) -> $osm (sha256 $($cfg.source.sha256))"
+        $pin = if ([string]::IsNullOrWhiteSpace($cfg.source.sha256)) { "unpinned" } else { "sha256: $($cfg.source.sha256)" }
+        Write-PlannedCommand "download" "curl -4 -L --fail --connect-timeout 30 --max-time 3600 $($cfg.geofabrik) -> $osm ($pin)"
     } elseif ($OsmPath) {
         Write-PlannedCommand "source" "copy $OsmPath -> $osm"
     }
     if (-not $SkipBasemap) {
-        Write-PlannedCommand "basemap" "docker run --rm -v `"$workDir`:/data`" $($cfg.images.planetiler) --force --download --osm-path=/data/$Region.osm.pbf --output=/data/$Region.pmtiles --maxzoom=$($cfg.maxzoom)"
+        Write-PlannedCommand "basemap" "docker run --rm -v `"$workDir`:/data`" $($cfg.images.planetiler) --force --download --osm-path=/data/$Region.osm.pbf --output=/data/$Region.pmtiles --maxzoom=$basemapMaxzoom"
     } elseif ($BasemapPath) {
         Write-PlannedCommand "basemap" "copy prebuilt $BasemapPath -> $pmtiles"
     }
@@ -120,9 +194,14 @@ if ($DryRun) {
         Write-PlannedCommand "routing" "docker run --rm --entrypoint valhalla_build_tiles -v `"$workDir`:/data`" $($cfg.images.valhalla) -c /data/$Region-valhalla.json /data/$Region.osm.pbf"
         Write-PlannedCommand "routing-tar" "tar -C $workDir -cf $valhalla valhalla_tiles"
     }
+    if (-not $SkipGraph) {
+        Write-PlannedCommand "graph-build-tool" "cargo build --release --locked --manifest-path tools/native-router/Cargo.toml"
+        Write-PlannedCommand "graph" "native-router build --osm $osm --out $graph"
+        Write-PlannedCommand "graph-gzip" "gzip $graph -> $graphGz"
+    }
     Write-PlannedCommand "manifest" "New-OfflineManifest -BaseUrl $BaseUrl -> $manifest"
-    Write-PlannedCommand "verify" "verify.ps1 -PackDir $workDir -AllowMissingRouting:$SkipRouting"
-    Write-PlannedCommand "publish" "replace $packDir with the five-file pack only after verify succeeds"
+    Write-PlannedCommand "verify" "verify.ps1 -PackDir $workDir -AllowMissingRouting:$SkipRouting -SkipGraph:$SkipGraph"
+    Write-PlannedCommand "publish" "replace $packDir with the verified pack only after verify succeeds"
     return
 }
 
@@ -165,6 +244,11 @@ if (-not $SkipSearch) {
         throw "cargo not found and no prebuilt pinpoint-offline-index; install Rust or run cargo build --features offline-build --bin pinpoint-offline-index"
     }
 }
+if (-not $SkipGraph) {
+    if (-not (Test-Application "cargo") -and -not (Find-NativeRouterBinary)) {
+        throw "cargo not found and no prebuilt native-router; install Rust or run cargo build --release --manifest-path tools/native-router/Cargo.toml"
+    }
+}
 
 $previousIndex = $env:PINPOINT_OFFLINE_INDEX
 $indexBin = $null
@@ -174,20 +258,38 @@ $newPackInstalled = $false
 try {
     New-Item -ItemType Directory -Force -Path $workDir | Out-Null
 
+    $pinnedSha = ([string]$cfg.source.sha256).Trim().ToLowerInvariant()
     if ($OsmPath) {
         Write-Output "using local OSM extract: $OsmPath"
         Get-OsmExtract -Region $cfg -Destination $osm -SourcePath $OsmPath | Out-Null
     } else {
-        if ([string]::IsNullOrWhiteSpace($cfg.source.sha256)) {
-            throw "region '$Region' has no source sha256; add source.sha256 to regions.json"
-        }
         Write-Output "downloading $($cfg.geofabrik)"
-        Get-OsmExtract -Region $cfg -Destination $osm -ExpectedSha256 $cfg.source.sha256 | Out-Null
+        if (-not [string]::IsNullOrWhiteSpace($pinnedSha) -and -not $AllowUnpinnedSource) {
+            # A pinned build fails on any upstream -latest change. Scheduled
+            # builds opt out with -AllowUnpinnedSource and record the new hash.
+            Get-OsmExtract -Region $cfg -Destination $osm -ExpectedSha256 $pinnedSha | Out-Null
+        } else {
+            Get-OsmExtract -Region $cfg -Destination $osm | Out-Null
+        }
+    }
+
+    $sourceSha = (Get-FileHash -Algorithm SHA256 -Path $osm).Hash.ToLowerInvariant()
+    $sourceBytes = (Get-Item $osm).Length
+    $downloadedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    $sourceUrl = if ($OsmPath) { "local:" + (Split-Path -Leaf $OsmPath) } else { [string]$cfg.geofabrik }
+    Write-Output "source sha256: $sourceSha ($sourceBytes bytes)"
+    if (-not $OsmPath -and [string]::IsNullOrWhiteSpace($pinnedSha)) {
+        Write-Warning "region '$Region' has no pinned source sha256; downloaded unpinned"
+        Write-Warning "pin source.sha256 = $sourceSha and source.bytes = $sourceBytes for region '$Region' in regions.json"
+    } elseif (-not $OsmPath -and $sourceSha -ne $pinnedSha) {
+        # Only reachable with -AllowUnpinnedSource; the pinned path fails earlier.
+        Write-Warning "source sha256 changed for '$Region': pinned $pinnedSha, downloaded $sourceSha ($sourceBytes bytes)"
+        Write-Warning "continuing because -AllowUnpinnedSource is set; the manifest records the downloaded hash"
     }
 
     if (-not $SkipBasemap) {
         Write-Output "basemap: $($cfg.images.planetiler)"
-        $code = Invoke-NativeCommand { & docker run --rm -v "${workDir}:/data" $cfg.images.planetiler --force --download --osm-path="/data/$Region.osm.pbf" --output="/data/$Region.pmtiles" --maxzoom=$($cfg.maxzoom) }
+        $code = Invoke-NativeCommand { & docker run --rm -v "${workDir}:/data" $cfg.images.planetiler --force --download --osm-path="/data/$Region.osm.pbf" --output="/data/$Region.pmtiles" --maxzoom=$basemapMaxzoom }
         if ($code -ne 0) { throw "planetiler basemap build failed" }
     } elseif ($BasemapPath) {
         Write-Output "basemap: using prebuilt $BasemapPath"
@@ -217,20 +319,36 @@ try {
         if ($code -ne 0) { throw "valhalla tar failed" }
     }
 
+    if (-not $SkipGraph) {
+        $router = Resolve-NativeRouterBinary
+        Write-Output "graph: native-router build"
+        $code = Invoke-NativeCommand { & $router build --osm $osm --out $graph }
+        if ($code -ne 0) { throw "native-router graph build failed" }
+        if (-not (Test-Path $graph) -or (Get-Item $graph).Length -eq 0) {
+            throw "native-router wrote no graph: $graph"
+        }
+        Compress-GzipFile -Source $graph -Destination $graphGz
+        if (-not (Test-Path $graphGz) -or (Get-Item $graphGz).Length -eq 0) {
+            throw "graph compression wrote no file: $graphGz"
+        }
+    }
+
     $built = @()
     foreach ($candidate in @($pmtiles, $search, $valhalla)) {
         if (Test-Path $candidate) { $built += $candidate }
     }
+    if (-not $SkipGraph) { $built += $graphGz }
     if ($built.Count -eq 0) { throw "no artifacts were built for $Region" }
 
     Copy-Item (Join-Path $PSScriptRoot "ATTRIBUTION.md") $attribution -Force
     . "$PSScriptRoot/manifest.ps1"
-    New-OfflineManifest -Region $cfg -Version "$Region-$(Get-Date -Format yyyyMMdd)" -Files $built -Output $manifest -BaseUrl $BaseUrl | Out-Null
+    New-OfflineManifest -Region $cfg -Version "$Region-$(Get-Date -Format yyyyMMdd)" -Files $built -Output $manifest -BaseUrl $BaseUrl `
+        -SourceSha256 $sourceSha -SourceBytes $sourceBytes -SourceUrl $sourceUrl -DownloadedAt $downloadedAt | Out-Null
 
     if ($indexBin) {
         $env:PINPOINT_OFFLINE_INDEX = $indexBin
     }
-    & "$PSScriptRoot/verify.ps1" -PackDir $workDir -AllowMissingRouting:$SkipRouting
+    & "$PSScriptRoot/verify.ps1" -PackDir $workDir -AllowMissingRouting:$SkipRouting -SkipGraph:$SkipGraph
     if ($LASTEXITCODE -ne 0) { throw "pack verification failed" }
 
     # Verification passed: stage exactly the publishable files, then swap the
@@ -244,6 +362,12 @@ try {
         @{ Source = $manifest; Name = "manifest.json" },
         @{ Source = $attribution; Name = "ATTRIBUTION.md" }
     )
+    if (-not $SkipGraph) {
+        $publishPlan += @(
+            @{ Source = $graphGz; Name = "$Region.graph.bin.gz" },
+            @{ Source = $graph; Name = "$Region.graph.bin" }
+        )
+    }
     $published = @()
     foreach ($entry in $publishPlan) {
         if (Test-Path $entry.Source) {
@@ -252,7 +376,9 @@ try {
             $published += $destination
         }
     }
-    if ($published.Count -ne ($built.Count + 2)) {
+    $expectedPublished = $built.Count + 2
+    if (-not $SkipGraph) { $expectedPublished++ }
+    if ($published.Count -ne $expectedPublished) {
         throw "publish staging is incomplete: $($published.Count) files for $($built.Count) artifacts"
     }
 

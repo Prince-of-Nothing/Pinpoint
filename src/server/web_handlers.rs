@@ -65,11 +65,18 @@ const SW_JS: &str = include_str!("../../web/sw.js");
 // MapLibre positions its canvas and controls with inline style attributes, so
 // style-src must allow inline CSS. Scripts stay strict: only same-origin
 // modules and the SQLite WASM evaluator are allowed.
-const CSP: &str = "default-src 'self'; img-src 'self' data:; \
+//
+// The one remote host is the opt-in OpenFreeMap basemap (style, tiles, glyphs
+// and sprites all live on `tiles.openfreemap.org`); it is off by default, so
+// these sources are only reachable when the user turns the online layer on.
+// The vendored MapLibre worker is same-origin, so `worker-src` stays `'self'`
+// (`docs/offline/android-webview-online.md` §3).
+const CSP: &str = "default-src 'self'; img-src 'self' data: https://tiles.openfreemap.org; \
 script-src 'self' 'wasm-unsafe-eval'; \
 worker-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; \
-connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; \
-form-action 'self'; object-src 'none'; manifest-src 'self'";
+connect-src 'self' https://tiles.openfreemap.org; base-uri 'none'; \
+frame-ancestors 'none'; form-action 'self'; object-src 'none'; \
+manifest-src 'self'";
 
 const PERMISSIONS_POLICY: &str = "geolocation=(self), camera=(), microphone=(), payment=(), usb=()";
 
@@ -471,6 +478,41 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(header::RANGE, HeaderValue::from_str(value).unwrap());
         parse_range(&headers, len)
+    }
+
+    fn directive(name: &str) -> &'static str {
+        CSP.split(';')
+            .map(str::trim)
+            .find(|part| part.split_whitespace().next() == Some(name))
+            .unwrap_or_else(|| panic!("missing {name} directive in {CSP}"))
+    }
+
+    #[test]
+    fn csp_allows_the_opt_in_openfreemap_basemap() {
+        for name in ["connect-src", "img-src"] {
+            let sources = directive(name);
+            assert!(
+                sources.contains("https://tiles.openfreemap.org"),
+                "{name} lacks the tile host: {sources}"
+            );
+            assert!(
+                sources.contains("'self'"),
+                "{name} dropped same-origin access: {sources}"
+            );
+        }
+        // One origin, no wildcard subdomains, and no blob workers.
+        assert!(!CSP.contains('*'), "wildcard source in {CSP}");
+        assert!(!CSP.contains("blob:"), "blob source in {CSP}");
+        assert_eq!(directive("worker-src"), "worker-src 'self'");
+        assert_eq!(directive("font-src"), "font-src 'self'");
+        // Nothing that executes code or renders frames was widened.
+        assert_eq!(directive("default-src"), "default-src 'self'");
+        assert_eq!(
+            directive("script-src"),
+            "script-src 'self' 'wasm-unsafe-eval'"
+        );
+        assert_eq!(directive("frame-ancestors"), "frame-ancestors 'none'");
+        assert_eq!(directive("object-src"), "object-src 'none'");
     }
 
     #[test]

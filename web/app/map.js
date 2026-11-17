@@ -1,6 +1,7 @@
 // Map adapter: the app's stable map API on top of the shared MapLibre GL JS +
-// PMTiles foundation (`web/map/map.js`). Everything stays same-origin; there is
-// no raster tile CDN and no remote style/glyph/sprite request.
+// PMTiles foundation (`web/map/map.js`). The default basemap is the same-origin
+// PMTiles style; the opt-in online basemap loads OpenFreeMap's Liberty style and
+// its tiles. The adapter sends no app data or auth headers to that host.
 //
 // `app.js`/`nav.js` keep calling the same functions they always have. The
 // returned `map` facade mirrors the small view surface they use
@@ -12,6 +13,8 @@ import * as maplibregl from "/vendor/maplibre-gl.js";
 
 const DEFAULT_STYLE_URL = "/map-assets/style.json";
 const DEFAULT_PMTILES_URL = "/map-assets/fixtures/monaco.pmtiles";
+const ONLINE_STORAGE_KEY = "pinpoint.onlineMapWeb";
+const ONLINE_TIMEOUT_MS = 10000;
 
 const FRIEND_LAYER = "pinpoint-locations-circles";
 const ROUTE_SOURCE = "pinpoint-route";
@@ -66,6 +69,23 @@ export function createMap({
   ];
   const initialZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : 2;
 
+  const localStyleUrl =
+    styleUrl ||
+    container.dataset?.styleUrl ||
+    readConfig("styleUrl", "pinpoint-map-style") ||
+    DEFAULT_STYLE_URL;
+  const localPmtilesUrl =
+    pmtilesUrl ||
+    container.dataset?.pmtilesUrl ||
+    readConfig("pmtilesUrl", "pinpoint-map-data") ||
+    DEFAULT_PMTILES_URL;
+  const onlineStyleUrl = readConfig("onlineStyleUrl", "pinpoint-online-style");
+
+  const onlineToggle = document.getElementById("online-map-toggle");
+  const onlineError = document.getElementById("online-map-error");
+  const attributionOffline = document.getElementById("map-attribution-offline");
+  const attributionOnline = document.getElementById("map-attribution-online");
+
   let mapReady = false;
   let destroyed = false;
   let currentTheme = theme === "dark" ? "dark" : "light";
@@ -79,19 +99,14 @@ export function createMap({
   let routeMarkers = [];
   let navigationControl = null;
   let scaleControl = null;
+  let online = false;
+  let onlineBusy = false;
+  let onlineSeq = 0;
 
   const base = createFoundationMap({
     container,
-    styleUrl:
-      styleUrl ||
-      container.dataset?.styleUrl ||
-      readConfig("styleUrl", "pinpoint-map-style") ||
-      DEFAULT_STYLE_URL,
-    pmtilesUrl:
-      pmtilesUrl ||
-      container.dataset?.pmtilesUrl ||
-      readConfig("pmtilesUrl", "pinpoint-map-data") ||
-      DEFAULT_PMTILES_URL,
+    styleUrl: localStyleUrl,
+    pmtilesUrl: localPmtilesUrl,
     center: [initialCenter[1], initialCenter[0]],
     zoom: initialZoom,
     onLoad() {
@@ -113,12 +128,17 @@ export function createMap({
           });
           map.addControl(scaleControl, "bottom-right");
         }
+        // A style switch drops the adapter's accuracy layers; re-add them.
+        map.on("style.load", () => {
+          if (!destroyed) applySelfLocation();
+        });
       }
       applyView();
       applySelectedMarker();
       applySelfLocation();
       applyRoute();
       applyFit();
+      if (readOnlinePreference()) void setOnline(true, { persist: false });
       if (typeof onLoad === "function") onLoad(api);
     },
     onError(error) {
@@ -136,6 +156,14 @@ export function createMap({
   });
 
   base.setTheme(currentTheme);
+
+  function onOnlineToggle() {
+    void setOnline(Boolean(onlineToggle?.checked));
+  }
+
+  onlineToggle?.addEventListener("change", onOnlineToggle);
+  if (onlineToggle) onlineToggle.checked = readOnlinePreference();
+  renderOnlineUi();
 
   /** View facade with latitude/longitude-array semantics for `nav.js`. */
   const map = {
@@ -206,6 +234,7 @@ export function createMap({
     locate,
     setTheme,
     getTheme,
+    setOnline,
     resize,
     destroy,
     getMap() {
@@ -511,6 +540,110 @@ export function createMap({
     return currentTheme;
   }
 
+  // -------------------------------------------------------------------------
+  // Online basemap (opt-in)
+  // -------------------------------------------------------------------------
+
+  /**
+   * Opt in to the worldwide OpenFreeMap Liberty style, or restore the local
+   * PMTiles style. The preference is stored on this device; a failed online
+   * switch reverts to the local style and shows an inline error.
+   *
+   * @param {boolean} enabled
+   * @param {{persist?: boolean}} [options]
+   * @returns {Promise<boolean>} whether the online style is active
+   */
+  async function setOnline(enabled, { persist = true } = {}) {
+    if (destroyed) return false;
+    const next = Boolean(enabled);
+    if (persist) saveOnlinePreference(next);
+    if (next && !onlineStyleUrl) {
+      online = false;
+      saveOnlinePreference(false);
+      if (onlineToggle) onlineToggle.checked = false;
+      renderOnlineUi();
+      showOnlineError("Online map is not configured.");
+      return false;
+    }
+
+    // Before the first load there is no style to swap; onLoad reads the
+    // stored preference and applies it.
+    if (!mapReady) {
+      if (onlineToggle) onlineToggle.checked = next;
+      return next;
+    }
+    if (next === online && !onlineBusy) {
+      if (onlineToggle) onlineToggle.checked = next;
+      return online;
+    }
+    if (next && typeof navigator !== "undefined" && navigator.onLine === false) {
+      online = false;
+      saveOnlinePreference(false);
+      if (onlineToggle) onlineToggle.checked = false;
+      renderOnlineUi();
+      showOnlineError(
+        "This device is offline — the online map needs a connection.",
+      );
+      return false;
+    }
+
+    const seq = ++onlineSeq;
+    onlineBusy = true;
+    showOnlineError("");
+    renderOnlineUi();
+
+    try {
+      if (next) {
+        await withTimeout(base.setStyle(onlineStyleUrl), ONLINE_TIMEOUT_MS);
+        if (destroyed || seq !== onlineSeq) return online;
+        online = true;
+      } else {
+        await base.setStyle(localStyleUrl, localPmtilesUrl);
+        if (destroyed || seq !== onlineSeq) return online;
+        online = false;
+      }
+    } catch {
+      if (destroyed || seq !== onlineSeq) return online;
+      if (next) {
+        online = false;
+        saveOnlinePreference(false);
+        try {
+          await base.setStyle(localStyleUrl, localPmtilesUrl);
+        } catch {
+          // base.onError reports a local style failure too.
+        }
+        if (destroyed || seq !== onlineSeq) return online;
+        showOnlineError("Online map unavailable — using the offline map.");
+      } else {
+        online = true;
+        saveOnlinePreference(true);
+        showOnlineError("Could not restore the offline map.");
+      }
+    } finally {
+      if (seq === onlineSeq) {
+        onlineBusy = false;
+        if (onlineToggle) onlineToggle.checked = online;
+        renderOnlineUi();
+      }
+    }
+    return online;
+  }
+
+  function renderOnlineUi() {
+    if (onlineToggle) {
+      onlineToggle.disabled = onlineBusy;
+      onlineToggle.setAttribute("aria-busy", String(onlineBusy));
+    }
+    attributionOffline?.classList.toggle("hidden", online);
+    attributionOnline?.classList.toggle("hidden", !online);
+  }
+
+  function showOnlineError(message) {
+    if (!onlineError) return;
+    onlineError.textContent = message || "";
+    onlineError.classList.toggle("hidden", !message);
+  }
+
   function resize() {
     if (destroyed) return;
     base.resize();
@@ -523,6 +656,9 @@ export function createMap({
   function destroy() {
     if (destroyed) return;
     destroyed = true;
+    onlineSeq += 1;
+    onlineBusy = false;
+    onlineToggle?.removeEventListener("change", onOnlineToggle);
     unsubscribeClick();
     selectedMarker?.remove();
     selectedMarker = null;
@@ -558,6 +694,34 @@ function readConfig(key, metaName) {
   const meta = document.querySelector(`meta[name="${metaName}"]`);
   const content = meta?.getAttribute("content");
   return content && content.trim() ? content.trim() : null;
+}
+
+function readOnlinePreference() {
+  try {
+    return localStorage.getItem(ONLINE_STORAGE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function saveOnlinePreference(enabled) {
+  try {
+    localStorage.setItem(ONLINE_STORAGE_KEY, enabled ? "1" : "0");
+  } catch {
+    // Private browsing: the choice lasts this page.
+  }
+}
+
+/** Reject if a style switch hangs, so the toggle cannot stay disabled. */
+function withTimeout(promise, timeoutMs) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`Map style did not load within ${timeoutMs} ms`)),
+      timeoutMs,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 function routePoints(route) {

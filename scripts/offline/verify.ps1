@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$PackDir,
     [switch]$AllowMissingRouting,
-    [switch]$AllowEmptyUrls
+    [switch]$AllowEmptyUrls,
+    [switch]$SkipGraph
 )
 
 $ErrorActionPreference = "Stop"
@@ -60,6 +61,34 @@ foreach ($file in $manifest.files) {
     if ($item.Length -ne $file.bytes) { throw "size mismatch: $name" }
     $hash = (Get-FileHash -Algorithm SHA256 -Path $path).Hash.ToLowerInvariant()
     if ($hash -ne $declaredHash.ToLowerInvariant()) { throw "SHA-256 mismatch: $name" }
+}
+
+if ($SkipGraph) {
+    Write-Host "graph: skipped"
+} else {
+    $graph = $manifest.files |
+        Where-Object { $_.role -eq "graph" -or ($null -eq $_.role -and $_.name -like "*.graph.bin.gz") } |
+        Select-Object -First 1
+    if (-not $graph) { throw "manifest has no routing graph (use -SkipGraph for a graph-less pack)" }
+    $installedName = [string]$graph.installed_name
+    if ([string]::IsNullOrWhiteSpace($installedName) -or
+        $installedName -eq "." -or
+        $installedName -eq ".." -or
+        $installedName -notmatch '^[A-Za-z0-9._-]+$' -or
+        [IO.Path]::GetFileName($installedName) -ne $installedName -or
+        $installedName -eq [string]$graph.name) {
+        throw "unsafe graph install name: $installedName"
+    }
+    $installedBytes = [long]$graph.installed_bytes
+    if ($installedBytes -le 0) { throw "graph install size missing: $installedName" }
+    $installedHash = [string]$graph.installed_sha256
+    if ($installedHash -notmatch '^[A-Fa-f0-9]{64}$') { throw "graph install SHA-256 mismatch: $installedName" }
+    $installedPath = Join-Path $PackDir $installedName
+    if (-not (Test-Path $installedPath)) { throw "missing graph: $installedName" }
+    if ((Get-Item $installedPath).Length -ne $installedBytes) { throw "graph size mismatch: $installedName" }
+    $installedActual = (Get-FileHash -Algorithm SHA256 -Path $installedPath).Hash.ToLowerInvariant()
+    if ($installedActual -ne $installedHash.ToLowerInvariant()) { throw "graph SHA-256 mismatch: $installedName" }
+    Write-Host "graph: ok"
 }
 
 $pmtiles = $manifest.files | Where-Object { $_.name -like "*.pmtiles" } | Select-Object -First 1

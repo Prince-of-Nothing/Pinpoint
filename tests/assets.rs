@@ -115,18 +115,27 @@ fn html_only_links_out_for_attribution() {
     }
 
     // Absolute URLs are allowed only for the mandatory OSM/OpenMapTiles/ODbL
-    // attribution links in the map overlay.
+    // attribution links and the opt-in OpenFreeMap style URL. The style URL
+    // lives in a meta tag, never in a subresource, so the offline page stays
+    // same-origin unless the user turns the online basemap on.
+    const ONLINE_STYLE_URL: &str = "https://tiles.openfreemap.org/styles/liberty";
     let mut rest = HTML;
     while let Some(index) = rest.find("https://") {
         let tail = &rest[index..];
         let end = tail.find(['"', '\'', ' ', '<', '>']).unwrap_or(tail.len());
         let url = &tail[..end];
         assert!(
-            ATTRIBUTION_URLS.contains(&url),
+            ATTRIBUTION_URLS.contains(&url) || url == ONLINE_STYLE_URL,
             "unexpected absolute URL in index.html: {url}"
         );
         rest = &tail[end..];
     }
+    assert!(
+        HTML.contains(&format!(
+            "<meta name=\"pinpoint-online-style\" content=\"{ONLINE_STYLE_URL}\""
+        )),
+        "index.html must keep the online style URL page-owned"
+    );
     for url in ATTRIBUTION_URLS {
         assert!(
             HTML.contains(url),
@@ -156,10 +165,22 @@ async fn csp_is_same_origin_and_blocks_remote_fonts() {
         csp.contains("worker-src 'self'"),
         "CSP must allow the local worker: {csp}"
     );
-    assert!(csp.contains("connect-src 'self'"), "CSP: {csp}");
     assert!(
-        !csp.contains("https:") && !csp.contains('*'),
-        "CSP must not allow remote origins: {csp}"
+        csp.contains("connect-src 'self' https://tiles.openfreemap.org"),
+        "CSP must allow only the opt-in OpenFreeMap host for tiles: {csp}"
+    );
+    assert!(
+        csp.contains("img-src 'self' data: https://tiles.openfreemap.org"),
+        "CSP must allow only the opt-in OpenFreeMap host for images: {csp}"
+    );
+    assert!(
+        !csp.contains('*') && !csp.contains("http://"),
+        "CSP must not allow non-https or wildcard origins: {csp}"
+    );
+    assert_eq!(
+        csp.matches("https://tiles.openfreemap.org").count(),
+        2,
+        "the only remote origin is the opt-in OpenFreeMap host: {csp}"
     );
 
     let headers = resp.headers();

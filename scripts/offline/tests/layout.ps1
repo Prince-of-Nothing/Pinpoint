@@ -8,6 +8,9 @@ $manifest = Join-Path $packDir "manifest.json"
 $expected = @("ATTRIBUTION.md", "manifest.json", "monaco-search.sqlite", "monaco.pmtiles")
 $config = Get-Content (Join-Path $PSScriptRoot "../regions.json") -Raw | ConvertFrom-Json
 $configuredBase = $config.monaco.base_url.TrimEnd("/")
+$pbfHash = (Get-FileHash -Algorithm SHA256 -Path $pbf).Hash.ToLowerInvariant()
+$pbfBytes = (Get-Item $pbf).Length
+$pbfPath = (Resolve-Path $pbf).Path
 
 function Get-PublishedNames {
     @(Get-ChildItem $packDir -Force | Select-Object -ExpandProperty Name)
@@ -22,6 +25,18 @@ function Assert-ManifestUrls([string]$BaseUrl) {
         if ($file.url -ne $wanted) { throw "manifest url mismatch: $($file.url) != $wanted" }
         if ($file.name -like "*.osm.pbf") { throw "manifest lists the source PBF" }
     }
+    if ($doc.source_sha256 -ne $pbfHash) { throw "manifest source sha256 mismatch" }
+    if ($doc.source_bytes -ne $pbfBytes) { throw "manifest source bytes mismatch" }
+    $expectedSource = "local:" + (Split-Path -Leaf $pbfPath)
+    if ($doc.source_url -ne $expectedSource) { throw "manifest source url mismatch: $($doc.source_url) != $expectedSource" }
+    # ConvertFrom-Json on pwsh 7 turns ISO timestamps into DateTime objects.
+    $stamp = $doc.downloaded_at
+    if ($stamp -is [datetime]) {
+        $stamp = $stamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    }
+    if ($stamp -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|\+00:00)$') {
+        throw "manifest downloaded_at is not UTC: $stamp"
+    }
 }
 
 try {
@@ -31,7 +46,7 @@ try {
 
     $good = & "$PSScriptRoot/../build.ps1" -Region monaco -OutputRoot $root `
         -OsmPath $pbf -BasemapPath $fixturePmtiles `
-        -SkipDownload -SkipBasemap -SkipRouting 2>&1 | Out-String
+        -SkipDownload -SkipBasemap -SkipRouting -SkipGraph 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "build failed: $good" }
 
     $actual = Get-PublishedNames
@@ -47,7 +62,7 @@ try {
     $override = "https://packs.test/monaco"
     $good = & "$PSScriptRoot/../build.ps1" -Region monaco -OutputRoot $root `
         -OsmPath $pbf -BasemapPath $fixturePmtiles -BaseUrl $override `
-        -SkipDownload -SkipBasemap -SkipRouting 2>&1 | Out-String
+        -SkipDownload -SkipBasemap -SkipRouting -SkipGraph 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { throw "override build failed: $good" }
     Assert-ManifestUrls $override
 

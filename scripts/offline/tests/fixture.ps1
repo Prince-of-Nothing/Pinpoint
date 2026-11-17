@@ -9,6 +9,26 @@ function New-PmtilesFixture {
     [IO.File]::WriteAllBytes($Path, $header)
 }
 
+function New-GzipFixture {
+    param(
+        [Parameter(Mandatory = $true)][string]$Source,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+
+    $inputStream = [IO.File]::OpenRead($Source)
+    try {
+        $outputStream = [IO.File]::Create($Destination)
+        try {
+            $gzip = New-Object System.IO.Compression.GZipStream($outputStream, [System.IO.Compression.CompressionMode]::Compress)
+            try { $inputStream.CopyTo($gzip) } finally { $gzip.Dispose() }
+        } finally {
+            $outputStream.Dispose()
+        }
+    } finally {
+        $inputStream.Dispose()
+    }
+}
+
 function New-VerifyFixture {
     param(
         [Parameter(Mandatory = $true)][string]$Dir,
@@ -43,6 +63,11 @@ function New-VerifyFixture {
     & tar -cf $tar -C $Dir "valhalla_tiles"
     if ($LASTEXITCODE -ne 0) { throw "fixture tar failed" }
 
+    $graph = Join-Path $Dir "moldova.graph.bin"
+    [IO.File]::WriteAllText($graph, "graph", (New-Object Text.UTF8Encoding($false)))
+    $graphGz = "$graph.gz"
+    New-GzipFixture -Source $graph -Destination $graphGz
+
     $attribution = Join-Path $Dir "ATTRIBUTION.md"
     $canonical = @(
         "Map data $([char]0x00A9) OpenStreetMap contributors, available under the Open Database License (ODbL) 1.0."
@@ -60,5 +85,5 @@ function New-VerifyFixture {
         minzoom = 0
         maxzoom = 14
     }
-    New-OfflineManifest -Region $region -Version "moldova-20260101" -Files @($pmtiles, $search, $tar) -Output (Join-Path $Dir "manifest.json") -BaseUrl "https://packs.pinpoint.example/moldova" | Out-Null
+    New-OfflineManifest -Region $region -Version "moldova-20260101" -Files @($pmtiles, $search, $tar, $graphGz) -Output (Join-Path $Dir "manifest.json") -BaseUrl "https://packs.pinpoint.example/moldova" | Out-Null
 }

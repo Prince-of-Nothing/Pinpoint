@@ -1002,3 +1002,40 @@ header { height: 60px; }
   color: #052e1b;
   opacity: 0.8;
 }
+
+/* Offline map prompt: visible only until the region pack is installed. */
+.offline-map-banner {
+  position: absolute;
+  right: 1rem;
+  bottom: 3.2rem;
+  z-index: 850;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: min(30rem, calc(100% - 2rem));
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text);
+  box-shadow: 0 0.6rem 1.8rem rgba(0, 0, 0, 0.35);
+}
+.offline-map-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+.offline-map-copy strong { font-size: 0.82rem; }
+.offline-map-copy span { color: var(--muted); }
+.offline-map-banner button { white-space: nowrap; }
+@media (max-width: 600px) {
+  .offline-map-banner {
+    left: 0.6rem;
+    right: 0.6rem;
+    bottom: 2.8rem;
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

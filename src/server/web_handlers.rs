@@ -41,11 +41,28 @@ const MAPLIBRE_LICENSE: &str = include_str!("../../web/vendor/maplibre-gl.LICENS
 const PMTILES_JS: &str = include_str!("../../web/vendor/pmtiles.js");
 const PMTILES_LICENSE: &str = include_str!("../../web/vendor/pmtiles.LICENSE.txt");
 
+// Offline pack manager, offline search and the service worker. The app imports
+// these by absolute path; they must be compiled in like the rest of the UI.
+const OFFLINE_SEARCH_JS: &str = include_str!("../../web/app/offline-search.js");
+const OFFLINE_JS: &str = include_str!("../../web/app/offline.js");
+const OFFLINE_CATALOG_JS: &str = include_str!("../../web/app/offline-catalog.js");
+const OFFLINE_DEMO: &str = include_str!("../../web/app/offline-demo.html");
+const OFFLINE_CSS: &str = include_str!("../../web/app/offline.css");
+const OFFLINE_MANIFEST: &str = include_str!("../../web/app/fixtures/offline-pack/manifest.json");
+const OFFLINE_MANIFEST_BROKEN: &str =
+    include_str!("../../web/app/fixtures/offline-pack/manifest-broken.json");
+const OFFLINE_LICENSE: &str = include_str!("../../web/app/fixtures/offline-pack/LICENSE.txt");
+const SEARCH_JS: &str = include_str!("../../web/map/search.js");
+const SQLITE_MODULE: &str = include_str!("../../web/vendor/sqlite3.mjs");
+const SQLITE_WASM: &[u8] = include_bytes!("../../web/vendor/sqlite3.wasm");
+const SW_JS: &str = include_str!("../../web/sw.js");
+
 // Same-origin only: no Google Fonts, no CDN scripts, no third-party pixels.
 // `font-src` is explicit even though the UI uses system fonts, so a future
 // `@font-face` cannot silently pull a remote file. MapLibre's module worker is
 // same-origin, and PMTiles range requests stay under `connect-src 'self'`.
-const CSP: &str = "default-src 'self'; img-src 'self' data:; script-src 'self'; \
+const CSP: &str = "default-src 'self'; img-src 'self' data:; \
+script-src 'self' 'wasm-unsafe-eval'; \
 worker-src 'self'; style-src 'self'; font-src 'self'; connect-src 'self'; \
 base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; \
 manifest-src 'self'";
@@ -257,6 +274,70 @@ pub async fn pmtiles_js() -> Response {
 
 pub async fn pmtiles_license() -> Response {
     cached(PMTILES_LICENSE.into_response(), "text/plain; charset=utf-8")
+}
+
+pub async fn offline_search_js() -> Response {
+    module_js(OFFLINE_SEARCH_JS)
+}
+
+pub async fn offline_js() -> Response {
+    module_js(OFFLINE_JS)
+}
+
+pub async fn offline_catalog_js() -> Response {
+    module_js(OFFLINE_CATALOG_JS)
+}
+
+pub async fn search_js() -> Response {
+    module_js(SEARCH_JS)
+}
+
+/// The pack-manager demo is a first-class same-origin page; the service worker
+/// precaches it. It is useful for installing the Moldova pack before opening
+/// the main app.
+pub async fn offline_demo() -> Response {
+    let mut resp = Html(OFFLINE_DEMO).into_response();
+    resp.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    secure(resp)
+}
+
+pub async fn offline_css() -> Response {
+    cached(OFFLINE_CSS.into_response(), "text/css; charset=utf-8")
+}
+
+pub async fn offline_manifest() -> Response {
+    cached(OFFLINE_MANIFEST.into_response(), "application/json")
+}
+
+pub async fn offline_manifest_broken() -> Response {
+    cached(OFFLINE_MANIFEST_BROKEN.into_response(), "application/json")
+}
+
+pub async fn offline_license() -> Response {
+    cached(OFFLINE_LICENSE.into_response(), "text/plain; charset=utf-8")
+}
+
+pub async fn sqlite_module() -> Response {
+    cached(
+        SQLITE_MODULE.into_response(),
+        "text/javascript; charset=utf-8",
+    )
+}
+
+pub async fn sqlite_wasm() -> Response {
+    cached(SQLITE_WASM.into_response(), "application/wasm")
+}
+
+/// Root service worker. `Service-Worker-Allowed: /` keeps the page's pack
+/// routes (`/offline-packs/...`) in scope.
+pub async fn service_worker() -> Response {
+    let mut resp = module_js(SW_JS);
+    resp.headers_mut().insert(
+        header::HeaderName::from_static("service-worker-allowed"),
+        HeaderValue::from_static("/"),
+    );
+    resp
 }
 
 enum ByteRange {

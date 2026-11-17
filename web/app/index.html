@@ -77,6 +77,15 @@
 
       <section id="app-panel" class="hidden app-shell">
         <div id="map" class="map" aria-label="Map"></div>
+        <div id="offline-map-banner" class="offline-map-banner hidden" role="status">
+          <div class="offline-map-copy">
+            <strong>Offline map</strong>
+            <span id="offline-map-status">Download the Moldova map to browse without a connection.</span>
+          </div>
+          <button id="offline-map-download" type="button" class="secondary">
+            Download map (220 MB)
+          </button>
+        </div>
         <div class="map-attribution">
           Map data ©
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>

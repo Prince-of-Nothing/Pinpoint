@@ -353,3 +353,80 @@ async fn map_fixture_supports_byte_ranges() {
         Some("bytes */94389")
     );
 }
+
+#[tokio::test]
+async fn offline_app_assets_are_served() {
+    let app = pinpoint_desktop::server::router(pinpoint_desktop::server::AppState::new());
+    let assets = [
+        ("/offline-search.js", "text/javascript"),
+        ("/offline.js", "text/javascript"),
+        ("/offline-catalog.js", "text/javascript"),
+        ("/sw.js", "text/javascript"),
+        ("/map-assets/search.js", "text/javascript"),
+        ("/vendor/sqlite3.mjs", "text/javascript"),
+        ("/vendor/sqlite3.wasm", "application/wasm"),
+        ("/app/offline-demo.html", "text/html"),
+        ("/app/offline.css", "text/css"),
+        ("/app/offline.js", "text/javascript"),
+        ("/app/offline-catalog.js", "text/javascript"),
+        (
+            "/app/fixtures/offline-pack/manifest.json",
+            "application/json",
+        ),
+        ("/map/map.js", "text/javascript"),
+        ("/map/style.json", "application/json"),
+    ];
+    for (path, mime) in assets {
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK, "{path}");
+        let content_type = resp
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        assert!(
+            content_type.starts_with(mime),
+            "{path} content type: {content_type}"
+        );
+        let body = to_bytes(resp.into_body(), 8 * 1024 * 1024)
+            .await
+            .expect("asset body");
+        assert!(!body.is_empty(), "{path} must not be empty");
+    }
+
+    let sw = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/sw.js")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        sw.headers()
+            .get("service-worker-allowed")
+            .and_then(|v| v.to_str().ok()),
+        Some("/"),
+        "the service worker must control the pack routes"
+    );
+
+    let range = app
+        .oneshot(
+            Request::builder()
+                .uri("/map/fixtures/monaco.pmtiles")
+                .header("range", "bytes=0-6")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(range.status(), StatusCode::PARTIAL_CONTENT);
+    let body = to_bytes(range.into_body(), 16).await.unwrap();
+    assert_eq!(&body[..], b"PMTiles");
+}

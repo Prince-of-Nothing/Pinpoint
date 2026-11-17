@@ -200,6 +200,42 @@ pub fn router(state: AppState) -> Router {
             "/map-assets/fixtures/monaco.pmtiles",
             get(web_handlers::map_fixture),
         )
+        // Offline search, pack manager and service worker.
+        .route("/offline-search.js", get(web_handlers::offline_search_js))
+        .route("/offline.js", get(web_handlers::offline_js))
+        .route("/offline-catalog.js", get(web_handlers::offline_catalog_js))
+        .route("/sw.js", get(web_handlers::service_worker))
+        .route("/map-assets/search.js", get(web_handlers::search_js))
+        .route("/vendor/sqlite3.mjs", get(web_handlers::sqlite_module))
+        .route("/vendor/sqlite3.wasm", get(web_handlers::sqlite_wasm))
+        // Pack-manager demo and its fixture, served under /app/ so the
+        // service-worker precache and relative imports resolve.
+        .route("/app/offline-demo.html", get(web_handlers::offline_demo))
+        .route("/app/offline.css", get(web_handlers::offline_css))
+        .route("/app/offline.js", get(web_handlers::offline_js))
+        .route(
+            "/app/offline-catalog.js",
+            get(web_handlers::offline_catalog_js),
+        )
+        .route(
+            "/app/fixtures/offline-pack/manifest.json",
+            get(web_handlers::offline_manifest),
+        )
+        .route(
+            "/app/fixtures/offline-pack/manifest-broken.json",
+            get(web_handlers::offline_manifest_broken),
+        )
+        .route(
+            "/app/fixtures/offline-pack/LICENSE.txt",
+            get(web_handlers::offline_license),
+        )
+        // Aliases used by the demo and the service-worker precache.
+        .route("/map/map.js", get(web_handlers::map_foundation_js))
+        .route("/map/style.json", get(web_handlers::map_style_json))
+        .route(
+            "/map/fixtures/monaco.pmtiles",
+            get(web_handlers::map_fixture),
+        )
         .route("/health", get(handlers::health))
         .route("/api/v1/sync-status", get(handlers::sync_status))
         .with_state(state)

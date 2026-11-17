@@ -20,7 +20,7 @@ use std::collections::BTreeMap;
 
 use osmpbfreader::OsmPbfReader;
 
-use crate::graph::{haversine_m, Edge, Graph, Node, RoadClass};
+use crate::graph::{haversine_m, Edge, Graph, Node, RoadClass, EDGE_FLAG_ROUNDABOUT, NO_NAME};
 
 /// Highest speed the car profile will accept from a `maxspeed` tag.
 const MAX_SPEED_KMH: f32 = 130.0;
@@ -64,11 +64,15 @@ enum OneWay {
     Backward,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct WayRule {
     class: RoadClass,
     speed_kmh: f32,
     oneway: OneWay,
+    /// `junction=roundabout|circular`; used for maneuver generation.
+    roundabout: bool,
+    /// `name`, or `ref` as the fallback, trimmed. `None` when both are absent.
+    name: Option<Box<str>>,
 }
 
 struct WayRecord {
@@ -88,6 +92,8 @@ struct RawWayTags<'a> {
     junction: Option<&'a str>,
     area: Option<&'a str>,
     maxspeed: Option<&'a str>,
+    name: Option<&'a str>,
+    reference: Option<&'a str>,
 }
 
 impl<'a> RawWayTags<'a> {
@@ -104,6 +110,8 @@ impl<'a> RawWayTags<'a> {
             junction: get("junction"),
             area: get("area"),
             maxspeed: get("maxspeed"),
+            name: get("name"),
+            reference: get("ref"),
         }
     }
 
@@ -119,6 +127,8 @@ impl<'a> RawWayTags<'a> {
             junction: get("junction"),
             area: get("area"),
             maxspeed: get("maxspeed"),
+            name: get("name"),
+            reference: get("ref"),
         }
     }
 }
@@ -186,17 +196,38 @@ fn parse_way_rule(tags: RawWayTags<'_>) -> Option<WayRule> {
         _ => OneWay::Both,
     };
 
+    let roundabout = tags.junction.is_some_and(|value| {
+        matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "roundabout" | "circular"
+        )
+    });
+
     let speed_kmh = tags
         .maxspeed
         .and_then(parse_maxspeed_kmh)
         .unwrap_or_else(|| class.default_speed_kmh())
         .clamp(MIN_SPEED_KMH, MAX_SPEED_KMH);
 
+    let name = tags
+        .name
+        .and_then(clean_tag)
+        .or_else(|| tags.reference.and_then(clean_tag))
+        .map(Into::into);
+
     Some(WayRule {
         class,
         speed_kmh,
         oneway,
+        roundabout,
+        name,
     })
+}
+
+/// Trim a tag value and treat an empty result as absent.
+fn clean_tag(value: &str) -> Option<&str> {
+    let value = value.trim();
+    (!value.is_empty()).then_some(value)
 }
 
 /// Parse an OSM `maxspeed` value into km/h. Returns `None` for values that are
@@ -271,7 +302,18 @@ pub fn load_pbf<P: AsRef<Path>>(path: P) -> Result<Graph, PbfError> {
     let mut index: HashMap<i64, u32> = HashMap::with_capacity(coordinates.len());
     let mut nodes: Vec<Node> = Vec::with_capacity(coordinates.len());
     let mut edges: Vec<Edge> = Vec::new();
+    let mut names: Vec<Box<str>> = Vec::new();
+    let mut name_ids: HashMap<Box<str>, u32> = HashMap::new();
     for way in ways {
+        let name_id = match way.rule.name.as_deref() {
+            Some(name) => intern_name(name, &mut names, &mut name_ids),
+            None => NO_NAME,
+        };
+        let flags = if way.rule.roundabout {
+            EDGE_FLAG_ROUNDABOUT
+        } else {
+            0
+        };
         let mut previous: Option<u32> = None;
         for osm_id in way.nodes {
             let Some(&(lat, lon)) = coordinates.get(&osm_id) else {
@@ -299,6 +341,8 @@ pub fn load_pbf<P: AsRef<Path>>(path: P) -> Result<Graph, PbfError> {
                             distance_m,
                             speed_kmh: way.rule.speed_kmh,
                             class: way.rule.class,
+                            flags,
+                            name: name_id,
                         };
                         let backward = Edge {
                             from: current,
@@ -323,7 +367,22 @@ pub fn load_pbf<P: AsRef<Path>>(path: P) -> Result<Graph, PbfError> {
     if nodes.is_empty() {
         return Err(PbfError::Empty(path.display().to_string()));
     }
-    Ok(Graph::from_edges(nodes, edges))
+    Ok(Graph::from_edges_with_names(nodes, edges, names))
+}
+
+/// Intern a road name, returning its table index.
+///
+/// The table owns one `Box<str>` per unique name; every edge only stores the
+/// 4-byte id. Ways that share a name (or a `ref`) share the id.
+fn intern_name(name: &str, names: &mut Vec<Box<str>>, ids: &mut HashMap<Box<str>, u32>) -> u32 {
+    if let Some(&id) = ids.get(name) {
+        return id;
+    }
+    let id = names.len() as u32;
+    let boxed: Box<str> = name.into();
+    ids.insert(boxed.clone(), id);
+    names.push(boxed);
+    id
 }
 
 #[cfg(test)]
@@ -410,6 +469,82 @@ mod tests {
             .oneway,
             OneWay::Both
         );
+    }
+
+    #[test]
+    fn captures_name_with_ref_fallback() {
+        let rule = parse_way_rule(&tags(&[
+            ("highway", "secondary"),
+            ("name", "  Strada Ștefan cel Mare  "),
+            ("ref", "M14"),
+        ]))
+        .unwrap();
+        assert_eq!(rule.name.as_deref(), Some("Strada Ștefan cel Mare"));
+
+        let rule = parse_way_rule(&tags(&[
+            ("highway", "trunk"),
+            ("ref", " M14 "),
+            ("name", "   "),
+        ]))
+        .unwrap();
+        assert_eq!(rule.name.as_deref(), Some("M14"), "ref is the fallback");
+
+        let rule = parse_way_rule(&tags(&[("highway", "residential")])).unwrap();
+        assert_eq!(rule.name, None);
+
+        let rule = parse_way_rule(&tags(&[
+            ("highway", "residential"),
+            ("name", ""),
+            ("ref", ""),
+        ]))
+        .unwrap();
+        assert_eq!(rule.name, None, "empty tags are treated as absent");
+    }
+
+    #[test]
+    fn flags_roundabouts_including_circular_junctions() {
+        let rule =
+            parse_way_rule(&tags(&[("highway", "primary"), ("junction", "roundabout")])).unwrap();
+        assert!(rule.roundabout);
+        assert_eq!(rule.oneway, OneWay::Forward);
+
+        let rule =
+            parse_way_rule(&tags(&[("highway", "primary"), ("junction", "circular")])).unwrap();
+        assert!(rule.roundabout);
+
+        let rule = parse_way_rule(&tags(&[("highway", "primary")])).unwrap();
+        assert!(!rule.roundabout, "plain ways must not be flagged");
+    }
+
+    #[test]
+    fn oneway_values_map_to_travel_directions() {
+        for value in ["yes", "true", "1", "YES"] {
+            assert_eq!(
+                parse_way_rule(&tags(&[("highway", "primary"), ("oneway", value)]))
+                    .unwrap()
+                    .oneway,
+                OneWay::Forward,
+                "oneway={value}"
+            );
+        }
+        for value in ["-1", "reverse"] {
+            assert_eq!(
+                parse_way_rule(&tags(&[("highway", "primary"), ("oneway", value)]))
+                    .unwrap()
+                    .oneway,
+                OneWay::Backward,
+                "oneway={value}"
+            );
+        }
+        for value in ["no", "false", "0", "unknown"] {
+            assert_eq!(
+                parse_way_rule(&tags(&[("highway", "primary"), ("oneway", value)]))
+                    .unwrap()
+                    .oneway,
+                OneWay::Both,
+                "oneway={value}"
+            );
+        }
     }
 
     #[test]

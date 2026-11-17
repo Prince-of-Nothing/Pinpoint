@@ -42,6 +42,11 @@ Finished `release` profile [optimized] target(s) in 1m 00s
 `libnative_router.rlib` is 219,888 bytes. This is **not** an APK and was not run
 on a device.
 
+This result predates the Wave 4 graph cache and maneuver generator. The crate is
+still pure Rust and the new code uses only `std::fs`, so no C dependency was
+added, but **the cross-build was not re-run in Wave 4**. Re-measure the artifact
+size before packaging.
+
 Use a separate `--target-dir` when the host `cargo`/`rustc` and the rustup
 toolchain differ (this machine has standalone Rust 1.99.1 first on `PATH` and
 rustup 1.100.0 with the Android target); mixing them produces stale artifact
@@ -67,13 +72,13 @@ native-router = { path = "../native-router" }
 Expose one long-lived native handle and two calls:
 
 ```text
-Java_…_NativeRouter_nativeLoadGraph(env, class, pbfPath) -> jlong
+Java_…_NativeRouter_nativeLoadGraph(env, class, graphPath) -> jlong
 Java_…_NativeRouter_nativeRoute(env, class, handle, fromLat, fromLon, toLat, toLon) -> jstring (JSON)
 Java_…_NativeRouter_nativeFreeGraph(env, class, handle)
 ```
 
-- Build the `Graph` once and box it behind the `jlong` handle; do **not** parse
-  the PBF per route.
+- Load `graph.bin` once with `Graph::load` and box it behind the `jlong`
+  handle; do **not** parse the PBF or reload the graph per route.
 - Copy the returned JSON into a Java `String` and parse it there, or return a
   small object with `distance_m`, `duration_s` and a `double[]` of coordinates.
 - Wrap the native call in `catch_unwind` so a Rust panic becomes a Java
@@ -92,22 +97,32 @@ option keeps routing local; do not add an HTTP fallback.
 
 ## 3. What must change before shipping
 
-1. **Persist the graph.** Parsing the 101 MB PBF at every app start is not
-   acceptable on a phone (desktop measurement is in
-   `docs/offline/native-routing.md`). Build the graph once when the pack is
-   installed/updated and serialize it to app-private storage (`filesDir`), for
-   example a versioned binary format (header + node/edge arrays) that can be
-   memory-mapped. The download manager already owns pack lifecycle and SHA-256
-   verification.
+1. **Persist the graph — implemented in Wave 4.** `Graph::save(path)` /
+   `Graph::load(path)` provide the versioned, CRC-checked `graph.bin` format
+   described in `README.md`. The recommended mobile model is to build
+   `graph.bin` in the offline pack pipeline and ship it inside the Moldova pack,
+   verified by the existing SHA-256 manifest. Load it once from app-private
+   storage (`filesDir`); do **not** parse the PBF at app launch. A first-launch
+   build costs 8–46 s and 283 MiB peak on desktop and is not acceptable on a
+   phone.
 2. **Keep it local.** The Android path must never call an online routing
    service. Outside-coverage checks (`RouteError::OutsideCoverage`) should show
    "outside offline area" rather than silently falling back.
-3. **Battery/memory.** The graph is currently `Vec`-based and fully resident.
-   Measure on a mid-range arm64 device before committing to a size; a packed
-   CSR with `f32` coordinates and memory mapping is the next optimization.
-4. **Maneuvers.** This spike returns geometry + ETA only. Turn-by-turn needs
-   edge names/refs, turn restrictions and a maneuver generator, or the Valhalla
-   path from design §10.
+3. **Battery/memory.** The cached graph is fully resident: 105.7 MiB of arrays,
+   149.1 MiB peak with A* on desktop. Measure on a mid-range arm64 device before
+   committing to a size. A packed CSR with `f32` coordinates and memory mapping
+   is the next optimization if that budget is too high.
+4. **Maneuvers — implemented in Wave 4 for the Rust path.** `Route.maneuvers`
+   carries `depart`/`straight`/`left`/`right`/`slight_*`/`sharp_*`/`uturn`/
+   `roundabout`/`arrive` with road names/refs, a 15° dead band and tag-based
+   roundabout detection. It still has no turn restrictions, lane guidance or
+   exit signage; Valhalla remains the production target for full semantics.
+5. **JNI wrapper and packaging.** Not written. Load the graph once behind a
+   `jlong` handle and route by handle (shape in section 2); do not expose the
+   CLI. Package only `arm64-v8a` for the first cut.
+6. **Re-run the cross-build and measure on device.** The recorded Wave 2 ELF
+   predates the graph cache/maneuvers. Rebuild with the NDK, then record load
+   time, route time and peak RSS on the device.
 
 ## 4. Native Valhalla alternative
 

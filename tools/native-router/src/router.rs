@@ -7,6 +7,7 @@ use std::fmt;
 use serde::Serialize;
 
 use crate::graph::{cmp_f64, haversine_m, Graph, Node};
+use crate::maneuver::{build_maneuvers, Maneuver};
 use crate::profile::Profile;
 
 /// Queries further than this from the nearest graph node are reported as
@@ -14,13 +15,16 @@ use crate::profile::Profile;
 pub const MAX_SNAP_M: f64 = 25_000.0;
 
 /// A computed route. `points` are `(lat, lon)` WGS84 pairs in travel order;
-/// `nodes` are the matching OSM node ids.
+/// `nodes` are the matching OSM node ids. `maneuvers` is the turn-by-turn
+/// instruction list for the same path, starting with `depart` at the snapped
+/// origin and ending with `arrive`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Route {
     pub distance_m: f64,
     pub duration_s: f64,
     pub points: Vec<(f64, f64)>,
     pub nodes: Vec<i64>,
+    pub maneuvers: Vec<Maneuver>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -71,10 +75,12 @@ pub fn route(
 
     if start == goal {
         let node = graph.node(start).expect("nearest_node returns a valid id");
+        let points = vec![node_latlon(node)];
         return Ok(Route {
             distance_m: 0.0,
             duration_s: 0.0,
-            points: vec![node_latlon(node)],
+            maneuvers: build_maneuvers(graph, &points, &[], profile),
+            points,
             nodes: vec![node.osm_id],
         });
     }
@@ -83,6 +89,7 @@ pub fn route(
     let mut best_time = vec![f64::INFINITY; node_count];
     let mut best_distance = vec![0.0_f64; node_count];
     let mut came_from = vec![u32::MAX; node_count];
+    let mut came_from_edge = vec![u32::MAX; node_count];
     let mut closed = vec![false; node_count];
     let mut queue = BinaryHeap::new();
 
@@ -113,18 +120,25 @@ pub fn route(
 
         if entry.node == goal {
             let mut path = Vec::new();
+            let mut path_edges = Vec::new();
             let mut cursor = goal;
             loop {
                 path.push(cursor);
                 if cursor == start {
                     break;
                 }
+                let via = came_from_edge[cursor as usize];
+                if via == u32::MAX {
+                    return Err(RouteError::NoPath);
+                }
+                path_edges.push(via);
                 cursor = came_from[cursor as usize];
                 if cursor == u32::MAX {
                     return Err(RouteError::NoPath);
                 }
             }
             path.reverse();
+            path_edges.reverse();
 
             let mut points = Vec::with_capacity(path.len());
             let mut nodes = Vec::with_capacity(path.len());
@@ -133,16 +147,19 @@ pub fn route(
                 points.push(node_latlon(node));
                 nodes.push(node.osm_id);
             }
+            let maneuvers = build_maneuvers(graph, &points, &path_edges, profile);
             return Ok(Route {
                 distance_m: best_distance[goal as usize],
                 duration_s: best_time[goal as usize],
                 points,
                 nodes,
+                maneuvers,
             });
         }
 
         let speed_cap_kmh = f64::from(profile.max_speed_kmh().max(1.0));
-        for edge in graph.edges_from(entry.node) {
+        let edge_base = graph.edge_index_base(entry.node);
+        for (offset, edge) in graph.edges_from(entry.node).iter().enumerate() {
             let next = edge.to as usize;
             if closed[next] {
                 continue;
@@ -154,6 +171,7 @@ pub fn route(
                 best_time[next] = next_time;
                 best_distance[next] = best_distance[current] + f64::from(edge.distance_m);
                 came_from[next] = entry.node;
+                came_from_edge[next] = edge_base + offset as u32;
                 queue.push(QueueEntry {
                     f: next_time + heuristic(edge.to),
                     g: next_time,
@@ -206,19 +224,30 @@ fn node_latlon(node: &Node) -> (f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::{Edge, RoadClass};
+    use crate::graph::{Edge, RoadClass, EDGE_FLAG_ROUNDABOUT};
+    use crate::maneuver::{
+        KIND_ARRIVE, KIND_DEPART, KIND_LEFT, KIND_RIGHT, KIND_ROUNDABOUT, KIND_STRAIGHT,
+    };
 
     fn node(osm_id: i64, lat: f64, lon: f64) -> Node {
         Node { osm_id, lat, lon }
     }
 
     fn edge(from: u32, to: u32, distance_m: f32, speed_kmh: f32) -> Edge {
+        Edge::new(from, to, distance_m, speed_kmh, RoadClass::Residential)
+    }
+
+    fn named(from: u32, to: u32, distance_m: f32, name: u32) -> Edge {
         Edge {
-            from,
-            to,
-            distance_m,
-            speed_kmh,
-            class: RoadClass::Residential,
+            name,
+            ..edge(from, to, distance_m, 50.0)
+        }
+    }
+
+    fn roundabout(from: u32, to: u32, distance_m: f32) -> Edge {
+        Edge {
+            flags: EDGE_FLAG_ROUNDABOUT,
+            ..edge(from, to, distance_m, 30.0)
         }
     }
 
@@ -318,6 +347,10 @@ mod tests {
         assert_eq!(route.duration_s, 0.0);
         assert_eq!(route.nodes, vec![101]);
         assert_eq!(route.points, vec![(47.0, 28.0)]);
+        assert_eq!(route.maneuvers.len(), 2);
+        assert_eq!(route.maneuvers[0].kind, KIND_DEPART);
+        assert_eq!(route.maneuvers[1].kind, KIND_ARRIVE);
+        assert_eq!(route.maneuvers[0].distance_m, 0.0);
     }
 
     #[test]
@@ -377,5 +410,233 @@ mod tests {
         assert_eq!(heap.pop().unwrap().node, 3);
         assert_eq!(heap.pop().unwrap().node, 2);
         assert_eq!(heap.pop().unwrap().node, 1);
+    }
+
+    // -- maneuvers ---------------------------------------------------------
+
+    #[test]
+    fn straight_route_departs_then_arrives_without_turn_spam() {
+        let graph = straight_line_graph();
+        let route = route(&graph, (47.0, 28.0), (47.0, 28.002), Profile::Car).unwrap();
+        assert_eq!(route.maneuvers.len(), 2, "{:#?}", route.maneuvers);
+        assert_eq!(route.maneuvers[0].kind, KIND_DEPART);
+        assert_eq!(route.maneuvers[0].instruction, "Head east");
+        assert_eq!(route.maneuvers[0].point_index, 0);
+        assert!((route.maneuvers[0].distance_m - 150.0).abs() < 0.01);
+        assert_eq!(route.maneuvers[1].kind, KIND_ARRIVE);
+        assert_eq!(route.maneuvers[1].distance_m, 0.0);
+        assert_eq!(route.maneuvers[1].duration_s, 0.0);
+        assert_eq!(route.maneuvers[1].point_index, 2);
+    }
+
+    #[test]
+    fn left_turn_uses_outgoing_road_name() {
+        // East along Strada A, then north onto Strada B: a left turn.
+        let graph = Graph::from_edges_with_names(
+            vec![
+                node(1, 47.0, 28.0),
+                node(2, 47.0, 28.001),
+                node(3, 47.001, 28.001),
+            ],
+            vec![named(0, 1, 75.0, 0), named(1, 2, 75.0, 1)],
+            vec!["Strada A".into(), "Strada B".into()],
+        );
+        let route = route(&graph, (47.0, 28.0), (47.001, 28.001), Profile::Car).unwrap();
+        let turn = route
+            .maneuvers
+            .iter()
+            .find(|maneuver| maneuver.kind == KIND_LEFT)
+            .expect("expected a left maneuver");
+        assert_eq!(turn.instruction, "Turn left onto Strada B");
+        assert_eq!(turn.point, (47.0, 28.001));
+        assert!(
+            (turn.distance_m - 75.0).abs() < 0.5,
+            "got {}",
+            turn.distance_m
+        );
+        assert!(
+            (turn.duration_s - 5.4).abs() < 0.1,
+            "got {}",
+            turn.duration_s
+        );
+    }
+
+    #[test]
+    fn right_turn_uses_outgoing_road_name() {
+        // East, then south: a right turn.
+        let graph = Graph::from_edges_with_names(
+            vec![
+                node(1, 47.0, 28.0),
+                node(2, 47.0, 28.001),
+                node(3, 46.999, 28.001),
+            ],
+            vec![named(0, 1, 75.0, 0), named(1, 2, 75.0, 1)],
+            vec!["Strada A".into(), "Strada B".into()],
+        );
+        let route = route(&graph, (47.0, 28.0), (46.999, 28.001), Profile::Car).unwrap();
+        let turn = route
+            .maneuvers
+            .iter()
+            .find(|maneuver| maneuver.kind == KIND_RIGHT)
+            .expect("expected a right maneuver");
+        assert_eq!(turn.instruction, "Turn right onto Strada B");
+    }
+
+    #[test]
+    fn turn_without_a_name_falls_back_to_the_bare_instruction() {
+        let graph = Graph::from_edges(
+            vec![
+                node(1, 47.0, 28.0),
+                node(2, 47.0, 28.001),
+                node(3, 47.001, 28.001),
+            ],
+            vec![edge(0, 1, 75.0, 50.0), edge(1, 2, 75.0, 50.0)],
+        );
+        let route = route(&graph, (47.0, 28.0), (47.001, 28.001), Profile::Car).unwrap();
+        let turn = route
+            .maneuvers
+            .iter()
+            .find(|maneuver| maneuver.kind == KIND_LEFT)
+            .expect("expected a left maneuver");
+        assert_eq!(turn.instruction, "Turn left");
+    }
+
+    #[test]
+    fn name_change_inside_the_dead_band_emits_straight() {
+        let graph = Graph::from_edges_with_names(
+            vec![
+                node(1, 47.0, 28.0),
+                node(2, 47.0, 28.001),
+                node(3, 47.0, 28.002),
+            ],
+            vec![named(0, 1, 75.0, 0), named(1, 2, 75.0, 1)],
+            vec!["Strada A".into(), "Strada B".into()],
+        );
+        let route = route(&graph, (47.0, 28.0), (47.0, 28.002), Profile::Car).unwrap();
+        let straight = route
+            .maneuvers
+            .iter()
+            .find(|maneuver| maneuver.kind == KIND_STRAIGHT)
+            .expect("expected a straight maneuver");
+        assert_eq!(straight.instruction, "Continue onto Strada B");
+        assert_eq!(route.maneuvers.len(), 3);
+    }
+
+    #[test]
+    fn noisy_geometry_inside_the_dead_band_does_not_add_turns() {
+        // A named road with ±4° zig-zags (≈8° per turn): below the 15° dead
+        // band, same name.
+        let graph = Graph::from_edges_with_names(
+            vec![
+                node(1, 47.0, 28.0),
+                node(2, 47.00005, 28.001),
+                node(3, 47.0, 28.002),
+                node(4, 47.00005, 28.003),
+                node(5, 47.0, 28.004),
+            ],
+            vec![
+                named(0, 1, 75.0, 0),
+                named(1, 2, 75.0, 0),
+                named(2, 3, 75.0, 0),
+                named(3, 4, 75.0, 0),
+            ],
+            vec!["Strada Sinuousă".into()],
+        );
+        let route = route(&graph, (47.0, 28.0), (47.0, 28.004), Profile::Car).unwrap();
+        assert_eq!(route.maneuvers.len(), 2, "{:#?}", route.maneuvers);
+        assert_eq!(route.maneuvers[0].kind, KIND_DEPART);
+        assert_eq!(route.maneuvers[1].kind, KIND_ARRIVE);
+    }
+
+    #[test]
+    fn maneuver_distances_and_durations_add_up_to_the_route() {
+        let graph = Graph::from_edges_with_names(
+            vec![
+                node(1, 47.0, 28.0),
+                node(2, 47.0, 28.001),
+                node(3, 47.001, 28.001),
+                node(4, 47.001, 28.002),
+            ],
+            vec![
+                named(0, 1, 75.0, 0),
+                named(1, 2, 75.0, 1),
+                named(2, 3, 75.0, 1),
+            ],
+            vec!["Strada A".into(), "Strada B".into()],
+        );
+        let route = route(&graph, (47.0, 28.0), (47.001, 28.002), Profile::Car).unwrap();
+        let distance: f64 = route.maneuvers.iter().map(|m| m.distance_m).sum();
+        let duration: f64 = route.maneuvers.iter().map(|m| m.duration_s).sum();
+        assert!((distance - route.distance_m).abs() < 1e-6);
+        assert!((duration - route.duration_s).abs() < 1e-6);
+        let last = route.maneuvers.last().unwrap();
+        assert_eq!(last.kind, KIND_ARRIVE);
+        assert_eq!(last.distance_m, 0.0);
+        assert_eq!(last.duration_s, 0.0);
+    }
+
+    #[test]
+    fn roundabout_entry_reports_the_exit_number() {
+        // Entry at node 3, a first exit branch at node 4, and the route leaves
+        // at node 5, so the instruction must say "2nd exit".
+        let graph = Graph::from_edges_with_names(
+            vec![
+                node(1, 47.0, 28.0),
+                node(2, 47.0, 28.001),
+                node(3, 47.0, 28.002),
+                node(4, 47.0, 28.003),
+                node(5, 47.0, 28.004),
+                node(6, 47.001, 28.002),
+            ],
+            vec![
+                edge(0, 1, 75.0, 50.0),
+                roundabout(1, 2, 30.0),
+                roundabout(2, 3, 30.0),
+                edge(2, 5, 75.0, 50.0),
+                // Two-way side road: both directions leave ring node 2, but
+                // this is one physical exit and must be counted once.
+                edge(5, 2, 75.0, 50.0),
+                named(3, 4, 75.0, 0),
+            ],
+            vec!["Strada Ieșirii".into()],
+        );
+        let route = route(&graph, (47.0, 28.0), (47.0, 28.004), Profile::Car).unwrap();
+        let roundabout = route
+            .maneuvers
+            .iter()
+            .find(|maneuver| maneuver.kind == KIND_ROUNDABOUT)
+            .expect("expected a roundabout maneuver");
+        assert_eq!(
+            roundabout.instruction,
+            "At the roundabout, take the 2nd exit onto Strada Ieșirii"
+        );
+        assert_eq!(roundabout.point_index, 1);
+    }
+
+    #[test]
+    fn roundabout_entry_without_a_name_still_reports_the_exit() {
+        let graph = Graph::from_edges(
+            vec![
+                node(1, 47.0, 28.0),
+                node(2, 47.0, 28.001),
+                node(3, 47.0, 28.002),
+                node(4, 47.0, 28.003),
+            ],
+            vec![
+                edge(0, 1, 75.0, 50.0),
+                roundabout(1, 2, 30.0),
+                edge(2, 3, 75.0, 50.0),
+            ],
+        );
+        let route = route(&graph, (47.0, 28.0), (47.0, 28.003), Profile::Car).unwrap();
+        let roundabout = route
+            .maneuvers
+            .iter()
+            .find(|maneuver| maneuver.kind == KIND_ROUNDABOUT)
+            .expect("expected a roundabout maneuver");
+        assert_eq!(
+            roundabout.instruction,
+            "At the roundabout, take the 1st exit"
+        );
     }
 }

@@ -7,6 +7,7 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="pinpoint-map-data" content="/map-assets/fixtures/monaco.pmtiles" />
     <meta name="pinpoint-map-style" content="/map-assets/style.json" />
+    <meta name="pinpoint-online-style" content="https://tiles.openfreemap.org/styles/liberty" />
     <link rel="stylesheet" href="/vendor/maplibre-gl.css" />
     <link rel="stylesheet" href="/app.css" />
   </head>
@@ -100,12 +101,20 @@
           </button>
         </div>
         <div class="map-attribution">
-          Map data ©
-          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>
-          <span class="sep">·</span>
-          <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a>
-          <span class="sep">·</span>
-          <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener noreferrer">ODbL 1.0</a>
+          <span id="map-attribution-offline">
+            Map data ©
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>
+            <span class="sep">·</span>
+            <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a>
+            <span class="sep">·</span>
+            <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener noreferrer">ODbL 1.0</a>
+          </span>
+          <span id="map-attribution-online" class="hidden">
+            ©
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>
+            <span class="sep">·</span>
+            tiles by OpenFreeMap
+          </span>
         </div>
 
         <div class="map-topbar">
@@ -385,6 +394,24 @@
             <div class="row">
               <button type="button" id="logout-all" class="secondary">Sign out everywhere</button>
             </div>
+          </div>
+
+          <div class="card" id="online-map-card">
+            <h2>Online map</h2>
+            <label class="online-map-toggle">
+              <input
+                type="checkbox"
+                id="online-map-toggle"
+                aria-describedby="online-map-note"
+              />
+              Use the worldwide online basemap
+            </label>
+            <p id="online-map-note" class="muted online-map-note">
+              Tiles are fetched from OpenFreeMap, which sees your IP address and
+              the area you view. Off by default; friend pins, locations and
+              account data are never sent.
+            </p>
+            <p id="online-map-error" class="online-map-error hidden" role="alert"></p>
           </div>
 
           <div class="card">

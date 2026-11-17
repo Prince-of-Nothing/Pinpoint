@@ -12,11 +12,11 @@
   --pr-border: var(--border, #1f2937);
   --pr-text: var(--text, #e5e7eb);
   --pr-muted: var(--muted, #9ca3af);
-  --pr-accent: var(--accent, #34d399);
-  --pr-accent-ink: #052e1b;
-  --pr-danger: var(--danger, #f87171);
-  --pr-accent-soft: rgba(52, 211, 153, 0.11);
-  --pr-accent-line: rgba(52, 211, 153, 0.55);
+  --pr-accent: var(--accent, #e3a458);
+  --pr-accent-ink: var(--accent-ink, #241708);
+  --pr-danger: var(--danger, #e06c5a);
+  --pr-accent-soft: rgba(227, 164, 88, 0.14);
+  --pr-accent-line: rgba(227, 164, 88, 0.55);
   --pr-danger-soft: rgba(248, 113, 113, 0.12);
   --pr-danger-line: rgba(248, 113, 113, 0.45);
   --pr-placeholder: #6b7280;

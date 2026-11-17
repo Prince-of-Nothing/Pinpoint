@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pinpoint — Map First</title>
+    <title>Pinpoint — private offline map</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="pinpoint-map-data" content="/map-assets/fixtures/monaco.pmtiles" />
     <meta name="pinpoint-map-style" content="/map-assets/style.json" />
@@ -22,7 +22,19 @@
     </header>
 
     <main>
-      <section id="login-panel" class="card">
+      <section id="login-panel" class="card auth-card">
+        <aside class="auth-brand">
+          <svg class="auth-mark" viewBox="0 0 120 120" fill="none" aria-hidden="true">
+            <circle cx="60" cy="60" r="44" stroke="currentColor" opacity=".22" />
+            <circle cx="60" cy="60" r="28" stroke="currentColor" opacity=".38" />
+            <path d="M24 78c16-22 28 10 44-12s16-22 28-30" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+            <circle cx="60" cy="60" r="6" fill="currentColor" />
+          </svg>
+          <p class="auth-tagline">The map that only shares when you do.</p>
+          <p class="auth-coords">47.0105° N · 28.8638° E</p>
+          <p class="auth-place">Chișinău, Moldova</p>
+        </aside>
+        <div class="auth-form">
         <h2>Sign in</h2>
         <form id="login-form">
           <label>Email <input id="login-email" type="email" autocomplete="username" required /></label>
@@ -60,6 +72,7 @@
           Location is shared only with explicit, revocable consent.
         </p>
         <p class="muted"><a href="/privacy">Privacy policy</a></p>
+        </div>
       </section>
 
       <section id="recovery-panel" class="card warn hidden" aria-live="polite">

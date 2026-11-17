@@ -153,13 +153,9 @@ impl AppState {
         // Shares are written by sql_upsert_share/sql_delete_share only. A
         // whole-store snapshot would resurrect a share deleted by another
         // request or replica after the explicit DELETE.
-        if self.owner.owns_locations() {
-            for l in &store.locations {
-                let _ = sqlx::query("INSERT INTO pinpoint_locations (user_id, user_name, latitude, longitude, precision_level, updated_at, accuracy) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (user_id) DO UPDATE SET user_name = EXCLUDED.user_name, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, precision_level = EXCLUDED.precision_level, updated_at = EXCLUDED.updated_at, accuracy = EXCLUDED.accuracy")
-                    .bind(l.user_id).bind(&l.user_name).bind(l.latitude).bind(l.longitude).bind(&l.precision_level).bind(&l.updated_at).bind(l.accuracy)
-                    .execute(&mut **tx).await;
-            }
-        }
+        // Latest locations are written by sql_upsert_location only. A
+        // whole-store snapshot would let a stale replica overwrite a newer
+        // publish (and the location is the table's single row per user).
         if self.owner.owns_checkins() {
             for c in &store.check_ins {
                 let _ = sqlx::query("INSERT INTO pinpoint_checkins (id, user_id, user_name, latitude, longitude, note, kind, created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO UPDATE SET user_id = EXCLUDED.user_id, user_name = EXCLUDED.user_name, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, note = EXCLUDED.note, kind = EXCLUDED.kind, created_at = EXCLUDED.created_at")
@@ -177,6 +173,20 @@ impl AppState {
         // No delete-missing: deletions go through sql_delete_* (explicit)
         // so a stale snapshot can never erase a row another replica just
         // committed.
+    }
+
+    pub async fn sql_upsert_location(&self, location: &FriendLocation) {
+        let Some(pool) = &self.pg else { return };
+        let _ = sqlx::query("INSERT INTO pinpoint_locations (user_id, user_name, latitude, longitude, precision_level, updated_at, accuracy) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (user_id) DO UPDATE SET user_name = EXCLUDED.user_name, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, precision_level = EXCLUDED.precision_level, updated_at = EXCLUDED.updated_at, accuracy = EXCLUDED.accuracy")
+            .bind(location.user_id)
+            .bind(&location.user_name)
+            .bind(location.latitude)
+            .bind(location.longitude)
+            .bind(&location.precision_level)
+            .bind(&location.updated_at)
+            .bind(location.accuracy)
+            .execute(pool)
+            .await;
     }
 
     pub async fn sql_upsert_share(&self, share: &LocationShare) {

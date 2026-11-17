@@ -1231,8 +1231,12 @@ header { height: 60px; }
 }
 
 #recovery-panel {
+  position: relative;
+  z-index: 1200;
   max-width: 560px;
   margin: 4vh auto;
+  background: var(--panel);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 45%);
 }
 
 @media (max-width: 800px) {

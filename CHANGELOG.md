@@ -10,6 +10,10 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [Unreleased]
+### Added
+- [FEATURE] Map data: a runtime region catalog (`catalog.json` in `pinpoint-maps`) and a manifest-driven multi-region installer replace the hardcoded Moldova pack, so a country can be added without an app release; GitHub Releases hosts assets (2 GiB cap, `maxzoom` reduced when needed), legacy root-level Moldova files migrate into `packs/moldova/`, and an opt-in OpenFreeMap basemap provides worldwide online viewing (ADR-0021).
+
 ## [2.3.0] - 2026-11-17
 ### Added
 - [FEATURE] UI: a cartographic forest/amber visual refresh — serif Pinpoint wordmark, a split auth field panel with coordinates and the "only shares when you do" line, a compact mobile auth sheet, consistent map-window header and route panel, and an amber route line.

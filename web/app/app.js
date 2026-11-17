@@ -4,7 +4,13 @@
 import { createMap } from "./map.js";
 import { initNavigation } from "./nav.js";
 import { createAdminConsole } from "./admin.js";
-import { initSharing } from "./sharing.js";
+import {
+  expiryText,
+  friendName,
+  initSharing,
+  precisionLabel,
+  shareStatus,
+} from "./sharing.js";
 import { initAppearance } from "./appearance.js";
 
 const state = {
@@ -269,8 +275,9 @@ async function refresh() {
     api("/api/v1/auth/sessions").catch(() => ({ sessions: [] })),
   ]);
   state.locations = Array.isArray(locations) ? locations : [];
-  renderFriends(Array.isArray(friendships) ? friendships : []);
-  renderShares(Array.isArray(shares) ? shares : []);
+  const friends = Array.isArray(friendships) ? friendships : [];
+  renderFriends(friends);
+  renderShares(Array.isArray(shares) ? shares : [], friends);
   renderLocations(state.locations);
   renderSessions(Array.isArray(sessions?.sessions) ? sessions.sessions : []);
   updateMap();
@@ -312,22 +319,41 @@ function renderFriends(items) {
   }
 }
 
-function renderShares(items) {
+function renderShares(items, friendships = []) {
   const ul = $("shares-list");
   ul.innerHTML = "";
   if (!items.length) {
-    ul.innerHTML = '<li class="muted">No shares yet.</li>';
+    ul.innerHTML = '<li class="muted">You are not sharing your location.</li>';
     return;
   }
   for (const s of items) {
+    const friendship =
+      friendships.find((f) => f.id === s.friendship_id) || { id: s.friendship_id };
+    const status = shareStatus(s);
+    const badge = status === "active" ? "accepted" : status === "expired" ? "rejected" : "pending";
     const li = document.createElement("li");
-    li.innerHTML = `<span>#${s.id} · ${escapeHtml(s.direction)} · ${escapeHtml(s.precision_level)}</span>
-      <span class="badge ${s.is_active ? "accepted" : "pending"}">${s.is_active ? "active" : "paused"}</span>`;
-    const toggle = document.createElement("button");
-    toggle.textContent = s.is_active ? "Pause" : "Resume";
-    toggle.className = "secondary";
-    toggle.onclick = () => toggleShare(s.id, !s.is_active);
-    li.appendChild(toggle);
+    li.innerHTML = `<span>${escapeHtml(friendName(friendship, state.user?.id))} · ${escapeHtml(
+      precisionLabel(s.precision_level),
+    )} · ${escapeHtml(expiryText(s))}</span>
+      <span class="badge ${badge}">${status}</span>`;
+    const revoke = document.createElement("button");
+    revoke.textContent = "Revoke";
+    revoke.className = "secondary";
+    revoke.onclick = () => revokeShare(s.id);
+    li.appendChild(revoke);
+    if (status === "expired") {
+      const again = document.createElement("button");
+      again.textContent = "Share again";
+      again.className = "secondary";
+      again.onclick = () => sharing?.open(friendship);
+      li.appendChild(again);
+    } else {
+      const toggle = document.createElement("button");
+      toggle.textContent = s.is_active ? "Pause" : "Resume";
+      toggle.className = "secondary";
+      toggle.onclick = () => toggleShare(s.id, !s.is_active);
+      li.appendChild(toggle);
+    }
     ul.appendChild(li);
   }
 }
@@ -682,6 +708,16 @@ async function respond(id, action) {
 async function toggleShare(id, isActive) {
   try {
     await api(`/api/v1/locations/shares/${id}`, { method: "PATCH", body: { is_active: isActive } });
+    await refresh();
+  } catch (e) {
+    setStatus(e.message, true);
+  }
+}
+
+async function revokeShare(id) {
+  try {
+    await api(`/api/v1/locations/shares/${id}`, { method: "DELETE" });
+    setStatus("Sharing revoked.");
     await refresh();
   } catch (e) {
     setStatus(e.message, true);

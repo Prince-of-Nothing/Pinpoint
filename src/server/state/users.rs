@@ -271,6 +271,8 @@ impl AppState {
             ("locations", "DELETE FROM pinpoint_locations WHERE user_id=$1"),
             ("check-ins", "DELETE FROM pinpoint_checkins WHERE user_id=$1"),
             ("emergencies", "DELETE FROM pinpoint_emergencies WHERE user_id=$1"),
+            ("location-history", "DELETE FROM pinpoint_location_history WHERE user_id=$1"),
+            ("place-notes", "DELETE FROM pinpoint_place_notes WHERE user_id=$1"),
             ("diagnostic-reports", "DELETE FROM pinpoint_diagnostic_reports WHERE user_id=$1"),
             ("sessions", "DELETE FROM pinpoint_sessions WHERE user_id=$1"),
             ("admin-audit", "DELETE FROM pinpoint_admin_audit WHERE actor_id=$1"),

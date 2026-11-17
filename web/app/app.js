@@ -12,10 +12,14 @@ const state = {
   user: null,
   map: { lat: 47.0105, lon: 28.8638, zoom: 13 },
   locations: [],
+  history: [],
+  notes: [],
+  trailVisible: false,
 };
 
 let accountNameDirty = false;
 let authBusy = false;
+let notePhotoData = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -95,9 +99,14 @@ function resetToLogin() {
   state.user = null;
   state.csrf = null;
   state.locations = [];
+  state.history = [];
+  state.notes = [];
+  state.trailVisible = false;
   accountNameDirty = false;
   mapApi?.clearRoute();
   mapApi?.clearSelfLocation();
+  mapApi?.clearTrail();
+  mapApi?.setNoteMarkers([]);
   $("nav-banner").classList.add("hidden");
   $("place-sheet").classList.add("hidden");
   $("route-panel").classList.add("hidden");
@@ -262,20 +271,27 @@ async function refresh() {
     show($("login-panel"), true);
     return;
   }
-  const [friendships, shares, locations, sessions] = await Promise.all([
+  const [friendships, shares, locations, sessions, history, notes] = await Promise.all([
     api("/api/v1/friendships/").catch(() => []),
     api("/api/v1/locations/shares").catch(() => []),
     api("/api/v1/locations/friends").catch(() => []),
     api("/api/v1/auth/sessions").catch(() => ({ sessions: [] })),
+    api("/api/v1/locations/history").catch(() => []),
+    api("/api/v1/locations/notes").catch(() => []),
   ]);
   state.locations = Array.isArray(locations) ? locations : [];
+  state.history = Array.isArray(history) ? history : [];
+  state.notes = Array.isArray(notes) ? notes : [];
   const friends = Array.isArray(friendships) ? friendships : [];
   renderFriends(friends);
   renderShares(Array.isArray(shares) ? shares : [], friends);
   renderLocations(state.locations);
+  renderToday();
+  renderNotes();
   renderSessions(Array.isArray(sessions?.sessions) ? sessions.sessions : []);
   updateMap();
   nav?.refreshStorage();
+  updateMapEmptyState();
 }
 
 // ---------------------------------------------------------------------------
@@ -367,6 +383,150 @@ function renderLocations(items) {
     li.textContent = `${loc.user_name} · ${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)} · ${loc.precision_level}`;
     ul.appendChild(li);
   }
+}
+
+function renderToday() {
+  const points = Array.isArray(state.history) ? state.history : [];
+  const count = $("today-count");
+  if (count) count.textContent = `${points.length} ${points.length === 1 ? "point" : "points"}`;
+  const list = $("trail-list");
+  if (list) {
+    list.innerHTML = "";
+    for (const point of [...points].reverse().slice(0, 12)) {
+      const li = document.createElement("li");
+      const time = document.createElement("time");
+      time.dateTime = point.recorded_at;
+      time.textContent = new Date(point.recorded_at).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const coords = document.createElement("span");
+      coords.className = "coords";
+      coords.textContent = `${Number(point.latitude).toFixed(4)}, ${Number(point.longitude).toFixed(4)}`;
+      li.append(time, coords);
+      list.append(li);
+    }
+  }
+  const toggle = $("trail-toggle");
+  if (toggle) {
+    toggle.disabled = points.length < 2;
+    toggle.textContent = state.trailVisible ? "Hide trail" : "Show trail";
+    toggle.setAttribute("aria-pressed", String(state.trailVisible));
+  }
+  const summary = $("today-summary");
+  if (summary) {
+    summary.textContent = points.length
+      ? "Your private trail for the last 24 hours. It never leaves your account."
+      : "No points yet. Publish your location or use GPS to add a point.";
+  }
+}
+
+function renderNotes() {
+  const ul = $("notes-list");
+  if (!ul) return;
+  ul.innerHTML = "";
+  if (!state.notes.length) {
+    ul.innerHTML = '<li class="muted">No notes yet. Pan the map and add one.</li>';
+    return;
+  }
+  for (const note of [...state.notes].reverse()) {
+    const li = document.createElement("li");
+    const details = document.createElement("details");
+    details.dataset.noteId = String(note.id);
+    const summary = document.createElement("summary");
+    summary.textContent = note.label || "Private note";
+    const body = document.createElement("div");
+    body.className = "note-body";
+    const message = document.createElement("p");
+    message.textContent = note.message;
+    body.append(message);
+    if (note.photo) {
+      const img = document.createElement("img");
+      img.src = note.photo;
+      img.alt = note.label ? `Photo for ${note.label}` : "Private note photo";
+      img.loading = "lazy";
+      body.append(img);
+    }
+    const meta = document.createElement("p");
+    meta.className = "muted small";
+    meta.textContent = `${Number(note.latitude).toFixed(4)}, ${Number(note.longitude).toFixed(4)} · ${fmtTime(note.created_at)}`;
+    body.append(meta);
+    const actions = document.createElement("div");
+    actions.className = "note-actions";
+    const show = document.createElement("button");
+    show.type = "button";
+    show.className = "secondary";
+    show.textContent = "Show on map";
+    show.onclick = () => showNote(note);
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "secondary";
+    del.textContent = "Delete";
+    del.onclick = () => deleteNote(note.id);
+    actions.append(show, del);
+    body.append(actions);
+    details.append(summary, body);
+    li.append(details);
+    ul.append(li);
+  }
+}
+
+function showNote(note) {
+  const lat = Number(note.latitude);
+  const lon = Number(note.longitude);
+  ensureMap()
+    .then((map) => map.map.flyTo([lat, lon], Math.max(map.map.getZoom(), 15), { duration: 0.6 }))
+    .catch(() => {});
+  const details = document.querySelector(`#notes-list details[data-note-id="${note.id}"]`);
+  if (details) {
+    details.open = true;
+    details.scrollIntoView({ block: "nearest" });
+  }
+}
+
+async function deleteNote(id) {
+  if (!window.confirm("Delete this private note?")) return;
+  try {
+    await api(`/api/v1/locations/notes/${id}`, { method: "DELETE" });
+    setStatus("Note deleted.");
+    await refresh();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+
+async function readNotePhoto(file) {
+  if (!/^image\/(jpeg|png)$/.test(file.type)) {
+    throw new Error("Choose a JPEG or PNG photo.");
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    throw new Error("Photo must be under 8 MB.");
+  }
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1024 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
+async function updateMapEmptyState() {
+  const el = $("map-empty-state");
+  if (!el) return;
+  let pack = false;
+  try {
+    const { listPacks } = await import("./offline.js");
+    const packs = await listPacks();
+    pack = Array.isArray(packs) && packs.length > 0;
+  } catch {
+    // The offline module may not be ready; keep the prompt visible.
+  }
+  const online = Boolean($("online-map-toggle")?.checked);
+  el.classList.toggle("hidden", online || pack);
+  const download = $("offline-map-download");
+  if (download) download.hidden = pack;
 }
 
 function escapeHtml(s) {
@@ -598,6 +758,10 @@ async function createAppMap() {
     center: [state.map.lat, state.map.lon],
     zoom: state.map.zoom,
     onClick: (point) => nav?.onMapClick(point),
+    onLoad: (api) => {
+      api.setNoteMarkers(state.notes, (note) => showNote(note));
+      if (state.trailVisible) api.drawTrail(state.history);
+    },
     ...(pmtilesUrl ? { pmtilesUrl } : {}),
   });
   nav = initNavigation({
@@ -627,7 +791,12 @@ async function installedPmtilesUrl() {
 
 function updateMap() {
   ensureMap()
-    .then((map) => map.setFriendMarkers(state.locations))
+    .then((map) => {
+      map.setFriendMarkers(state.locations);
+      map.setNoteMarkers(state.notes, (note) => showNote(note));
+      if (state.trailVisible) map.drawTrail(state.history);
+      else map.clearTrail();
+    })
     .catch(() => {});
 }
 
@@ -663,6 +832,7 @@ async function refreshOfflineBanner() {
     // fails (for example before the service worker is active).
     console.info("[pinpoint] offline pack list unavailable", error?.message || error);
   }
+  await updateMapEmptyState();
 }
 
 async function downloadOfflineMap() {
@@ -927,6 +1097,82 @@ $("crash-dismiss").addEventListener("click", () => {
 });
 
 $("offline-map-download")?.addEventListener("click", downloadOfflineMap);
+$("empty-download")?.addEventListener("click", downloadOfflineMap);
+$("empty-online")?.addEventListener("click", () => {
+  const toggle = $("online-map-toggle");
+  if (toggle && !toggle.checked) {
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  updateMapEmptyState();
+});
+$("online-map-toggle")?.addEventListener("change", updateMapEmptyState);
+$("drawer-close")?.addEventListener("click", () => setDrawer(false));
+
+$("trail-toggle")?.addEventListener("click", () => {
+  state.trailVisible = !state.trailVisible;
+  renderToday();
+  updateMap();
+  if (state.trailVisible && state.history.length >= 2) {
+    ensureMap()
+      .then((map) =>
+        map.fitRoute({
+          points: state.history.map((point) => [point.latitude, point.longitude]),
+        }),
+      )
+      .catch(() => {});
+  }
+});
+
+$("note-photo")?.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  const preview = $("note-preview");
+  notePhotoData = null;
+  show(preview, false);
+  preview.removeAttribute("src");
+  if (!file) return;
+  try {
+    notePhotoData = await readNotePhoto(file);
+    preview.src = notePhotoData;
+    show(preview, true);
+  } catch (error) {
+    event.target.value = "";
+    setStatus(error.message, true);
+  }
+});
+
+$("note-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const message = $("note-message").value.trim();
+  if (!message) {
+    setStatus("Write a message for the note.", true);
+    return;
+  }
+  try {
+    const map = await ensureMap();
+    const center = map.map.getCenter();
+    const note = await api("/api/v1/locations/notes", {
+      method: "POST",
+      body: {
+        latitude: center.lat,
+        longitude: center.lng,
+        label: $("note-label").value.trim(),
+        message,
+        ...(notePhotoData ? { photo: notePhotoData } : {}),
+      },
+    });
+    $("note-form").reset();
+    notePhotoData = null;
+    show($("note-preview"), false);
+    $("note-preview").removeAttribute("src");
+    setStatus("Private note saved.");
+    await refresh();
+    showNote(note);
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
+
 refreshOfflineBanner();
 registerOfflineWorker().then(() => refreshOfflineBanner());
 

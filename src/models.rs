@@ -167,6 +167,35 @@ pub struct FriendLocation {
     pub accuracy: Option<f64>,
 }
 
+/// One point on the owner's private daily trail.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LocationPoint {
+    pub id: i64,
+    pub user_id: i64,
+    pub latitude: f64,
+    pub longitude: f64,
+    #[serde(default)]
+    pub accuracy: Option<f64>,
+    pub recorded_at: String,
+}
+
+/// A private note (text and optional photo) attached to a place.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlaceNote {
+    pub id: i64,
+    pub user_id: i64,
+    pub latitude: f64,
+    pub longitude: f64,
+    #[serde(default)]
+    pub label: String,
+    pub message: String,
+    /// `data:image/jpeg;base64,...` or `data:image/png;base64,...`; private to
+    /// the owner, never uploaded to a third party.
+    #[serde(default)]
+    pub photo: Option<String>,
+    pub created_at: String,
+}
+
 /// A trip / scheduled / manual check-in (latest retained per user + history
 /// list). Check-ins are explicit user actions, never auto-tracked.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

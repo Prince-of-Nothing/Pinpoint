@@ -1858,6 +1858,7 @@ fn free_space_for(path: &Path) -> Option<u64> {
 }
 
 #[cfg(unix)]
+#[allow(clippy::useless_conversion)] // `f_bavail`/`f_frsize` are already u64 on 64-bit Unix.
 fn free_space_for(path: &Path) -> Option<u64> {
     use std::os::unix::ffi::OsStrExt;
 

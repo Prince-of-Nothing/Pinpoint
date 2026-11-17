@@ -1,14 +1,14 @@
 //! Trips and check-ins screen
+use super::theme;
 use super::{PendingAction, PinpointAppUI};
-use eframe::egui::{self, RichText};
+use eframe::egui::{self};
 
 impl PinpointAppUI {
     pub fn draw_trips_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        self.draw_main_toolbar(ui);
         ui.heading("Trips & check-ins");
         ui.add_space(8.0);
-        ui.group(|ui| {
-            ui.label(RichText::new("New check-in").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "New check-in");
             ui.add(
                 egui::TextEdit::singleline(&mut self.checkin_lat)
                     .hint_text("Latitude")
@@ -27,7 +27,7 @@ impl PinpointAppUI {
             for k in ["manual", "scheduled", "trip"] {
                 ui.selectable_value(&mut self.checkin_kind, k.to_string(), k);
             }
-            if ui.button("Check in").clicked() {
+            if theme::primary_button(ui, "Check in").clicked() {
                 if let (Ok(lat), Ok(lon)) = (
                     self.checkin_lat.trim().parse::<f64>(),
                     self.checkin_lon.trim().parse::<f64>(),
@@ -48,8 +48,8 @@ impl PinpointAppUI {
             }
         });
         ui.add_space(8.0);
-        ui.group(|ui| {
-            ui.label(RichText::new("Recent check-ins").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Recent check-ins");
             let data = self.app.data();
             let d = data.lock().unwrap();
             if d.check_ins.is_empty() {

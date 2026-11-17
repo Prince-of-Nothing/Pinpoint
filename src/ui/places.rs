@@ -1,21 +1,21 @@
 //! Places screen (routes / POIs / reverse)
+use super::theme;
 use super::{PendingAction, PinpointAppUI};
 use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_places_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        self.draw_main_toolbar(ui);
         ui.heading("Places — route, nearby POIs & address lookup");
         ui.add_space(8.0);
 
         // Route planner entry point (shared sheet on desktop and mobile).
-        ui.group(|ui| {
-            ui.label(RichText::new("Route planner").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Route planner");
             ui.label(
                 "Search for a place, then use Directions or Set as origin. The route sheet \
                  supports stops, avoid options, alternatives and exports.",
             );
-            if ui.button("Open route planner").clicked() {
+            if theme::primary_button(ui, "Open route planner").clicked() {
                 self.route_plan.open = true;
                 if self.route_plan.origin.is_none() {
                     let (lat, lon, name) = {
@@ -38,8 +38,8 @@ impl PinpointAppUI {
         ui.add_space(8.0);
 
         // POI form
-        ui.group(|ui| {
-            ui.label(RichText::new("Nearby (Overpass)").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Nearby (Overpass)");
             for cat in [
                 "food", "fuel", "pharmacy", "hospital", "hotel", "tourism", "water", "parking",
                 "park",
@@ -48,7 +48,7 @@ impl PinpointAppUI {
                     self.poi_category = cat.to_string();
                 }
             }
-            if ui.button("Find nearby").clicked() {
+            if theme::primary_button(ui, "Find nearby").clicked() {
                 self.spawn_action(
                     PendingAction::Poi {
                         lat: 41.8902,
@@ -62,14 +62,14 @@ impl PinpointAppUI {
         ui.add_space(8.0);
 
         // Reverse form
-        ui.group(|ui| {
-            ui.label(RichText::new("Reverse geocode").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Reverse geocode");
             ui.add(
                 egui::TextEdit::singleline(&mut self.reverse_label)
                     .hint_text("lat,lon e.g. 41.89,-87.63")
                     .desired_width(220.0),
             );
-            if ui.button("Lookup address").clicked() {
+            if theme::primary_button(ui, "Lookup address").clicked() {
                 let s = self.reverse_label.clone();
                 {
                     let parts: Vec<&str> = s.split(',').collect();
@@ -89,7 +89,7 @@ impl PinpointAppUI {
         let pois = { self.app.data().lock().unwrap().poi_results.clone() };
         if !pois.is_empty() {
             ui.add_space(8.0);
-            ui.group(|ui| {
+            theme::card(ui, |ui| {
                 ui.label(
                     RichText::new(format!("Nearby places ({})", pois.len()))
                         .size(14.0)
@@ -104,13 +104,13 @@ impl PinpointAppUI {
                         if !poi.phone.is_empty() {
                             ui.label(RichText::new(&poi.phone).size(10.0));
                         }
-                        if ui.small_button("Save").clicked() {
+                        if ui.button("Save").clicked() {
                             let store = crate::bookmarks::BookmarkStore::default_location();
                             store.add(&poi.name, poi.latitude, poi.longitude);
                             self.app.refresh_bookmarks();
                             self.app.set_notice(Some(format!("Saved {}", poi.name)));
                         }
-                        if ui.small_button("OSM").clicked() {
+                        if ui.button("OSM").clicked() {
                             let url = format!(
                                 "https://www.openstreetmap.org/?mlat={:.4}&mlon={:.4}#map=16/{:.4}/{:.4}",
                                 poi.latitude, poi.longitude, poi.latitude, poi.longitude
@@ -130,7 +130,7 @@ impl PinpointAppUI {
         let route = { self.app.data().lock().unwrap().last_route.clone() };
         if let Some(route) = route {
             ui.add_space(8.0);
-            ui.group(|ui| {
+            theme::card(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
                         RichText::new(format!(
@@ -141,7 +141,7 @@ impl PinpointAppUI {
                         .size(14.0)
                         .strong(),
                     );
-                    if ui.small_button("Export GPX").clicked() {
+                    if ui.button("Export GPX").clicked() {
                         self.spawn_action(
                             PendingAction::ExportGpx {
                                 name: "Pinpoint route".to_string(),

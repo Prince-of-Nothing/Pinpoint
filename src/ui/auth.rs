@@ -1,4 +1,5 @@
 //! Auth screens (login / register)
+use super::theme;
 use super::{PendingAction, PinpointAppUI};
 use crate::app::CurrentScreen;
 use eframe::egui::{self};
@@ -15,7 +16,7 @@ impl PinpointAppUI {
                 );
             });
             ui.add_space(8.0);
-            ui.group(|ui| self.draw_server_settings(ui));
+            theme::card(ui, |ui| self.draw_server_settings(ui));
             return;
         }
         let compact = Self::is_compact(ctx);
@@ -24,10 +25,9 @@ impl PinpointAppUI {
                 ui.heading("Pinpoint");
                 ui.label("Private location sharing for trusted friends");
             }
-            ui.small(format!("Backend: {}", self.app.backend_url()));
             ui.add_space(if compact { 10.0 } else { 20.0 });
 
-            ui.group(|ui| {
+            theme::card(ui, |ui| {
                 ui.label("Sign in");
                 ui.add_space(8.0);
                 let field_width = if compact { 300.0 } else { 250.0 };
@@ -50,7 +50,7 @@ impl PinpointAppUI {
                         .desired_width(field_width),
                 );
                 ui.add_space(16.0);
-                if ui.button("Sign in").clicked()
+                if theme::primary_button(ui, "Sign in").clicked()
                     && !self.login_email.is_empty()
                     && !self.login_password.is_empty()
                 {
@@ -100,7 +100,7 @@ impl PinpointAppUI {
             });
             if self.show_recover_form {
                 ui.add_space(8.0);
-                ui.group(|ui| {
+                theme::card(ui, |ui| {
                     ui.label("Recover anonymous account");
                     ui.add(
                         egui::TextEdit::singleline(&mut self.recover_code_input)
@@ -108,7 +108,7 @@ impl PinpointAppUI {
                             .desired_width(field_width),
                     );
                     ui.horizontal(|ui| {
-                        if ui.button("Recover").clicked()
+                        if theme::primary_button(ui, "Recover").clicked()
                             && !self.recover_code_input.trim().is_empty()
                         {
                             let code = self.recover_code_input.clone();
@@ -138,11 +138,8 @@ impl PinpointAppUI {
             .show(ctx, |ui| {
                 ui.set_width((ctx.screen_rect().width() - 32.0).min(420.0));
                 egui::Frame::new()
-                    .fill(egui::Color32::from_rgb(15, 23, 42))
-                    .stroke(egui::Stroke::new(
-                        1.0_f32,
-                        egui::Color32::from_rgb(250, 204, 21),
-                    ))
+                    .fill(theme::PANEL)
+                    .stroke(egui::Stroke::new(1.0_f32, theme::ACCENT))
                     .corner_radius(egui::CornerRadius::same(12))
                     .inner_margin(egui::Margin::same(16))
                     .show(ui, |ui| {
@@ -162,7 +159,7 @@ impl PinpointAppUI {
                             if ui.button("Copy code").clicked() {
                                 copy = true;
                             }
-                            if ui.button("I saved it").clicked() {
+                            if theme::primary_button(ui, "I saved it").clicked() {
                                 dismiss = true;
                             }
                         });
@@ -188,7 +185,7 @@ impl PinpointAppUI {
                 );
             });
             ui.add_space(8.0);
-            ui.group(|ui| self.draw_server_settings(ui));
+            theme::card(ui, |ui| self.draw_server_settings(ui));
             return;
         }
         let compact = Self::is_compact(ctx);
@@ -198,7 +195,7 @@ impl PinpointAppUI {
             }
             ui.add_space(if compact { 10.0 } else { 20.0 });
 
-            ui.group(|ui| {
+            theme::card(ui, |ui| {
                 ui.label("New to Pinpoint?");
                 ui.add_space(10.0);
                 let field_width = if compact { 300.0 } else { 200.0 };
@@ -223,7 +220,7 @@ impl PinpointAppUI {
                 ui.add_space(10.0);
 
                 ui.horizontal_wrapped(|ui| {
-                    if ui.button("Create Account").clicked()
+                    if theme::primary_button(ui, "Create Account").clicked()
                         && !self.register_email.is_empty()
                         && !self.register_password.is_empty()
                     {

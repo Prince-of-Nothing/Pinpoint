@@ -1,9 +1,10 @@
 //! Map screen
+use super::theme;
 use super::{PendingAction, PinpointAppUI};
 use crate::i18n::{self, key};
 use crate::map;
 use crate::models::FriendLocation;
-use eframe::egui::{self, Color32, Direction, RichText};
+use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_map_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -11,63 +12,138 @@ impl PinpointAppUI {
             self.draw_mobile_map_screen(ui, ctx);
             return;
         }
-        if crate::platform::map_webview_supported() {
-            let visible = crate::platform::map_webview_visible();
-            ui.horizontal(|ui| {
-                let label = if visible {
-                    "Close offline map"
-                } else {
-                    "Offline map"
-                };
-                if ui.button(label).clicked() {
-                    self.toggle_webview_map();
-                }
-            });
-            ui.add_space(4.0);
-        }
-        let lang = self.lang;
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
+        // Map first: the canvas takes every pixel the details column does not.
+        let details_width = (ui.available_width() * 0.36).clamp(300.0, 380.0);
+        // 14 pt gap + the parent's 10 pt item spacing.
+        let map_width = (ui.available_width() - details_width - 24.0).max(320.0);
+        let height = ui.available_height();
+        ui.horizontal_top(|ui| {
+            ui.allocate_ui_with_layout(
+                egui::vec2(map_width, height),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| self.draw_map_card(ui, ctx),
+            );
+            ui.add_space(14.0);
+            ui.allocate_ui_with_layout(
+                egui::vec2(details_width, height),
+                egui::Layout::top_down(egui::Align::Min),
                 |ui| {
-                    ui.heading(i18n::t(lang, key::FRIEND_LOCATIONS));
+                    egui::ScrollArea::vertical()
+                        .id_salt("map_details")
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| self.draw_map_details(ui, ctx));
                 },
             );
         });
-        ui.add_space(8.0);
+    }
 
-        {
+    fn draw_map_card(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let lang = self.lang;
+        let backend_url = self.app.backend_url();
+        let online = !self.app.is_offline_mode();
+        let (zoom, has_pins) = {
             let binding = self.app.data();
             let data = binding.lock().unwrap();
-            let unknown = "Unknown".to_string();
-            let user_email = data.user.as_ref().map(|u| &u.email).unwrap_or(&unknown);
-            ui.label(format!("Signed in as: {}", user_email));
-        }
+            (data.map_zoom, !data.locations.is_empty())
+        };
+        let mut zoom_delta = 0i8;
+        let mut fit_pins = false;
+        let mut reset = false;
+        let mut locate = false;
 
-        // Quick location publish (persistent inputs so typing survives frames)
-        ui.group(|ui| {
-            ui.label(
-                RichText::new(i18n::t(lang, key::PUBLISH_MY_LOCATION))
-                    .size(12.0)
-                    .strong(),
-            );
-            ui.add_space(4.0);
+        theme::full_card(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(i18n::t(lang, key::MAP)).size(18.0).strong());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if crate::platform::map_webview_supported() {
+                        let visible = crate::platform::map_webview_visible();
+                        let label = if visible {
+                            "Close offline map"
+                        } else {
+                            "Offline map"
+                        };
+                        if ui.button(label).clicked() {
+                            self.toggle_webview_map();
+                        }
+                    }
+                    if ui.button("Locate").clicked() {
+                        locate = true;
+                    }
+                    if ui
+                        .add_enabled(has_pins, egui::Button::new("Fit pins"))
+                        .clicked()
+                    {
+                        fit_pins = true;
+                    }
+                    if ui.button("Reset view").clicked() {
+                        reset = true;
+                    }
+                    if ui.button("+").clicked() {
+                        zoom_delta = 1;
+                    }
+                    ui.label(
+                        RichText::new(format!("z{zoom}"))
+                            .size(12.0)
+                            .color(theme::MUTED),
+                    );
+                    if ui.button("−").clicked() {
+                        zoom_delta = -1;
+                    }
+                });
+            });
+            ui.add_space(6.0);
+            let map_height = (ui.available_height() - 34.0).max(170.0);
+            let binding = self.app.data();
+            let mut data = binding.lock().unwrap();
+            map::render_map_with(ui, &mut data, map_height, Some(&backend_url), online, true);
+        });
+
+        let binding = self.app.data();
+        let mut data = binding.lock().unwrap();
+        if zoom_delta != 0 {
+            data.map_zoom = (data.map_zoom as i8 + zoom_delta).clamp(2, 18) as u8;
+        }
+        if reset {
+            data.map_center_lat = map::DEFAULT_CENTER_LAT;
+            data.map_center_lon = map::DEFAULT_CENTER_LON;
+            data.map_zoom = map::DEFAULT_ZOOM;
+        }
+        if fit_pins && !data.locations.is_empty() {
+            let n = data.locations.len() as f64;
+            data.map_center_lat = data.locations.iter().map(|l| l.latitude).sum::<f64>() / n;
+            data.map_center_lon = data.locations.iter().map(|l| l.longitude).sum::<f64>() / n;
+        }
+        drop(data);
+        if locate {
+            self.spawn_action(PendingAction::Locate, ctx);
+        }
+        self.handle_map_click(ctx);
+    }
+
+    fn draw_map_details(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let lang = self.lang;
+
+        // Quick location publish (persistent inputs so typing survives frames).
+        theme::full_card(ui, |ui| {
+            theme::card_title(ui, i18n::t(lang, key::PUBLISH_MY_LOCATION));
+            theme::caption(ui, "Manual coordinates or a fresh GPS fix.");
+            ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.publish_lat)
                         .hint_text(i18n::t(lang, key::LATITUDE))
-                        .desired_width(100.0),
+                        .desired_width(110.0),
                 );
-                ui.add_space(8.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.publish_lon)
                         .hint_text(i18n::t(lang, key::LONGITUDE))
-                        .desired_width(100.0),
+                        .desired_width(110.0),
                 );
             });
             ui.add_space(4.0);
             ui.horizontal(|ui| {
-                if ui.button(i18n::t(lang, key::PUBLISH)).clicked() {
+                if theme::primary_button(ui, i18n::t(lang, key::PUBLISH)).clicked() {
                     match (
                         self.publish_lat.trim().parse::<f64>(),
                         self.publish_lon.trim().parse::<f64>(),
@@ -92,36 +168,31 @@ impl PinpointAppUI {
                         }
                     }
                 }
-                if ui.button("📍 Use GPS").clicked() {
+                if ui.button("Use GPS").clicked() {
                     self.request_gps_publish(ctx);
                 }
             });
         });
 
-        ui.add_space(8.0);
+        ui.add_space(10.0);
 
-        // Friendships with inline accept/reject for incoming requests
-        ui.group(|ui| {
-            ui.label(
-                RichText::new(i18n::t(lang, key::FRIENDS))
-                    .size(14.0)
-                    .strong(),
-            );
-            ui.add_space(4.0);
-
+        // Friendships with inline accept/reject for incoming requests.
+        theme::full_card(ui, |ui| {
+            theme::card_title(ui, i18n::t(lang, key::FRIENDS));
+            ui.add_space(2.0);
             let binding = self.app.data();
             let data = binding.lock().unwrap();
             if data.friendships.is_empty() {
-                ui.label(i18n::t(lang, key::NO_FRIENDS));
+                theme::caption(ui, i18n::t(lang, key::NO_FRIENDS));
             } else {
                 for friendship in &data.friendships {
                     let color = match friendship.status.as_str() {
-                        "pending" => Color32::YELLOW,
-                        "accepted" => Color32::GREEN,
-                        _ => Color32::GRAY,
+                        "pending" => theme::ACCENT,
+                        "accepted" => theme::SUCCESS,
+                        _ => theme::MUTED,
                     };
                     let label = format!(
-                        "{} → {}",
+                        "{} ↔ {}",
                         friendship.requester_name, friendship.receiver_name
                     );
                     let id = friendship.id;
@@ -152,35 +223,30 @@ impl PinpointAppUI {
                                 );
                             }
                         } else if friendship.status == "pending" {
-                            ui.small(i18n::t(lang, key::AWAITING_RESPONSE));
+                            theme::caption(ui, i18n::t(lang, key::AWAITING_RESPONSE));
                         }
                     });
                 }
             }
         });
 
-        ui.add_space(8.0);
+        ui.add_space(10.0);
 
-        // Location shares
-        ui.group(|ui| {
-            ui.label(
-                RichText::new(i18n::t(lang, key::LOCATION_SHARING))
-                    .size(14.0)
-                    .strong(),
-            );
-            ui.add_space(4.0);
-
+        // Location shares.
+        theme::full_card(ui, |ui| {
+            theme::card_title(ui, i18n::t(lang, key::LOCATION_SHARING));
+            ui.add_space(2.0);
             let binding = self.app.data();
             let data = binding.lock().unwrap();
             if data.shares.is_empty() {
-                ui.label(i18n::t(lang, key::NO_SHARING));
+                theme::caption(ui, i18n::t(lang, key::NO_SHARING));
             } else {
                 for share in &data.shares {
                     let precision_color = match share.precision_level.as_str() {
-                        "exact" => Color32::GREEN,
-                        "approximate" => Color32::YELLOW,
-                        "city_only" => Color32::RED,
-                        _ => Color32::GRAY,
+                        "exact" => theme::SUCCESS,
+                        "approximate" => theme::ACCENT,
+                        "city_only" => theme::DANGER,
+                        _ => theme::MUTED,
                     };
                     let is_active = share.is_active;
                     let share_id = share.id;
@@ -208,151 +274,44 @@ impl PinpointAppUI {
             }
         });
 
-        ui.add_space(8.0);
+        ui.add_space(10.0);
 
-        #[cfg(all(
-            feature = "map-webview",
-            not(target_arch = "wasm32"),
-            not(target_os = "android"),
-            not(target_os = "ios")
-        ))]
-        self.draw_map_window_card(ui);
-
-        // Map visualization + location list
-        let backend_url = self.app.backend_url();
-        let online = !self.app.is_offline_mode();
-        let binding = self.app.data();
-        let mut data = binding.lock().unwrap();
-        map::render_map_with(ui, &mut data, 320.0, Some(&backend_url), online, false);
-        drop(data);
-        self.handle_map_click(ctx);
-        let data = binding.lock().unwrap();
-        let (center_lat, center_lon, zoom) =
-            (data.map_center_lat, data.map_center_lon, data.map_zoom);
-        let locations: Vec<FriendLocation> = data.locations.clone();
-        drop(data);
-
-        ui.add_space(6.0);
-        ui.group(|ui| {
-            ui.horizontal(|ui| {
-                let bytes = crate::tilepacks::packs_size();
-                ui.label(
-                    RichText::new(format!(
-                        "Offline map packs: {:.1} KB cached",
-                        bytes as f64 / 1024.0
-                    ))
-                    .size(12.0),
-                );
-                if ui.button("⬇ Download current area pack").clicked() {
-                    self.spawn_action(
-                        PendingAction::DownloadTilePack {
-                            center_lat,
-                            center_lon,
-                            zoom,
-                        },
-                        ctx,
-                    );
-                }
-            });
-        });
-
-        ui.add_space(8.0);
-
-        // Navigation to friend locations
-        ui.group(|ui| {
-            ui.label(
-                RichText::new(i18n::t(lang, key::NAVIGATE_TO_FRIEND))
-                    .size(14.0)
-                    .strong(),
-            );
-            ui.add_space(4.0);
-            if locations.is_empty() {
-                ui.label(i18n::t(lang, key::NO_LOCATIONS));
-            } else {
-                for loc in &locations {
-                    ui.horizontal(|ui| {
-                        ui.label(format!(
-                            "{} ({:.4}, {:.4})",
-                            loc.user_name, loc.latitude, loc.longitude
-                        ));
-                        ui.add_space(4.0);
-                        if ui.button(i18n::t(lang, key::NAVIGATE)).clicked() {
-                            let (lat, lon, name) = {
-                                let d = self.app.data();
-                                let d = d.lock().unwrap();
-                                d.my_location
-                                    .as_ref()
-                                    .map(|l| (l.latitude, l.longitude, "My location".to_string()))
-                                    .unwrap_or((
-                                        d.map_center_lat,
-                                        d.map_center_lon,
-                                        "Map centre".to_string(),
-                                    ))
-                            };
-                            self.route_plan.origin =
-                                Some(crate::ui::route::RoutePoint::new(lat, lon, name));
-                            self.route_plan.destination = Some(crate::ui::route::RoutePoint::new(
-                                loc.latitude,
-                                loc.longitude,
-                                loc.user_name.clone(),
-                            ));
-                            self.route_plan.open = true;
-                            self.route_plan.error = None;
-                        }
-                        if ui.button(i18n::t(lang, key::OSM_MAP)).clicked() {
-                            let url = format!(
-                                "https://www.openstreetmap.org/#map=14/{:.4}/{:.4}",
-                                loc.latitude, loc.longitude
-                            );
-                            let _ = webbrowser::open(&url);
-                        }
-                    });
-                }
-            }
-        });
-
-        ui.add_space(8.0);
-
-        // Search for places (Nominatim)
-        ui.group(|ui| {
-            ui.label(
-                RichText::new(i18n::t(lang, key::SEARCH_PLACES))
-                    .size(14.0)
-                    .strong(),
-            );
-            ui.add_space(4.0);
-            let binding = self.app.data();
-            let data = binding.lock().unwrap();
-            let results = data.search_results.clone();
-            let error = data.search_error.clone();
-            drop(data);
+        // Search for places (Nominatim).
+        theme::full_card(ui, |ui| {
+            theme::card_title(ui, i18n::t(lang, key::SEARCH_PLACES));
+            ui.add_space(2.0);
+            let (results, error) = {
+                let binding = self.app.data();
+                let data = binding.lock().unwrap();
+                (data.search_results.clone(), data.search_error.clone())
+            };
             ui.add(
                 egui::TextEdit::singleline(&mut self.search_query)
                     .hint_text(i18n::t(lang, key::SEARCH_PLACES))
-                    .desired_width(300.0),
+                    .desired_width((ui.available_width() - 16.0).max(120.0)),
             );
             ui.add_space(4.0);
-            if ui.button(i18n::t(lang, key::SEARCH)).clicked()
+            if theme::primary_button(ui, i18n::t(lang, key::SEARCH)).clicked()
                 && !self.search_query.trim().is_empty()
             {
                 let query = self.search_query.clone();
                 self.spawn_action(PendingAction::SearchPlaces { query }, ctx);
             }
             if !results.is_empty() {
-                ui.add_space(4.0);
-                ui.label(format!(
-                    "{} ({}):",
-                    i18n::t(lang, key::RESULTS),
-                    results.len()
-                ));
+                ui.add_space(6.0);
+                theme::caption(
+                    ui,
+                    format!("{} ({})", i18n::t(lang, key::RESULTS), results.len()),
+                );
                 for place in results {
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(format!(
                             "{} ({:.4}, {:.4})",
                             place.display_name, place.latitude, place.longitude
                         ));
-                        ui.add_space(4.0);
-                        if ui.small_button("★ Save").clicked() {
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button("Save").clicked() {
                             let store = crate::bookmarks::BookmarkStore::default_location();
                             store.add(&place.short_name, place.latitude, place.longitude);
                             self.app.refresh_bookmarks();
@@ -388,11 +347,113 @@ impl PinpointAppUI {
                             );
                         }
                     });
+                    ui.separator();
                 }
             }
             if let Some(err) = error {
-                ui.colored_label(Color32::RED, err);
+                ui.colored_label(theme::DANGER, err);
             }
+        });
+
+        ui.add_space(10.0);
+
+        // Navigation to friend locations.
+        let locations: Vec<FriendLocation> = self.app.data().lock().unwrap().locations.clone();
+        theme::full_card(ui, |ui| {
+            theme::card_title(ui, i18n::t(lang, key::NAVIGATE_TO_FRIEND));
+            ui.add_space(2.0);
+            if locations.is_empty() {
+                theme::caption(ui, i18n::t(lang, key::NO_LOCATIONS));
+            } else {
+                for loc in &locations {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new(&loc.user_name).strong());
+                        theme::caption(ui, format!("{:.4}, {:.4}", loc.latitude, loc.longitude));
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button(i18n::t(lang, key::NAVIGATE)).clicked() {
+                            let (lat, lon, name) = {
+                                let d = self.app.data();
+                                let d = d.lock().unwrap();
+                                d.my_location
+                                    .as_ref()
+                                    .map(|l| (l.latitude, l.longitude, "My location".to_string()))
+                                    .unwrap_or((
+                                        d.map_center_lat,
+                                        d.map_center_lon,
+                                        "Map centre".to_string(),
+                                    ))
+                            };
+                            self.route_plan.origin =
+                                Some(crate::ui::route::RoutePoint::new(lat, lon, name));
+                            self.route_plan.destination = Some(crate::ui::route::RoutePoint::new(
+                                loc.latitude,
+                                loc.longitude,
+                                loc.user_name.clone(),
+                            ));
+                            self.route_plan.open = true;
+                            self.route_plan.error = None;
+                        }
+                        if ui.button(i18n::t(lang, key::OSM_MAP)).clicked() {
+                            let url = format!(
+                                "https://www.openstreetmap.org/#map=14/{:.4}/{:.4}",
+                                loc.latitude, loc.longitude
+                            );
+                            let _ = webbrowser::open(&url);
+                        }
+                    });
+                    ui.separator();
+                }
+            }
+        });
+
+        ui.add_space(10.0);
+
+        // Offline tile packs for the current viewport.
+        let (center_lat, center_lon, zoom) = {
+            let binding = self.app.data();
+            let data = binding.lock().unwrap();
+            (data.map_center_lat, data.map_center_lon, data.map_zoom)
+        };
+        theme::full_card(ui, |ui| {
+            theme::card_title(ui, "Offline maps");
+            let bytes = crate::tilepacks::packs_size();
+            theme::caption(
+                ui,
+                format!("{:.1} KB cached on this device", bytes as f64 / 1024.0),
+            );
+            ui.add_space(4.0);
+            if ui.button("Download current area").clicked() {
+                self.spawn_action(
+                    PendingAction::DownloadTilePack {
+                        center_lat,
+                        center_lon,
+                        zoom,
+                    },
+                    ctx,
+                );
+            }
+        });
+
+        ui.add_space(10.0);
+
+        #[cfg(all(
+            feature = "map-webview",
+            not(target_arch = "wasm32"),
+            not(target_os = "android"),
+            not(target_os = "ios")
+        ))]
+        self.draw_map_window_card(ui);
+
+        theme::full_card(ui, |ui| {
+            theme::card_title(ui, "Map data");
+            theme::caption(ui, "OpenStreetMap contributors · ODbL");
+            theme::caption(
+                ui,
+                "Pins: exact (green), approximate (amber), city-only (red).",
+            );
+            ui.add_space(4.0);
+            map::draw_map_links(ui, &locations);
         });
     }
 }
@@ -408,15 +469,11 @@ impl PinpointAppUI {
     /// egui map below remains the fallback and keeps its own data/auth paths.
     fn draw_map_window_card(&mut self, ui: &mut egui::Ui) {
         ui.add_space(8.0);
-        ui.group(|ui| {
-            ui.label(RichText::new("MapLibre map window").size(14.0).strong());
-            ui.label(
-                RichText::new(
-                    "Opens the shared web/map foundation in a separate native WebView, \
-                     served from 127.0.0.1 with HTTP Range for PMTiles. The egui map stays \
-                     available as the fallback.",
-                )
-                .size(12.0),
+        theme::full_card(ui, |ui| {
+            theme::card_title(ui, "Offline map window");
+            theme::caption(
+                ui,
+                "Opens the full map in its own window. The map above stays available as a fallback.",
             );
             ui.add_space(4.0);
             let running = self.map_window.is_running();
@@ -482,10 +539,10 @@ impl PinpointAppUI {
         }
         self.handle_map_click(ctx);
 
-        let panel = Color32::from_rgba_unmultiplied(15, 23, 42, 246);
-        let panel_solid = Color32::from_rgb(15, 23, 42);
-        let border = Color32::from_rgb(31, 41, 55);
-        let muted = Color32::from_rgb(156, 163, 175);
+        let panel = theme::PANEL.gamma_multiply(0.98);
+        let panel_solid = theme::PANEL;
+        let border = theme::BORDER;
+        let muted = theme::MUTED;
 
         // Floating search pill (web `.search-form`).
         let mut submit = false;
@@ -545,7 +602,7 @@ impl PinpointAppUI {
                                     .fill(panel)
                                     .stroke(egui::Stroke::new(1.0_f32, border))
                                     .corner_radius(egui::CornerRadius::same(14))
-                                    .min_size(egui::vec2(0.0, 30.0));
+                                    .min_size(egui::vec2(0.0, 44.0));
                                 if ui.add(button).clicked() {
                                     chip_query = Some(query);
                                 }
@@ -631,7 +688,7 @@ impl PinpointAppUI {
                         if ui
                             .add(
                                 egui::Button::new("+")
-                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .min_size(egui::vec2(44.0, 44.0))
                                     .corner_radius(egui::CornerRadius::same(20)),
                             )
                             .clicked()
@@ -641,7 +698,7 @@ impl PinpointAppUI {
                         if ui
                             .add(
                                 egui::Button::new("−")
-                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .min_size(egui::vec2(44.0, 44.0))
                                     .corner_radius(egui::CornerRadius::same(20)),
                             )
                             .clicked()
@@ -651,7 +708,7 @@ impl PinpointAppUI {
                         if ui
                             .add(
                                 egui::Button::new("◎")
-                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .min_size(egui::vec2(44.0, 44.0))
                                     .corner_radius(egui::CornerRadius::same(20)),
                             )
                             .clicked()
@@ -661,7 +718,7 @@ impl PinpointAppUI {
                         if ui
                             .add(
                                 egui::Button::new(if map_dark { "L" } else { "D" })
-                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .min_size(egui::vec2(44.0, 44.0))
                                     .corner_radius(egui::CornerRadius::same(20)),
                             )
                             .on_hover_text(if map_dark {
@@ -676,7 +733,7 @@ impl PinpointAppUI {
                         if ui
                             .add(
                                 egui::Button::new("↗")
-                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .min_size(egui::vec2(44.0, 44.0))
                                     .corner_radius(egui::CornerRadius::same(20)),
                             )
                             .on_hover_text("Route")
@@ -688,7 +745,7 @@ impl PinpointAppUI {
                             if ui
                                 .add(
                                     egui::Button::new(if webview_visible { "▣" } else { "▦" })
-                                        .min_size(egui::vec2(40.0, 40.0))
+                                        .min_size(egui::vec2(44.0, 44.0))
                                         .corner_radius(egui::CornerRadius::same(20)),
                                 )
                                 .on_hover_text("Offline MapLibre map")
@@ -701,7 +758,7 @@ impl PinpointAppUI {
                                     if ui
                                         .add(
                                             egui::Button::new("⌖")
-                                                .min_size(egui::vec2(40.0, 40.0))
+                                                .min_size(egui::vec2(44.0, 44.0))
                                                 .corner_radius(egui::CornerRadius::same(20)),
                                         )
                                         .on_hover_text(format!(
@@ -717,7 +774,7 @@ impl PinpointAppUI {
                         if ui
                             .add(
                                 egui::Button::new("☰")
-                                    .min_size(egui::vec2(40.0, 40.0))
+                                    .min_size(egui::vec2(44.0, 44.0))
                                     .corner_radius(egui::CornerRadius::same(20)),
                             )
                             .clicked()

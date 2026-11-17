@@ -3,6 +3,7 @@
 
 use crate::models::{AppData, FriendLocation};
 use crate::tilepacks::{cached_tile_path, latlon_to_world_px, world_px_to_latlon, TILE_SIZE};
+use crate::ui::theme;
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Sense, Stroke, TextureHandle, Ui, Vec2};
 use std::collections::HashSet;
 use std::sync::{Mutex, OnceLock};
@@ -226,10 +227,10 @@ pub fn render_map_with(
         if !minimal {
             ui.horizontal_wrapped(|ui| {
                 if !compact {
-                    ui.label(RichText::new("Interactive Slippy Map").size(16.0).strong());
+                    ui.label(RichText::new("Map").size(18.0).strong());
                     ui.add_space(8.0);
                 }
-                if ui.small_button("−").clicked() && state.map_zoom > 2 {
+                if ui.button("−").clicked() && state.map_zoom > 2 {
                     state.map_zoom -= 1;
                 }
                 ui.label(
@@ -237,30 +238,20 @@ pub fn render_map_with(
                         .monospace()
                         .size(12.0),
                 );
-                if ui.small_button("+").clicked() && state.map_zoom < 18 {
+                if ui.button("+").clicked() && state.map_zoom < 18 {
                     state.map_zoom += 1;
                 }
-                if !compact && ui.small_button("Chișinău").clicked() {
+                if !compact && ui.button("Reset view").clicked() {
                     state.map_center_lat = DEFAULT_CENTER_LAT;
                     state.map_center_lon = DEFAULT_CENTER_LON;
                     state.map_zoom = DEFAULT_ZOOM;
                 }
-                if !all_locations.is_empty() && ui.small_button("Fit pins").clicked() {
+                if !all_locations.is_empty() && ui.button("Fit pins").clicked() {
                     let sum_lat: f64 = all_locations.iter().map(|l| l.latitude).sum();
                     let sum_lon: f64 = all_locations.iter().map(|l| l.longitude).sum();
                     let n = all_locations.len() as f64;
                     state.map_center_lat = sum_lat / n;
                     state.map_center_lon = sum_lon / n;
-                }
-                if !compact {
-                    ui.label(
-                        RichText::new(format!(
-                            "center {:.4}, {:.4}",
-                            state.map_center_lat, state.map_center_lon
-                        ))
-                        .size(11.0)
-                        .color(Color32::from_rgb(148, 163, 184)),
-                    );
                 }
             });
             ui.add_space(6.0);
@@ -272,7 +263,7 @@ pub fn render_map_with(
         } else {
             (ui.available_width() - 8.0).max(240.0)
         };
-        let canvas_size = Vec2::new(avail_width, height.max(220.0));
+        let canvas_size = Vec2::new(avail_width, height.max(160.0));
         let (map_rect, response) = ui.allocate_exact_size(canvas_size, Sense::click_and_drag());
 
         if response.clicked() && ui.input(|i| i.multi_touch()).is_none() {
@@ -327,7 +318,7 @@ pub fn render_map_with(
         }
 
         let painter = ui.painter_at(map_rect);
-        painter.rect_filled(map_rect, 4.0, Color32::from_rgb(15, 23, 42));
+        painter.rect_filled(map_rect, 4.0, theme::BG);
 
         // Draw visible 256×256 Slippy tiles
         let z = state.map_zoom;
@@ -373,15 +364,8 @@ pub fn render_map_with(
                     painter.rect_stroke(
                         tile_rect,
                         0.0_f32,
-                        Stroke::new(1.0_f32, Color32::from_rgb(30, 41, 59)),
+                        Stroke::new(1.0_f32, theme::BORDER),
                         egui::StrokeKind::Inside,
-                    );
-                    painter.text(
-                        tile_rect.min + Vec2::new(6.0, 6.0),
-                        egui::Align2::LEFT_TOP,
-                        format!("{z}/{utx}/{uty}"),
-                        egui::FontId::monospace(9.0),
-                        Color32::from_rgb(71, 85, 105),
                     );
                 }
             }
@@ -406,11 +390,11 @@ pub fn render_map_with(
             if points.len() > 1 {
                 painter.add(egui::Shape::line(
                     points.clone(),
-                    Stroke::new(8.0_f32, Color32::from_rgb(2, 6, 23)),
+                    Stroke::new(8.0_f32, theme::BG),
                 ));
                 painter.add(egui::Shape::line(
                     points,
-                    Stroke::new(4.0_f32, Color32::from_rgb(52, 211, 153)),
+                    Stroke::new(4.0_f32, theme::ACCENT),
                 ));
             }
             for (index, (lat, lon)) in route.points.iter().enumerate() {
@@ -431,18 +415,18 @@ pub fn render_map_with(
                 }
                 let label = if index == 0 { "A" } else { "B" };
                 let color = if index == 0 {
-                    Color32::from_rgb(52, 211, 153)
+                    theme::ACCENT
                 } else {
-                    Color32::from_rgb(248, 113, 113)
+                    theme::DANGER
                 };
                 painter.circle_filled(p, 12.0, color);
-                painter.circle_stroke(p, 12.0, Stroke::new(2.0_f32, Color32::BLACK));
+                painter.circle_stroke(p, 12.0, Stroke::new(2.0_f32, theme::BG));
                 painter.text(
                     p,
                     egui::Align2::CENTER_CENTER,
                     label,
                     egui::FontId::proportional(11.0),
-                    Color32::from_rgb(5, 46, 27),
+                    theme::ACCENT_INK,
                 );
             }
         }
@@ -458,7 +442,7 @@ pub fn render_map_with(
                 map_rect,
             );
             if map_rect.expand(40.0).contains(p) {
-                let accent = Color32::from_rgb(52, 211, 153);
+                let accent = theme::ACCENT;
                 painter.circle_stroke(p, icon_size * 0.54, Stroke::new(2.5_f32, accent));
                 painter.circle_filled(p, pin_radius * 0.7, accent);
                 painter.text(
@@ -472,7 +456,7 @@ pub fn render_map_with(
         }
 
         // Saved places (on-device bookmarks), drawn under friend pins.
-        let saved_color = Color32::from_rgb(96, 165, 250);
+        let saved_color = theme::MUTED;
         for (name, latitude, longitude) in &state.map_bookmark_pins {
             // The selected-place marker draws this bookmark already.
             if state.selected_place.as_ref().is_some_and(|place| {
@@ -493,11 +477,7 @@ pub fn render_map_with(
                 continue;
             }
             painter.circle_filled(pin_pos, pin_radius * 0.8, saved_color);
-            painter.circle_stroke(
-                pin_pos,
-                pin_radius * 0.8,
-                Stroke::new(2.0_f32, Color32::WHITE),
-            );
+            painter.circle_stroke(pin_pos, pin_radius * 0.8, Stroke::new(2.0_f32, theme::TEXT));
             painter.text(
                 pin_pos + Vec2::new(0.0, -(icon_size * 0.5)),
                 egui::Align2::CENTER_BOTTOM,
@@ -521,10 +501,10 @@ pub fn render_map_with(
                 continue;
             }
             let (pin_color, ring_radius) = match loc.precision_level.as_str() {
-                "exact" => (Color32::from_rgb(52, 211, 153), pin_radius + 5.0),
-                "approximate" => (Color32::from_rgb(250, 204, 21), pin_radius + 15.0),
-                "city_only" => (Color32::from_rgb(248, 113, 113), pin_radius + 27.0),
-                _ => (Color32::from_rgb(148, 163, 184), pin_radius + 7.0),
+                "exact" => (theme::SUCCESS, pin_radius + 5.0),
+                "approximate" => (theme::ACCENT, pin_radius + 15.0),
+                "city_only" => (theme::DANGER, pin_radius + 27.0),
+                _ => (theme::MUTED, pin_radius + 7.0),
             };
             painter.circle_stroke(
                 pin_pos,
@@ -532,7 +512,7 @@ pub fn render_map_with(
                 Stroke::new(1.5_f32, pin_color.gamma_multiply(0.55)),
             );
             painter.circle_filled(pin_pos, pin_radius, pin_color);
-            painter.circle_stroke(pin_pos, pin_radius, Stroke::new(2.0_f32, Color32::BLACK));
+            painter.circle_stroke(pin_pos, pin_radius, Stroke::new(2.0_f32, theme::BG));
 
             painter.text(
                 pin_pos + Vec2::new(0.0, -(icon_size * 0.46)),
@@ -546,7 +526,7 @@ pub fn render_map_with(
         painter.rect_stroke(
             map_rect,
             4.0_f32,
-            Stroke::new(1.0_f32, Color32::from_rgb(51, 65, 85)),
+            Stroke::new(1.0_f32, theme::BORDER),
             egui::StrokeKind::Inside,
         );
 
@@ -558,58 +538,31 @@ pub fn render_map_with(
                 if !compact {
                     ui.label(RichText::new("Legend:").size(12.0).strong());
                 }
-                ui.label(
-                    RichText::new("● Exact")
-                        .size(12.0)
-                        .color(Color32::from_rgb(52, 211, 153)),
-                );
+                ui.label(RichText::new("● Exact").size(12.0).color(theme::SUCCESS));
                 ui.label(
                     RichText::new("● Approximate")
                         .size(12.0)
-                        .color(Color32::from_rgb(250, 204, 21)),
+                        .color(theme::ACCENT),
                 );
-                ui.label(
-                    RichText::new("● City-only")
-                        .size(12.0)
-                        .color(Color32::from_rgb(248, 113, 113)),
-                );
-                ui.label(
-                    RichText::new("● Saved")
-                        .size(12.0)
-                        .color(Color32::from_rgb(96, 165, 250)),
-                );
+                ui.label(RichText::new("● City-only").size(12.0).color(theme::DANGER));
+                ui.label(RichText::new("● Saved").size(12.0).color(theme::MUTED));
                 if !compact {
                     ui.label(
-                        RichText::new("(drag map to pan, scroll/+/− to zoom)")
+                        RichText::new("Drag to pan, scroll to zoom")
                             .size(11.0)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(theme::MUTED),
                     );
                 }
             });
 
-            // Map provider buttons (OSM data — ODbL; see docs/OSM_POLICY.md)
-            if let Some(first_loc) = all_locations.first() {
-                ui.horizontal_wrapped(|ui| {
-                    if ui.button("OpenStreetMap").clicked() {
-                        open_map_in_browser(ui.ctx(), first_loc, "osm");
-                    }
-                    if !compact && ui.button("Directions (OSM)").clicked() {
-                        open_map_in_browser(ui.ctx(), first_loc, "directions");
-                    }
-                    if ui.button("Organic Maps").clicked() {
-                        open_map_in_browser(ui.ctx(), first_loc, "organic");
-                    }
-                    if ui.button("Google Maps").clicked() {
-                        open_map_in_browser(ui.ctx(), first_loc, "google");
-                    }
-                });
-            }
+            // Map provider buttons (OSM data, ODbL; see docs/OSM_POLICY.md)
+            draw_map_links(ui, &all_locations);
         }
         ui.horizontal_wrapped(|ui| {
             ui.label(
                 RichText::new("Map data © OpenStreetMap contributors (ODbL)")
                     .size(10.0)
-                    .color(Color32::from_rgb(148, 163, 184)),
+                    .color(theme::MUTED),
             );
             ui.hyperlink_to(
                 RichText::new(OSM_COPYRIGHT_URL).size(10.0),
@@ -622,7 +575,7 @@ pub fn render_map_with(
 
     if !minimal {
         if all_locations.is_empty() {
-            ui.group(|ui| {
+            crate::ui::theme::card(ui, |ui| {
                 ui.label(RichText::new("No friend locations shared yet").size(14.0));
             });
         } else if compact {
@@ -635,6 +588,27 @@ pub fn render_map_with(
             draw_location_list(ui, &all_locations, &mut state.map_bookmark_pins);
         }
     }
+}
+
+/// "Open in" buttons shared by the map card and the desktop details column.
+pub(crate) fn draw_map_links(ui: &mut Ui, locations: &[FriendLocation]) {
+    let Some(first_loc) = locations.first() else {
+        return;
+    };
+    ui.horizontal_wrapped(|ui| {
+        if ui.button("OpenStreetMap").clicked() {
+            open_map_in_browser(ui.ctx(), first_loc, "osm");
+        }
+        if ui.button("Directions (OSM)").clicked() {
+            open_map_in_browser(ui.ctx(), first_loc, "directions");
+        }
+        if ui.button("Organic Maps").clicked() {
+            open_map_in_browser(ui.ctx(), first_loc, "organic");
+        }
+        if ui.button("Google Maps").clicked() {
+            open_map_in_browser(ui.ctx(), first_loc, "google");
+        }
+    });
 }
 
 /// Open a map in the default browser for the given location and provider.
@@ -682,14 +656,14 @@ fn draw_location_list(
     locations: &[FriendLocation],
     bookmark_pins: &mut Vec<(String, f64, f64)>,
 ) {
-    ui.group(|ui| {
+    crate::ui::theme::card(ui, |ui| {
         ui.label(RichText::new(format!("Locations: {}", locations.len())).size(14.0));
 
         for loc in locations {
             let precision_color = match loc.precision_level.as_str() {
-                "exact" => Color32::from_rgb(250, 204, 21),
-                "approximate" => Color32::from_rgb(239, 68, 68),
-                _ => Color32::from_rgb(148, 163, 184),
+                "exact" => theme::SUCCESS,
+                "approximate" => theme::ACCENT,
+                _ => theme::MUTED,
             };
 
             ui.horizontal(|ui| {
@@ -713,11 +687,11 @@ fn draw_location_list(
             let now = chrono::Utc::now().timestamp();
             let fresh = crate::models::freshness_state(&loc.updated_at, now);
             let fresh_color = match fresh {
-                "live" => Color32::from_rgb(52, 211, 153),
-                "fresh" => Color32::from_rgb(250, 204, 21),
-                "stale" => Color32::from_rgb(249, 115, 22),
-                "dead" => Color32::from_rgb(239, 68, 68),
-                _ => Color32::from_rgb(148, 163, 184),
+                "live" => theme::SUCCESS,
+                "fresh" => theme::ACCENT,
+                "stale" => theme::ACCENT,
+                "dead" => theme::DANGER,
+                _ => theme::MUTED,
             };
             ui.horizontal(|ui| {
                 ui.label(
@@ -728,15 +702,15 @@ fn draw_location_list(
                         loc.updated_at
                     ))
                     .size(10.0)
-                    .color(Color32::from_rgb(148, 163, 184)),
+                    .color(theme::MUTED),
                 );
                 ui.colored_label(fresh_color, RichText::new(format!("● {fresh}")).size(10.0));
-                if ui.small_button("★ Save").clicked() {
+                if ui.button("★ Save").clicked() {
                     let store = crate::bookmarks::BookmarkStore::default_location();
                     store.add(&loc.user_name, loc.latitude, loc.longitude);
                     *bookmark_pins = store.map_pins();
                 }
-                if ui.small_button("Address").clicked() {
+                if ui.button("Address").clicked() {
                     // Handled by Places screen reverse lookup; here just notice.
                     ui.ctx().request_repaint();
                 }

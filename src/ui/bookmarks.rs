@@ -1,19 +1,19 @@
 //! Saved places screen
+use super::theme;
 use super::PinpointAppUI;
 use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_bookmarks_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        self.draw_main_toolbar(ui);
         ui.heading("Saved places (on-device only)");
         ui.add_space(8.0);
         let store = crate::bookmarks::BookmarkStore::default_location();
         let list = store.list();
         self.app.data().lock().unwrap().bookmarks_count = list.len();
-        ui.group(|ui| {
+        theme::card(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(format!("{} saved", list.len()));
-                if !list.is_empty() && ui.small_button("Copy GeoJSON").clicked() {
+                if !list.is_empty() && ui.button("Copy GeoJSON").clicked() {
                     ctx.copy_text(store.to_geojson());
                     self.app
                         .set_notice(Some("Copied bookmarks GeoJSON to clipboard.".to_string()));
@@ -50,8 +50,8 @@ impl PinpointAppUI {
             }
         });
         ui.add_space(8.0);
-        ui.group(|ui| {
-            ui.label(RichText::new("Add place").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Add place");
             ui.add(
                 egui::TextEdit::singleline(&mut self.bookmark_name)
                     .hint_text("Name")
@@ -67,7 +67,7 @@ impl PinpointAppUI {
                     .hint_text("Longitude")
                     .desired_width(120.0),
             );
-            if ui.button("Save").clicked() {
+            if theme::primary_button(ui, "Save").clicked() {
                 if let (Ok(lat), Ok(lon)) = (
                     self.bookmark_lat.trim().parse::<f64>(),
                     self.bookmark_lon.trim().parse::<f64>(),
@@ -92,14 +92,14 @@ impl PinpointAppUI {
             }
         });
         ui.add_space(8.0);
-        ui.group(|ui| {
-            ui.label(RichText::new("Import GeoJSON").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Import GeoJSON");
             ui.label(
                 RichText::new(
                     "Paste a FeatureCollection exported from Pinpoint (Saved → Copy GeoJSON).",
                 )
                 .size(10.0)
-                .color(egui::Color32::from_rgb(148, 163, 184)),
+                .color(theme::MUTED),
             );
             ui.add(
                 egui::TextEdit::multiline(&mut self.bookmark_import_text)

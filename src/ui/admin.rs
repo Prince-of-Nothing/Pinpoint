@@ -2,22 +2,17 @@
 //!
 //! The web console has four modules (`admin/overview.js`, `users.js`,
 //! `audit.js`, `diagnostics.js`); this screen mirrors them in one tabbed view.
+use super::theme;
 use super::{PendingAction, PinpointAppUI};
-use eframe::egui::{self, Color32, Direction, RichText};
+use eframe::egui::{self, RichText};
 use serde_json::Value;
 
 impl PinpointAppUI {
     pub fn draw_admin_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        self.draw_main_toolbar(ui);
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading("Admin Console");
-                },
-            );
-        });
-        ui.add_space(8.0);
+        ui.heading("Admin Console");
+        ui.add_space(4.0);
+        theme::caption(ui, "Accounts, audit trail and diagnostics");
+        ui.add_space(10.0);
 
         let (is_admin, my_id) = {
             let data = self.app.data();
@@ -37,9 +32,9 @@ impl PinpointAppUI {
         // Server-side authorization is authoritative; this is a fail-closed
         // UI hint, matching the web console's hidden Admin tab.
         if !is_admin {
-            ui.group(|ui| {
+            theme::card(ui, |ui| {
                 ui.colored_label(
-                    Color32::RED,
+                    theme::DANGER,
                     "Access denied: Admin or Administrator role required.",
                 );
             });
@@ -83,8 +78,8 @@ impl PinpointAppUI {
             data.admin_overview.clone()
         };
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Deployment overview").size(14.0).strong());
-            if ui.small_button("Refresh").clicked() {
+            theme::card_title(ui, "Deployment overview");
+            if ui.button("Refresh").clicked() {
                 self.spawn_action(PendingAction::AdminLoadOverview, ctx);
             }
         });
@@ -106,8 +101,8 @@ impl PinpointAppUI {
                         ("audit_events", "Audit events"),
                     ] {
                         egui::Frame::new()
-                            .fill(Color32::from_rgb(15, 23, 42))
-                            .stroke(egui::Stroke::new(1.0_f32, Color32::from_rgb(31, 41, 55)))
+                            .fill(theme::PANEL)
+                            .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
                             .corner_radius(egui::CornerRadius::same(10))
                             .inner_margin(egui::Margin::same(12))
                             .show(ui, |ui| {
@@ -141,7 +136,7 @@ impl PinpointAppUI {
                     .hint_text("Filter by email, name or role")
                     .desired_width(260.0),
             );
-            if ui.small_button("Refresh").clicked() {
+            if ui.button("Refresh").clicked() {
                 self.spawn_action(PendingAction::AdminLoadUsers, ctx);
             }
         });
@@ -296,7 +291,7 @@ impl PinpointAppUI {
                     ctx,
                 );
             }
-            if ui.small_button("Refresh").clicked() {
+            if ui.button("Refresh").clicked() {
                 self.spawn_action(
                     PendingAction::AdminLoadDiagnostics {
                         status: if self.admin_diag_filter.is_empty() {
@@ -360,17 +355,7 @@ impl PinpointAppUI {
             data.must_change_password
         };
 
-        if !forced {
-            self.draw_main_toolbar(ui);
-        }
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading("Change Password");
-                },
-            );
-        });
+        ui.heading("Change Password");
         ui.add_space(8.0);
 
         if forced {
@@ -378,7 +363,7 @@ impl PinpointAppUI {
             ui.add_space(8.0);
         }
 
-        ui.group(|ui| {
+        theme::card(ui, |ui| {
             if !forced {
                 ui.label("Current password");
                 ui.add_space(4.0);

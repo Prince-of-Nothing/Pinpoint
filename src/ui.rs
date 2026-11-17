@@ -23,6 +23,7 @@ pub(crate) mod qr;
 pub(crate) mod route;
 pub(crate) mod share_sheet;
 pub(crate) mod sharing;
+pub(crate) mod theme;
 pub(crate) mod trips;
 
 use crate::app::{CurrentScreen, PinpointApp};
@@ -30,7 +31,7 @@ use crate::backend::DynBackend;
 use crate::i18n::{self, key, Lang};
 use crate::osm::OsmClient;
 use crash_dialog::CrashDialog;
-use eframe::egui::{self, Align, Color32, Direction, RichText};
+use eframe::egui::{self, Align, RichText};
 use route::RoutePlan;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
@@ -296,6 +297,7 @@ pub struct PinpointAppUI {
     route_nav_last_fix: Option<std::time::Instant>,
     route_nav_gps_warned: bool,
     session_restore_attempted: bool,
+    theme_installed: bool,
     // Per-friend sharing sheet
     share_sheet: Option<share_sheet::ShareSheet>,
     // Mobile shell
@@ -412,6 +414,7 @@ impl PinpointAppUI {
             route_nav_last_fix: None,
             route_nav_gps_warned: false,
             session_restore_attempted: false,
+            theme_installed: false,
             share_sheet: None,
             mobile_nav_open: false,
             mobile_publish_open: false,
@@ -526,10 +529,10 @@ impl PinpointAppUI {
         };
         let Some(latest) = latest else { return };
         egui::Frame::new()
-            .fill(Color32::from_rgb(61, 44, 12))
-            .stroke(egui::Stroke::new(1.0_f32, Color32::from_rgb(250, 204, 21)))
-            .corner_radius(egui::CornerRadius::same(10))
-            .inner_margin(egui::Margin::symmetric(12, 8))
+            .fill(theme::PANEL_2)
+            .stroke(egui::Stroke::new(1.0_f32, theme::ACCENT))
+            .corner_radius(egui::CornerRadius::same(12))
+            .inner_margin(egui::Margin::symmetric(14, 10))
             .show(ui, |ui| {
                 ui.vertical(|ui| {
                     ui.horizontal_wrapped(|ui| {
@@ -539,9 +542,9 @@ impl PinpointAppUI {
                                 latest.tag,
                                 crate::update::current_version()
                             ))
-                            .size(13.0)
+                            .size(14.0)
                             .strong()
-                            .color(Color32::from_rgb(253, 230, 138)),
+                            .color(theme::TEXT),
                         );
                         if cfg!(target_os = "android") {
                             if let Some(download) = latest.download_url() {
@@ -564,11 +567,7 @@ impl PinpointAppUI {
                         .collect::<Vec<_>>()
                         .join(" · ");
                     if !summary.is_empty() {
-                        ui.label(
-                            RichText::new(summary)
-                                .size(10.0)
-                                .color(Color32::from_rgb(252, 211, 77)),
-                        );
+                        theme::caption(ui, summary);
                     }
                 });
             });
@@ -636,17 +635,7 @@ impl PinpointAppUI {
                 ui.horizontal_wrapped(|ui| {
                     if cfg!(target_os = "android") {
                         if let Some(download) = latest.download_url() {
-                            if ui
-                                .add(
-                                    egui::Button::new(
-                                        RichText::new("Download APK")
-                                            .strong()
-                                            .color(Color32::BLACK),
-                                    )
-                                    .fill(Color32::from_rgb(52, 211, 153)),
-                                )
-                                .clicked()
-                            {
+                            if theme::primary_button(ui, "Download APK").clicked() {
                                 let _ = webbrowser::open(download);
                             }
                         }
@@ -672,7 +661,7 @@ impl PinpointAppUI {
                                 size as f64 / 1_048_576.0
                             ))
                             .size(10.0)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(theme::MUTED),
                         );
                     }
                 }
@@ -1208,53 +1197,53 @@ impl PinpointAppUI {
                 } else if ui.button("☰").clicked() {
                     self.mobile_nav_open = !self.mobile_nav_open;
                 }
-                ui.label(
-                    RichText::new(i18n::t(lang, key::APP_TITLE))
-                        .size(20.0)
-                        .strong(),
-                );
+                theme::wordmark(ui);
                 if self.app.is_offline_mode() {
-                    ui.add_space(6.0);
                     ui.label(
                         RichText::new(i18n::t(lang, key::OFFLINE_MODE))
-                            .size(10.0)
+                            .size(11.0)
                             .strong()
-                            .color(Color32::from_rgb(250, 204, 21)),
+                            .color(theme::ACCENT),
                     );
                 }
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    if self.app.is_loading() {
+                        ui.spinner();
+                    }
                     if !auth_screen {
                         if signed_in {
                             if ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
                                 self.spawn_action(PendingAction::Logout, ctx);
                             }
-                        } else if ui.button(i18n::t(lang, key::SIGN_IN)).clicked() {
+                        } else if theme::primary_button(ui, i18n::t(lang, key::SIGN_IN)).clicked() {
                             self.app.set_screen(CurrentScreen::Login);
                         }
-                    }
-                    if self.app.is_loading() {
-                        ui.spinner();
                     }
                 });
             });
             if let Some(err) = self.app.error_message() {
-                ui.colored_label(Color32::RED, err);
+                ui.colored_label(theme::DANGER, err);
             } else if let Some(notice) = self.app.notice_message() {
-                ui.colored_label(Color32::from_rgb(52, 211, 153), notice);
+                ui.colored_label(theme::SUCCESS, notice);
             }
-            ui.separator();
-            ui.add_space(4.0);
+            ui.add_space(6.0);
             return;
         }
 
         ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading(i18n::t(lang, key::APP_TITLE));
-                },
-            );
+            theme::wordmark(ui);
+            if self.app.is_offline_mode() {
+                ui.label(
+                    RichText::new(i18n::t(lang, key::OFFLINE_MODE))
+                        .size(11.0)
+                        .strong()
+                        .color(theme::ACCENT),
+                );
+            }
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                if self.app.is_loading() {
+                    ui.spinner();
+                }
                 // Language picker (works for every registered language).
                 egui::ComboBox::from_id_salt("lang")
                     .selected_text(self.lang.native_name())
@@ -1268,34 +1257,38 @@ impl PinpointAppUI {
                             }
                         }
                     });
-                ui.add_space(4.0);
                 if signed_in {
                     if ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
                         self.spawn_action(PendingAction::Logout, ctx);
                     }
                     if let Some(user) = &self.app.data().lock().unwrap().user {
-                        ui.label(user.email.to_string());
+                        egui::Frame::new()
+                            .fill(theme::PANEL_2)
+                            .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
+                            .corner_radius(egui::CornerRadius::same(18))
+                            .inner_margin(egui::Margin::symmetric(12, 6))
+                            .show(ui, |ui| {
+                                ui.label(RichText::new(&user.email).size(12.0).color(theme::MUTED));
+                            });
                     }
                 } else {
-                    if ui.button(i18n::t(lang, key::SIGN_IN)).clicked() {
+                    if theme::primary_button(ui, i18n::t(lang, key::SIGN_IN)).clicked() {
                         self.app.set_screen(CurrentScreen::Login);
                     }
-                }
-                ui.add_space(4.0);
-                if self.app.is_offline_mode() {
-                    ui.label(i18n::t(lang, key::OFFLINE_MODE));
-                }
-                if self.app.is_loading() {
-                    ui.spinner();
-                }
-                if let Some(notice) = self.app.notice_message() {
-                    ui.colored_label(Color32::from_rgb(52, 211, 153), notice);
-                }
-                if let Some(err) = self.app.error_message() {
-                    ui.colored_label(Color32::RED, err);
+                    ui.label(
+                        RichText::new("Private location sharing for trusted friends")
+                            .size(12.0)
+                            .color(theme::MUTED),
+                    );
                 }
             });
         });
+        if let Some(notice) = self.app.notice_message() {
+            ui.colored_label(theme::SUCCESS, notice);
+        }
+        if let Some(err) = self.app.error_message() {
+            ui.colored_label(theme::DANGER, err);
+        }
         ui.add_space(4.0);
     }
 
@@ -1330,18 +1323,35 @@ impl PinpointAppUI {
             (CurrentScreen::ChangePassword, key::PASSWORD),
         ];
         ui.horizontal(|ui| {
-            for (screen, key_str) in screens {
-                if screen == CurrentScreen::Admin && !is_admin {
-                    continue;
-                }
-                if ui
-                    .selectable_label(self.app.current_screen() == screen, i18n::t(lang, key_str))
-                    .clicked()
-                {
-                    self.app.set_screen(screen);
-                }
-                ui.add_space(4.0);
-            }
+            let refresh_width = 110.0;
+            let tabs_width = (ui.available_width() - refresh_width).max(240.0);
+            ui.allocate_ui_with_layout(
+                egui::vec2(tabs_width, 44.0),
+                egui::Layout::left_to_right(Align::Center),
+                |ui| {
+                    egui::ScrollArea::horizontal()
+                        .id_salt("screen_tabs")
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                for (screen, key_str) in screens {
+                                    if screen == CurrentScreen::Admin && !is_admin {
+                                        continue;
+                                    }
+                                    let selected = self.app.current_screen() == screen;
+                                    if ui
+                                        .add(egui::Button::selectable(
+                                            selected,
+                                            RichText::new(i18n::t(lang, key_str)).size(14.0),
+                                        ))
+                                        .clicked()
+                                    {
+                                        self.app.set_screen(screen);
+                                    }
+                                }
+                            });
+                        });
+                },
+            );
             if ui.button(i18n::t(lang, key::REFRESH)).clicked() {
                 let app = self.app.clone();
                 let rt = Arc::new(Runtime::new().expect("tokio"));
@@ -1356,7 +1366,7 @@ impl PinpointAppUI {
                 });
             }
         });
-        ui.add_space(12.0);
+        ui.add_space(6.0);
     }
 
     fn draw_sign_in_required(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, feature: &str) {
@@ -1367,7 +1377,7 @@ impl PinpointAppUI {
             ui.add_space(16.0);
             ui.label(i18n::t(lang, key::SIGN_IN_TO_USE).replace("{feature}", feature));
             ui.add_space(24.0);
-            ui.group(|ui| {
+            theme::card(ui, |ui| {
                 ui.label(i18n::t(lang, key::SIGN_IN));
                 ui.add_space(8.0);
                 ui.add(
@@ -1495,7 +1505,7 @@ impl PinpointAppUI {
         egui::CentralPanel::default()
             .frame(
                 egui::Frame::NONE
-                    .fill(Color32::from_rgb(11, 16, 32))
+                    .fill(theme::BG)
                     .inner_margin(egui::Margin::same(24)),
             )
             .show(ctx, |ui| {
@@ -1506,7 +1516,7 @@ impl PinpointAppUI {
                     ui.label(
                         RichText::new("Enter your on-device PIN to view locations.")
                             .size(13.0)
-                            .color(Color32::from_rgb(148, 163, 184)),
+                            .color(theme::MUTED),
                     );
                     ui.add_space(20.0);
                     let response = ui.add(
@@ -1541,14 +1551,10 @@ impl PinpointAppUI {
                         ui.label(
                             RichText::new(format!("Try again in {retry_secs}s."))
                                 .size(12.0)
-                                .color(Color32::from_rgb(250, 204, 21)),
+                                .color(theme::ACCENT),
                         );
                     } else if let Some(error) = &self.pin_error {
-                        ui.label(
-                            RichText::new(error)
-                                .size(12.0)
-                                .color(Color32::from_rgb(248, 113, 113)),
-                        );
+                        ui.label(RichText::new(error).size(12.0).color(theme::DANGER));
                     }
                     #[cfg(target_os = "android")]
                     if self.prefs.biometric_unlock && crate::platform::android_biometric_supported()
@@ -1605,6 +1611,10 @@ impl PinpointAppUI {
 
 impl eframe::App for PinpointAppUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if !self.theme_installed {
+            self.theme_installed = true;
+            theme::apply(ctx);
+        }
         #[cfg(target_os = "android")]
         store_android_context(ctx);
         if self.lock_enabled {
@@ -1723,17 +1733,16 @@ impl eframe::App for PinpointAppUI {
             };
             egui::TopBottomPanel::bottom("mobile_nav")
                 .resizable(false)
-                .exact_height(500.0)
+                .exact_height((ctx.screen_rect().height() * 0.82).clamp(320.0, 520.0))
                 .frame(
                     egui::Frame::NONE
-                        .fill(Color32::from_rgb(8, 12, 24))
+                        .fill(theme::PANEL)
                         .inner_margin(egui::Margin::symmetric(12, 6)),
                 )
                 .show(ctx, |ui| {
                     let (handle, _) =
                         ui.allocate_exact_size(egui::vec2(42.0, 4.0), egui::Sense::hover());
-                    ui.painter()
-                        .rect_filled(handle, 2.0, Color32::from_rgb(71, 85, 105));
+                    ui.painter().rect_filled(handle, 2.0, theme::BORDER);
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         ui.label(RichText::new("Tools").size(22.0).strong());
@@ -1743,28 +1752,39 @@ impl eframe::App for PinpointAppUI {
                             }
                         });
                     });
-                    ui.label(
-                        RichText::new("Everything Pinpoint can do, one tap away.")
-                            .size(11.0)
-                            .color(Color32::from_rgb(148, 163, 184)),
-                    );
+                    theme::caption(ui, "Everything Pinpoint can do, one tap away.");
                     ui.add_space(8.0);
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         let tile_width = (ui.available_width() - 8.0) / 2.0;
-                        let accent = Color32::from_rgb(52, 211, 153);
                         ui.horizontal(|ui| {
-                            for (label, icon, requested) in [
-                                ("Publish", "+", &mut publish_requested),
-                                ("Refresh", "↻", &mut refresh_requested),
+                            for (label, icon, primary, requested) in [
+                                ("Publish", "+", true, &mut publish_requested),
+                                ("Refresh", "↻", false, &mut refresh_requested),
                             ] {
+                                let ink = if primary {
+                                    theme::ACCENT_INK
+                                } else {
+                                    theme::TEXT
+                                };
                                 let button = egui::Button::new(
                                     RichText::new(format!("{icon}\n{label}"))
                                         .size(14.0)
                                         .strong()
-                                        .color(Color32::WHITE),
+                                        .color(ink),
                                 )
-                                .fill(Color32::from_rgb(24, 72, 58))
-                                .stroke(egui::Stroke::new(1.0_f32, Color32::from_rgb(52, 211, 153)))
+                                .fill(if primary {
+                                    theme::ACCENT
+                                } else {
+                                    theme::PANEL_2
+                                })
+                                .stroke(egui::Stroke::new(
+                                    1.0_f32,
+                                    if primary {
+                                        theme::ACCENT
+                                    } else {
+                                        theme::BORDER
+                                    },
+                                ))
                                 .corner_radius(egui::CornerRadius::same(14))
                                 .min_size(egui::vec2(tile_width, 64.0));
                                 if ui.add(button).clicked() {
@@ -1773,55 +1793,15 @@ impl eframe::App for PinpointAppUI {
                             }
                         });
                         ui.add_space(8.0);
-                        let mut tools: Vec<(CurrentScreen, &str, &str, Color32)> = vec![
-                            (
-                                CurrentScreen::Map,
-                                "Map",
-                                "⌖",
-                                Color32::from_rgb(26, 45, 74),
-                            ),
-                            (
-                                CurrentScreen::Friends,
-                                "Friends",
-                                "👥",
-                                Color32::from_rgb(55, 35, 70),
-                            ),
-                            (
-                                CurrentScreen::Sharing,
-                                "Share",
-                                "◎",
-                                Color32::from_rgb(24, 62, 54),
-                            ),
-                            (
-                                CurrentScreen::Places,
-                                "Places",
-                                "⌖",
-                                Color32::from_rgb(30, 58, 80),
-                            ),
-                            (
-                                CurrentScreen::Bookmarks,
-                                "Saved",
-                                "★",
-                                Color32::from_rgb(72, 56, 20),
-                            ),
-                            (
-                                CurrentScreen::Trips,
-                                "Trips",
-                                "T",
-                                Color32::from_rgb(38, 45, 82),
-                            ),
-                            (
-                                CurrentScreen::Emergency,
-                                "SOS",
-                                "!",
-                                Color32::from_rgb(86, 34, 34),
-                            ),
-                            (
-                                CurrentScreen::Profile,
-                                "Profile",
-                                "P",
-                                Color32::from_rgb(42, 48, 60),
-                            ),
+                        let mut tools: Vec<(CurrentScreen, &str, &str)> = vec![
+                            (CurrentScreen::Map, "Map", "M"),
+                            (CurrentScreen::Friends, "Friends", "F"),
+                            (CurrentScreen::Sharing, "Share", "S"),
+                            (CurrentScreen::Places, "Places", "P"),
+                            (CurrentScreen::Bookmarks, "Saved", "B"),
+                            (CurrentScreen::Trips, "Trips", "T"),
+                            (CurrentScreen::Emergency, "SOS", "!"),
+                            (CurrentScreen::Profile, "Profile", "U"),
                             (
                                 CurrentScreen::About,
                                 if update_available {
@@ -1830,54 +1810,41 @@ impl eframe::App for PinpointAppUI {
                                     "Updates"
                                 },
                                 "U",
-                                if update_available {
-                                    Color32::from_rgb(98, 62, 20)
-                                } else {
-                                    Color32::from_rgb(62, 40, 62)
-                                },
                             ),
-                            (
-                                CurrentScreen::Admin,
-                                "Admin",
-                                "A",
-                                Color32::from_rgb(70, 48, 24),
-                            ),
-                            (
-                                CurrentScreen::Kiosk,
-                                "Kiosk",
-                                "K",
-                                Color32::from_rgb(24, 58, 66),
-                            ),
-                            (
-                                CurrentScreen::ChangePassword,
-                                "Password",
-                                "PW",
-                                Color32::from_rgb(38, 42, 52),
-                            ),
+                            (CurrentScreen::Admin, "Admin", "A"),
+                            (CurrentScreen::Kiosk, "Kiosk", "K"),
+                            (CurrentScreen::ChangePassword, "Password", "PW"),
                         ];
                         if !is_admin {
-                            tools.retain(|(screen, _, _, _)| *screen != CurrentScreen::Admin);
+                            tools.retain(|(screen, _, _)| *screen != CurrentScreen::Admin);
                         }
                         egui::Grid::new("mobile_tools_grid")
                             .num_columns(2)
                             .spacing([8.0, 8.0])
                             .show(ui, |ui| {
-                                for (index, (screen, label, icon, fill)) in tools.iter().enumerate()
-                                {
+                                for (index, (screen, label, icon)) in tools.iter().enumerate() {
                                     let selected = current == *screen;
                                     let button = egui::Button::new(
                                         RichText::new(format!("{icon}\n{label}"))
                                             .size(13.0)
                                             .strong()
-                                            .color(Color32::WHITE),
+                                            .color(if selected {
+                                                theme::ACCENT_INK
+                                            } else {
+                                                theme::TEXT
+                                            }),
                                     )
-                                    .fill(if selected { accent } else { *fill })
+                                    .fill(if selected {
+                                        theme::ACCENT
+                                    } else {
+                                        theme::PANEL_2
+                                    })
                                     .stroke(egui::Stroke::new(
                                         1.0_f32,
                                         if selected {
-                                            accent
+                                            theme::ACCENT
                                         } else {
-                                            Color32::from_rgb(31, 41, 55)
+                                            theme::BORDER
                                         },
                                     ))
                                     .corner_radius(egui::CornerRadius::same(14))
@@ -1937,7 +1904,7 @@ impl eframe::App for PinpointAppUI {
                 .exact_height(74.0)
                 .frame(
                     egui::Frame::NONE
-                        .fill(Color32::from_rgb(15, 23, 42))
+                        .fill(theme::PANEL)
                         .inner_margin(egui::Margin {
                             left: 4,
                             right: 4,
@@ -1958,14 +1925,14 @@ impl eframe::App for PinpointAppUI {
                         ] {
                             let selected = current == screen;
                             let fill = if selected {
-                                Color32::from_rgb(52, 211, 153)
+                                theme::ACCENT
                             } else {
-                                Color32::from_rgb(15, 23, 42)
+                                theme::PANEL
                             };
                             let text_color = if selected {
-                                Color32::from_rgb(5, 46, 27)
+                                theme::ACCENT_INK
                             } else {
-                                Color32::from_rgb(229, 231, 235)
+                                theme::TEXT
                             };
                             let button = egui::Button::new(
                                 RichText::new(label).size(12.0).strong().color(text_color),
@@ -1985,18 +1952,25 @@ impl eframe::App for PinpointAppUI {
         }
 
         let panel = if compact {
-            egui::CentralPanel::default()
-                .frame(egui::Frame::NONE.fill(Color32::from_rgb(11, 16, 32)))
+            egui::CentralPanel::default().frame(egui::Frame::NONE.fill(theme::BG))
         } else {
             egui::CentralPanel::default()
         };
         panel.show(ctx, |ui| {
             self.draw_header_bar(ui, ctx);
             self.draw_update_banner(ui);
+            let auth_screen = matches!(
+                self.app.current_screen(),
+                CurrentScreen::Login | CurrentScreen::Register
+            );
+            let forced_password = self.app.current_screen() == CurrentScreen::ChangePassword
+                && self.app.data().lock().unwrap().must_change_password;
+            if !auth_screen && !forced_password {
+                self.draw_main_toolbar(ui);
+            }
 
             match self.app.current_screen() {
                 CurrentScreen::Map => {
-                    self.draw_main_toolbar(ui);
                     self.draw_map_screen(ui, ctx);
                 }
                 CurrentScreen::Login => self.draw_login_form(ui, ctx),
@@ -2027,7 +2001,6 @@ impl eframe::App for PinpointAppUI {
                 CurrentScreen::About => self.draw_about_screen(ui, ctx),
                 CurrentScreen::Friends => {
                     if self.app.is_signed_in() {
-                        self.draw_main_toolbar(ui);
                         self.draw_friends_screen(ui, ctx);
                     } else {
                         self.draw_sign_in_required(ui, ctx, "Friends");
@@ -2035,7 +2008,6 @@ impl eframe::App for PinpointAppUI {
                 }
                 CurrentScreen::Sharing => {
                     if self.app.is_signed_in() {
-                        self.draw_main_toolbar(ui);
                         self.draw_sharing_screen(ui, ctx);
                     } else {
                         self.draw_sign_in_required(ui, ctx, "Sharing");
@@ -2049,12 +2021,10 @@ impl eframe::App for PinpointAppUI {
                     }
                 }
                 CurrentScreen::Kiosk => {
-                    self.draw_main_toolbar(ui);
                     self.draw_kiosk_screen(ui, ctx);
                 }
                 CurrentScreen::ChangePassword => {
                     if self.app.is_signed_in() {
-                        self.draw_main_toolbar(ui);
                         self.draw_change_password_screen(ui, ctx);
                     } else {
                         self.draw_sign_in_required(ui, ctx, "Change Password");

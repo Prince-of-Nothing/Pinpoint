@@ -13,6 +13,7 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] Web map foundation: vendored MapLibre GL JS 6.18.0 and PMTiles 4.5.0, a no-CDN `web/map/` module and preview, and the 94 KB ODbL Monaco fixture with a headless smoke test.
+- [FEATURE] Offline routing spike: a local-only Valhalla WASM harness, the Chișinău → Bălți route evidence and the web/MapLibre route API contract in `docs/offline/routing-spike.md`.
 
 ## [1.5.3] - 2026-11-16
 ### Fixed

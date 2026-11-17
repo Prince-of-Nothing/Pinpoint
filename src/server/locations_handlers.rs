@@ -68,6 +68,20 @@ pub async fn create_share(
         .and_then(Value::as_str)
         .unwrap_or("exact")
         .to_string();
+    // Trust-boundary validation: an unknown precision must never fall through
+    // to exact coordinates, and an unknown direction must not create a share.
+    if !["exact", "approximate", "city_only"].contains(&precision.as_str()) {
+        return error_envelope(
+            "VALIDATION_FAILED",
+            "precision_level must be exact, approximate, or city_only",
+        );
+    }
+    if !["to_friend", "from_friend", "mutual"].contains(&direction.as_str()) {
+        return error_envelope(
+            "VALIDATION_FAILED",
+            "direction must be to_friend, from_friend, or mutual",
+        );
+    }
     // Optional expiry: duration_hours (int) or explicit expires_at ISO-8601.
     // 0 means "no expiry".
     let expires_at: Option<String> =

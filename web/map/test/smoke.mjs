@@ -48,6 +48,590 @@ function check(condition, message, detail = "") {
   }
 }
 
+function respondJson(request, body, status = 200) {
+  return request.respond({
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "access-control-allow-origin": "*",
+      "cache-control": "no-store",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+const ONLINE_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+
+const LIBERTY_FIXTURE = {
+  version: 8,
+  name: "OpenFreeMap Liberty (test)",
+  sources: {
+    land: {
+      type: "geojson",
+      data: { type: "FeatureCollection", features: [] },
+    },
+  },
+  layers: [
+    { id: "background", type: "background", paint: { "background-color": "#eef2f0" } },
+  ],
+};
+
+const EMPTY_FILE_STATUS = {
+  installed: false,
+  bytes: 0,
+  expected_bytes: 0,
+  download_bytes: 0,
+  downloaded_bytes: 0,
+  progress_bytes: 0,
+  phase: "idle",
+  error: null,
+};
+
+/**
+ * Second browser pass: mocked catalog/config/status proves the region manager,
+ * the `{region}` download body, and the opt-in OpenFreeMap style switch. The
+ * static server has no catalog, so the fallback pass checks the legacy panel.
+ */
+async function runMapsPanelChecks(browser) {
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 900, deviceScaleFactor: 1 });
+  page.setDefaultTimeout(30000);
+  await page.evaluateOnNewDocument(() => {
+    try {
+      localStorage.removeItem("pinpoint.onlineMap");
+    } catch {
+      // Storage disabled: the page still defaults to the offline style.
+    }
+  });
+
+  const catalog = {
+    schema: 1,
+    updated: "2026-11-17T12:00:00Z",
+    regions: [
+      {
+        id: "moldova",
+        name: "Moldova",
+        bbox: [7.4, 43.72, 7.45, 43.76],
+        maxzoom: 14,
+        version: "2026-11-17",
+        installed: true,
+        installed_version: "2026-11-17",
+        files: [
+          { role: "basemap", transfer_bytes: 93172399, installed_bytes: 93172399, installed: true },
+        ],
+      },
+      {
+        id: "romania",
+        name: "Romania",
+        bbox: [20.2, 43.6, 29.7, 48.3],
+        maxzoom: 12,
+        version: "2026-11-10",
+        installed: false,
+        files: [
+          {
+            role: "basemap",
+            transfer_bytes: 550000000,
+            installed_bytes: 600000000,
+            installed: false,
+          },
+        ],
+      },
+    ],
+  };
+  const config = {
+    pmtilesUrl: "/map/fixtures/monaco.pmtiles",
+    graphInstalled: true,
+    packInstalled: true,
+    regions: [
+      {
+        id: "moldova",
+        name: "Moldova",
+        bbox: [7.4, 43.72, 7.45, 43.76],
+        version: "2026-11-17",
+        pmtilesUrl: "/map/fixtures/monaco.pmtiles",
+        graphUrl: "/packs/moldova/moldova.graph.bin",
+        installed: true,
+      },
+    ],
+  };
+  const idleStatus = {
+    region: null,
+    pack: { ...EMPTY_FILE_STATUS },
+    graph: { ...EMPTY_FILE_STATUS },
+    expected_download_bytes: 0,
+  };
+  const runningStatus = {
+    region: "romania",
+    pack: {
+      ...EMPTY_FILE_STATUS,
+      phase: "downloading",
+      expected_bytes: 93172399,
+      download_bytes: 93172399,
+      downloaded_bytes: 12000000,
+    },
+    graph: {
+      ...EMPTY_FILE_STATUS,
+      expected_bytes: 110858815,
+      download_bytes: 45338586,
+    },
+    expected_download_bytes: 138510985,
+  };
+
+  const state = {
+    catalog,
+    catalogStatus: 200,
+    config,
+    status: idleStatus,
+    styleStatus: 200,
+    posts: [],
+    statusRequests: 0,
+    styleRequests: 0,
+  };
+
+  const pageErrors = [];
+  const consoleErrors = [];
+  const externalRequests = [];
+  const httpFailures = [];
+
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") consoleErrors.push(message.text());
+  });
+  page.on("response", (response) => {
+    if (response.status() < 400) return;
+    try {
+      httpFailures.push({ status: response.status(), url: new URL(response.url()).href });
+    } catch {
+      httpFailures.push({ status: response.status(), url: response.url() });
+    }
+  });
+  page.on("request", (request) => {
+    const url = request.url();
+    if (url.startsWith("https://tiles.openfreemap.org/")) {
+      state.styleRequests += 1;
+      return;
+    }
+    if (!url.startsWith("http://") && !url.startsWith("https://")) return;
+    if (new URL(url).origin !== base) externalRequests.push(url);
+  });
+
+  await page.setRequestInterception(true);
+  page.on("request", (request) => {
+    const url = request.url();
+    if (url === ONLINE_STYLE_URL) {
+      if (state.styleStatus !== 200) {
+        return request.respond({
+          status: state.styleStatus,
+          contentType: "text/plain; charset=utf-8",
+          headers: { "Access-Control-Allow-Origin": "*" },
+          body: "unavailable",
+        });
+      }
+      return respondJson(request, LIBERTY_FIXTURE);
+    }
+
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return request.continue();
+    }
+    if (parsed.origin !== base) return request.continue();
+
+    switch (parsed.pathname) {
+      case "/map/catalog":
+        return respondJson(request, state.catalog, state.catalogStatus);
+      case "/map/config":
+        return respondJson(request, state.config);
+      case "/map/offline/status":
+        state.statusRequests += 1;
+        return respondJson(request, state.status);
+      case "/map/offline/download":
+        state.posts.push(request.postData());
+        state.status = runningStatus;
+        return respondJson(request, runningStatus, 202);
+      default:
+        return request.continue();
+    }
+  });
+
+  await page.goto(`${base}/map/index.html`, { waitUntil: "load", timeout: 30000 });
+  await page.waitForFunction(
+    () =>
+      window.__pinpointMapReady === true ||
+      typeof window.__pinpointMapError === "string",
+  );
+  await page.waitForFunction(
+    () => document.querySelectorAll("#region-list li").length === 2,
+  );
+
+  const rows = await page.$$eval("#region-list li", (items) =>
+    items.map((item) => ({
+      id: item.dataset.region,
+      state: item.dataset.state,
+      text: item.textContent.replace(/\s+/g, " ").trim(),
+      buttons: [...item.querySelectorAll("button")].map((button) => ({
+        action: button.dataset.action,
+        label: button.getAttribute("aria-label"),
+      })),
+    })),
+  );
+  const moldova = rows.find((row) => row.id === "moldova");
+  const romania = rows.find((row) => row.id === "romania");
+
+  check(rows.length === 2, "catalog renders one row per region", JSON.stringify(rows));
+  check(
+    moldova?.text.includes("Moldova") && moldova?.text.includes("93 MB"),
+    "Moldova row shows its transfer size",
+    moldova?.text ?? "missing",
+  );
+  check(
+    romania?.text.includes("Romania") && romania?.text.includes("550 MB"),
+    "Romania row shows its transfer size",
+    romania?.text ?? "missing",
+  );
+  check(
+    moldova?.state === "installed" && moldova.buttons.some((b) => b.action === "show"),
+    "installed region shows Installed and Show",
+    JSON.stringify(moldova),
+  );
+  check(
+    romania?.state === "idle" && romania.buttons.some((b) => b.action === "download"),
+    "missing region shows Download",
+    JSON.stringify(romania),
+  );
+  check(
+    rows.every((row) => row.buttons.every((button) => Boolean(button.label))),
+    "region buttons have accessible labels",
+    JSON.stringify(rows),
+  );
+
+  const initial = await page.evaluate(() => ({
+    sourceId: window.__pinpointPreview?.source?.id ?? null,
+    meta: document.querySelector("#map-meta")?.textContent ?? "",
+    mapsHidden: document.querySelector("#maps-panel")?.hidden ?? null,
+    offlineHidden: document.querySelector("#offline-panel")?.hidden ?? null,
+  }));
+  check(
+    initial.sourceId === "moldova",
+    "defaults to the installed region from /map/config",
+    JSON.stringify(initial),
+  );
+  check(initial.meta.includes("Moldova"), "map meta names the installed region", initial.meta);
+  check(
+    initial.mapsHidden === false && initial.offlineHidden === true,
+    "catalog mode shows the Maps panel and hides the legacy card",
+    JSON.stringify(initial),
+  );
+
+  await page.click('#region-list li[data-region="romania"] [data-action="download"]');
+  await page.waitForFunction(() => !document.querySelector("#maps-progress")?.hidden);
+
+  const post = state.posts.length ? JSON.parse(state.posts[0]) : null;
+  check(
+    post?.region === "romania",
+    "download POST body is { region }",
+    state.posts[0] ?? "missing",
+  );
+
+  const progress = await page.evaluate(() => ({
+    text: document.querySelector("#maps-progress-text")?.textContent ?? "",
+    live: document.querySelector("#maps-progress")?.getAttribute("aria-live") ?? "",
+    value: Number(document.querySelector("#maps-progress-bar")?.value ?? 0),
+    max: Number(document.querySelector("#maps-progress-bar")?.max ?? 0),
+  }));
+  check(
+    progress.text.includes("Downloading") &&
+      progress.text.includes("Romania") &&
+      progress.text.includes("MB"),
+    "progress row names the phase, region and bytes",
+    progress.text,
+  );
+  check(progress.live === "polite", "progress row is an aria-live region", progress.live);
+  check(
+    progress.max === 138510985 && progress.value === 12000000,
+    "progress bar uses the status transfer total",
+    JSON.stringify(progress),
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+  check(
+    state.statusRequests >= 2,
+    "status polls while the download runs",
+    String(state.statusRequests),
+  );
+
+  state.status = { ...idleStatus, region: "romania" };
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  const stoppedAt = state.statusRequests;
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  check(
+    state.statusRequests === stoppedAt,
+    "status polling stops when no download runs",
+    `${stoppedAt} -> ${state.statusRequests}`,
+  );
+  check(
+    await page.$eval("#maps-progress", (element) => element.hidden),
+    "progress row hides when the download is idle",
+  );
+
+  await page.evaluate(() =>
+    window.__pinpointPreview?.handle?.drawRoute({
+      points: [
+        [47.0105, 28.8638],
+        [47.76, 27.93],
+      ],
+    }),
+  );
+  await page.waitForFunction(() =>
+    Boolean(window.__pinpointPreview?.map?.getLayer("pinpoint-route-line")),
+  );
+
+  await page.click("#online-map");
+  await page.waitForFunction(
+    () =>
+      window.__pinpointPreview?.online === true &&
+      window.__pinpointPreview?.map?.getStyle()?.name === "OpenFreeMap Liberty (test)",
+  );
+
+  const onlineState = await page.evaluate(() => ({
+    online: window.__pinpointPreview?.online ?? null,
+    styleName: window.__pinpointPreview?.map?.getStyle()?.name ?? "",
+    creditHidden: document.querySelector("#online-credit")?.hidden ?? null,
+    credit: document.querySelector("#online-credit")?.textContent.replace(/\s+/g, " ").trim() ?? "",
+    privacy: document.querySelector(".online-credit__privacy")?.textContent?.trim() ?? "",
+    markers: Boolean(window.__pinpointPreview?.map?.getLayer("pinpoint-locations-circles")),
+    route: Boolean(
+      window.__pinpointPreview?.map?.getLayer("pinpoint-route-line") &&
+        window.__pinpointPreview?.map?.getLayer("pinpoint-route-casing"),
+    ),
+    stored: localStorage.getItem("pinpoint.onlineMap"),
+    toggle: document.querySelector("#online-map")?.checked ?? null,
+  }));
+  check(
+    onlineState.online === true && onlineState.styleName === "OpenFreeMap Liberty (test)",
+    "online toggle switches MapLibre to the fetched style",
+    JSON.stringify(onlineState),
+  );
+  check(
+    onlineState.creditHidden === false &&
+      onlineState.credit.includes("tiles by OpenFreeMap"),
+    "OpenFreeMap credit is visible only while online",
+    onlineState.credit,
+  );
+  check(
+    onlineState.privacy.includes("OpenFreeMap") &&
+      onlineState.privacy.includes("reveal the viewed area"),
+    "online privacy note is shown",
+    onlineState.privacy,
+  );
+  check(
+    onlineState.markers && onlineState.route,
+    "pins, route casing and route line survive style.load",
+    JSON.stringify({ markers: onlineState.markers, route: onlineState.route }),
+  );
+  check(
+    onlineState.stored === "1" && onlineState.toggle === true,
+    "online choice persists in pinpoint.onlineMap",
+    JSON.stringify({ stored: onlineState.stored, toggle: onlineState.toggle }),
+  );
+  check(state.styleRequests === 1, "online style fetched once", String(state.styleRequests));
+
+  await page.click("#online-map");
+  await page.waitForFunction(
+    () =>
+      window.__pinpointPreview?.online === false &&
+      window.__pinpointPreview?.map?.getStyle()?.name === "Pinpoint Offline Basemap",
+  );
+  const offlineState = await page.evaluate(() => ({
+    stored: localStorage.getItem("pinpoint.onlineMap"),
+    creditHidden: document.querySelector("#online-credit")?.hidden ?? null,
+    markers: Boolean(window.__pinpointPreview?.map?.getLayer("pinpoint-locations-circles")),
+    route: Boolean(window.__pinpointPreview?.map?.getLayer("pinpoint-route-line")),
+  }));
+  check(
+    offlineState.stored === "0" && offlineState.creditHidden === true,
+    "disabling online restores the local style and hides the credit",
+    JSON.stringify(offlineState),
+  );
+  check(
+    offlineState.markers && offlineState.route,
+    "pins and route survive the offline style restore",
+    JSON.stringify(offlineState),
+  );
+
+  // A failed style fetch keeps the local map and reports inline, with no retry.
+  state.styleStatus = 500;
+  const styleRequestsBefore = state.styleRequests;
+  await page.click("#online-map");
+  await page.waitForFunction(
+    () => document.querySelector("#online-error")?.hidden === false,
+  );
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  const failedState = await page.evaluate(() => ({
+    online: window.__pinpointPreview?.online ?? null,
+    styleName: window.__pinpointPreview?.map?.getStyle()?.name ?? "",
+    errorHidden: document.querySelector("#online-error")?.hidden ?? null,
+    error: document.querySelector("#online-error")?.textContent ?? "",
+    toggle: document.querySelector("#online-map")?.checked ?? null,
+  }));
+  check(
+    failedState.online === false &&
+      failedState.styleName === "Pinpoint Offline Basemap" &&
+      failedState.toggle === false,
+    "a failed online fetch keeps the local style rendered",
+    JSON.stringify(failedState),
+  );
+  check(
+    failedState.errorHidden === false &&
+      failedState.error.includes("Online map unavailable"),
+    "a failed online fetch shows the inline message",
+    failedState.error,
+  );
+  check(
+    state.styleRequests === styleRequestsBefore + 1,
+    "a failed online fetch is not retried automatically",
+    `${styleRequestsBefore} -> ${state.styleRequests}`,
+  );
+
+  check(pageErrors.length === 0, "maps panel has no page errors", pageErrors.join(" | "));
+  const unexpectedHttpFailures = httpFailures.filter(
+    ({ status, url }) => !(status === 500 && url === ONLINE_STYLE_URL),
+  );
+  check(
+    unexpectedHttpFailures.length === 0,
+    "only the deliberate online-style 500 failed",
+    JSON.stringify(httpFailures),
+  );
+  const unexpectedConsoleErrors = consoleErrors.filter((text) => {
+    if (!text.includes("status of 500")) return true;
+    return unexpectedHttpFailures.length > 0;
+  });
+  check(
+    unexpectedConsoleErrors.length === 0,
+    "maps panel has no console errors other than the deliberate style failure",
+    unexpectedConsoleErrors.join(" | "),
+  );
+  check(
+    externalRequests.length === 0,
+    "maps panel sends no requests except the opted-in style",
+    externalRequests.join(", "),
+  );
+
+  await page.close();
+
+  // Fallback: a v2.3.0 backend has no /map/catalog and must keep the old card.
+  const legacyPage = await browser.newPage();
+  legacyPage.setDefaultTimeout(30000);
+  await legacyPage.evaluateOnNewDocument(() => {
+    try {
+      localStorage.removeItem("pinpoint.onlineMap");
+    } catch {
+      // Storage disabled: the page still defaults to the offline style.
+    }
+  });
+
+  const legacyStatus = {
+    pack: {
+      ...EMPTY_FILE_STATUS,
+      expected_bytes: 93172399,
+      download_bytes: 93172399,
+    },
+    graph: {
+      ...EMPTY_FILE_STATUS,
+      expected_bytes: 110858815,
+      download_bytes: 45338586,
+    },
+    expected_download_bytes: 138510985,
+  };
+  const legacyConsoleErrors = [];
+  const legacyHttpFailures = [];
+
+  legacyPage.on("console", (message) => {
+    if (message.type() === "error") legacyConsoleErrors.push(message.text());
+  });
+  legacyPage.on("response", (response) => {
+    if (response.status() < 400) return;
+    try {
+      legacyHttpFailures.push({
+        status: response.status(),
+        pathname: new URL(response.url()).pathname,
+      });
+    } catch {
+      legacyHttpFailures.push({ status: response.status(), pathname: response.url() });
+    }
+  });
+  await legacyPage.setRequestInterception(true);
+  legacyPage.on("request", (request) => {
+    let parsed;
+    try {
+      parsed = new URL(request.url());
+    } catch {
+      return request.continue();
+    }
+    if (parsed.origin !== base) return request.continue();
+    switch (parsed.pathname) {
+      case "/map/catalog":
+        return request.respond({ status: 404, body: "Not Found" });
+      case "/map/config":
+        return respondJson(request, {
+          pmtilesUrl: "./fixtures/monaco.pmtiles",
+          graphInstalled: false,
+          packInstalled: false,
+        });
+      case "/map/offline/status":
+        return respondJson(request, legacyStatus);
+      default:
+        return request.continue();
+    }
+  });
+
+  await legacyPage.goto(`${base}/map/index.html`, { waitUntil: "load", timeout: 30000 });
+  await legacyPage.waitForFunction(
+    () =>
+      window.__pinpointMapReady === true &&
+      document.querySelector("#offline-panel")?.hidden === false,
+  );
+  const fallback = await legacyPage.evaluate(() => ({
+    mapsHidden: document.querySelector("#maps-panel")?.hidden ?? null,
+    offlineHidden: document.querySelector("#offline-panel")?.hidden ?? null,
+    badge: document.querySelector("#offline-badge")?.textContent ?? "",
+    buttonHidden: document.querySelector("#offline-download")?.hidden ?? null,
+    buttonText: document.querySelector("#offline-download")?.textContent ?? "",
+  }));
+  check(
+    fallback.mapsHidden === true && fallback.offlineHidden === false,
+    "catalog 404 falls back to the legacy offline card",
+    JSON.stringify(fallback),
+  );
+  check(
+    fallback.badge === "Not installed" &&
+      fallback.buttonHidden === false &&
+      fallback.buttonText.includes("Download Moldova map") &&
+      fallback.buttonText.includes("139 MB"),
+    "fallback keeps the Moldova download behavior and computed size",
+    JSON.stringify(fallback),
+  );
+  const unexpectedLegacyFailures = legacyHttpFailures.filter(
+    ({ status, pathname }) => !(status === 404 && pathname === "/map/catalog"),
+  );
+  check(
+    unexpectedLegacyFailures.length === 0,
+    "only the deliberate catalog 404 failed in fallback mode",
+    JSON.stringify(legacyHttpFailures),
+  );
+  const unexpectedLegacyErrors = legacyConsoleErrors.filter((text) => {
+    if (!text.includes("status of 404")) return true;
+    return unexpectedLegacyFailures.length > 0;
+  });
+  check(
+    unexpectedLegacyErrors.length === 0,
+    "fallback has no console errors other than the deliberate catalog 404",
+    unexpectedLegacyErrors.join(" | "),
+  );
+  await legacyPage.close();
+}
+
 async function fetchText(base, pathname) {
   const response = await fetch(base + pathname);
   return { response, text: await response.text() };
@@ -198,6 +782,26 @@ try {
     check(!indexHtml.toLowerCase().includes(forbidden), `preview does not reference ${forbidden}`);
   }
 
+  check(indexHtml.includes('id="online-map"'), "preview offers the opt-in online toggle");
+  check(
+    indexHtml.includes('id="maps-panel"') && indexHtml.includes('aria-live="polite"'),
+    "Maps panel exposes live download progress",
+  );
+  check(
+    indexHtml.includes("pinpoint.onlineMap") &&
+      indexHtml.includes("https://tiles.openfreemap.org/styles/liberty"),
+    "online style URL and localStorage key are page-owned",
+  );
+  check(
+    !indexHtml.includes("setCacheMode") && !indexHtml.includes("LOAD_NO_CACHE"),
+    "the page has no LOAD_NO_CACHE assumption",
+  );
+  const mapModuleText = readFileSync(path.join(WEB_ROOT, "map", "map.js"), "utf8");
+  check(
+    !mapModuleText.includes("https://"),
+    "map.js has no remote URL (tests/assets.rs contract)",
+  );
+
   const utf8Files = [
     "map/style.json",
     "map/index.html",
@@ -269,10 +873,19 @@ try {
       const consoleErrors = [];
       const failedRequests = [];
       const externalRequests = [];
+      const notFound = [];
 
       page.on("pageerror", (error) => pageErrors.push(error.message));
       page.on("console", (message) => {
         if (message.type() === "error") consoleErrors.push(message.text());
+      });
+      page.on("response", (response) => {
+        if (response.status() !== 404) return;
+        try {
+          notFound.push(new URL(response.url()).pathname);
+        } catch {
+          notFound.push(response.url());
+        }
       });
       page.on("requestfailed", (request) => {
         failedRequests.push(`${request.url()} (${request.failure()?.errorText ?? "unknown"})`);
@@ -458,7 +1071,25 @@ try {
       check(externalRequests.length === 0, "no external network requests", externalRequests.join(", "));
       check(failedRequests.length === 0, "no failed network requests", failedRequests.join(", "));
       check(pageErrors.length === 0, "no page errors", pageErrors.join(" | "));
-      check(consoleErrors.length === 0, "no console errors", consoleErrors.join(" | "));
+
+      const unexpectedNotFound = notFound.filter((pathname) => pathname !== "/map/catalog");
+      check(
+        unexpectedNotFound.length === 0,
+        "only the expected catalog 404 is missing",
+        JSON.stringify(notFound),
+      );
+      const unexpectedConsoleErrors = consoleErrors.filter((text) => {
+        if (!text.includes("status of 404")) return true;
+        return unexpectedNotFound.length > 0;
+      });
+      check(
+        unexpectedConsoleErrors.length === 0,
+        "no console errors besides the expected catalog 404",
+        unexpectedConsoleErrors.join(" | "),
+      );
+
+      await page.close();
+      await runMapsPanelChecks(browser);
     } finally {
       await browser.close();
     }

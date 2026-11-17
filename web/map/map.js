@@ -3,9 +3,9 @@
  *
  * A small, dependency-light wrapper around MapLibre GL JS + PMTiles. It is the
  * foundation shared by the web app and the Android/desktop WebView map pages.
- * It has no imports from the rest of `web/app/` and makes no network requests
- * other than the local style, the local PMTiles fixture/pack and MapLibre's own
- * worker file.
+ * It has no imports from the rest of `web/app/`. By default it only requests
+ * the local style, the local PMTiles fixture/pack and MapLibre's own worker;
+ * `setStyle` lets the caller opt into a remote vector style.
  *
  * The caller must load `../vendor/maplibre-gl.css` in the page. The module
  * loads `../vendor/pmtiles.js` itself on first use.
@@ -163,6 +163,29 @@ function toProtocolUrl(url) {
 }
 
 /**
+ * Bind a parsed style's `pmtiles://` vector source(s) to `pmtilesUrl`.
+ * Returns a copy so a caller's style object is never mutated.
+ */
+function bindPmtilesStyle(style, pmtilesUrl) {
+  const protocolUrl = toProtocolUrl(pmtilesUrl);
+  const sources = { ...(style?.sources ?? {}) };
+  let bound = 0;
+
+  for (const [key, source] of Object.entries(sources)) {
+    if (source && typeof source.url === "string" && source.url.startsWith("pmtiles://")) {
+      sources[key] = { ...source, url: protocolUrl };
+      bound += 1;
+    }
+  }
+
+  if (bound === 0) {
+    throw new Error("Map style has no pmtiles:// vector source to bind");
+  }
+
+  return { ...style, sources };
+}
+
+/**
  * Fetch the style and bind its `pmtiles://` vector source(s) to `pmtilesUrl`.
  * The style is fetched relatively, so the same module works at `/map/`, at a
  * loopback WebView origin, or under an app sub-path.
@@ -173,22 +196,7 @@ async function loadStyle(styleUrl, pmtilesUrl) {
     throw new Error(`Failed to load map style ${styleUrl}: HTTP ${response.status}`);
   }
 
-  const style = await response.json();
-  const protocolUrl = toProtocolUrl(pmtilesUrl);
-  let bound = 0;
-
-  for (const source of Object.values(style.sources ?? {})) {
-    if (source && typeof source.url === "string" && source.url.startsWith("pmtiles://")) {
-      source.url = protocolUrl;
-      bound += 1;
-    }
-  }
-
-  if (bound === 0) {
-    throw new Error("Map style has no pmtiles:// vector source to bind");
-  }
-
-  return style;
+  return bindPmtilesStyle(await response.json(), pmtilesUrl);
 }
 
 function injectStyles() {
@@ -337,6 +345,7 @@ export function createMap({
     setLocations,
     onClick,
     setTheme,
+    setStyle,
     drawRoute,
     clearRoute,
     destroy,
@@ -433,7 +442,7 @@ export function createMap({
     }
   }
 
-  function applyRoute() {
+  function applyRoute({ fit = true } = {}) {
     if (!map || !loaded || !pendingRoute) return;
 
     if (map.getSource(ROUTE_SOURCE)) {
@@ -464,6 +473,8 @@ export function createMap({
     }
 
     paintRoute();
+
+    if (!fit) return;
 
     const bounds = new maplibregl.LngLatBounds();
     for (const coordinate of pendingRoute.geometry.coordinates) {
@@ -548,6 +559,67 @@ export function createMap({
     return map;
   }
 
+  /**
+   * Switch the basemap style. Pass a style object or a URL; pass `pmtilesUrl`
+   * as well to bind a local PMTiles style. Resolves once the new style loaded
+   * and the pins and route line were re-added.
+   *
+   * @param {string|object} nextStyle Style URL or a pre-fetched style object.
+   * @param {string|null} [nextPmtilesUrl]
+   * @returns {Promise<void>}
+   */
+  function setStyle(nextStyle, nextPmtilesUrl = null) {
+    if (!map || destroyed) return Promise.reject(new Error("Map is not ready."));
+    if (!nextStyle) {
+      return Promise.reject(new Error("setStyle: a style or style URL is required"));
+    }
+
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error) => {
+        if (settled) return;
+        settled = true;
+        map?.off("style.load", onStyleLoad);
+        map?.off("error", onError);
+        if (error) reject(error);
+        else resolve();
+      };
+      const onStyleLoad = () => finish();
+      const onError = (event) => {
+        if (map?.isStyleLoaded()) return;
+        finish(
+          event?.error instanceof Error
+            ? event.error
+            : new Error(String(event?.error ?? event)),
+        );
+      };
+
+      map.once("style.load", onStyleLoad);
+      map.on("error", onError);
+
+      (async () => {
+        try {
+          const style =
+            nextStyle && typeof nextStyle === "object"
+              ? nextPmtilesUrl
+                ? bindPmtilesStyle(nextStyle, nextPmtilesUrl)
+                : nextStyle
+              : nextPmtilesUrl
+                ? await loadStyle(String(nextStyle), nextPmtilesUrl)
+                : nextStyle;
+          if (destroyed || !map) {
+            finish(new Error("Map was destroyed."));
+            return;
+          }
+          // Diff mode drops the custom sources/layers and races rapid toggles.
+          map.setStyle(style, { diff: false });
+        } catch (error) {
+          finish(error instanceof Error ? error : new Error(String(error)));
+        }
+      })();
+    });
+  }
+
   function destroy() {
     if (destroyed) return;
     destroyed = true;
@@ -588,6 +660,17 @@ export function createMap({
         if (locationsRequested) applyLocations();
         if (pendingRoute) applyRoute();
         if (typeof onLoad === "function") onLoad(handle);
+      });
+
+      // A style switch keeps the map instance but drops its sources and
+      // layers. Restore the overlays here so online and offline styles both
+      // keep the pins and the route line.
+      map.on("style.load", () => {
+        if (destroyed || !map) return;
+        loaded = true;
+        applyTheme();
+        if (locationsRequested) applyLocations();
+        applyRoute({ fit: false });
       });
 
       map.on("click", (event) => {

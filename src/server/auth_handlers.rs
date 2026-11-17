@@ -196,39 +196,57 @@ pub async fn register(
             "password must be at least 8 characters",
         );
     }
-    // Scope the store lock so it is never held across the session await.
-    let (id, user) = {
-        let mut store = state.store.lock().unwrap();
+    // The email pre-check avoids a duplicate insert and a confusing error.
+    {
+        let store = state.store.lock().unwrap();
         if store.find_user_by_email(&email).is_some() {
             return error_envelope("VALIDATION_FAILED", "email already registered");
         }
-        let id = store.next_user_id;
-        store.next_user_id += 1;
-        let user = crate::models::User {
-            id,
-            username: String::new(),
-            email: email.clone(),
-            full_name: full_name.clone(),
-            role: "resident".into(),
-            is_active: true,
-            must_change_password: false,
-            password_hash: Some(crate::security::password::hash_password(
-                password,
-                crate::security::password::DEFAULT_ITERS,
-            )),
-            totp_secret: None,
-            mfa_enabled: false,
-            mfa_last_step: 0,
-            failed_login_attempts: 0,
-            locked_until: None,
-            auth_method: "email".into(),
-            public_key: None,
-            recovery_code_hash: None,
-            identity_subject: None,
-        };
-        store.users.push(user.clone());
-        (id, user)
+    }
+    let password_hash = crate::security::password::hash_password(
+        password,
+        crate::security::password::DEFAULT_ITERS,
+    );
+    // Persist the row before creating the session. A session or the next
+    // request can land on another replica, so a memory-only account must never
+    // be acknowledged with 201.
+    let id = match state
+        .sql_insert_user_strict(&email, &full_name, "resident", Some(&password_hash))
+        .await
+    {
+        Ok(id) => id,
+        Err(error) => {
+            tracing::error!(%error, "registration insert failed");
+            return error_envelope(
+                "REGISTRATION_FAILED",
+                "Could not register the account. Try again.",
+            );
+        }
     };
+    let user = crate::models::User {
+        id,
+        username: String::new(),
+        email: email.clone(),
+        full_name: full_name.clone(),
+        role: "resident".into(),
+        is_active: true,
+        must_change_password: false,
+        password_hash: Some(password_hash),
+        totp_secret: None,
+        mfa_enabled: false,
+        mfa_last_step: 0,
+        failed_login_attempts: 0,
+        locked_until: None,
+        auth_method: "email".into(),
+        public_key: None,
+        recovery_code_hash: None,
+        identity_subject: None,
+    };
+    {
+        let mut store = state.store.lock().unwrap();
+        store.next_user_id = store.next_user_id.max(id + 1);
+        store.users.push(user.clone());
+    }
 
     let (session_id, csrf) = state.create_session(id, "email", false).await;
     let mut resp = (
@@ -717,4 +735,58 @@ pub async fn anonymous_recover(
 
     let (session_id, csrf) = state.create_session(user.id, "anonymous", false).await;
     anonymous_response(StatusCode::OK, &user, &csrf, &session_id, &new_code)
+}
+
+#[cfg(test)]
+mod registration_tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::http::Request;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn registration_returns_a_usable_session() {
+        let app = crate::server::router(AppState::new());
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/register")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"email":"new-user@example.com","password":"StrongPass!2026","full_name":"New User"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let cookie = response
+            .headers()
+            .get("set-cookie")
+            .expect("registration must set the session cookie")
+            .to_str()
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_string();
+
+        let me = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            me.status(),
+            StatusCode::OK,
+            "the new session must authenticate"
+        );
+    }
 }

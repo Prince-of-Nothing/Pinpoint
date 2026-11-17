@@ -10,6 +10,10 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [2.0.1] - 2026-11-17
+### Fixed
+- [FIX] Registration: the user row is inserted into Postgres before the session is created, so a new account cannot exist only in a replica's memory and be dropped by a background refresh; a failed insert now returns an error instead of a false `201`.
+
 ## [2.0.0] - 2026-11-17
 ### Added
 - [FEATURE] Offline map data pipeline and search CLI: `scripts/offline/` builds a versioned region pack (Planetiler/OpenMapTiles PMTiles basemap, `pinpoint-offline-index` SQLite FTS5 search index, Valhalla routing tiles, hashed manifest) and `pinpoint-offline-index` (`offline-build`) builds and verifies the search index.

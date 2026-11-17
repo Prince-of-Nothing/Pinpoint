@@ -1,14 +1,18 @@
 package com.pinpoint.desktop;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.NativeActivity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -18,6 +22,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.Toast;
 
 /**
  * Thin Java bridge around {@link NativeActivity}.
@@ -45,6 +50,8 @@ public class PinpointActivity extends NativeActivity {
     private static native void nativeMapWebViewClosed();
 
     private static final String MAP_BRIDGE_NAME = "PinpointBridge";
+    private static final int REQ_LOCATION = 1001;
+    private static final int REQ_NOTIFICATIONS = 1002;
 
     /**
      * Binds the preview page's map handle to the Java bridge. The contract is
@@ -74,6 +81,9 @@ public class PinpointActivity extends NativeActivity {
     private WebView mapWebView;
     private String mapHost;
     private int mapPort = -1;
+    private String pendingGeoOrigin;
+    private GeolocationPermissions.Callback pendingGeoCallback;
+    private int pendingLocationInterval = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -261,7 +271,7 @@ public class PinpointActivity extends NativeActivity {
         settings.setAllowUniversalAccessFromFileURLs(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setMediaPlaybackRequiresUserGesture(true);
-        settings.setGeolocationEnabled(false);
+        settings.setGeolocationEnabled(true);
         settings.setSupportMultipleWindows(false);
         settings.setJavaScriptCanOpenWindowsAutomatically(false);
         settings.setSaveFormData(false);
@@ -275,6 +285,24 @@ public class PinpointActivity extends NativeActivity {
         web.addJavascriptInterface(new MapBridge(), MAP_BRIDGE_NAME);
         web.setWebViewClient(new MapWebViewClient());
         web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onGeolocationPermissionsShowPrompt(
+                    String origin, GeolocationPermissions.Callback callback) {
+                if (hasLocationPermission()) {
+                    callback.invoke(origin, true, false);
+                    return;
+                }
+                pendingGeoOrigin = origin;
+                pendingGeoCallback = callback;
+                requestPermissions(
+                    new String[] {
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                    },
+                    REQ_LOCATION
+                );
+            }
+
             @Override
             public boolean onConsoleMessage(android.webkit.ConsoleMessage message) {
                 android.util.Log.i(
@@ -450,13 +478,44 @@ public class PinpointActivity extends NativeActivity {
         }
     }
 
-    /** Start the foreground service. Returns 1 on success, 0 on failure. */
+    /**
+     * Start the foreground service. Returns 1 when the service started or the
+     * permission request was issued, 0 on failure.
+     *
+     * <p>Android only shows the location dialog in response to
+     * {@code requestPermissions}; a manifest entry alone never prompts. If the
+     * permission is missing the request is issued and the service is started
+     * from {@link #onRequestPermissionsResult}.
+     */
     public int startLocationService(int intervalSeconds) {
+        if (!hasLocationPermission()) {
+            pendingLocationInterval = Math.max(15, intervalSeconds);
+            requestPermissions(
+                new String[] {
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                },
+                REQ_LOCATION
+            );
+            return 1;
+        }
+        return startForegroundLocation(intervalSeconds);
+    }
+
+    private int startForegroundLocation(int intervalSeconds) {
         try {
+            if (Build.VERSION.SDK_INT >= 33
+                && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(
+                    new String[] { Manifest.permission.POST_NOTIFICATIONS },
+                    REQ_NOTIFICATIONS
+                );
+            }
             Intent intent = new Intent(this, PinpointLocationService.class)
                 .setAction(PinpointLocationService.ACTION_START)
                 .putExtra("interval_secs", intervalSeconds);
-            if (android.os.Build.VERSION.SDK_INT >= 26) {
+            if (Build.VERSION.SDK_INT >= 26) {
                 startForegroundService(intent);
             } else {
                 startService(intent);
@@ -465,6 +524,48 @@ public class PinpointActivity extends NativeActivity {
         } catch (Throwable error) {
             android.util.Log.w("PinpointService", "start failed", error);
             return 0;
+        }
+    }
+
+    private boolean hasLocationPermission() {
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED
+            || checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    @Override
+    public void onRequestPermissionsResult(
+            int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQ_LOCATION) {
+            return;
+        }
+        boolean granted = false;
+        for (int result : grantResults) {
+            if (result == PackageManager.PERMISSION_GRANTED) {
+                granted = true;
+                break;
+            }
+        }
+        if (pendingGeoCallback != null) {
+            pendingGeoCallback.invoke(pendingGeoOrigin, granted, false);
+            pendingGeoCallback = null;
+            pendingGeoOrigin = null;
+        }
+        if (granted) {
+            if (pendingLocationInterval > 0) {
+                int interval = pendingLocationInterval;
+                pendingLocationInterval = -1;
+                startForegroundLocation(interval);
+            }
+        } else {
+            pendingLocationInterval = -1;
+            Toast.makeText(
+                this,
+                "Location permission is required to show or share your position.",
+                Toast.LENGTH_LONG
+            ).show();
         }
     }
 

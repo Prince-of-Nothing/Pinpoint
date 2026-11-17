@@ -4,8 +4,9 @@
 //! directional share for one accepted friendship and reuses the existing
 //! share instead of creating duplicates.
 
+use super::theme;
 use crate::models::{Friendship, LocationShare};
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShareSheet {
@@ -82,10 +83,10 @@ impl super::PinpointAppUI {
             return;
         }
         let compact = Self::is_compact(ctx);
-        let panel = Color32::from_rgba_unmultiplied(15, 23, 42, 248);
-        let border = Color32::from_rgb(31, 41, 55);
-        let muted = Color32::from_rgb(156, 163, 175);
-        let accent = Color32::from_rgb(52, 211, 153);
+        let panel = theme::PANEL.gamma_multiply(0.98);
+        let border = theme::BORDER;
+        let muted = theme::MUTED;
+        let accent = theme::ACCENT;
         let mut save = false;
         let mut stop = false;
         let mut close = false;

@@ -3,10 +3,11 @@
 //! The report stays local until the user chooses to open their email app.
 //! Nothing is uploaded by the app.
 
+use super::theme;
 use super::PinpointAppUI;
 use crate::crash::{self, StoredReport};
 use crate::platform;
-use eframe::egui::{self, Align2, Color32};
+use eframe::egui::{self, Align2};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,10 +111,10 @@ impl PinpointAppUI {
                             );
                         });
                     if dialog.copied {
-                        ui.colored_label(Color32::from_rgb(52, 211, 153), "Report copied.");
+                        ui.colored_label(theme::SUCCESS, "Report copied.");
                     }
                     if let Some(error) = &dialog.error {
-                        ui.colored_label(Color32::from_rgb(248, 113, 113), error);
+                        ui.colored_label(theme::DANGER, error);
                     }
                     ui.add_space(6.0);
                     ui.horizontal_wrapped(|ui| {

@@ -1,23 +1,17 @@
 //! Kiosk / check-in screen for Pinpoint (portable webapp logic for egui).
 
+use super::theme;
 use super::{PendingAction, PinpointAppUI};
-use eframe::egui::{self, Direction, RichText};
+use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_kiosk_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading("Kiosk & Share Check-In");
-                },
-            );
-        });
-        ui.add_space(8.0);
-        ui.label(format!("Backend: {}", self.app.backend_url()));
-        ui.add_space(8.0);
+        ui.heading("Kiosk & Share Check-In");
+        ui.add_space(4.0);
+        theme::caption(ui, "Check in from a shared kiosk link");
+        ui.add_space(10.0);
 
-        ui.group(|ui| {
+        theme::card(ui, |ui| {
             ui.label(
                 RichText::new("Share Link / Check-In Token")
                     .size(14.0)
@@ -30,7 +24,7 @@ impl PinpointAppUI {
                         .hint_text("Enter share token or check-in code")
                         .desired_width(280.0),
                 );
-                if ui.button("Resolve Token").clicked() {
+                if theme::primary_button(ui, "Resolve Token").clicked() {
                     let token = self.kiosk_token_input.trim().to_string();
                     if !token.is_empty() {
                         self.spawn_action(PendingAction::KioskResolveToken { token }, ctx);
@@ -44,7 +38,7 @@ impl PinpointAppUI {
         let qr_token = self.kiosk_token_input.trim().to_string();
         if !qr_token.is_empty() {
             ui.add_space(8.0);
-            ui.group(|ui| {
+            theme::card(ui, |ui| {
                 ui.label(RichText::new("Scan to open this kiosk").size(12.0).strong());
                 let link = format!("pinpoint://kiosk?token={qr_token}");
                 super::qr::draw_qr(ui, &link, 180.0);
@@ -60,8 +54,8 @@ impl PinpointAppUI {
         let resolved = self.app.data().lock().unwrap().kiosk_resolved.clone();
 
         if let Some(resolved) = resolved {
-            ui.group(|ui| {
-                ui.label(RichText::new("Resolved Share Link").size(14.0).strong());
+            theme::card(ui, |ui| {
+                theme::card_title(ui, "Resolved Share Link");
                 ui.add_space(4.0);
                 ui.label(format!("Token: {}", resolved.token));
                 if let Some(label) = &resolved.label {
@@ -103,8 +97,8 @@ impl PinpointAppUI {
             ui.add_space(12.0);
 
             if !resolved.consent_required || self.kiosk_consent_accepted {
-                ui.group(|ui| {
-                    ui.label(RichText::new("Submit Kiosk Check-In").size(14.0).strong());
+                theme::card(ui, |ui| {
+                    theme::card_title(ui, "Submit Kiosk Check-In");
                     ui.add_space(4.0);
                     ui.add(
                         egui::TextEdit::singleline(&mut self.kiosk_note_input)
@@ -112,7 +106,7 @@ impl PinpointAppUI {
                             .desired_width(320.0),
                     );
                     ui.add_space(8.0);
-                    if ui.button("Submit Check-In").clicked() {
+                    if theme::primary_button(ui, "Submit Check-In").clicked() {
                         let token = resolved.token.clone();
                         let note = (!self.kiosk_note_input.trim().is_empty())
                             .then(|| self.kiosk_note_input.trim().to_string());

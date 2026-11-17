@@ -4,24 +4,17 @@
 //! headings, rounded surface cards and a single accent action. The update
 //! check runs at most once a day at launch (opt-out) or on demand and reads
 //! GitHub's public releases feed.
+use super::theme;
 use super::PinpointAppUI;
 use crate::app::CurrentScreen;
 use crate::update::{self, UpdateStatus};
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_about_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        self.draw_main_toolbar(ui);
         let compact = Self::is_compact(ctx);
-        let bg = Color32::from_rgb(8, 12, 24);
-        let panel = Color32::from_rgb(17, 24, 39);
-        let border = Color32::from_rgb(31, 41, 55);
-        let muted = Color32::from_rgb(148, 163, 184);
-        let accent = Color32::from_rgb(52, 211, 153);
-        let warn = Color32::from_rgb(250, 204, 21);
-        let danger = Color32::from_rgb(248, 113, 113);
 
-        ui.painter().rect_filled(ui.max_rect(), 0.0, bg);
+        ui.painter().rect_filled(ui.max_rect(), 0.0, theme::BG);
         egui::ScrollArea::vertical().show(ui, |ui| {
             ui.vertical(|ui| {
                 ui.add_space(if compact { 8.0 } else { 16.0 });
@@ -40,24 +33,15 @@ impl PinpointAppUI {
                     crate::platform::build_identity()
                 ))
                 .size(12.0)
-                .color(muted),
+                .color(theme::MUTED),
             );
             ui.add_space(12.0);
-
-            let card = |ui: &mut egui::Ui, add: &mut dyn FnMut(&mut egui::Ui)| {
-                egui::Frame::new()
-                    .fill(panel)
-                    .stroke(egui::Stroke::new(1.0_f32, border))
-                    .corner_radius(egui::CornerRadius::same(14))
-                    .inner_margin(egui::Margin::same(14))
-                    .show(ui, |ui| add(ui));
-            };
 
             // Privacy: opening About itself never contacts GitHub. The
             // throttled launch check may already have run; the button below
             // forces a fresh check.
             let status = self.app.data().lock().unwrap().update_status.clone();
-            card(ui, &mut |ui| {
+            theme::card(ui, |ui| {
                 ui.label(RichText::new("Updates").size(17.0).strong());
                 ui.add_space(4.0);
                 match &status {
@@ -74,14 +58,14 @@ impl PinpointAppUI {
                     }
                     UpdateStatus::UpToDate { current } => {
                         ui.colored_label(
-                            accent,
+                            theme::SUCCESS,
                             RichText::new(format!("You are on the latest version ({current})."))
                                 .strong(),
                         );
                     }
                     UpdateStatus::Available { current, latest } => {
                         ui.colored_label(
-                            warn,
+                            theme::ACCENT,
                             RichText::new(format!(
                                 "Update available: {} (you have {current}).",
                                 latest.tag
@@ -90,7 +74,7 @@ impl PinpointAppUI {
                             .strong(),
                         );
                         if !latest.title.is_empty() {
-                            ui.label(RichText::new(&latest.title).size(12.0).color(muted));
+                            ui.label(RichText::new(&latest.title).size(12.0).color(theme::MUTED));
                         }
                         if !latest.notes.is_empty() {
                             ui.add_space(4.0);
@@ -102,7 +86,7 @@ impl PinpointAppUI {
                                     ui.label(
                                         RichText::new(update::notes_plain(&latest.notes))
                                             .size(11.0)
-                                            .color(muted),
+                                            .color(theme::MUTED),
                                     );
                                 });
                         }
@@ -114,9 +98,9 @@ impl PinpointAppUI {
                                         egui::Button::new(
                                             RichText::new("Download APK")
                                                 .strong()
-                                                .color(Color32::WHITE),
+                                                .color(theme::ACCENT_INK),
                                         )
-                                        .fill(accent),
+                                        .fill(theme::ACCENT),
                                     )
                                     .clicked()
                                 {
@@ -135,7 +119,7 @@ impl PinpointAppUI {
                                             size as f64 / 1_048_576.0
                                         ))
                                         .size(10.0)
-                                        .color(muted),
+                                        .color(theme::MUTED),
                                     );
                                 }
                                 if ui.button("Copy download link").clicked() {
@@ -149,17 +133,17 @@ impl PinpointAppUI {
                     }
                     UpdateStatus::NoReleases => {
                         ui.colored_label(
-                            muted,
+                            theme::MUTED,
                             "No GitHub releases are published yet, so there is nothing to compare.",
                         );
                         ui.label(
                             RichText::new("Publish a tagged release on GitHub to enable updates.")
                                 .size(11.0)
-                                .color(muted),
+                                .color(theme::MUTED),
                         );
                     }
                     UpdateStatus::Error(error) => {
-                        ui.colored_label(danger, format!("Could not check for updates: {error}"));
+                        ui.colored_label(theme::DANGER, format!("Could not check for updates: {error}"));
                     }
                 }
                 ui.add_space(8.0);
@@ -184,12 +168,12 @@ impl PinpointAppUI {
                          data is sent.",
                     )
                     .size(10.0)
-                    .color(muted),
+                    .color(theme::MUTED),
                 );
             });
 
             ui.add_space(10.0);
-            card(ui, &mut |ui| {
+            theme::card(ui, |ui| {
                 ui.label(RichText::new("Project").size(17.0).strong());
                 ui.add_space(4.0);
                 ui.label(
@@ -221,7 +205,7 @@ impl PinpointAppUI {
             let log_path = crate::logging::log_path();
 
             ui.add_space(10.0);
-            card(ui, &mut |ui| {
+            theme::card(ui, |ui| {
                 ui.label(RichText::new("Troubleshooting").size(17.0).strong());
                 ui.add_space(4.0);
                 ui.label(
@@ -229,7 +213,7 @@ impl PinpointAppUI {
                         "Crash reports and logs stay on this device until you choose to email them.",
                     )
                     .size(11.0)
-                    .color(muted),
+                    .color(theme::MUTED),
                 );
                 ui.add_space(4.0);
                 if ui.button("Report a problem").clicked() {
@@ -257,7 +241,7 @@ impl PinpointAppUI {
                          onNewIntent bridge can handle repeat shares.",
                     )
                     .size(10.0)
-                    .color(muted),
+                    .color(theme::MUTED),
                 );
                 if ui.button("Clear log").clicked() {
                     crate::logging::clear();
@@ -266,21 +250,21 @@ impl PinpointAppUI {
                 ui.label(
                     RichText::new(format!("Backend: {backend}"))
                         .size(10.0)
-                        .color(muted),
+                        .color(theme::MUTED),
                 );
                 ui.label(
                     RichText::new(format!(
                         "Pending crash reports: {pending_count} (seen reports are kept but not counted)"
                     ))
                     .size(10.0)
-                    .color(muted),
+                    .color(theme::MUTED),
                 );
-                ui.label(RichText::new(device.as_str()).size(10.0).color(muted));
+                ui.label(RichText::new(device.as_str()).size(10.0).color(theme::MUTED));
                 if let Some(path) = &log_path {
                     ui.label(
                         RichText::new(format!("Log: {}", path.display()))
                             .size(10.0)
-                            .color(muted),
+                            .color(theme::MUTED),
                     );
                 }
             });
@@ -289,7 +273,7 @@ impl PinpointAppUI {
             ui.label(
                 RichText::new("Map data © OpenStreetMap contributors (ODbL)")
                     .size(10.0)
-                    .color(muted),
+                    .color(theme::MUTED),
             );
             });
         });

@@ -1,20 +1,16 @@
 //! Friends screen
+use super::theme;
 use super::{PendingAction, PinpointAppUI};
 use crate::models::Friendship;
 use crate::ui::share_sheet::ShareSheet;
-use eframe::egui::{self, Direction, RichText};
+use eframe::egui::{self};
 
 impl PinpointAppUI {
     pub fn draw_friends_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        self.draw_main_toolbar(ui);
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading("Friends Management");
-                },
-            );
-        });
+        ui.heading("Friends Management");
+        ui.add_space(4.0);
+        theme::caption(ui, "Requests, accepted friends and sharing");
+        ui.add_space(10.0);
 
         let (my_id, friendships, shares) = {
             let binding = self.app.data();
@@ -27,8 +23,8 @@ impl PinpointAppUI {
         };
 
         // Incoming requests (I am the receiver) — the only ones I can answer.
-        ui.group(|ui| {
-            ui.label(RichText::new("Received Requests").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Received Requests");
             ui.add_space(4.0);
 
             let received: Vec<Friendship> = friendships
@@ -46,7 +42,7 @@ impl PinpointAppUI {
                     ui.horizontal(|ui| {
                         ui.label(name);
                         ui.add_space(4.0);
-                        if ui.button("Accept").clicked() {
+                        if theme::primary_button(ui, "Accept").clicked() {
                             self.spawn_action(
                                 PendingAction::RespondFriendship {
                                     id,
@@ -72,8 +68,8 @@ impl PinpointAppUI {
         ui.add_space(8.0);
 
         // Outgoing requests (I am the requester) — no actions available.
-        ui.group(|ui| {
-            ui.label(RichText::new("Sent Requests").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Sent Requests");
             ui.add_space(4.0);
 
             let sent: Vec<Friendship> = friendships
@@ -94,8 +90,8 @@ impl PinpointAppUI {
         ui.add_space(8.0);
 
         // Accepted friends, with per-friend sharing and removal.
-        ui.group(|ui| {
-            ui.label(RichText::new("Friends").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Friends");
             ui.add_space(4.0);
             let accepted: Vec<Friendship> = friendships
                 .iter()
@@ -131,8 +127,8 @@ impl PinpointAppUI {
         ui.add_space(8.0);
 
         // Add new friend
-        ui.group(|ui| {
-            ui.label(RichText::new("Add Friend").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Add Friend");
             ui.add_space(4.0);
             ui.add(
                 egui::TextEdit::singleline(&mut self.friend_handle)
@@ -141,7 +137,9 @@ impl PinpointAppUI {
             );
             ui.label("Usernames are exact-match; badges shown here are handles.");
             ui.add_space(8.0);
-            if ui.button("Send Request").clicked() && !self.friend_handle.trim().is_empty() {
+            if theme::primary_button(ui, "Send Request").clicked()
+                && !self.friend_handle.trim().is_empty()
+            {
                 self.spawn_action(
                     PendingAction::SendFriendRequest {
                         handle: self.friend_handle.clone(),

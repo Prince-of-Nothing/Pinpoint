@@ -4,9 +4,10 @@
 //! native equivalent. State lives in [`RoutePlan`] on [`super::PinpointAppUI`],
 //! while the chosen route is copied to `AppData.last_route` for the map.
 
+use super::theme;
 use crate::models::AppData;
 use crate::osm::{MapCapabilities, Route, SearchPlace};
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 use std::fmt::Write as _;
 
 /// A route endpoint or stop. `name` is display-only; coordinates are the
@@ -436,10 +437,10 @@ impl super::PinpointAppUI {
             return;
         }
         let width = ctx.screen_rect().width();
-        let panel = Color32::from_rgba_unmultiplied(15, 23, 42, 248);
-        let border = Color32::from_rgb(31, 41, 55);
-        let muted = Color32::from_rgb(156, 163, 175);
-        let accent = Color32::from_rgb(52, 211, 153);
+        let panel = theme::PANEL.gamma_multiply(0.98);
+        let border = theme::BORDER;
+        let muted = theme::MUTED;
+        let accent = theme::ACCENT;
         let mut plan = self.route_plan.clone();
         let mut plan_requested = false;
         let mut close = false;
@@ -497,7 +498,7 @@ impl super::PinpointAppUI {
                             ui.label(RichText::new("A").strong().color(accent));
                             ui.label(RichText::new(origin_label).size(12.0));
                             ui.horizontal_wrapped(|ui| {
-                                if ui.small_button("Use map centre").clicked() {
+                                if ui.button("Use map centre").clicked() {
                                     let (lat, lon) = {
                                         let d = self.app.data();
                                         let d = d.lock().unwrap();
@@ -505,7 +506,7 @@ impl super::PinpointAppUI {
                                     };
                                     plan.origin = Some(RoutePoint::new(lat, lon, "Map centre"));
                                 }
-                                if ui.small_button("Use my location").clicked() {
+                                if ui.button("Use my location").clicked() {
                                     let (lat, lon) = {
                                         let d = self.app.data();
                                         let d = d.lock().unwrap();
@@ -516,7 +517,7 @@ impl super::PinpointAppUI {
                                     };
                                     plan.origin = Some(RoutePoint::new(lat, lon, "My location"));
                                 }
-                                if ui.small_button("Swap").clicked() {
+                                if ui.button("Swap").clicked() {
                                     plan.swap();
                                 }
                             });
@@ -533,7 +534,7 @@ impl super::PinpointAppUI {
                                 .selected_place()
                                 .or_else(|| self.app.data().lock().unwrap().selected_place.clone())
                             {
-                                if ui.small_button("Use selected place as B").clicked() {
+                                if ui.button("Use selected place as B").clicked() {
                                     plan.destination = Some(RoutePoint::from_place(&place));
                                 }
                             }
@@ -546,12 +547,12 @@ impl super::PinpointAppUI {
                                         RichText::new(format!("{}. {}", index + 1, stop.label()))
                                             .size(12.0),
                                     );
-                                    if ui.small_button("×").clicked() {
+                                    if ui.button("×").clicked() {
                                         remove_stop = Some(index);
                                     }
                                 });
                             }
-                            if ui.small_button("+ Add selected place as stop").clicked() {
+                            if ui.button("+ Add selected place as stop").clicked() {
                                 add_stop = true;
                             }
                             ui.separator();
@@ -598,7 +599,7 @@ impl super::PinpointAppUI {
                             });
 
                             if let Some(error) = &plan.error {
-                                ui.colored_label(Color32::from_rgb(248, 113, 113), error);
+                                ui.colored_label(theme::DANGER, error);
                             }
                             if !plan.routes.is_empty() {
                                 ui.separator();
@@ -652,27 +653,27 @@ impl super::PinpointAppUI {
                                     if ui.button("Share").clicked() {
                                         copy_share = true;
                                     }
-                                    if ui.small_button("GPX").clicked() {
+                                    if ui.button("GPX").clicked() {
                                         copy_share = true;
                                     }
-                                    if ui.small_button("KML").clicked() {
+                                    if ui.button("KML").clicked() {
                                         copy_kml = true;
                                     }
-                                    if ui.small_button("GeoJSON").clicked() {
+                                    if ui.button("GeoJSON").clicked() {
                                         copy_geojson = true;
                                     }
-                                    if ui.small_button("Clear").clicked() {
+                                    if ui.button("Clear").clicked() {
                                         clear = true;
                                     }
                                 });
                                 ui.horizontal_wrapped(|ui| {
-                                    if ui.small_button("Google Maps").clicked() {
+                                    if ui.button("Google Maps").clicked() {
                                         external = google_route_url(&plan);
                                     }
-                                    if ui.small_button("Organic Maps").clicked() {
+                                    if ui.button("Organic Maps").clicked() {
                                         external = organic_route_url(&plan);
                                     }
-                                    if ui.small_button("Magic Earth").clicked() {
+                                    if ui.button("Magic Earth").clicked() {
                                         external = magic_route_url(&plan);
                                     }
                                 });

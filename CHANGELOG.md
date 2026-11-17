@@ -10,6 +10,10 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [Unreleased]
+### Changed
+- [FEATURE] Native UI: one shared dark theme from the web palette, a compact top bar with a scrollable screen tab row, filled/padded cards, 44 pt touch targets, and a map-first map screen shared by desktop and Android.
+
 ## [2.5.2] - 2026-11-17
 ### Fixed
 - [FIX] Friends: friend requests, accepts and removals now write directly to Postgres instead of a whole-store snapshot. On the multi-replica deployment a request could be acknowledged and then wiped before it was persisted, so the receiver never saw it.

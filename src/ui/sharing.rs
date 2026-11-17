@@ -1,22 +1,18 @@
 //! Sharing screen
+use super::theme;
 use super::{PendingAction, PinpointAppUI};
-use eframe::egui::{self, Color32, Direction, RichText};
+use eframe::egui::{self};
 
 impl PinpointAppUI {
     pub fn draw_sharing_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        self.draw_main_toolbar(ui);
-        ui.horizontal(|ui| {
-            ui.with_layout(
-                egui::Layout::centered_and_justified(Direction::LeftToRight),
-                |ui| {
-                    ui.heading("Location Sharing");
-                },
-            );
-        });
+        ui.heading("Location Sharing");
+        ui.add_space(4.0);
+        theme::caption(ui, "Choose who sees your location, and how precisely");
+        ui.add_space(10.0);
 
         // Create new share targeting a selected accepted friendship.
-        ui.group(|ui| {
-            ui.label(RichText::new("Share Location").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Share Location");
             ui.add_space(4.0);
 
             let accepted: Vec<(i64, String)> = {
@@ -93,7 +89,7 @@ impl PinpointAppUI {
             });
 
             ui.add_space(12.0);
-            if ui.button("Create Share").clicked() {
+            if theme::primary_button(ui, "Create Share").clicked() {
                 if let Some(friendship_id) = self.selected_friendship {
                     let dur = self.share_duration.trim().parse::<i64>().ok();
                     self.spawn_action(
@@ -115,8 +111,8 @@ impl PinpointAppUI {
         ui.add_space(8.0);
 
         // Active shares
-        ui.group(|ui| {
-            ui.label(RichText::new("Active Shares").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Active Shares");
             ui.add_space(4.0);
 
             let binding = self.app.data();
@@ -126,10 +122,10 @@ impl PinpointAppUI {
             } else {
                 for share in &data.shares {
                     let precision_color = match share.precision_level.as_str() {
-                        "exact" => Color32::GREEN,
-                        "approximate" => Color32::YELLOW,
-                        "city_only" => Color32::RED,
-                        _ => Color32::GRAY,
+                        "exact" => theme::SUCCESS,
+                        "approximate" => theme::ACCENT,
+                        "city_only" => theme::DANGER,
+                        _ => theme::MUTED,
                     };
                     let is_active = share.is_active;
                     let share_id = share.id;

@@ -1,4 +1,5 @@
 //! Profile and settings screen (incl. MFA)
+use super::theme;
 use super::{PendingAction, PinpointAppUI};
 use eframe::egui::{self, RichText};
 use std::sync::Arc;
@@ -13,7 +14,7 @@ impl PinpointAppUI {
                 .desired_width(300.0),
         );
         ui.horizontal_wrapped(|ui| {
-            if ui.button("Save & reconnect").clicked() {
+            if theme::primary_button(ui, "Save & reconnect").clicked() {
                 let url = self.server_url_input.clone();
                 match self.switch_backend(&url) {
                     Ok(()) => self
@@ -32,19 +33,18 @@ impl PinpointAppUI {
             }
         });
         if let Some(error) = &self.server_error {
-            ui.colored_label(egui::Color32::from_rgb(248, 113, 113), error);
+            ui.colored_label(theme::DANGER, error);
         }
         ui.label(
             RichText::new(
                 "HTTPS is required for any server except localhost. Changing the server signs you out.",
             )
             .size(10.0)
-            .color(egui::Color32::from_rgb(148, 163, 184)),
+            .color(theme::MUTED),
         );
     }
 
     pub fn draw_profile_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        self.draw_main_toolbar(ui);
         if !self.sessions_requested {
             self.sessions_requested = true;
             self.spawn_action(PendingAction::RefreshSessions, ctx);
@@ -69,14 +69,16 @@ impl PinpointAppUI {
             });
             ui.label("Share this handle so friends can add you; names and emails stay private.");
         }
-        ui.group(|ui| {
-            ui.label(RichText::new("Display name").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Display name");
             ui.add(
                 egui::TextEdit::singleline(&mut self.profile_name)
                     .hint_text(&name)
                     .desired_width(220.0),
             );
-            if ui.button("Save name").clicked() && !self.profile_name.trim().is_empty() {
+            if theme::primary_button(ui, "Save name").clicked()
+                && !self.profile_name.trim().is_empty()
+            {
                 self.spawn_action(
                     PendingAction::UpdateProfile {
                         full_name: self.profile_name.clone(),
@@ -86,13 +88,13 @@ impl PinpointAppUI {
             }
         });
         ui.add_space(8.0);
-        ui.group(|ui| {
-            ui.label(RichText::new("Server").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Server");
             self.draw_server_settings(ui);
         });
         ui.add_space(8.0);
-        ui.group(|ui| {
-            ui.label(RichText::new("Units").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Units");
             ui.selectable_value(
                 &mut self.app.data().lock().unwrap().settings.metric,
                 true,
@@ -106,8 +108,8 @@ impl PinpointAppUI {
             let _ = metric;
         });
         ui.add_space(8.0);
-        ui.group(|ui| {
-            ui.label(RichText::new("Updates").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Updates");
             let mut check_on_launch = self.prefs.update_check_on_launch;
             if ui
                 .checkbox(
@@ -125,14 +127,14 @@ impl PinpointAppUI {
                      account, location or friend data is sent.",
                 )
                 .size(10.0)
-                .color(egui::Color32::from_rgb(148, 163, 184)),
+                .color(theme::MUTED),
             );
         });
         ui.add_space(8.0);
         #[cfg(target_os = "android")]
         {
-            ui.group(|ui| {
-                ui.label(RichText::new("Background sharing").size(14.0).strong());
+            theme::card(ui, |ui| {
+                theme::card_title(ui, "Background sharing");
                 ui.label(
                     "Publishes your latest location on a fixed interval while Pinpoint is in \
                      the background. A persistent notification stays visible; stop it here or \
@@ -152,10 +154,7 @@ impl PinpointAppUI {
                 }
                 let running = crate::platform::android_background_location_running();
                 if running {
-                    ui.colored_label(
-                        egui::Color32::from_rgb(52, 211, 153),
-                        format!("Running every {interval}s."),
-                    );
+                    ui.colored_label(theme::SUCCESS, format!("Running every {interval}s."));
                     if ui.button("Stop background sharing").clicked() {
                         match crate::platform::android_stop_background_location() {
                             Ok(()) => self
@@ -165,7 +164,7 @@ impl PinpointAppUI {
                         }
                     }
                 } else {
-                    if ui.button("Start background sharing").clicked() {
+                    if theme::primary_button(ui, "Start background sharing").clicked() {
                         let fine = crate::platform::ensure_location_permission();
                         let background = crate::platform::ensure_background_location_permission();
                         if fine != crate::platform::LocationPermission::Granted {
@@ -203,18 +202,18 @@ impl PinpointAppUI {
                          Android may stop the service when the app is force-stopped.",
                     )
                     .size(10.0)
-                    .color(egui::Color32::from_rgb(148, 163, 184)),
+                    .color(theme::MUTED),
                 );
             });
             ui.add_space(8.0);
         }
-        ui.group(|ui| {
-            ui.label(RichText::new("Safety").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Safety");
             ui.label("Share expiry, pause, and delete live under Sharing. Emergency alerts under Emergency.");
             ui.label("Location is latest-only; no history is stored.");
         });
         ui.add_space(8.0);
-        ui.group(|ui| {
+        theme::card(ui, |ui| {
             ui.label(
                 RichText::new("App lock (on-device PIN)")
                     .size(14.0)
@@ -295,7 +294,7 @@ impl PinpointAppUI {
             ui.label(
                 RichText::new("The PIN is stored only as an Argon2id hash on this device.")
                     .size(10.0)
-                    .color(egui::Color32::from_rgb(148, 163, 184)),
+                    .color(theme::MUTED),
             );
             ui.label(
                 RichText::new(
@@ -303,7 +302,7 @@ impl PinpointAppUI {
                      is persisted on this device, so force-stopping the app does not clear it.",
                 )
                 .size(10.0)
-                .color(egui::Color32::from_rgb(148, 163, 184)),
+                .color(theme::MUTED),
             );
             #[cfg(target_os = "android")]
             if self.lock_enabled {
@@ -327,19 +326,19 @@ impl PinpointAppUI {
                             "Fingerprint or face can unlock the app; the PIN remains the fallback.",
                         )
                         .size(10.0)
-                        .color(egui::Color32::from_rgb(148, 163, 184)),
+                        .color(theme::MUTED),
                     );
                 } else {
                     ui.label(
                         RichText::new("No enrolled biometrics are available on this device.")
                             .size(10.0)
-                            .color(egui::Color32::from_rgb(148, 163, 184)),
+                            .color(theme::MUTED),
                     );
                 }
             }
         });
         ui.add_space(8.0);
-        ui.group(|ui| {
+        theme::card(ui, |ui| {
             ui.label(
                 RichText::new("Two-factor authentication (TOTP)")
                     .size(14.0)
@@ -370,7 +369,9 @@ impl PinpointAppUI {
                         .hint_text("6-digit code")
                         .desired_width(140.0),
                 );
-                if ui.button("Verify & enable").clicked() && !self.mfa_code.trim().is_empty() {
+                if theme::primary_button(ui, "Verify & enable").clicked()
+                    && !self.mfa_code.trim().is_empty()
+                {
                     let code = self.mfa_code.clone();
                     let app = Arc::clone(&self.app);
                     self.rt.spawn(async move {
@@ -389,10 +390,10 @@ impl PinpointAppUI {
         });
         ui.add_space(8.0);
 
-        ui.group(|ui| {
+        theme::card(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Active sessions").size(14.0).strong());
-                if ui.small_button("Refresh").clicked() {
+                theme::card_title(ui, "Active sessions");
+                if ui.button("Refresh").clicked() {
                     self.spawn_action(PendingAction::RefreshSessions, ctx);
                 }
             });
@@ -411,10 +412,7 @@ impl PinpointAppUI {
                             session.auth_method, session.id, session.last_activity
                         ));
                         if session.current {
-                            ui.label(
-                                RichText::new("this device")
-                                    .color(egui::Color32::from_rgb(52, 211, 153)),
-                            );
+                            ui.label(RichText::new("this device").color(theme::SUCCESS));
                         }
                         if ui
                             .button(if session.current {
@@ -441,8 +439,8 @@ impl PinpointAppUI {
         });
         ui.add_space(8.0);
 
-        ui.group(|ui| {
-            ui.label(RichText::new("Help & diagnostics").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Help & diagnostics");
             ui.label("Sends only the category and message — no location, IP address or device ID.");
             egui::ComboBox::from_id_salt("diagnostic_category")
                 .selected_text(&self.diagnostic_category)
@@ -489,12 +487,12 @@ impl PinpointAppUI {
         });
         ui.add_space(8.0);
 
-        ui.group(|ui| {
+        theme::card(ui, |ui| {
             ui.label(
                 RichText::new("Danger zone")
                     .size(14.0)
                     .strong()
-                    .color(egui::Color32::from_rgb(248, 113, 113)),
+                    .color(theme::DANGER),
             );
             ui.label(
                 "Deleting your account removes your profile, friendships, shares, current \
@@ -523,10 +521,7 @@ impl PinpointAppUI {
                 );
             }
             if ui
-                .button(
-                    RichText::new("Delete my account")
-                        .color(egui::Color32::from_rgb(248, 113, 113)),
-                )
+                .button(RichText::new("Delete my account").color(theme::DANGER))
                 .clicked()
             {
                 let confirm = self.delete_confirm.trim().to_string();
@@ -550,8 +545,8 @@ impl PinpointAppUI {
         }
         ui.add_space(8.0);
 
-        ui.group(|ui| {
-            ui.label(RichText::new("Map appearance").size(14.0).strong());
+        theme::card(ui, |ui| {
+            theme::card_title(ui, "Map appearance");
             let (mut label, mut icon) = {
                 let d = self.app.data();
                 let d = d.lock().unwrap();

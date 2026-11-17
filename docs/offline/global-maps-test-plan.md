@@ -17,12 +17,12 @@ Tests this plan expects to exist: `src/region_catalog.rs` unit tests,
 | R2 | Catalog validation | Reject: schema ≠ 1, id not `[a-z0-9-]{1,64}`, duplicate id, bbox not 4 finite numbers, non-http(s) URL, 0 size, non-hex/uppercase hash, >64 regions, >32 files, >1 MiB body. Each has one negative test | same |
 | R3 | Two-region install | Moldova + Romania fixtures install into `packs/<id>/`; both files per region; a second job returns 409; unknown region 404; one job at a time | `cargo test --locked --test global_maps_e2e` |
 | R4 | Hash/length failure | Wrong transfer hash, wrong installed hash and short body leave an existing good file untouched; `.part` cleaned; phase `failed` | `cargo test --locked --lib offline_install` |
-| R5 | Legacy migration | Root `packs/moldova.pmtiles`/`.graph.bin` move to `packs/moldova/`; idempotent; no re-download; interrupted move keeps the source | `cargo test --locked --test global_maps_e2e legacy` |
+| R5 | Legacy migration | Root `packs/moldova.pmtiles`/`.graph.bin` move to `packs/moldova/`; idempotent; no re-download; interrupted move keeps the source | `cargo test --locked --test global_maps_e2e -- legacy` |
 | R6 | Range serving | `/packs/<region>/<file>` 200/206/416/HEAD, correct `Content-Range` and MIME; `/packs/<name>` legacy path still works; name not in that region's `installed_name` list, `..`, encoded traversal, other extensions → 404 | `cargo test --locked --lib map_server` + R3 file |
 | R7 | Remote fallback | Fetch timeout/500/invalid JSON serves the bundled Moldova entry; download still starts from bundled URLs | `cargo test --locked --lib region_catalog` |
 | R8 | Config | `/map/config` returns active region `pmtilesUrl`, `graphUrl`, bbox and `regions[]` with installed ids; no pack → Monaco fixture | `cargo test --locked --test global_maps_e2e` |
-| R9 | URL policy | Catalog/asset URLs must be https on the release host; reject loopback, private/link-local, IP literal, userinfo and custom port; reject off-host or https→http redirects and >3 hops | `cargo test --locked --test region_catalog url` |
-| R10 | Page boundary | Download accepts only `{"region":"<id>"}`; unknown/misspelled fields → 400; 2 GiB per-file cap; free-space preflight; symlinked region dir/target refused; `.part` never left | `cargo test --locked --test global_maps_e2e boundary` |
+| R9 | URL policy | Catalog/asset URLs must be https on the release host; reject loopback, private/link-local, IP literal, userinfo and custom port; reject off-host or https→http redirects and >3 hops | `cargo test --locked --test region_catalog -- url` |
+| R10 | Page boundary | Download accepts only `{"region":"<id>"}`; unknown/misspelled fields → 400; 2 GiB per-file cap; free-space preflight; symlinked region dir/target refused; `.part` never left | `cargo test --locked --test global_maps_e2e -- boundary` |
 
 ## P0 — data repo (`pinpoint-maps`)
 
@@ -30,7 +30,7 @@ Tests this plan expects to exist: `src/region_catalog.rs` unit tests,
 |---|------|---------|
 | D1 | Workflow parses and is dispatchable | `gh workflow view build-region.yml -R Prince-of-Nothing/pinpoint-maps --yaml` |
 | D2 | Dry run | `gh workflow run build-region.yml -R Prince-of-Nothing/pinpoint-maps -f region=monaco -f app_ref=<sha> -f maxzoom=10 -f dry_run=true` then `gh run watch -R Prince-of-Nothing/pinpoint-maps` |
-| D3 | Catalog generator/merge | `pwsh -NoProfile -File scripts/offline/tests/catalog.ps1` — two fixture regions; rebuild one keeps the other; rejects duplicate id, missing asset, bad hash, asset ≥ 2 GiB |
+| D3 | Catalog generator/merge | `pwsh -NoProfile -File scripts/offline/tests/catalog.ps1` — two fixture regions; rebuild one keeps the other; rejects duplicate id, missing asset, bad hash, declared asset ≥ 2 GiB |
 | D4 | Release assets | `gh release view data-moldova-20261117 -R Prince-of-Nothing/pinpoint-maps --json assets --jq '.assets[] \| select(.size > 2147483648) \| .name'` prints nothing; download + `Get-FileHash` matches `catalog.json` |
 
 **Gap to resolve in P0:** the design lists only `region`, `app_ref`, `maxzoom`.
@@ -47,7 +47,10 @@ in the app repo (`scripts/offline/catalog.ps1`) so D3 runs in the app gate.
 | W3 | Progress | Bar advances within `expected_download_bytes`; verifying → installed; button hidden while running | same |
 | W4 | Online toggle | Off by default; no external request while off; turning it on loads only OpenFreeMap hosts; local pack wins when installed | same + W1 |
 | W5 | Style switch | Toggle off→on→off keeps pins and route; `pinpoint-locations-circles` source/layer and `pinpoint-route` re-added after each style load | same |
-| W6 | CSP | Response header on `/map/index.html` has no `*`; only `https://tiles.openfreemap.org` plus verified style/glyph/sprite hosts; local pack path remains allowed | `cargo test --locked --lib map_server csp` |
+| W6 | CSP | Response header on `/map/index.html` has no `*`; only `https://tiles.openfreemap.org` plus verified style/glyph/sprite hosts; local pack path remains allowed | `cargo test --locked --lib -- csp` |
+
+Browser rows need Node + Puppeteer in `NODE_PATH` and Chromium, like the
+existing ignored tests; CI runs only the static row.
 
 **Design gap:** CSP is per-response, not per-toggle. Either send one CSP that
 admits OpenFreeMap hosts (safe only because the page makes no request until
@@ -97,17 +100,3 @@ packs keep working; large-catalog render time; iOS; web per-region offline.
   `-Data` runs D1/D4 read-only checks; `-Dispatch` runs D2; `-Android` runs the
   Gradle build; default with no switch prints the lab checklist and skips.
   This keeps network, GitHub and emulator dependencies out of the merge gate.
-
-## P0 command summary
-
-```powershell
-cargo test --locked --test region_catalog
-cargo test --locked --test global_maps_e2e
-cargo test --locked --lib offline_install
-cargo test --locked --lib region_catalog
-cargo test --locked --lib map_servernode web/map/test/regions.mjs --static-only
-cargo test --locked --test global_maps_e2e -- --ignored --nocapture
-pwsh -NoProfile -File scripts/offline/tests/catalog.ps1
-pwsh -NoProfile -File scripts/v2/check.ps1
-cd android; .\gradlew.bat :app:assembleDebug -Pabi=arm64-v8a
-```

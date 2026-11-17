@@ -14,6 +14,8 @@ const CSS: &str = include_str!("../web/app/app.css");
 const JS: &str = include_str!("../web/app/app.js");
 const MAP_ADAPTER: &str = include_str!("../web/app/map.js");
 const MAP_FOUNDATION: &str = include_str!("../web/map/map.js");
+const ROUTE_UI: &str = include_str!("../web/app/route-ui.js");
+const ROUTE_CSS: &str = include_str!("../web/app/route.css");
 
 const ATTRIBUTION_URLS: &[&str] = &[
     "https://www.openstreetmap.org/copyright",
@@ -42,6 +44,8 @@ fn shipped_web_assets_have_no_third_party_hosts() {
         ("app.js", JS),
         ("map.js (adapter)", MAP_ADAPTER),
         ("map/map.js (foundation)", MAP_FOUNDATION),
+        ("route-ui.js", ROUTE_UI),
+        ("route.css", ROUTE_CSS),
     ] {
         let lower = text.to_ascii_lowercase();
         for host in BANNED_HOSTS {
@@ -68,6 +72,30 @@ fn css_and_js_make_no_absolute_requests() {
             "{name} must not reference a remote origin"
         );
     }
+}
+
+#[test]
+fn route_ui_assets_are_local_and_network_free() {
+    // The map page loads these two files from the loopback map server; the
+    // component takes an injected router and must never fetch by itself.
+    for (needle, label) in [
+        ("fetch(", "fetch"),
+        ("XMLHttpRequest", "XMLHttpRequest"),
+        ("WebSocket", "WebSocket"),
+        ("EventSource", "EventSource"),
+        ("http://", "absolute http URL"),
+        ("https://", "absolute https URL"),
+    ] {
+        assert!(
+            !ROUTE_UI.contains(needle),
+            "route-ui.js must not use {label}"
+        );
+    }
+    assert!(ROUTE_UI.contains("export function createRouteUI"));
+    assert!(ROUTE_CSS.contains(".pinpoint-route"));
+    assert!(!ROUTE_CSS.contains("@import"));
+    assert!(!ROUTE_CSS.contains("url("));
+    assert!(!ROUTE_CSS.contains("http"));
 }
 
 #[test]

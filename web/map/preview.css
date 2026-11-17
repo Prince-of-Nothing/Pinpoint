@@ -262,6 +262,44 @@ main {
   opacity: 0.55;
 }
 
+/* Local route panel over the shared map. The component owns its internals;
+   this only places it and keeps the page's own dark/light tokens. */
+.route-panel {
+  position: absolute;
+  z-index: 6;
+  left: 14px;
+  bottom: 14px;
+  width: min(340px, calc(100% - 28px));
+  max-height: calc(100% - 96px);
+  overflow: auto;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 22%);
+}
+
+.route-panel__kicker {
+  margin: 0;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--panel-border);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.route-panel .pinpoint-route {
+  border: 0;
+  border-radius: 0;
+}
+
+.route-panel .pinpoint-route__profile:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
 @media (max-width: 820px) {
   .topbar {
     flex-direction: column;
@@ -295,5 +333,12 @@ main {
 
   .map-meta {
     display: none;
+  }
+
+  .route-panel {
+    left: 10px;
+    bottom: 58px;
+    width: calc(100% - 20px);
+    max-height: calc(100% - 132px);
   }
 }

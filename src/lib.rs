@@ -23,6 +23,8 @@ pub mod backend;
 pub mod bookmarks;
 pub mod crash;
 pub mod i18n;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod local_route;
 pub mod logging;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod mobile;

@@ -10,6 +10,10 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [2.1.0] - 2026-11-17
+### Added
+- [FEATURE] Mobile/desktop map: local turn-by-turn routing panel over `/map/route`, backed by the on-device `native_router` graph cache (no online service or fallback).
+
 ## [2.0.1] - 2026-11-17
 ### Fixed
 - [FIX] Registration: the user row is inserted into Postgres before the session is created, so a new account cannot exist only in a replica's memory and be dropped by a background refresh; a failed insert now returns an error instead of a false `201`.

@@ -5,10 +5,12 @@ the M1 `monaco.pmtiles` fixture renders as an offline vector map with local
 friend markers, and it is the component the web app, Android WebView and
 desktop WebView will consume.
 
-This is a **foundation**, not the finished offline feature. There is no pack
-download manager, OPFS storage, service worker, routing or in-map search UI
-here yet. The separate `search.js` module already searches the M1
-`places`/`places_fts` SQLite index on-device; see [`search.md`](search.md).
+This is a **foundation**, not the finished offline feature. The preview now
+wires the on-device `native_router` car route to a panel and `/map/route` on
+both loopback map servers. The pack download manager, OPFS storage and
+service worker live in the web-app stream; the `search.js` module already
+searches the M1 `places`/`places_fts` SQLite index on-device (see
+[`search.md`](search.md)).
 
 ## Run the preview
 
@@ -41,9 +43,11 @@ sprites or remote tile URLs.
 |---|---|
 | `web/map/index.html` | Preview page with controls, status and visible attribution |
 | `web/map/preview.css` | Preview-only styling |
-| `web/map/map.js` | ES module API (`createMap`, markers, clicks, theme, destroy) |
+| `web/map/map.js` | ES module API (`createMap`, markers, clicks, route line, theme, destroy) |
 | `web/map/search.js` | On-device SQLite FTS5 search API (`openSearch`, `search`, `close`) |
 | `web/map/search.md` | Search API, hosting, CSP and WebView integration notes |
+| `web/app/route-ui.js` | Route planner, summary and turn-by-turn component (`createRouteUI`) |
+| `web/app/route.css` | Route component styles, scoped under `.pinpoint-route` |
 | `web/map/style.json` | Minimal OpenMapTiles-schema style for the fixture |
 | `web/map/fixtures/monaco.pmtiles` | 94 KB ODbL test fixture |
 | `web/map/fixtures/balti-search.sqlite` | 24 KB ODbL FTS5 search fixture (Bălți/Кишинёв) |
@@ -51,6 +55,7 @@ sprites or remote tile URLs.
 | `web/map/serve.mjs` | Dependency-free static server with Range support |
 | `web/map/test/smoke.mjs` | Static + headless-browser map smoke test |
 | `web/map/test/search-smoke.mjs` | HTTP + Chromium/Node offline-search smoke test |
+| `web/map/test/route-e2e.mjs` | Chromium E2E for the local route panel, run by `tests/map_route_e2e.rs` |
 | `web/vendor/maplibre-gl.js` | MapLibre GL JS 6.18.0 ES module |
 | `web/vendor/maplibre-gl-worker.mjs` | MapLibre 6.18.0 worker (required sibling) |
 | `web/vendor/maplibre-gl.css` | MapLibre 6.18.0 stylesheet |
@@ -168,11 +173,47 @@ its own colours but still gets the CSS class.
 Removes the map, canvas, listeners and popups. The PMTiles protocol stays
 registered so a later `createMap` can reuse it. Calling `destroy` twice is safe.
 
+### `drawRoute(routeOrPoints)` / `clearRoute()`
+
+`drawRoute` accepts the route UI shape (`points: [[lat, lon], ...]`) or a plain
+point list. It creates or updates one GeoJSON source with a casing and a line
+layer, recolours them with the active theme and fits the map bounds. Safe before
+the style finishes loading: the latest call is drawn on load. Returns `false`
+when there are fewer than two valid points. `clearRoute` removes the layers and
+source and is safe to call repeatedly.
+
 ### Extras
 
 - `resize()` — call after the container changes size.
 - `getMap()` — returns the underlying MapLibre map (or `null` before
   initialization) for advanced use such as `flyTo`.
+
+## Local routing panel
+
+The preview mounts `web/app/route-ui.js` beside the map. It defaults to
+Chișinău `47.0105, 28.8638` → Bălți `47.76, 27.93` and sends only:
+
+```text
+GET /map/route?from_lat=47.0105&from_lon=28.8638&to_lat=47.76&to_lon=27.93&profile=auto
+```
+
+The desktop (`src/map_server.rs`) and Android (`src/mobile/map_server.rs`)
+loopback servers answer from the same `src/local_route.rs` handler and the
+on-device `native_router` graph. There is no online routing service and no
+fallback. The response is `{distance_m, duration_s, points, maneuvers}`; the
+page draws it with `drawRoute` and the component renders the summary and
+directions. Clear removes the line; Stop only ends guidance.
+
+The graph cache is resolved lazily from `PINPOINT_ROUTER_GRAPH`, otherwise
+`<app data>/packs/moldova.graph.bin`. A missing or invalid cache returns
+`503 {"error":"ROUTING_UNAVAILABLE"}`. Missing/malformed coordinates return
+`400`, and outside-coverage/no-path return `404`. Only the car profile is
+implemented; the page disables Walk and Bike instead of pretending they work.
+
+```powershell
+$env:PINPOINT_ROUTER_GRAPH="C:\path\to\moldova.graph.bin"
+# start the desktop map server, then open its /map/index.html
+```
 
 ## Offline search
 
@@ -266,6 +307,18 @@ node web/map/test/search-smoke.mjs
 fixture, then runs the real search module (Chromium when Puppeteer is
 available, Node fallback otherwise). It asserts `balti` → Bălți,
 `кишин` → Кишинёв, punctuation-only → `[]`, and local-only traffic.
+
+The route panel has its own ignored Rust + Chromium E2E (synthetic graph by
+default, real Moldova cache with `PINPOINT_E2E_GRAPH`):
+
+```powershell
+$env:NODE_PATH="C:\Users\Dinusauuuur\AppData\Local\Temp\opencode\node_modules"
+cargo test --locked --test map_route_e2e -- --ignored --nocapture
+```
+
+It asserts the local `/map/route` response, summary, maneuver list, casing and
+line layers, fitted bounds, Stop keeps the line, Clear removes it, and no
+external/failed request, page error or console error.
 
 ## Limitations and follow-up stream
 

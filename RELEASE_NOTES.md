@@ -1,3 +1,55 @@
+# Pinpoint 2.1.0 - Release Notes
+
+**Released:** 2026-11-17 - **Version:** `2.1.0` (from `2.0.1`) -
+**Status:** Local routing in the mobile/desktop map window.
+
+**Artifacts:** `pinpoint-android-2.1.0.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source archives for the `v2.1.0` tag.
+
+## What is new
+
+- The Android and desktop loopback map servers now expose `GET /map/route`
+  backed by the on-device Rust A* router. There is no HTTP client and no online
+  routing fallback.
+- The shared map page has a route panel with Chișinău → Bălți defaults, a
+  GeoJSON route line, distance/time and turn-by-turn maneuvers.
+- The real `moldova.graph.bin` (110,858,815 bytes, SHA-256
+  `8cdbb0cb1d61c2d5857cb2677ab1343968223e4ae10892f0268c8feb0eb50e75`) is
+  published on the `data-moldova-20261116` data release. It is not committed.
+- Missing graph returns `503 ROUTING_UNAVAILABLE`; invalid coordinates `400`;
+  outside coverage/no path `404`. Pedestrian/bicycle are explicitly unsupported.
+
+## Verification
+
+- `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo build --locked` and `cargo test --locked` pass (281 lib tests, 10
+  asset tests, 17 router tests).
+- Android `aarch64-linux-android` library check passes with NDK 27.2.12479018;
+  the arm64 debug APK built successfully (71,319,601 bytes) and contains the
+  route UI assets.
+- Synthetic browser E2E: one local `/map/route` request, route line, summary,
+  maneuvers, Stop keeps the line, Clear removes it, zero external/failed
+  requests and zero console/page errors.
+- Real Moldova graph through `/map/route`: 134.38 km / 97.8 min, 2,054 points,
+  57 maneuvers, matching the native CLI.
+
+## Known limitations
+
+- The map page still uses the Monaco PMTiles fixture, so the basemap is blank
+  outside Monaco until a Moldova PMTiles pack is placed in the app's `packs/`
+  directory and the page is pointed at it. A native pack downloader is the next
+  step.
+- No physical Android device/emulator run; the arm64 library check and APK
+  build are the evidence.
+- Car only; no turn restrictions, lane guidance, traffic, closures or ferries.
+- iOS not checked.
+
+## Upgrade
+
+Install over 2.0.1. The routing graph is a separate 106 MB asset; routing shows
+`ROUTING_UNAVAILABLE` until it is present.
+
+---
 # Pinpoint 2.0.1 - Release Notes
 
 **Released:** 2026-11-17 - **Version:** `2.0.1` (from `2.0.0`) -

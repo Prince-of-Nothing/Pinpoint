@@ -8,6 +8,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%231c2430'/%3E%3Cpath d='M16 25s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z' fill='none' stroke='%23f4f1ea' stroke-width='2'/%3E%3Ccircle cx='16' cy='12.5' r='2.4' fill='%236fd3b6'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="../vendor/maplibre-gl.css">
   <link rel="stylesheet" href="./preview.css">
+  <link rel="stylesheet" href="../app/route.css">
   <script>
     try {
       const saved = localStorage.getItem("pinpoint-map-theme");
@@ -47,6 +48,11 @@
 
       <div class="map-meta">Monaco fixture · z0–12 · 94 KB</div>
 
+      <aside class="route-panel" aria-label="Offline routing">
+        <p class="route-panel__kicker">Offline car routing · car only · no network</p>
+        <div id="route-panel"></div>
+      </aside>
+
       <div class="map-attribution">
         Map data ©
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>
@@ -63,9 +69,56 @@
 
   <script type="module">
     import { createMap } from "./map.js";
+    import { createRouteUI } from "../app/route-ui.js";
 
     const MONACO_CENTER = [7.4246, 43.7384];
     const MONACO_ZOOM = 13.2;
+    // Real Moldova coordinates exercise the on-device graph. The fixture map
+    // only has Monaco tiles, so the fitted view may be blank outside Monaco;
+    // the route line and panel remain local and usable.
+    const DEFAULT_FROM = "47.0105, 28.8638"; // Chișinău
+    const DEFAULT_TO = "47.76, 27.93"; // Bălți
+
+    /**
+     * Injected local router for createRouteUI. It fetches only this loopback
+     * origin's `/map/route`; there is no online routing fallback.
+     */
+    async function requestLocalRoute({ from, to, profile }) {
+      const params = new URLSearchParams({
+        from_lat: String(from.lat),
+        from_lon: String(from.lon),
+        to_lat: String(to.lat),
+        to_lon: String(to.lon),
+        profile,
+      });
+      const response = await fetch(`/map/route?${params.toString()}`, {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      });
+
+      let payload = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.message || `Local routing failed (HTTP ${response.status}).`,
+        );
+      }
+      if (!payload || !Array.isArray(payload.points)) {
+        throw new Error("Local routing returned an invalid response.");
+      }
+
+      return {
+        distance_m: payload.distance_m,
+        duration_s: payload.duration_s,
+        points: payload.points,
+        maneuvers: payload.maneuvers,
+      };
+    }
 
     // Demo data only. Real friend locations arrive through setLocations().
     const SAMPLE_LOCATIONS = [
@@ -153,6 +206,35 @@
       window.__pinpointMapError = message;
       console.error("[map preview]", error);
     }
+
+    // Local route panel. The provider talks only to this origin's /map/route.
+    const routeUI = createRouteUI({
+      container: "#route-panel",
+      route: requestLocalRoute,
+      onRoute: ({ route }) => {
+        handle?.drawRoute(route);
+      },
+      onCancel: ({ reason }) => {
+        if (reason === "clear") handle?.clearRoute();
+      },
+    });
+
+    const fromInput = routeUI.element.querySelector('input[name="from"]');
+    const toInput = routeUI.element.querySelector('input[name="to"]');
+    if (fromInput) fromInput.value = DEFAULT_FROM;
+    if (toInput) toInput.value = DEFAULT_TO;
+
+    for (const button of routeUI.element.querySelectorAll(".pinpoint-route__profile")) {
+      if (button.dataset.profile === "auto") continue;
+      button.disabled = true;
+      button.title = "Only the offline car profile is available.";
+    }
+
+    window.__pinpointRoute = {
+      ui: routeUI,
+      route: requestLocalRoute,
+      defaults: { from: DEFAULT_FROM, to: DEFAULT_TO },
+    };
 
     themeButton.addEventListener("click", () => {
       theme = theme === "dark" ? "light" : "dark";

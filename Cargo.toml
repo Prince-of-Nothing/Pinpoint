@@ -1,6 +1,6 @@
 [package]
 name = "pinpoint-desktop"
-version = "2.0.1"
+version = "2.1.0"
 edition = "2021"
 description = "Privacy-first location-sharing platform in pure Rust: multiplatform client + API server (desktop + Android + iOS, OSM maps)"
 publish = false
@@ -99,6 +99,10 @@ typenum = "1.15"
 zeroize = "1.7"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# On-device routing engine (`tools/native-router`): A* over a local OSM graph
+# cache with road names and maneuvers. It has no HTTP client and no online
+# fallback; the map servers only hand it coordinates (ADR: local routing).
+native-router = { path = "tools/native-router" }
 tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time", "net", "macros", "sync", "fs"] }
 # `stream` keeps the offline-pack proxy from buffering a 220 MB artifact: the
 # GitHub release body is piped into the Axum response chunk by chunk.

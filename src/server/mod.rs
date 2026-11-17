@@ -283,9 +283,21 @@ pub fn auth_router() -> Router<AppState> {
 
 /// Offline pack download routes (`/offline/packs/*`): the committed manifest
 /// plus a Range-capable, same-origin proxy of the published release assets.
+/// Also the region catalog (`/map/catalog`) shared with the native map
+/// servers. The browser client installs packs itself (OPFS), so the catalog
+/// here reports metadata only and no pack is marked installed.
 /// Isolated in its own merge so web-app router work does not conflict here.
 pub fn offline_router() -> Router<AppState> {
+    // Bundled catalog metadata, no packs directory: the browser client installs
+    // packs itself (OPFS), so nothing is reported as installed here.
+    let installer = std::sync::Arc::new(crate::offline_install::OfflineInstaller::with_catalog(
+        None,
+        crate::region_catalog::RegionCatalog::bundled(),
+        crate::offline_install::LEGACY_REGION,
+    ));
     offline_handlers::routes()
+        .route("/map/catalog", get(crate::offline_install::catalog))
+        .layer(axum::extract::Extension(installer))
 }
 
 /// Admin console routes (`/api/v1/admin/*`). Role-gated per handler so the
@@ -1153,6 +1165,52 @@ pub fn error_envelope(code: &str, message: &str) -> axum::response::Response {
 }
 
 pub use axum::response::IntoResponse;
+
+#[cfg(test)]
+mod offline_router_tests {
+    use super::*;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn offline_router_serves_the_map_catalog_as_json() {
+        let response = offline_router()
+            .with_state(AppState::new())
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/map/catalog")
+                    .body(axum::body::Body::empty())
+                    .expect("catalog request"),
+            )
+            .await
+            .expect("catalog response");
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+        assert!(
+            response
+                .headers()
+                .get(header::CONTENT_TYPE)
+                .and_then(|value| value.to_str().ok())
+                .unwrap_or_default()
+                .starts_with("application/json"),
+            "unexpected catalog content type: {:?}",
+            response.headers().get(header::CONTENT_TYPE)
+        );
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("catalog body");
+        let catalog: serde_json::Value = serde_json::from_slice(&body).expect("catalog JSON");
+        let regions = catalog["regions"]
+            .as_array()
+            .unwrap_or_else(|| panic!("catalog has no regions array: {catalog}"));
+        assert!(!regions.is_empty(), "bundled catalog is empty");
+        assert!(regions.iter().all(|region| region["id"].is_string()));
+        assert!(
+            !serde_json::to_string(&catalog)
+                .unwrap()
+                .contains("https://"),
+            "catalog view must not leak asset URLs"
+        );
+    }
+}
 
 #[cfg(test)]
 mod log_tests {

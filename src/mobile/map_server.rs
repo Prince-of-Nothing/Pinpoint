@@ -9,17 +9,19 @@
 //! - binds only to `127.0.0.1` and only on an ephemeral port;
 //! - embedded assets are addressed by an exact-path table (no filesystem
 //!   traversal and no directory listing);
-//! - disk-backed packs must be a single `packs/<name>.pmtiles` segment and
-//!   are canonicalised under the configured packs directory;
+//! - disk-backed packs must be `packs/<region>/<name>` (or the legacy
+//!   `packs/<name>`) and are canonicalised under the configured packs
+//!   directory;
 //! - no session, CSRF token or account data is ever served.
 //!
 //! PMTiles reads through HTTP Range requests, so every response advertises
 //! `Accept-Ranges: bytes` and supports `206 Partial Content` and `416`.
 //!
-//! `/map/offline/status`, `/map/offline/download` and `/map/config` come from
-//! [`crate::offline_install`], the same module the desktop server mounts.
-//! Downloaded artifacts land in `<app data>/packs/` and are served at
-//! `/packs/<name>.pmtiles` with the same Range semantics.
+//! `/map/catalog`, `/map/offline/status`, `/map/offline/download` and
+//! `/map/config` come from [`crate::offline_install`], the same module the
+//! desktop server mounts. Downloaded artifacts land in
+//! `<app data>/packs/<region>/` and are served at `/packs/<region>/<name>`
+//! with the same Range semantics.
 
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
@@ -133,9 +135,11 @@ pub struct MapServer {
 
 impl MapServer {
     /// Bind `127.0.0.1:0` and serve the embedded map assets plus, optionally,
-    /// `*.pmtiles` files from `packs_dir` at `/packs/<name>.pmtiles`.
+    /// installed `packs/<region>/<name>` files. Production uses the region
+    /// catalog; [`Self::start_with_plan`] keeps the legacy single-pack plan for
+    /// fixture tests.
     pub fn start(packs_dir: Option<PathBuf>) -> std::io::Result<Self> {
-        Self::start_with_plan(packs_dir, DownloadPlan::default())
+        Self::start_with(packs_dir, OfflineInstaller::new)
     }
 
     /// Fixture/test variant with explicit artifact metadata.
@@ -143,13 +147,22 @@ impl MapServer {
         packs_dir: Option<PathBuf>,
         plan: DownloadPlan,
     ) -> std::io::Result<Self> {
+        Self::start_with(packs_dir, move |packs| {
+            OfflineInstaller::with_plan(packs, plan)
+        })
+    }
+
+    fn start_with(
+        packs_dir: Option<PathBuf>,
+        make_installer: impl FnOnce(Option<PathBuf>) -> OfflineInstaller + Send + 'static,
+    ) -> std::io::Result<Self> {
         let listener = std::net::TcpListener::bind(SocketAddr::from((Ipv4Addr::LOCALHOST, 0)))?;
         listener.set_nonblocking(true)?;
         let address = listener.local_addr()?;
-        let installer = Arc::new(OfflineInstaller::with_plan(packs_dir.clone(), plan));
         let local_router = Arc::new(crate::local_route::LocalRouter::for_packs_dir(
             packs_dir.as_deref(),
         ));
+        let installer = Arc::new(make_installer(packs_dir));
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
         let thread = std::thread::Builder::new()
@@ -245,11 +258,16 @@ fn router(
 ) -> Router {
     Router::new()
         .route("/map/route", get(crate::local_route::map_route))
+        .route("/map/catalog", get(crate::offline_install::catalog))
         .route("/map/config", get(crate::offline_install::config))
         .route("/map/offline/status", get(crate::offline_install::status))
         .route(
             "/map/offline/download",
             post(crate::offline_install::download),
+        )
+        .route(
+            "/packs/:region/:name",
+            get(crate::offline_install::serve_region_pack),
         )
         .route("/packs/:name", get(crate::offline_install::serve_pack))
         .route(
@@ -399,6 +417,12 @@ fn body_response(
         .header(header::CACHE_CONTROL, "no-cache")
         .header(header::X_CONTENT_TYPE_OPTIONS, "nosniff")
         .header(header::CONTENT_LENGTH, length.to_string());
+    if mime == MIME_HTML {
+        builder = builder.header(
+            header::CONTENT_SECURITY_POLICY,
+            crate::map_server::MAP_PAGE_CSP,
+        );
+    }
     if let Some(content_range) = content_range {
         builder = builder.header(header::CONTENT_RANGE, content_range);
     }
@@ -472,6 +496,12 @@ mod tests {
             "text/html; charset=utf-8"
         );
         assert_eq!(index.headers()[header::ACCEPT_RANGES], "bytes");
+        let csp = index.headers()[header::CONTENT_SECURITY_POLICY]
+            .to_str()
+            .expect("map page CSP");
+        assert!(csp.contains("connect-src 'self' https://tiles.openfreemap.org"));
+        assert!(csp.contains("worker-src 'self'"));
+        assert!(!csp.contains('*') && !csp.contains("blob:"), "{csp}");
         let body = index.text().await.unwrap();
         assert!(body.contains("id=\"map\""));
         assert!(
@@ -522,6 +552,13 @@ mod tests {
 
         let fixture = get(&server, "/map/fixtures/monaco.pmtiles").await;
         assert_eq!(fixture.status(), StatusCode::OK);
+        assert!(
+            fixture
+                .headers()
+                .get(header::CONTENT_SECURITY_POLICY)
+                .is_none(),
+            "only the map page carries the CSP"
+        );
         assert_eq!(
             fixture.headers()[header::CONTENT_TYPE],
             "application/octet-stream"
@@ -624,6 +661,12 @@ mod tests {
 
         let full = get(&server, "/packs/demo.pmtiles").await;
         assert_eq!(full.status(), StatusCode::OK);
+        assert!(
+            full.headers()
+                .get(header::CONTENT_SECURITY_POLICY)
+                .is_none(),
+            "only the map page carries the CSP"
+        );
         assert_eq!(
             full.headers()[header::CONTENT_TYPE],
             "application/octet-stream"
@@ -648,6 +691,66 @@ mod tests {
             get(&server, "/packs/../demo.pmtiles").await.status(),
             StatusCode::NOT_FOUND
         );
+    }
+
+    #[tokio::test]
+    async fn serves_the_region_catalog_and_region_packs() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir(dir.path().join("moldova")).expect("region dir");
+        std::fs::write(dir.path().join("moldova/moldova.pmtiles"), b"0123456789").unwrap();
+        let server =
+            MapServer::start_with_plan(Some(dir.path().to_path_buf()), DownloadPlan::default())
+                .expect("server starts");
+
+        let catalog = get(&server, "/map/catalog").await;
+        assert_eq!(catalog.status(), StatusCode::OK);
+        assert!(
+            catalog.headers()[header::CONTENT_TYPE]
+                .to_str()
+                .expect("catalog content type")
+                .starts_with("application/json"),
+            "unexpected catalog content type: {:?}",
+            catalog.headers()[header::CONTENT_TYPE]
+        );
+        let catalog: serde_json::Value = catalog.json().await.expect("catalog JSON");
+        assert!(catalog["regions"].is_array(), "catalog: {catalog}");
+
+        let ranged = client()
+            .get(format!("{}/packs/moldova/moldova.pmtiles", server.origin()))
+            .header(header::RANGE, "bytes=2-5")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(ranged.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(ranged.headers()[header::CONTENT_RANGE], "bytes 2-5/10");
+        assert_eq!(ranged.bytes().await.unwrap().as_ref(), b"2345");
+
+        assert_eq!(
+            get(&server, "/packs/atlantis/moldova.pmtiles")
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[tokio::test]
+    async fn download_takes_a_region_id_and_rejects_unknown_regions() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        // A dead host, so a job can never start a real transfer from this test.
+        let plan = DownloadPlan {
+            base_url: Some("http://127.0.0.1:1".to_string()),
+            ..Default::default()
+        };
+        let server = MapServer::start_with_plan(Some(dir.path().to_path_buf()), plan)
+            .expect("server starts");
+
+        let unknown = client()
+            .post(format!("{}/map/offline/download", server.origin()))
+            .json(&serde_json::json!({"region": "atlantis"}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

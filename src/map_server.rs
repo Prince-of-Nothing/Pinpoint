@@ -13,8 +13,9 @@
 //! * supports single `Range` requests with `206` and `Content-Range`, and
 //!   answers unsatisfiable ranges with `416`, matching `web/map/serve.mjs`;
 //! * sends `Accept-Ranges: bytes` and correct MIME types for the page;
-//! * mounts the shared offline installer (`/map/offline/*`, `/map/config`) and
-//!   streams installed `packs/<name>.pmtiles` archives with Range support.
+//! * mounts the shared offline installer (`/map/catalog`, `/map/offline/*`,
+//!   `/map/config`) and streams installed `packs/<region>/<name>` archives
+//!   with Range support (legacy `packs/<name>` stays reachable).
 //!
 //! This is not the production pack server. It exposes only public, bundled
 //! ODbL map assets and downloaded public pack files to the local machine and
@@ -42,6 +43,21 @@ const WEB_DIR: &str = "web";
 /// Marker used to validate a candidate web root.
 const WEB_MARKER: &str = "map/index.html";
 
+/// Content type of the map page (and the only response that carries the CSP).
+const MIME_HTML: &str = "text/html; charset=utf-8";
+
+/// CSP for the loopback map page in the desktop `wry` window and the Android
+/// WebView (`docs/offline/android-webview-online.md` §3): one remote origin,
+/// the opt-in OpenFreeMap basemap; the two inline blocks in
+/// `web/map/index.html` need `'unsafe-inline'`; the vendored MapLibre worker is
+/// same-origin, so no `blob:`. Applied to HTML only, never to pack bytes.
+pub(crate) const MAP_PAGE_CSP: &str = "default-src 'self'; \
+script-src 'self' 'unsafe-inline'; worker-src 'self'; \
+style-src 'self' 'unsafe-inline'; \
+img-src 'self' data: https://tiles.openfreemap.org; font-src 'self'; \
+connect-src 'self' https://tiles.openfreemap.org; base-uri 'none'; \
+frame-ancestors 'none'; form-action 'none'; object-src 'none'";
+
 /// Start a map server on an ephemeral loopback port.
 ///
 /// The server owns its own single-threaded Tokio runtime so callers can start
@@ -53,18 +69,23 @@ pub struct MapServer {
 }
 
 impl MapServer {
-    /// Start the server with the app's own `<app data>/packs` directory.
+    /// Start the server with the app's own `<app data>/packs` directory and the
+    /// production region catalog.
     pub fn start(web_root: impl AsRef<Path>) -> anyhow::Result<Self> {
         let packs = crate::platform::app_data_dir().map(|dir| dir.join("packs"));
-        Self::start_with_packs(web_root, packs)
+        Self::start_with(web_root, packs, OfflineInstaller::new)
     }
 
     /// Start the server with an explicit packs directory (tests and tooling).
+    /// These keep the v2.3.0 single-pack plan so they stay hermetic; production
+    /// uses the region catalog through [`Self::start`].
     pub fn start_with_packs(
         web_root: impl AsRef<Path>,
         packs_dir: Option<PathBuf>,
     ) -> anyhow::Result<Self> {
-        Self::start_with_plan(web_root, packs_dir, DownloadPlan::default())
+        Self::start_with(web_root, packs_dir, |packs| {
+            OfflineInstaller::with_plan(packs, DownloadPlan::default())
+        })
     }
 
     /// Start with explicit artifact metadata. Only used by fixture tests; the
@@ -73,6 +94,16 @@ impl MapServer {
         web_root: impl AsRef<Path>,
         packs_dir: Option<PathBuf>,
         plan: DownloadPlan,
+    ) -> anyhow::Result<Self> {
+        Self::start_with(web_root, packs_dir, move |packs| {
+            OfflineInstaller::with_plan(packs, plan)
+        })
+    }
+
+    fn start_with(
+        web_root: impl AsRef<Path>,
+        packs_dir: Option<PathBuf>,
+        make_installer: impl FnOnce(Option<PathBuf>) -> OfflineInstaller + Send + 'static,
     ) -> anyhow::Result<Self> {
         use anyhow::Context as _;
 
@@ -87,10 +118,10 @@ impl MapServer {
         let assets = MapAssets {
             root: Arc::new(root),
         };
-        let installer = Arc::new(OfflineInstaller::with_plan(packs_dir.clone(), plan));
         let router = Arc::new(crate::local_route::LocalRouter::for_packs_dir(
             packs_dir.as_deref(),
         ));
+        let installer = Arc::new(make_installer(packs_dir));
 
         std::thread::Builder::new()
             .name("pinpoint-map-server".to_string())
@@ -130,11 +161,16 @@ impl MapServer {
 
                     let app = Router::new()
                         .route("/map/route", get(crate::local_route::map_route))
+                        .route("/map/catalog", get(crate::offline_install::catalog))
                         .route("/map/config", get(crate::offline_install::config))
                         .route("/map/offline/status", get(crate::offline_install::status))
                         .route(
                             "/map/offline/download",
                             post(crate::offline_install::download),
+                        )
+                        .route(
+                            "/packs/:region/:name",
+                            get(crate::offline_install::serve_region_pack),
                         )
                         .route("/packs/:name", get(crate::offline_install::serve_pack))
                         .fallback(serve_asset)
@@ -442,7 +478,7 @@ fn content_type(path: &Path) -> &'static str {
         .map(|extension| extension.to_ascii_lowercase());
     match extension.as_deref() {
         Some("css") => "text/css; charset=utf-8",
-        Some("html") => "text/html; charset=utf-8",
+        Some("html") => MIME_HTML,
         Some("js" | "mjs") => "text/javascript; charset=utf-8",
         Some("json" | "map") => "application/json; charset=utf-8",
         Some("md" | "txt") => "text/plain; charset=utf-8",
@@ -472,6 +508,12 @@ fn asset_response(
         header::X_CONTENT_TYPE_OPTIONS,
         HeaderValue::from_static("nosniff"),
     );
+    if mime == MIME_HTML {
+        headers.insert(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static(MAP_PAGE_CSP),
+        );
+    }
     if let Ok(value) = HeaderValue::from_str(&content_length.to_string()) {
         headers.insert(header::CONTENT_LENGTH, value);
     }
@@ -589,6 +631,12 @@ mod tests {
         assert_eq!(page.status(), reqwest::StatusCode::OK);
         assert_eq!(page.headers()["content-type"], "text/html; charset=utf-8");
         assert_eq!(page.headers()["accept-ranges"], "bytes");
+        let csp = page.headers()["content-security-policy"]
+            .to_str()
+            .expect("map page CSP");
+        assert!(csp.contains("https://tiles.openfreemap.org"), "{csp}");
+        assert!(csp.contains("connect-src 'self' https://tiles.openfreemap.org"));
+        assert!(!csp.contains('*') && !csp.contains("blob:"), "{csp}");
         let body = page.text().await.expect("page body");
         assert!(body.contains("OpenStreetMap contributors"));
         assert!(body.contains("ODbL 1.0"));
@@ -696,6 +744,7 @@ mod tests {
         assert_eq!(config["pmtilesUrl"], "./fixtures/monaco.pmtiles");
         assert_eq!(config["packInstalled"], false);
         assert_eq!(config["graphInstalled"], false);
+        assert!(config["regions"].is_array(), "config: {config}");
 
         // A sparse file with the production length is enough for the length
         // check; the real SHA-256 is verified by the download manager.
@@ -741,6 +790,10 @@ mod tests {
             ranged.headers()["content-range"],
             format!("bytes 0-15/{PACK_BYTES}")
         );
+        assert!(
+            ranged.headers().get("content-security-policy").is_none(),
+            "pack bytes must not carry the page CSP"
+        );
         assert_eq!(ranged.bytes().await.expect("range body").len(), 16);
 
         let invalid = client
@@ -754,6 +807,70 @@ mod tests {
             invalid.headers()["content-range"],
             format!("bytes */{PACK_BYTES}")
         );
+
+        drop(client);
+        server.shutdown();
+    }
+
+    #[tokio::test]
+    async fn serves_the_region_catalog_and_region_packs() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir(dir.path().join("moldova")).expect("region dir");
+        std::fs::File::create(dir.path().join("moldova/moldova.pmtiles"))
+            .expect("sparse pack")
+            .set_len(PACK_BYTES)
+            .expect("pack length");
+        let server = MapServer::start_with_packs(repo_web_root(), Some(dir.path().to_path_buf()))
+            .expect("server");
+        let client = reqwest::Client::new();
+
+        let catalog = client
+            .get(format!("{}map/catalog", server.base_url()))
+            .send()
+            .await
+            .expect("catalog request");
+        assert_eq!(catalog.status(), reqwest::StatusCode::OK);
+        assert!(
+            catalog.headers()["content-type"]
+                .to_str()
+                .expect("catalog content type")
+                .starts_with("application/json"),
+            "unexpected catalog content type: {:?}",
+            catalog.headers()["content-type"]
+        );
+        let catalog: serde_json::Value = catalog.json().await.expect("catalog JSON");
+        assert!(catalog["regions"].is_array(), "catalog: {catalog}");
+
+        let ranged = client
+            .get(format!(
+                "{}packs/moldova/moldova.pmtiles",
+                server.base_url()
+            ))
+            .header(reqwest::header::RANGE, "bytes=0-15")
+            .send()
+            .await
+            .expect("region range");
+        assert_eq!(ranged.status(), reqwest::StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            ranged.headers()["content-range"],
+            format!("bytes 0-15/{PACK_BYTES}")
+        );
+        assert_eq!(ranged.headers()["accept-ranges"], "bytes");
+        assert!(
+            ranged.headers().get("content-security-policy").is_none(),
+            "pack bytes must not carry the page CSP"
+        );
+        assert_eq!(ranged.bytes().await.expect("range body").len(), 16);
+
+        let unknown = client
+            .get(format!(
+                "{}packs/atlantis/moldova.pmtiles",
+                server.base_url()
+            ))
+            .send()
+            .await
+            .expect("unknown region request");
+        assert_eq!(unknown.status(), reqwest::StatusCode::NOT_FOUND);
 
         drop(client);
         server.shutdown();

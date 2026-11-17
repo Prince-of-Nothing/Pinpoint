@@ -1,3 +1,32 @@
+# Pinpoint 2.5.2 - Release Notes
+
+**Released:** 2026-11-17 - **Version:** `2.5.2` (from `2.5.1`) -
+**Status:** Demo-hardening patch for durable friend requests.
+
+**Artifacts:** `pinpoint-android-2.5.2.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source archives for the `v2.5.2` tag.
+
+## What is fixed
+
+- Friend requests, accepts and removals are written directly to Postgres.
+  Before, the write went through the whole-store snapshot tick; on the
+  multi-replica deployment a request could be acknowledged and then wiped by
+  the next refresh before it was persisted, so the receiver never saw it.
+
+## Verification
+
+- `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo test --locked` pass.
+- Live retest on the deployed service: request → accept → sharing → pause →
+  revoke, exact coordinates, durable after 10 s.
+
+## Upgrade
+
+Install over 2.5.1. Existing accounts, friendships, shares and installed
+packs are preserved.
+
+---
+
 # Pinpoint 2.5.1 - Release Notes
 
 **Released:** 2026-11-17 - **Version:** `2.5.1` (from `2.5.0`) -

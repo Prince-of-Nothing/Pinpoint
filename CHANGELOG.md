@@ -10,6 +10,10 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [2.5.2] - 2026-11-17
+### Fixed
+- [FIX] Friends: friend requests, accepts and removals now write directly to Postgres instead of a whole-store snapshot. On the multi-replica deployment a request could be acknowledged and then wiped before it was persisted, so the receiver never saw it.
+
 ## [2.5.1] - 2026-11-17
 ### Fixed
 - [FIX] Web: the anonymous recovery code panel now sits above the fixed map shell, so the code and “I saved it” are visible and clickable on desktop and mobile.

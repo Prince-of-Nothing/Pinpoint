@@ -10,7 +10,7 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
-## [Unreleased]
+## [2.5.0] - 2026-11-17
 ### Added
 - [FEATURE] Web sharing: a deliberate consent sheet with a named/precision/timed summary and confirmation before granting or widening a share; the "Who can see me" list shows friend, precision, active/paused/expired state and expiry, with one-click revoke and a "Share again" path for expired shares; editing precision preserves the existing expiry.
 - [FEATURE] Map: a "covers this view" hint in the Maps panel when the map center falls inside a catalog region that is not active, with Download (idle) or Show (installed).

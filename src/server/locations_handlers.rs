@@ -39,6 +39,7 @@ fn visible_share(store: &Store, viewer: i64, owner: i64) -> Option<&LocationShar
 
 fn round_for_precision(lat: f64, lon: f64, precision: &str) -> (f64, f64) {
     match precision {
+        "exact" => (lat, lon),
         "approximate" => ((lat * 100.0).round() / 100.0, (lon * 100.0).round() / 100.0),
         "city_only" => ((lat * 10.0).round() / 10.0, (lon * 10.0).round() / 10.0),
         // Defense in depth for legacy/corrupt rows: an unknown level must
@@ -109,45 +110,51 @@ pub async fn create_share(
     if friendship_id <= 0 {
         return error_envelope("VALIDATION_FAILED", "friendship_id is required");
     }
-    let mut store = state.store.lock().unwrap();
-    if !store.friendships.iter().any(|f| {
-        f.id == friendship_id
-            && f.status == "accepted"
-            && (f.requester_id == cu.user_id || f.receiver_id == cu.user_id)
-    }) {
-        return error_envelope(
-            "FRIENDSHIP_NOT_FOUND",
-            "Friendship not found or not accepted.",
-        );
-    }
     // Per-friend control is an upsert: one share per friendship + direction.
-    if let Some(existing) = store.shares.iter_mut().find(|s| {
-        s.owner_id == cu.user_id && s.friendship_id == friendship_id && s.direction == direction
-    }) {
-        existing.precision_level = precision;
-        existing.expires_at = expires_at;
-        existing.is_active = true;
-        if label.is_some() {
-            existing.label = label;
+    // Shares are written directly to Postgres, never by a whole-store
+    // snapshot, so a stale replica cannot resurrect a revoked share.
+    let (status, share) = {
+        let mut store = state.store.lock().unwrap();
+        if !store.friendships.iter().any(|f| {
+            f.id == friendship_id
+                && f.status == "accepted"
+                && (f.requester_id == cu.user_id || f.receiver_id == cu.user_id)
+        }) {
+            return error_envelope(
+                "FRIENDSHIP_NOT_FOUND",
+                "Friendship not found or not accepted.",
+            );
         }
-        let view = share_json(existing);
-        return (StatusCode::OK, Json(view)).into_response();
-    }
-    let id = store.next_share_id;
-    store.next_share_id += 1;
-    let share = crate::models::LocationShare {
-        id,
-        friendship_id,
-        owner_id: cu.user_id,
-        direction: direction.clone(),
-        precision_level: precision.clone(),
-        is_active: true,
-        last_location_update_at: None,
-        expires_at,
-        label,
+        if let Some(existing) = store.shares.iter_mut().find(|s| {
+            s.owner_id == cu.user_id && s.friendship_id == friendship_id && s.direction == direction
+        }) {
+            existing.precision_level = precision;
+            existing.expires_at = expires_at;
+            existing.is_active = true;
+            if label.is_some() {
+                existing.label = label;
+            }
+            (StatusCode::OK, existing.clone())
+        } else {
+            let id = store.next_share_id;
+            store.next_share_id += 1;
+            let share = crate::models::LocationShare {
+                id,
+                friendship_id,
+                owner_id: cu.user_id,
+                direction: direction.clone(),
+                precision_level: precision.clone(),
+                is_active: true,
+                last_location_update_at: None,
+                expires_at,
+                label,
+            };
+            store.shares.push(share.clone());
+            (StatusCode::CREATED, share)
+        }
     };
-    store.shares.push(share.clone());
-    (StatusCode::CREATED, Json(share_json(&share))).into_response()
+    state.sql_upsert_share(&share).await;
+    (status, Json(share_json(&share))).into_response()
 }
 
 /// `GET /locations/shares`.
@@ -180,83 +187,88 @@ pub async fn update_share(
         Ok(cu) => cu,
         Err(resp) => return resp,
     };
-    let mut store = state.store.lock().unwrap();
-    let pos = match store.shares.iter().position(|s| s.id == id) {
-        Some(p) if store.shares[p].owner_id == cu.user_id => p,
-        _ => return error_envelope("SHARE_NOT_FOUND", "Share not found."),
-    };
+    let (view, updated) = {
+        let mut store = state.store.lock().unwrap();
+        let pos = match store.shares.iter().position(|s| s.id == id) {
+            Some(p) if store.shares[p].owner_id == cu.user_id => p,
+            _ => return error_envelope("SHARE_NOT_FOUND", "Share not found."),
+        };
 
-    // Validate every supplied field before mutating the stored share: a
-    // rejected PATCH must not flip is_active or silently widen precision.
-    let mut next_active = None;
-    if let Some(active) = body.get("is_active") {
-        let Some(active) = active.as_bool() else {
-            return error_envelope("VALIDATION_FAILED", "is_active must be a boolean");
-        };
-        next_active = Some(active);
-    }
-    let mut next_precision = None;
-    if let Some(p) = body.get("precision_level").and_then(Value::as_str) {
-        if !["exact", "approximate", "city_only"].contains(&p) {
-            return error_envelope(
-                "VALIDATION_FAILED",
-                "precision_level must be exact, approximate, or city_only",
-            );
+        // Validate every supplied field before mutating the stored share: a
+        // rejected PATCH must not flip is_active or silently widen precision.
+        let mut next_active = None;
+        if let Some(active) = body.get("is_active") {
+            let Some(active) = active.as_bool() else {
+                return error_envelope("VALIDATION_FAILED", "is_active must be a boolean");
+            };
+            next_active = Some(active);
         }
-        next_precision = Some(p.to_string());
-    }
-    let mut next_direction = None;
-    if let Some(d) = body.get("direction").and_then(Value::as_str) {
-        if !["to_friend", "from_friend", "mutual"].contains(&d) {
-            return error_envelope(
-                "VALIDATION_FAILED",
-                "direction must be to_friend, from_friend, or mutual",
-            );
+        let mut next_precision = None;
+        if let Some(p) = body.get("precision_level").and_then(Value::as_str) {
+            if !["exact", "approximate", "city_only"].contains(&p) {
+                return error_envelope(
+                    "VALIDATION_FAILED",
+                    "precision_level must be exact, approximate, or city_only",
+                );
+            }
+            next_precision = Some(p.to_string());
         }
-        next_direction = Some(d.to_string());
-    }
-    let next_label = body
-        .get("label")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let next_expiry = if body.get("expires_at").is_some() {
-        let Some(raw) = body.get("expires_at").and_then(Value::as_str) else {
-            return error_envelope("VALIDATION_FAILED", "expires_at must be a string");
-        };
-        if chrono::DateTime::parse_from_rfc3339(raw).is_err() {
-            return error_envelope("VALIDATION_FAILED", "expires_at must be RFC 3339");
+        let mut next_direction = None;
+        if let Some(d) = body.get("direction").and_then(Value::as_str) {
+            if !["to_friend", "from_friend", "mutual"].contains(&d) {
+                return error_envelope(
+                    "VALIDATION_FAILED",
+                    "direction must be to_friend, from_friend, or mutual",
+                );
+            }
+            next_direction = Some(d.to_string());
         }
-        Some(Some(raw.to_string()))
-    } else if let Some(h) = body.get("duration_hours").and_then(Value::as_i64) {
-        if h < 0 {
-            return error_envelope("VALIDATION_FAILED", "duration_hours must be >= 0");
-        }
-        Some(if h == 0 {
-            None
+        let next_label = body
+            .get("label")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let next_expiry = if body.get("expires_at").is_some() {
+            let Some(raw) = body.get("expires_at").and_then(Value::as_str) else {
+                return error_envelope("VALIDATION_FAILED", "expires_at must be a string");
+            };
+            if chrono::DateTime::parse_from_rfc3339(raw).is_err() {
+                return error_envelope("VALIDATION_FAILED", "expires_at must be RFC 3339");
+            }
+            Some(Some(raw.to_string()))
+        } else if let Some(h) = body.get("duration_hours").and_then(Value::as_i64) {
+            if h < 0 {
+                return error_envelope("VALIDATION_FAILED", "duration_hours must be >= 0");
+            }
+            Some(if h == 0 {
+                None
+            } else {
+                Some((chrono::Utc::now() + chrono::Duration::hours(h)).to_rfc3339())
+            })
         } else {
-            Some((chrono::Utc::now() + chrono::Duration::hours(h)).to_rfc3339())
-        })
-    } else {
-        None
-    };
+            None
+        };
 
-    let share = &mut store.shares[pos];
-    if let Some(active) = next_active {
-        share.is_active = active;
-    }
-    if let Some(p) = next_precision {
-        share.precision_level = p;
-    }
-    if let Some(d) = next_direction {
-        share.direction = d;
-    }
-    if let Some(l) = next_label {
-        share.label = Some(l);
-    }
-    if let Some(e) = next_expiry {
-        share.expires_at = e;
-    }
-    (StatusCode::OK, Json(share_json(share))).into_response()
+        let share = &mut store.shares[pos];
+        if let Some(active) = next_active {
+            share.is_active = active;
+        }
+        if let Some(p) = next_precision {
+            share.precision_level = p;
+        }
+        if let Some(d) = next_direction {
+            share.direction = d;
+        }
+        if let Some(l) = next_label {
+            share.label = Some(l);
+        }
+        if let Some(e) = next_expiry {
+            share.expires_at = e;
+        }
+        let updated = share.clone();
+        (share_json(share), updated)
+    };
+    state.sql_upsert_share(&updated).await;
+    (StatusCode::OK, Json(view)).into_response()
 }
 
 /// `DELETE /locations/shares/{id}` — revoke a share permanently.
@@ -456,11 +468,19 @@ pub async fn create_check_in(
 }
 
 /// `GET /locations/check-ins` — all check-ins (newest first).
-pub async fn list_check_ins(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn list_check_ins(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let store = state.store.lock().unwrap();
     let mut items: Vec<Value> = store
         .check_ins
         .iter()
+        .filter(|c| c.user_id == cu.user_id)
         .map(|c| {
             json!({
                 "id": c.id, "user_id": c.user_id, "user_name": c.user_name,
@@ -476,13 +496,18 @@ pub async fn list_check_ins(State(state): State<AppState>) -> impl IntoResponse 
 /// `DELETE /locations/check-ins/{id}`.
 pub async fn delete_check_in(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Path(id): Path<i64>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     {
         let mut store = state.store.lock().unwrap();
         let pos = match store.check_ins.iter().position(|c| c.id == id) {
-            Some(p) => p,
-            None => return error_envelope("CHECK_IN_NOT_FOUND", "Check-in not found."),
+            Some(p) if store.check_ins[p].user_id == cu.user_id => p,
+            _ => return error_envelope("CHECK_IN_NOT_FOUND", "Check-in not found."),
         };
         store.check_ins.remove(pos);
     }
@@ -562,11 +587,19 @@ pub async fn trigger_emergency(
 }
 
 /// `GET /locations/emergency` — all emergency alerts (newest first).
-pub async fn list_emergencies(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn list_emergencies(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let store = state.store.lock().unwrap();
     let mut items: Vec<Value> = store
         .emergencies
         .iter()
+        .filter(|e| e.user_id == cu.user_id)
         .map(|e| {
             json!({
                 "id": e.id, "user_id": e.user_id, "user_name": e.user_name,
@@ -582,17 +615,22 @@ pub async fn list_emergencies(State(state): State<AppState>) -> impl IntoRespons
 /// `PATCH /locations/emergency/{id}` — resolve / re-open an alert.
 pub async fn resolve_emergency(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     Path(id): Path<i64>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let cu = match require_current_user(cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
     let resolved = body
         .get("resolved")
         .and_then(Value::as_bool)
         .unwrap_or(true);
     let mut store = state.store.lock().unwrap();
     let alert = match store.emergencies.iter_mut().find(|e| e.id == id) {
-        Some(e) => e,
-        None => return error_envelope("EMERGENCY_NOT_FOUND", "Emergency alert not found."),
+        Some(e) if e.user_id == cu.user_id => e,
+        _ => return error_envelope("EMERGENCY_NOT_FOUND", "Emergency alert not found."),
     };
     alert.resolved = resolved;
     (

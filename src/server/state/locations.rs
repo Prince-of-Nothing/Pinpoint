@@ -148,13 +148,9 @@ impl AppState {
         tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
         store: &Store,
     ) {
-        if self.owner.owns_shares() {
-            for s in &store.shares {
-                let _ = sqlx::query("INSERT INTO pinpoint_shares (id, friendship_id, owner_id, direction, precision_level, is_active, last_location_update_at, expires_at, label) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO UPDATE SET friendship_id = EXCLUDED.friendship_id, owner_id = EXCLUDED.owner_id, direction = EXCLUDED.direction, precision_level = EXCLUDED.precision_level, is_active = EXCLUDED.is_active, last_location_update_at = EXCLUDED.last_location_update_at, expires_at = EXCLUDED.expires_at, label = EXCLUDED.label")
-                    .bind(s.id).bind(s.friendship_id).bind(s.owner_id).bind(&s.direction).bind(&s.precision_level).bind(s.is_active).bind(&s.last_location_update_at).bind(&s.expires_at).bind(&s.label)
-                    .execute(&mut **tx).await;
-            }
-        }
+        // Shares are written by sql_upsert_share/sql_delete_share only. A
+        // whole-store snapshot would resurrect a share deleted by another
+        // request or replica after the explicit DELETE.
         if self.owner.owns_locations() {
             for l in &store.locations {
                 let _ = sqlx::query("INSERT INTO pinpoint_locations (user_id, user_name, latitude, longitude, precision_level, updated_at, accuracy) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (user_id) DO UPDATE SET user_name = EXCLUDED.user_name, latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, precision_level = EXCLUDED.precision_level, updated_at = EXCLUDED.updated_at, accuracy = EXCLUDED.accuracy")
@@ -179,6 +175,22 @@ impl AppState {
         // No delete-missing: deletions go through sql_delete_* (explicit)
         // so a stale snapshot can never erase a row another replica just
         // committed.
+    }
+
+    pub async fn sql_upsert_share(&self, share: &LocationShare) {
+        let Some(pool) = &self.pg else { return };
+        let _ = sqlx::query("INSERT INTO pinpoint_shares (id, friendship_id, owner_id, direction, precision_level, is_active, last_location_update_at, expires_at, label) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT (id) DO UPDATE SET friendship_id = EXCLUDED.friendship_id, owner_id = EXCLUDED.owner_id, direction = EXCLUDED.direction, precision_level = EXCLUDED.precision_level, is_active = EXCLUDED.is_active, last_location_update_at = EXCLUDED.last_location_update_at, expires_at = EXCLUDED.expires_at, label = EXCLUDED.label")
+            .bind(share.id)
+            .bind(share.friendship_id)
+            .bind(share.owner_id)
+            .bind(&share.direction)
+            .bind(&share.precision_level)
+            .bind(share.is_active)
+            .bind(&share.last_location_update_at)
+            .bind(&share.expires_at)
+            .bind(&share.label)
+            .execute(pool)
+            .await;
     }
 
     pub async fn sql_delete_share(&self, id: i64) {

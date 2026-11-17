@@ -625,3 +625,156 @@ async fn list_hides_from_friend_shares() {
     let visible = get_json(&app, "/api/v1/locations/friends", &alice_cookie).await;
     assert_eq!(visible, json!([]));
 }
+
+#[tokio::test]
+async fn exact_share_keeps_full_precision() {
+    let state = pinpoint_desktop::server::AppState::new();
+    let app = pinpoint_desktop::server::router(state);
+    let (alice_cookie, alice_csrf, _, _) =
+        register(&app, "exact-alice@example.invalid", "Alice").await;
+    let (bob_cookie, bob_csrf, _, bob_username) =
+        register(&app, "exact-bob@example.invalid", "Bob").await;
+    let friendship_id = accepted_friendship(
+        &app,
+        &alice_cookie,
+        &alice_csrf,
+        &bob_cookie,
+        &bob_csrf,
+        &bob_username,
+    )
+    .await;
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/me",
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"latitude":47.0245,"longitude":28.8322,"accuracy":5.0}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/shares",
+            &bob_cookie,
+            &bob_csrf,
+            &format!(r#"{{"friendship_id":{friendship_id},"precision_level":"exact"}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let visible = get_json(&app, "/api/v1/locations/friends", &alice_cookie).await;
+    let item = &visible[0];
+    assert_eq!(item["precision_level"], "exact");
+    assert_eq!(item["latitude"].as_f64().unwrap(), 47.0245);
+    assert_eq!(item["longitude"].as_f64().unwrap(), 28.8322);
+}
+
+#[tokio::test]
+async fn check_ins_and_emergencies_require_auth_and_are_owner_scoped() {
+    let state = pinpoint_desktop::server::AppState::new();
+    let app = pinpoint_desktop::server::router(state);
+    let (alice_cookie, alice_csrf, _, _) =
+        register(&app, "private-alice@example.invalid", "Alice").await;
+    let (bob_cookie, bob_csrf, _, _) = register(&app, "private-bob@example.invalid", "Bob").await;
+
+    for uri in ["/api/v1/locations/check-ins", "/api/v1/locations/emergency"] {
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "{uri}");
+    }
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/check-ins",
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"latitude":47.01,"longitude":28.86,"note":"private","kind":"manual"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let check_in_id = body_json(resp).await["id"].as_i64().expect("check-in id");
+
+    assert_eq!(
+        get_json(&app, "/api/v1/locations/check-ins", &alice_cookie).await,
+        json!([]),
+        "check-ins are owner-scoped"
+    );
+    let bob_items = get_json(&app, "/api/v1/locations/check-ins", &bob_cookie).await;
+    assert_eq!(bob_items.as_array().expect("array").len(), 1);
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "DELETE",
+            &format!("/api/v1/locations/check-ins/{check_in_id}"),
+            &alice_cookie,
+            &alice_csrf,
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let bob_items = get_json(&app, "/api/v1/locations/check-ins", &bob_cookie).await;
+    assert_eq!(bob_items.as_array().expect("array").len(), 1);
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/emergency",
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"latitude":47.01,"longitude":28.86,"message":"private"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let emergency_id = body_json(resp).await["id"].as_i64().expect("emergency id");
+
+    assert_eq!(
+        get_json(&app, "/api/v1/locations/emergency", &alice_cookie).await,
+        json!([]),
+        "emergencies are owner-scoped"
+    );
+    let bob_items = get_json(&app, "/api/v1/locations/emergency", &bob_cookie).await;
+    assert_eq!(bob_items.as_array().expect("array").len(), 1);
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "PATCH",
+            &format!("/api/v1/locations/emergency/{emergency_id}"),
+            &alice_cookie,
+            &alice_csrf,
+            r#"{"resolved":true}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "PATCH",
+            &format!("/api/v1/locations/emergency/{emergency_id}"),
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"resolved":true}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}

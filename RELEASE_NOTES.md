@@ -1,3 +1,53 @@
+# Pinpoint 2.5.1 - Release Notes
+
+**Released:** 2026-11-17 - **Version:** `2.5.1` (from `2.5.0`) -
+**Status:** Demo-hardening patch for anonymous recovery, offline routing,
+exact sharing and private locations.
+
+**Artifacts:** `pinpoint-android-2.5.1.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source archives for the `v2.5.1` tag.
+
+## What is fixed
+
+- The anonymous recovery panel sits above the fixed map shell, so its code and
+  “I saved it” button are visible and clickable on desktop and mobile.
+- The local router resolves `packs/<region>/<region>.graph.bin` after a
+  catalog install (and still accepts the legacy root file), so `/map/route`
+  works on a default map server without `PINPOINT_ROUTER_GRAPH`.
+- Exact shares return the published coordinates instead of a 0.1°-rounded
+  fallback.
+- Share create/update/delete write directly to Postgres; a stale whole-store
+  snapshot can no longer resurrect a paused or revoked share.
+- Check-ins and emergency alerts require authentication and are owner-scoped;
+  they are no longer readable or deletable by another user.
+
+## Verification
+
+- `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo test --locked` pass.
+- `location_consent`: **10 passed** (exact precision, owner-only PATCH/DELETE,
+  expiry, invalid values, private check-ins/emergencies).
+- `local_route`: **7 passed**; the default map server returned HTTP 200 for a
+  Moldova route after a catalog install (before: 503).
+- `tests/assets`: **10 passed**; web map smoke suite passes.
+- `scripts/v2/check.ps1`: **17/17**.
+
+## Known limitations
+
+- Admin console still needs a promoted account and `DATABASE_URL`; no seeded
+  admin exists.
+- The native Windows WebView2 window needs the WebView2 runtime installed; the
+  system-browser fallback works.
+- Romania is ~681 MB installed; Moldova remains the demo pack.
+- No physical Android device/emulator run in this environment.
+
+## Upgrade
+
+Install over 2.5.0. Existing accounts, shares and installed packs are
+preserved.
+
+---
+
 # Pinpoint 2.5.0 - Release Notes
 
 **Released:** 2026-11-17 - **Version:** `2.5.0` (from `2.4.0`) -

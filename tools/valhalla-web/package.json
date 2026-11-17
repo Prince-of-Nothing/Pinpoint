@@ -1,0 +1,15 @@
+{
+  "name": "pinpoint-valhalla-web-spike",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Spike: Valhalla WASM routing for the Pinpoint web/MapLibre client",
+  "type": "module",
+  "scripts": {
+    "install:jansoft": "npm install --no-save --no-package-lock @jansoft/mbujkanji-valhalla-wasm@0.1.2",
+    "spike": "node run.mjs"
+  },
+  "dependencies": {
+    "@adret-maps/valhalla-wasm": "3.9.0-alpha.2",
+    "valhalla-browser": "0.2.1"
+  }
+}

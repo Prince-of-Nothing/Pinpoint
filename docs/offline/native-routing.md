@@ -197,6 +197,28 @@ Rebuild `graph.bin` whenever the PBF changes. Bump `GRAPH_FORMAT_VERSION` when
 the format changes so a client can reject an incompatible cache and fetch/rebuild
 a new one instead of misreading it.
 
+## Map server integration (delivered)
+
+Both loopback map servers used by the WebView pages now mount
+`GET /map/route?from_lat=&from_lon=&to_lat=&to_lon=&profile=auto` from
+`src/local_route.rs`, backed by this crate's `Graph` and A* router:
+
+- Desktop: `src/map_server.rs` (the `web/` asset server).
+- Android: `src/mobile/map_server.rs` (the embedded-asset server).
+- The graph is loaded lazily from `PINPOINT_ROUTER_GRAPH`, otherwise
+  `<app data>/packs/moldova.graph.bin`, in `spawn_blocking`.
+- The response is the route UI contract (`distance_m`, `duration_s`, `points`,
+  `maneuvers`); missing/invalid coordinates are `400`, outside coverage and
+  no-path are `404`, and a missing/invalid cache is
+  `503 {"error":"ROUTING_UNAVAILABLE"}`. There is still no network fallback.
+- The shared map page (`web/map/index.html`) mounts `createRouteUI`, defaults to
+  Chișinău → Bălți, draws the returned line through MapLibre and disables the
+  unimplemented Walk/Bike profiles.
+
+The unit tests build a synthetic `graph.bin` in a temp directory; the ignored
+browser E2E (`tests/map_route_e2e.rs`) runs the same `/map/route` endpoint in a
+headless Chromium session with a synthetic or the real Moldova cache.
+
 ## Android integration shape
 
 No JNI wrapper, Gradle packaging or APK change was done in this wave; this

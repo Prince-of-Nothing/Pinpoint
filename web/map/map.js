@@ -16,6 +16,9 @@ import * as maplibregl from "../vendor/maplibre-gl.js";
 const PMTILES_SCRIPT_URL = new URL("../vendor/pmtiles.js", import.meta.url).href;
 const LOCATION_SOURCE = "pinpoint-locations";
 const LOCATION_LAYER = "pinpoint-locations-circles";
+const ROUTE_SOURCE = "pinpoint-route";
+const ROUTE_CASING_LAYER = "pinpoint-route-casing";
+const ROUTE_LINE_LAYER = "pinpoint-route-line";
 const STYLE_ELEMENT_ID = "pinpoint-map-styles";
 
 const PRECISION_COLORS = {
@@ -30,6 +33,14 @@ const PRECISION_LABELS = {
   approximate: "Approximate location",
   city_only: "City only",
   unknown: "Location",
+};
+
+/**
+ * Route line colours for the casing and the line layer.
+ */
+const ROUTE_PAINT = {
+  light: { casing: "#ffffff", line: "#0f9d6e" },
+  dark: { casing: "#0b0f14", line: "#34d399" },
 };
 
 /**
@@ -221,6 +232,42 @@ function toGeoJSON(locations) {
   return { type: "FeatureCollection", features };
 }
 
+/**
+ * Convert route `[lat, lon]` points into a GeoJSON LineString feature.
+ * Invalid or missing points are skipped; fewer than two valid points means no
+ * drawable route.
+ */
+function toRouteGeoJSON(routeOrPoints) {
+  const points = Array.isArray(routeOrPoints)
+    ? routeOrPoints
+    : Array.isArray(routeOrPoints?.points)
+      ? routeOrPoints.points
+      : [];
+  const coordinates = [];
+
+  for (const point of points) {
+    if (!Array.isArray(point) || point.length < 2) continue;
+    const lat = Number(point[0]);
+    const lon = Number(point[1]);
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lon) ||
+      Math.abs(lat) > 90 ||
+      Math.abs(lon) > 180
+    ) {
+      continue;
+    }
+    coordinates.push([lon, lat]);
+  }
+
+  if (coordinates.length < 2) return null;
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: { type: "LineString", coordinates },
+  };
+}
+
 function buildPopupContent(properties) {
   const root = document.createElement("div");
   root.className = "pinpoint-popup-content";
@@ -282,6 +329,7 @@ export function createMap({
   let destroyed = false;
   let locationsRequested = false;
   let pendingLocations = toGeoJSON([]);
+  let pendingRoute = null;
   let popup = null;
   let locationHandlersInstalled = false;
 
@@ -289,6 +337,8 @@ export function createMap({
     setLocations,
     onClick,
     setTheme,
+    drawRoute,
+    clearRoute,
     destroy,
     resize,
     getMap,
@@ -307,6 +357,7 @@ export function createMap({
     for (const [layerId, [property, value]] of Object.entries(THEME_PAINT[theme])) {
       if (map.getLayer(layerId)) map.setPaintProperty(layerId, property, value);
     }
+    paintRoute();
   }
 
   function installLocationHandlers() {
@@ -371,6 +422,82 @@ export function createMap({
     installLocationHandlers();
   }
 
+  function paintRoute() {
+    if (!map || !map.isStyleLoaded()) return;
+    const colors = ROUTE_PAINT[theme];
+    if (map.getLayer(ROUTE_CASING_LAYER)) {
+      map.setPaintProperty(ROUTE_CASING_LAYER, "line-color", colors.casing);
+    }
+    if (map.getLayer(ROUTE_LINE_LAYER)) {
+      map.setPaintProperty(ROUTE_LINE_LAYER, "line-color", colors.line);
+    }
+  }
+
+  function applyRoute() {
+    if (!map || !loaded || !pendingRoute) return;
+
+    if (map.getSource(ROUTE_SOURCE)) {
+      map.getSource(ROUTE_SOURCE).setData(pendingRoute);
+    } else {
+      map.addSource(ROUTE_SOURCE, { type: "geojson", data: pendingRoute });
+      map.addLayer({
+        id: ROUTE_CASING_LAYER,
+        type: "line",
+        source: ROUTE_SOURCE,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ROUTE_PAINT[theme].casing,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 6, 7, 14, 11],
+          "line-opacity": 0.9,
+        },
+      });
+      map.addLayer({
+        id: ROUTE_LINE_LAYER,
+        type: "line",
+        source: ROUTE_SOURCE,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": ROUTE_PAINT[theme].line,
+          "line-width": ["interpolate", ["linear"], ["zoom"], 6, 4, 14, 6.5],
+        },
+      });
+    }
+
+    paintRoute();
+
+    const bounds = new maplibregl.LngLatBounds();
+    for (const coordinate of pendingRoute.geometry.coordinates) {
+      bounds.extend(coordinate);
+    }
+    map.fitBounds(bounds, { padding: 48, maxZoom: 14, duration: 600 });
+  }
+
+  /**
+   * Draw a local route line. Accepts the route UI shape (`points: [[lat, lon]]`)
+   * or a plain list of points. Safe before the style has loaded: the latest
+   * call is drawn on load. Returns `false` when there is no usable geometry.
+   *
+   * @param {object|Array<[number, number]>} routeOrPoints
+   * @returns {boolean}
+   */
+  function drawRoute(routeOrPoints) {
+    const feature = toRouteGeoJSON(routeOrPoints);
+    if (!feature) return false;
+    pendingRoute = feature;
+    applyRoute();
+    return true;
+  }
+
+  /** Remove the route line, casing and source. Safe to call repeatedly. */
+  function clearRoute() {
+    pendingRoute = null;
+    if (!map || !loaded) return;
+    for (const layer of [ROUTE_LINE_LAYER, ROUTE_CASING_LAYER]) {
+      if (map.getLayer(layer)) map.removeLayer(layer);
+    }
+    if (map.getSource(ROUTE_SOURCE)) map.removeSource(ROUTE_SOURCE);
+  }
+
   /**
    * Replace the friend markers. Invalid coordinates are skipped. Safe to call
    * before the style has loaded; the latest call wins.
@@ -425,6 +552,7 @@ export function createMap({
     if (destroyed) return;
     destroyed = true;
     clickListeners.clear();
+    pendingRoute = null;
     popup?.remove();
     popup = null;
     map?.remove();
@@ -458,6 +586,7 @@ export function createMap({
         loaded = true;
         applyTheme();
         if (locationsRequested) applyLocations();
+        if (pendingRoute) applyRoute();
         if (typeof onLoad === "function") onLoad(handle);
       });
 

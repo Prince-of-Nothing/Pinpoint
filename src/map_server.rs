@@ -21,6 +21,7 @@ use axum::body::{Body, Bytes};
 use axum::extract::{Request, State};
 use axum::http::{header, HeaderValue, Method, StatusCode};
 use axum::response::Response;
+use axum::routing::get;
 use axum::Router;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -98,7 +99,10 @@ impl MapServer {
                         }
                     };
 
-                    let app = Router::new().fallback(serve_asset).with_state(assets);
+                    let app = Router::new()
+                        .route("/map/route", get(crate::local_route::map_route))
+                        .fallback(serve_asset)
+                        .with_state(assets);
 
                     if ready_tx.send(Ok(addr)).is_err() {
                         return;
@@ -549,6 +553,26 @@ mod tests {
         let body = page.text().await.expect("page body");
         assert!(body.contains("OpenStreetMap contributors"));
         assert!(body.contains("ODbL 1.0"));
+        assert!(body.contains("route-panel"));
+        assert!(body.contains("../app/route-ui.js"));
+        assert!(body.contains("../app/route.css"));
+
+        for (path, mime) in [
+            ("app/route-ui.js", "text/javascript; charset=utf-8"),
+            ("app/route.css", "text/css; charset=utf-8"),
+        ] {
+            let asset = client
+                .get(format!("{}{path}", server.base_url()))
+                .send()
+                .await
+                .expect("route UI asset request");
+            assert_eq!(asset.status(), reqwest::StatusCode::OK, "{path}");
+            assert_eq!(asset.headers()["content-type"], mime, "{path}");
+            assert!(
+                !asset.bytes().await.expect("route UI asset body").is_empty(),
+                "{path} must not be empty"
+            );
+        }
 
         let style = client
             .get(format!("{}map/style.json", server.base_url()))

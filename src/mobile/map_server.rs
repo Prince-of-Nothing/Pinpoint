@@ -45,6 +45,9 @@ const MAP_INDEX: &[u8] = include_bytes!("../../web/map/index.html");
 const MAP_PREVIEW_CSS: &[u8] = include_bytes!("../../web/map/preview.css");
 const MAP_JS: &[u8] = include_bytes!("../../web/map/map.js");
 const MAP_STYLE: &[u8] = include_bytes!("../../web/map/style.json");
+/// Route panel component shared with the web app (no imports, no network).
+const ROUTE_UI_JS: &[u8] = include_bytes!("../../web/app/route-ui.js");
+const ROUTE_UI_CSS: &[u8] = include_bytes!("../../web/app/route.css");
 /// The committed ODbL Monaco fixture. The same file is loaded from disk for
 /// downloaded packs; this copy keeps the prototype self-contained in the APK.
 const MONACO_PMTILES: &[u8] = include_bytes!("../../web/map/fixtures/monaco.pmtiles");
@@ -86,6 +89,16 @@ const ASSETS: &[EmbeddedAsset] = &[
         path: "map/fixtures/monaco.pmtiles",
         mime: MIME_PMTILES,
         bytes: MONACO_PMTILES,
+    },
+    EmbeddedAsset {
+        path: "app/route-ui.js",
+        mime: MIME_JS,
+        bytes: ROUTE_UI_JS,
+    },
+    EmbeddedAsset {
+        path: "app/route.css",
+        mime: MIME_CSS,
+        bytes: ROUTE_UI_CSS,
     },
     EmbeddedAsset {
         path: "vendor/maplibre-gl.js",
@@ -220,6 +233,7 @@ pub fn shared() -> Result<&'static MapServer, String> {
 
 fn router(state: Arc<ServerState>) -> Router {
     Router::new()
+        .route("/map/route", get(crate::local_route::map_route))
         .route(
             "/",
             get(|| async { Redirect::temporary("/map/index.html") }),
@@ -570,6 +584,26 @@ mod tests {
         assert!(
             body.contains("/fixtures/monaco.pmtiles") || body.contains("./fixtures/monaco.pmtiles")
         );
+        assert!(body.contains("route-panel"));
+        assert!(body.contains("../app/route-ui.js"));
+        assert!(body.contains("../app/route.css"));
+
+        let route_js = get(&server, "/app/route-ui.js").await;
+        assert_eq!(route_js.status(), StatusCode::OK);
+        assert_eq!(
+            route_js.headers()[header::CONTENT_TYPE],
+            "text/javascript; charset=utf-8"
+        );
+        let route_js_body = route_js.text().await.unwrap();
+        assert!(route_js_body.contains("export function createRouteUI"));
+
+        let route_css = get(&server, "/app/route.css").await;
+        assert_eq!(route_css.status(), StatusCode::OK);
+        assert_eq!(
+            route_css.headers()[header::CONTENT_TYPE],
+            "text/css; charset=utf-8"
+        );
+        assert!(route_css.text().await.unwrap().contains(".pinpoint-route"));
 
         let vendor = get(&server, "/vendor/maplibre-gl.js").await;
         assert_eq!(vendor.status(), StatusCode::OK);

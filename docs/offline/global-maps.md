@@ -13,8 +13,12 @@ so adding a region is a data change, not an app release.
 - **Online basemap, opt-in.** The map page has a toggle for the OpenFreeMap
   Liberty style. It is off by default, and an installed pack wins when active.
 - **Per-country offline packs.** The map lists catalog regions with size and
-  installed state; the user can download, update, delete and show one. Several
-  regions can be installed; one download runs at a time.
+  installed state; the user can download, update and show one. Several regions
+  can be installed; one download runs at a time. v1 has no delete route or
+  button.
+- **"This area" coverage hint.** Panning the map names the catalog region under
+  the view centre with its transfer size and a Download/Show button; it hides
+  while a download runs and when that region is already the active source.
 - **Data-driven catalog.** Adding a country means building and publishing it in
   `pinpoint-maps`; no Rust change and no app release.
 - **Clients.** Android and desktop get online and offline maps. The web app
@@ -88,8 +92,8 @@ weekly; others are built on demand. Measured sizes:
 
 Files land at `packs/<region>/<installed_name>` from the catalog. One job runs
 at a time (in-process lock plus `packs/.lock`). An update replaces files only
-after verification, and a failed update leaves the old pack usable. Deleting a
-region removes only that directory.
+after verification, and a failed update leaves the old pack usable. With no
+delete route in v1, removing a region means deleting its directory by hand.
 
 Version 2.3.0 and earlier keep the Moldova files at the root of `packs/`. On the
 first status or config request they are moved into `packs/moldova/` after
@@ -131,8 +135,8 @@ available while shipped clients may fetch them
 |---|---|---|
 | Only Moldova appears, or a new region never does | Catalog fetch/validation failed; bundled Moldova fallback in use | Check GitHub connectivity, retry later. Installed packs still work offline. |
 | Hash or size mismatch | Asset does not match the catalog; `.part` discarded, old pack kept | Retry once. If it repeats, fix the release and catalog. Never bypass verification. |
-| "Not enough space" | Free space below installed size plus 10% headroom; updates keep the old pack until verified | Delete another region or free space, then retry. |
-| Blank map, or Monaco after deleting a region | No active installed pack; `/map/config` falls back to the fixture | Download or show an installed region. |
+| "Not enough space" | Free space below installed size plus 10% headroom; updates keep the old pack until verified | Free space, or remove an installed region's directory, then retry. |
+| Blank map, or Monaco after a region's files are removed | No active installed pack; `/map/config` falls back to the fixture | Download or show an installed region. |
 | Online map is blank | Online mode is off, or OpenFreeMap is unavailable (no SLA) | Use an installed pack, or enable the toggle where online tiles are acceptable. |
 
 ## References

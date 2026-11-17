@@ -59,6 +59,7 @@
           <span class="maps-panel__hint">Offline regions</span>
         </div>
         <p id="maps-empty" class="maps-panel__empty">Loading regions…</p>
+        <p id="maps-coverage" class="maps-coverage" hidden></p>
         <ul id="region-list" class="region-list" aria-label="Offline regions"></ul>
         <div id="maps-progress" class="maps-progress" aria-live="polite" hidden>
           <p id="maps-progress-text" class="maps-progress__text"></p>
@@ -177,6 +178,7 @@
     const offlineError = document.getElementById("offline-error");
     const mapsPanel = document.getElementById("maps-panel");
     const mapsEmpty = document.getElementById("maps-empty");
+    const mapsCoverage = document.getElementById("maps-coverage");
     const regionList = document.getElementById("region-list");
     const mapsProgress = document.getElementById("maps-progress");
     const mapsProgressText = document.getElementById("maps-progress-text");
@@ -343,6 +345,22 @@
           Math.min(13.2, Math.round(Math.log2(360 / spanLon) * 10) / 10),
         ),
       };
+    }
+
+    /** First catalog region whose bbox contains the point. */
+    function regionCovering(regions, lon, lat) {
+      // shortcut: plain bbox containment, so an antimeridian region (US) needs
+      // a split bbox before it can be matched here.
+      return (
+        regions.find((region) => {
+          const values = Array.isArray(region?.bbox) ? region.bbox.map(Number) : [];
+          if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) {
+            return false;
+          }
+          const [west, south, east, north] = values;
+          return lon >= west && lon <= east && lat >= south && lat <= north;
+        }) ?? null
+      );
     }
 
     function sourceForRegion(region, regions = configRegions) {
@@ -567,6 +585,8 @@
           handle?.setLocations(markersVisible ? SAMPLE_LOCATIONS : []);
           const route = routeUI?.getRoute?.();
           if (route) loadedHandle.drawRoute(route);
+          loadedHandle.getMap()?.on("moveend", () => renderCoverage());
+          renderCoverage();
         },
         onError: (error) => {
           if (created !== handle) return;
@@ -651,6 +671,61 @@
       actions.append(button);
     }
 
+    /**
+     * "This area" hint: names the catalog region under the view centre and
+     * offers the same action as its row. Hidden while a download runs, when
+     * nothing covers the centre and when that region is already active.
+     */
+    function renderCoverage(center = handle?.getMap()?.getCenter()) {
+      const region = center
+        ? regionCovering(catalogRegions, Number(center.lng), Number(center.lat))
+        : null;
+      if (
+        !region ||
+        runningState(lastStatus) ||
+        activeDownloadRegion ||
+        (!online && activeSource?.id === region.id)
+      ) {
+        mapsCoverage.hidden = true;
+        mapsCoverage.replaceChildren();
+        return;
+      }
+
+      const state = regionState(region);
+      const bytes = regionDownloadBytes(region);
+      const sizeLabel = bytes > 0 ? formatBytes(bytes) : "Size unknown";
+      const text = document.createElement("span");
+      text.textContent = `${region.name} covers this view · ${sizeLabel}`;
+      mapsCoverage.replaceChildren(text);
+
+      if (state === "installed") {
+        addRegionButton(
+          mapsCoverage,
+          region,
+          "show",
+          "Show",
+          `Show ${region.name} on the map`,
+        );
+      } else if (state === "update") {
+        addRegionButton(
+          mapsCoverage,
+          region,
+          "update",
+          "Update",
+          `Update ${region.name} offline map to ${region.version || "the latest version"}`,
+        );
+      } else {
+        addRegionButton(
+          mapsCoverage,
+          region,
+          "download",
+          "Download",
+          `Download ${region.name} offline map (${sizeLabel})`,
+        );
+      }
+      mapsCoverage.hidden = false;
+    }
+
     function renderRegions() {
       regionList.replaceChildren();
       mapsEmpty.hidden = catalogRegions.length > 0;
@@ -725,6 +800,7 @@
         item.append(actions);
         regionList.append(item);
       }
+      renderCoverage();
     }
 
     function showRegion(region) {
@@ -776,6 +852,7 @@
         mapsError.hidden = false;
         mapsError.textContent = `${region?.name || regionId}: ${actionError}`;
         mapsPanel.dataset.state = "error";
+        renderCoverage();
       }
     }
 
@@ -857,6 +934,7 @@
       ) {
         markRegionInstalled(regionId);
       }
+      renderCoverage();
     }
 
     function renderStatus(status) {
@@ -1115,6 +1193,7 @@
         refresh: () => refreshStatus(),
         panel: mapsPanel,
         formatBytes,
+        coverageAt: (lon, lat) => renderCoverage({ lng: lon, lat }),
       };
 
       window.__pinpointOffline = {

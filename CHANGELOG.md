@@ -10,6 +10,13 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [Unreleased]
+### Added
+- [FEATURE] Web sharing: a deliberate consent sheet with a named/precision/timed summary and confirmation before granting or widening a share; the "Who can see me" list shows friend, precision, active/paused/expired state and expiry, with one-click revoke and a "Share again" path for expired shares; editing precision preserves the existing expiry.
+- [FEATURE] Map: a "covers this view" hint in the Maps panel when the map center falls inside a catalog region that is not active, with Download (idle) or Show (installed).
+### Fixed
+- [FIX] Sharing: the server validates updates before mutating, rejects unknown precision/direction instead of falling through to exact coordinates, hides incoming `from_friend` rows from "Who can see me", and the consent tests cover owner-only PATCH/DELETE, expiry, invalid values and incoming-share filtering.
+
 ## [2.4.0] - 2026-11-17
 ### Added
 - [FEATURE] Map data: a runtime region catalog (`catalog.json` in `pinpoint-maps`) and a manifest-driven multi-region installer replace the hardcoded Moldova pack, so a country can be added without an app release; GitHub Releases hosts assets (2 GiB cap, `maxzoom` reduced when needed), legacy root-level Moldova files migrate into `packs/moldova/`, and an opt-in OpenFreeMap basemap provides worldwide online viewing (ADR-0021).

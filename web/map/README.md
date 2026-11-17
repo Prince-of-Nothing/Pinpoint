@@ -10,7 +10,9 @@ wires the on-device `native_router` car route to a panel and `/map/route` on
 both loopback map servers. The Android/desktop map servers also own the native
 pack download manager: the **Offline map** card installs the real Moldova
 PMTiles archive and routing graph into `packs/`, verifies both SHA-256 digests
-and reloads the page onto the installed archive. The web app keeps its own
+and reloads the page onto the installed archive. The **Maps** panel also names
+the catalog region covering the view centre and offers its Download or Show
+action. The web app keeps its own
 OPFS storage and service-worker stream; the `search.js` module already searches
 the M1 `places`/`places_fts` SQLite index on-device (see
 [`search.md`](search.md)).

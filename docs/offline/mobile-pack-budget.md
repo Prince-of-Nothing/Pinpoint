@@ -48,6 +48,12 @@ Romania is the practical single-pack ceiling on a 6 GB phone. Ukraine and
 larger do not fit a 4 GB phone once A* runs; mmap would drop the resident copy
 but not the A* arrays.
 
+Measured 2026-11-17 (Romania z13, `data-romania-20261117-44139439624`):
+PMTiles **218,306,730 B**, installed graph **463,119,610 B**, gzip graph
+**187,335,727 B**, transfer **405,642,457 B**, installed **681,426,340 B**.
+That is within the transfer budget but above the 500 MiB installed target;
+verify a route on a 6 GB device before promoting it as tier B.
+
 ## Search SQLite (not in native v1)
 
 6.46 MiB for 36,913 places (183 B/place); scaled by PBF: Romania ~22 MiB,

@@ -76,8 +76,9 @@ The Moldova map data is a separate, non-latest data release:
   requests, zero console/page errors.
 - Pack proxy: real GitHub asset test, manifest JSON, `206` ranges, `416`
   out-of-range, CORS/preflight, traversal/whitelist rejection.
-- Android: `:app:assembleDebug -Pabi=arm64-v8a` succeeded; the APK is
-  66,765,317 bytes (this local build), arm64-v8a, minSdk 26, targetSdk 35, with
+- Android: `:app:assembleDebug -Pabi=arm64-v8a` succeeded; the local APK is
+  66,853,397 bytes (SHA-256 `fcec6a2d5b6c41c1b74fcba523246edae73f38eed85fe2e324869ede9bdb711b`),
+  `versionName=2.0.0`, arm64-v8a, minSdk 26, targetSdk 35, with
   `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` and `POST_NOTIFICATIONS`.
 
 ## Known limitations

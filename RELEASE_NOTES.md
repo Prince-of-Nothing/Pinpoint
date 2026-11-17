@@ -1,3 +1,65 @@
+# Pinpoint 2.5.0 - Release Notes
+
+**Released:** 2026-11-17 - **Version:** `2.5.0` (from `2.4.0`) -
+**Status:** Deliberate location-sharing consent and a map coverage hint, with
+Romania available as the second offline region.
+
+**Artifacts:** `pinpoint-android-2.5.0.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source archives for the `v2.5.0` tag.
+
+## What is new
+
+- The location-sharing sheet now shows a named, precision and expiry summary
+  and asks for confirmation before granting a new share or widening precision
+  (including `city_only -> approximate` and a later expiry). Editing precision
+  preserves the existing expiry instead of silently resetting it.
+- Unchecking an existing share pauses it with `{ "is_active": false }` only;
+  it no longer rewrites precision or expiry. Expired shares cannot be silently
+  revived.
+- “Who can see me” lists the friend, precision, active/paused/expired state and
+  expiry, with one-click **Revoke** (`DELETE`) and **Share again** for expired
+  shares. Incoming `from_friend` rows are hidden.
+- Server: create/update reject unknown precision/direction instead of falling
+  through to exact coordinates; PATCH validates every field before mutating;
+  unknown precision rows are never visible.
+- The Maps panel shows “<Region> covers this view · <size>” when the map centre
+  is inside a catalog region that is not active, with **Download** or **Show**.
+- The `pinpoint-maps` workflow published Romania
+  (`data-romania-20261117-44139439624`): 218,306,730 B PMTiles and
+  187,335,727 B gzip graph. The catalog now contains Moldova + Romania.
+
+## Verification
+
+- `cargo test --locked --test location_consent`: **8 passed** (owner-only
+  PATCH/DELETE, expiry, invalid values, incoming-share filtering, expired not
+  revived).
+- `node web/app/test/sharing-ui.mjs`: **17/17**.
+- `node web/map/test/smoke.mjs`: all map checks pass, including the coverage
+  hint for a non-active region and the active/outside/open-water hides.
+- `scripts/v2/check.ps1`: **17/17**.
+- Romania catalog release assets and sizes match the generated catalog.
+
+## Known limitations
+
+- No browser E2E for the sharing sheet; the pure helpers and server tests cover
+  the contract.
+- Coverage uses the view centre and plain bbox containment; a region that only
+  partly covers the viewport is not flagged, and antimeridian regions need a
+  split bbox later.
+- Romania is ~681 MB installed (463 MB graph) and needs a real-device check;
+  no physical Android run.
+- No delete UI/route for installed packs; remove the region directory by hand.
+- Location sharing remains directional and server-enforced; `from_friend` rows
+  are not shown as grants.
+
+## Upgrade
+
+Install over 2.4.0. Existing shares, installed packs and the opt-in online
+basemap preference are preserved. Romania appears in the Maps panel on the next
+catalog refresh; download it on Wi-Fi.
+
+---
+
 # Pinpoint 2.4.0 - Release Notes
 
 **Released:** 2026-11-17 - **Version:** `2.4.0` (from `2.3.0`) -

@@ -282,6 +282,14 @@ pub struct PinpointAppUI {
     pub(crate) kiosk_token_input: String,
     pub(crate) kiosk_note_input: String,
     pub(crate) kiosk_consent_accepted: bool,
+    // Optional native MapLibre map window (feature `map-webview`).
+    #[cfg(all(
+        feature = "map-webview",
+        not(target_arch = "wasm32"),
+        not(target_os = "android"),
+        not(target_os = "ios")
+    ))]
+    map_window: crate::map_window::MapWindowLauncher,
     // Route planner
     route_plan: RoutePlan,
     route_result_seq: u64,
@@ -294,6 +302,8 @@ pub struct PinpointAppUI {
     mobile_nav_open: bool,
     mobile_publish_open: bool,
     mobile_selected_place: Option<crate::osm::SearchPlace>,
+    /// Last point reported by the Android MapLibre WebView bridge.
+    webview_map_click: Option<(f64, f64)>,
     // On-device PIN app lock
     lock_enabled: bool,
     locked: bool,
@@ -390,6 +400,13 @@ impl PinpointAppUI {
             kiosk_token_input: String::new(),
             kiosk_note_input: String::new(),
             kiosk_consent_accepted: false,
+            #[cfg(all(
+                feature = "map-webview",
+                not(target_arch = "wasm32"),
+                not(target_os = "android"),
+                not(target_os = "ios")
+            ))]
+            map_window: crate::map_window::MapWindowLauncher::new(),
             route_plan: RoutePlan::default(),
             route_result_seq: 0,
             route_nav_last_fix: None,
@@ -399,6 +416,7 @@ impl PinpointAppUI {
             mobile_nav_open: false,
             mobile_publish_open: false,
             mobile_selected_place: None,
+            webview_map_click: None,
             lock_enabled,
             locked: lock_enabled,
             lock_armed: false,

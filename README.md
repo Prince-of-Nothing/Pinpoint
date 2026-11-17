@@ -17,7 +17,8 @@ production-hardened. See the functional-state matrix and per-item
 - **Accounts & sessions** — email/password (Argon2id) and anonymous
   device-bound accounts, opaque `HttpOnly` session cookies + CSRF, session
   list/revoke, logout-all, lockout, TOTP MFA.
-- **Web UI at `/`** — map-first Leaflet UI (locally vendored), place search,
+- **Web UI at `/`** — map-first MapLibre GL JS + PMTiles UI (locally
+  vendored), place search,
   A→B routing with alternatives/steps (drive; walk/bike when self-hosted),
   saved/recent places per account, locate-me, plus the auth, publish, friends,
   shares and sessions surfaces in a drawer.
@@ -75,6 +76,26 @@ If port 8000 is taken (Docker), use `BIND_ADDR=127.0.0.1:8080`.
 ```bash
 cargo run -- --backend http://127.0.0.1:8000
 ```
+
+The shared MapLibre page (`web/map/`) can open in a separate native WebView
+window from **Map → MapLibre map window → Open map window**. It is opt-in:
+
+```bash
+cargo run --features map-webview -- --backend http://127.0.0.1:8000
+# or run the window directly (starts a loopback server on an ephemeral port)
+cargo run --features map-webview -- --map-window
+```
+
+The window loads `http://127.0.0.1:<port>/map/index.html` from a Rust axum
+server with HTTP Range support, so PMTiles works. WebView2 is required on
+Windows, WebKitGTK on Linux and WKWebView on macOS. `wry`/`tao` need their own
+event loop on the main thread, which eframe already owns, so the window runs in
+a child process of the same binary. If the platform WebView runtime is missing,
+the launcher opens the same loopback URL in the system browser and keeps the
+server alive while Pinpoint runs. The egui map remains the fallback; auth,
+friends and privacy behavior are unchanged. `web/` is resolved next to the
+executable, from the current directory, or through `PINPOINT_WEB_ROOT`, so a
+packaged build must ship the `web/` tree.
 
 ### Android (Rust APK)
 

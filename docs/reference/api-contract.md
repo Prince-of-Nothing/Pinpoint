@@ -96,6 +96,13 @@ is applied before serialization.
 | GET | `/map/attribution` | source list + license |
 | GET | `/map/health` | tile-cache health |
 
+## Offline packs — `/offline/packs/*`
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/offline/packs/moldova/manifest.json` | committed manifest (`web/app/packs/moldova.json`); `files[].url` is already same-origin |
+| GET/HEAD | `/offline/packs/moldova/:file` | whitelisted `moldova.pmtiles`, `moldova-search.sqlite`, `moldova-valhalla.tar`. Streams the GitHub release asset, forwards `Range` (206 + `Content-Range`), always sends `Accept-Ranges: bytes`, `Access-Control-Allow-Origin: *` and `Access-Control-Expose-Headers`. Any other pack id or file name is `404` before an outbound request. `PINPOINT_PACK_BASE_URL` overrides the upstream base (tests/local fixtures). |
+
 ## Operations
 
 | Method | Path | Notes |

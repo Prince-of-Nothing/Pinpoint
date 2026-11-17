@@ -1,0 +1,26 @@
+{
+  "id": "monaco",
+  "version": "2026.11.16",
+  "name": "Monaco",
+  "built_at": "2026-11-16T21:11:47Z",
+  "bbox": [7.4, 43.72, 7.44, 43.75],
+  "minzoom": 0,
+  "maxzoom": 12,
+  "files": [
+    {
+      "name": "monaco.pmtiles",
+      "url": "../../../map/fixtures/monaco.pmtiles",
+      "bytes": 94389,
+      "sha256": "a600dbfd9ddb25b82661f01d228a39d2b386dd13e401d2081b3ce7fd9c6de82f"
+    },
+    {
+      "name": "LICENSE.txt",
+      "url": "LICENSE.txt",
+      "bytes": 405,
+      "sha256": "bf40327577f4ae509a121e90610b0d6dcad71d64a5e9a4ceac9d6d190933becf"
+    }
+  ],
+  "attribution": "© OpenStreetMap contributors",
+  "license": "ODbL-1.0",
+  "license_url": "https://opendatacommons.org/licenses/odbl/1-0/"
+}

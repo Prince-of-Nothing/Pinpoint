@@ -1,6 +1,6 @@
-﻿[package]
+[package]
 name = "pinpoint-desktop"
-version = "1.5.3"
+version = "2.0.0"
 edition = "2021"
 description = "Privacy-first location-sharing platform in pure Rust: multiplatform client + API server (desktop + Android + iOS, OSM maps)"
 publish = false
@@ -66,6 +66,10 @@ required-features = ["offline-build"]
 [features]
 default = []
 offline-build = ["dep:rusqlite", "dep:osmpbfreader"]
+# Native desktop WebView window for the shared MapLibre page (`web/map/`).
+# Opt-in: the default egui build stays unchanged and Linux only needs the
+# WebKitGTK system libraries when this feature is enabled.
+map-webview = ["dep:wry", "dep:tao"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -95,8 +99,10 @@ typenum = "1.15"
 zeroize = "1.7"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time", "net", "macros", "sync"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "time", "net", "macros", "sync", "fs"] }
+# `stream` keeps the offline-pack proxy from buffering a 220 MB artifact: the
+# GitHub release body is piped into the Axum response chunk by chunk.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 webbrowser = "1.2"
 image = { version = "0.25", default-features = false, features = ["png"] }
 which = "6.0"
@@ -114,6 +120,15 @@ sqlx = { version = "0.8", default-features = false, features = [
 # backend (accesskit is only compatible with game-activity on Android).
 [target.'cfg(not(target_os = "android"))'.dependencies]
 eframe = { version = "0.32", default-features = true, features = ["glow"] }
+
+# Separate native WebView window for the shared MapLibre map page. Optional
+# (`map-webview` feature) and desktop-only: it needs WebView2 on Windows,
+# WebKitGTK on Linux and WKWebView on macOS. The map window runs in a child
+# process because `tao` requires its event loop on the main thread, while
+# eframe already owns winit's main-thread loop (see src/map_window.rs).
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_os = "ios")))'.dependencies]
+wry = { version = "0.57", optional = true }
+tao = { version = "0.37", optional = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 eframe = { version = "0.32", default-features = false, features = ["glow", "default_fonts", "android-native-activity"] }

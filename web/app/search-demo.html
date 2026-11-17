@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Pinpoint offline search — component demo</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./search.css" />
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: #0f172a;
+        --panel-2: #111c33;
+        --border: #1f2937;
+        --text: #e5e7eb;
+        --muted: #9ca3af;
+        --accent: #34d399;
+        --danger: #f87171;
+        --page-max: 1080px;
+      }
+
+      :root[data-theme="light"] {
+        --bg: #eef2f7;
+        --panel: #ffffff;
+        --panel-2: #f1f5f9;
+        --border: #d5dde8;
+        --text: #111827;
+        --muted: #5b6576;
+        --accent: #0f766e;
+        --danger: #b91c1c;
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 10% 0%, rgba(52, 211, 153, 0.09), transparent 32rem),
+          var(--bg);
+        color: var(--text);
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+
+      .demo-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+        max-width: var(--page-max);
+        margin: 0 auto;
+        padding: 1.4rem 1rem 0.9rem;
+      }
+
+      .demo-kicker {
+        margin: 0 0 0.25rem;
+        color: var(--accent);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .demo-header h1 {
+        margin: 0;
+        font-size: clamp(1.35rem, 2.4vw, 1.9rem);
+        letter-spacing: -0.02em;
+      }
+
+      .demo-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .demo-button {
+        padding: 0.5rem 0.8rem;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--text);
+        font: inherit;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .demo-button:hover {
+        border-color: var(--accent);
+      }
+
+      .demo-button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .demo-button--ghost {
+        background: transparent;
+        color: var(--muted);
+      }
+
+      .demo-main {
+        max-width: var(--page-max);
+        margin: 0 auto;
+        padding: 0 1rem 2rem;
+      }
+
+      .demo-stage {
+        position: relative;
+        min-height: 600px;
+        padding: 1rem;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        border-radius: 1rem;
+        background: #0a0f1c;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
+        isolation: isolate;
+      }
+
+      :root[data-theme="light"] .demo-stage {
+        background: #e7edf3;
+        box-shadow: 0 24px 60px rgba(15, 23, 42, 0.14);
+      }
+
+      .demo-map {
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background:
+          radial-gradient(circle at 26% 22%, rgba(52, 211, 153, 0.13), transparent 38%),
+          radial-gradient(circle at 76% 64%, rgba(56, 189, 248, 0.11), transparent 42%),
+          linear-gradient(142deg, #0b1220 0%, #0a0f1c 56%, #0c1623 100%);
+      }
+
+      :root[data-theme="light"] .demo-map {
+        background:
+          radial-gradient(circle at 26% 22%, rgba(15, 118, 110, 0.12), transparent 38%),
+          radial-gradient(circle at 76% 64%, rgba(2, 132, 199, 0.1), transparent 42%),
+          linear-gradient(142deg, #f2f5f8 0%, #e7edf3 56%, #dfe8f0 100%);
+      }
+
+      .demo-map::before {
+        content: "";
+        position: absolute;
+        inset: -20%;
+        background-image:
+          linear-gradient(rgba(148, 163, 184, 0.07) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(148, 163, 184, 0.07) 1px, transparent 1px);
+        background-size: 64px 64px;
+        transform: rotate(-9deg);
+      }
+
+      :root[data-theme="light"] .demo-map::before {
+        background-image:
+          linear-gradient(rgba(71, 85, 105, 0.08) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(71, 85, 105, 0.08) 1px, transparent 1px);
+      }
+
+      .demo-map::after {
+        content: "";
+        position: absolute;
+        top: 8%;
+        right: -12%;
+        width: 58%;
+        height: 96%;
+        border: 2px solid rgba(56, 189, 248, 0.22);
+        border-left-color: transparent;
+        border-radius: 50%;
+        transform: rotate(-24deg);
+      }
+
+      :root[data-theme="light"] .demo-map::after {
+        border-color: rgba(2, 132, 199, 0.24);
+        border-left-color: transparent;
+      }
+
+      .demo-road {
+        position: absolute;
+        height: 2px;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.18);
+        transform-origin: left center;
+      }
+
+      .demo-road--one {
+        top: 38%;
+        left: 6%;
+        width: 68%;
+        transform: rotate(13deg);
+      }
+
+      .demo-road--two {
+        top: 70%;
+        left: 24%;
+        width: 62%;
+        transform: rotate(-26deg);
+      }
+
+      :root[data-theme="light"] .demo-road {
+        background: rgba(71, 85, 105, 0.2);
+      }
+
+      .demo-search {
+        position: relative;
+        z-index: 2;
+        width: min(100%, 540px);
+      }
+
+      .demo-hint {
+        margin: 0.6rem 0 0;
+        padding: 0 0.35rem;
+        color: var(--muted);
+        font-size: 0.76rem;
+        text-shadow: 0 1px 10px rgba(0, 0, 0, 0.4);
+      }
+
+      :root[data-theme="light"] .demo-hint {
+        text-shadow: none;
+      }
+
+      .demo-hint code {
+        padding: 0.05rem 0.3rem;
+        border: 1px solid var(--border);
+        border-radius: 0.25rem;
+        background: var(--panel);
+        color: var(--text);
+        font-size: 0.74rem;
+      }
+
+      .demo-result-panel {
+        position: absolute;
+        right: 1rem;
+        bottom: 3.6rem;
+        z-index: 2;
+        width: min(340px, calc(100% - 2rem));
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 0.85rem;
+        background: var(--panel);
+        background: color-mix(in srgb, var(--panel) 94%, transparent);
+        box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+      }
+
+      .demo-result-panel h2 {
+        margin: 0 0 0.35rem;
+        color: var(--muted);
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .demo-selection {
+        margin: 0 0 0.75rem;
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+
+      .demo-error {
+        margin: 0.55rem 0 0;
+        color: var(--danger);
+        font-size: 0.76rem;
+      }
+
+      .demo-attribution {
+        position: absolute;
+        right: 1rem;
+        bottom: 0.85rem;
+        z-index: 3;
+        max-width: calc(100% - 2rem);
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.68rem;
+        text-align: right;
+      }
+
+      .demo-attribution a {
+        color: var(--muted);
+      }
+
+      .demo-notes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 0.8rem;
+        margin-top: 1rem;
+      }
+
+      .demo-note {
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 0.75rem;
+        background: var(--panel);
+      }
+
+      .demo-note h2 {
+        margin: 0 0 0.35rem;
+        font-size: 0.92rem;
+      }
+
+      .demo-note p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.5;
+      }
+
+      .demo-note code {
+        padding: 0.05rem 0.3rem;
+        border-radius: 0.25rem;
+        background: var(--panel-2);
+        color: var(--text);
+        font-size: 0.78rem;
+      }
+
+      @media (max-width: 720px) {
+        .demo-stage {
+          min-height: 680px;
+        }
+
+        .demo-result-panel {
+          right: 1rem;
+          left: 1rem;
+          width: auto;
+        }
+
+        .demo-attribution {
+          right: 1rem;
+          left: 1rem;
+          text-align: left;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="demo-header">
+      <div>
+        <p class="demo-kicker">Pinpoint 2.0 · Offline maps</p>
+        <h1>Offline search UI</h1>
+      </div>
+      <div class="demo-actions">
+        <button id="theme-toggle" type="button" class="demo-button">Light theme</button>
+      </div>
+    </header>
+
+    <main class="demo-main">
+      <section class="demo-stage" aria-label="Offline search component demo">
+        <div class="demo-map" aria-hidden="true">
+          <span class="demo-road demo-road--one"></span>
+          <span class="demo-road demo-road--two"></span>
+        </div>
+
+        <div class="demo-search">
+          <div id="search-host"></div>
+          <p class="demo-hint">
+            Try <code>balti</code>, <code>chisinau</code> or <code>кишинёв</code>.
+            Results come from a local stub, not a network.
+          </p>
+          <p id="error-note" class="demo-error" hidden></p>
+        </div>
+
+        <aside class="demo-result-panel" aria-live="polite">
+          <h2>Selected result</h2>
+          <p id="selection" class="demo-selection">No place selected yet.</p>
+          <button id="error-toggle" type="button" class="demo-button demo-button--ghost">
+            Fail next search
+          </button>
+        </aside>
+
+        <p class="demo-attribution">
+          Search data ©
+          <a href="https://www.openstreetmap.org/copyright" rel="noreferrer"
+            >OpenStreetMap contributors</a
+          >
+          ·
+          <a href="https://opendatacommons.org/licenses/odbl/1-0/" rel="noreferrer">ODbL 1.0</a>
+          · Local stub only
+        </p>
+      </section>
+
+      <section class="demo-notes" aria-label="Component notes">
+        <article class="demo-note">
+          <h2>Keyboard</h2>
+          <p>
+            <code>ArrowDown</code>/<code>ArrowUp</code> move through results,
+            <code>Enter</code> selects, <code>Escape</code> closes the list and a second
+            press clears the query.
+          </p>
+        </article>
+        <article class="demo-note">
+          <h2>States</h2>
+          <p>
+            The component renders loading, empty and error states. Use
+            <code>Fail next search</code> to exercise the provider error path.
+          </p>
+        </article>
+        <article class="demo-note">
+          <h2>Local only</h2>
+          <p>
+            The module calls only the injected <code>search</code> function. It makes no
+            network requests and loads no third-party assets.
+          </p>
+        </article>
+      </section>
+    </main>
+
+    <script type="module">
+      import { createSearchUI } from "./search-ui.js";
+
+      const PLACES = [
+        {
+          name: "Bălți",
+          kind: "city",
+          lat: 47.7615,
+          lon: 27.9289,
+          address: "Bălți, Moldova",
+          importance: 0.86,
+          aliases: ["Balti", "Beltsy", "Бельцы"],
+        },
+        {
+          name: "Chișinău",
+          kind: "city",
+          lat: 47.0105,
+          lon: 28.8638,
+          address: "Chișinău, Moldova · Кишинёв",
+          importance: 0.97,
+          aliases: ["Chisinau", "Kishinev", "Кишинёв"],
+        },
+        {
+          name: "Orhei",
+          kind: "town",
+          lat: 47.3845,
+          lon: 28.8247,
+          address: "Orhei, Moldova",
+          importance: 0.62,
+          aliases: ["Орхей"],
+        },
+        {
+          name: "Cahul",
+          kind: "town",
+          lat: 45.9043,
+          lon: 28.1944,
+          address: "Cahul, Moldova",
+          importance: 0.55,
+          aliases: ["Кагул"],
+        },
+        {
+          name: "Soroca",
+          kind: "town",
+          lat: 48.1584,
+          lon: 28.2849,
+          address: "Soroca, Moldova",
+          importance: 0.51,
+          aliases: ["Сороки"],
+        },
+        {
+          name: "Bălți City Center",
+          kind: "locality",
+          lat: 47.7581,
+          lon: 27.9186,
+          address: "Piața Vasile Alecsandri, Bălți",
+          importance: 0.38,
+          aliases: ["Balti centre"],
+        },
+      ];
+
+      const selectionElement = document.querySelector("#selection");
+      const errorNote = document.querySelector("#error-note");
+      const errorToggle = document.querySelector("#error-toggle");
+      const themeToggle = document.querySelector("#theme-toggle");
+      const selections = [];
+      const errors = [];
+      let lastQuery = "";
+      let failNext = false;
+
+      function fold(value) {
+        return String(value ?? "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/[ёЁ]/g, (character) => (character === "ё" ? "е" : "Е"))
+          .toLowerCase()
+          .replace(/[’'`]/g, "")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+
+      function searchScore(place, query) {
+        const fields = [place.name, place.address, ...(place.aliases ?? [])].map(fold);
+        let best = Number.POSITIVE_INFINITY;
+
+        for (const field of fields) {
+          if (field === query) best = Math.min(best, 0);
+          else if (field.startsWith(query)) best = Math.min(best, 1);
+          else if (field.split(/[\s·,/-]+/).some((word) => word.startsWith(query))) {
+            best = Math.min(best, 2);
+          } else if (field.includes(query)) best = Math.min(best, 3);
+        }
+
+        return best;
+      }
+
+      function publicResult(place) {
+        return {
+          name: place.name,
+          kind: place.kind,
+          lat: place.lat,
+          lon: place.lon,
+          address: place.address,
+          importance: place.importance,
+        };
+      }
+
+      function delay(milliseconds) {
+        return new Promise((resolve) => {
+          setTimeout(resolve, milliseconds);
+        });
+      }
+
+      async function stubSearch(rawQuery) {
+        const query = fold(rawQuery);
+        lastQuery = rawQuery;
+        errorNote.hidden = true;
+
+        // A short delay makes the loading state visible in the demo.
+        await delay(120);
+
+        if (failNext) {
+          failNext = false;
+          throw new Error("Simulated offline index failure");
+        }
+
+        return PLACES.map((place) => ({ place, score: searchScore(place, query) }))
+          .filter((entry) => Number.isFinite(entry.score))
+          .sort(
+            (left, right) =>
+              left.score - right.score ||
+              right.place.importance - left.place.importance ||
+              left.place.name.localeCompare(right.place.name),
+          )
+          .slice(0, 8)
+          .map((entry) => publicResult(entry.place));
+      }
+
+      function showSelection(result) {
+        selectionElement.textContent =
+          `${result.name} — ${result.kind} · ` +
+          `${Number(result.lat).toFixed(5)}, ${Number(result.lon).toFixed(5)}`;
+      }
+
+      const ui = createSearchUI({
+        container: document.querySelector("#search-host"),
+        search: stubSearch,
+        onSelect(result) {
+          selections.push(result);
+          showSelection(result);
+        },
+        onError(error) {
+          errors.push(error instanceof Error ? error.message : String(error));
+          errorNote.hidden = false;
+          errorNote.textContent = `Provider error: ${errors[errors.length - 1]}`;
+        },
+        placeholder: "Search a place…",
+        debounceMs: 220,
+      });
+
+      errorToggle.addEventListener("click", () => {
+        failNext = true;
+        errorNote.hidden = false;
+        errorNote.textContent = "The next search will reject once to show the error state.";
+      });
+
+      themeToggle.addEventListener("click", () => {
+        const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+        document.documentElement.dataset.theme = next;
+        themeToggle.textContent = next === "light" ? "Dark theme" : "Light theme";
+        ui.setTheme(next);
+      });
+
+      window.__searchDemo = {
+        ui,
+        selections,
+        errors,
+        get lastQuery() {
+          return lastQuery;
+        },
+        setFailNext(value) {
+          failNext = Boolean(value);
+        },
+      };
+    </script>
+  </body>
+</html>

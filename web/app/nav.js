@@ -1,6 +1,8 @@
 // Search, place sheet and route panel wiring.
 // All requests are same-origin; no user identity or friend data is sent to OSM.
 
+import { getOfflineSearch, toSearchPlace } from "./offline-search.js";
+
 const $ = (id) => document.getElementById(id);
 const MIN_QUERY = 3;
 
@@ -306,6 +308,14 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     searchController = new AbortController();
     const center = mapApi.map.getCenter();
     try {
+      const offline = await getOfflineSearch();
+      if (offline) {
+        const items = offline
+          .search(q, 8)
+          .map((result) => toSearchPlace(result, { lat: center.lat, lon: center.lng }));
+        renderResults(items);
+        return;
+      }
       const url = `/map/search?q=${encodeURIComponent(q)}&lat=${center.lat.toFixed(5)}&lon=${center.lng.toFixed(5)}&limit=8`;
       const res = await fetch(url, { signal: searchController.signal, credentials: "include" });
       const body = await res.json().catch(() => ({}));

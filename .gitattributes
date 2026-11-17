@@ -8,4 +8,10 @@ web/vendor/maplibre-gl.js text eol=lf
 web/vendor/maplibre-gl-worker.mjs text eol=lf
 web/vendor/maplibre-gl.css text eol=lf
 web/vendor/pmtiles.js text eol=lf
+web/vendor/sqlite3.mjs text eol=lf
+web/vendor/sqlite3.wasm binary
 web/map/fixtures/monaco.pmtiles binary
+web/map/fixtures/balti-search.sqlite binary
+
+# Byte-exact ODbL fixture: CRLF would change the manifest's bytes and SHA-256.
+web/app/fixtures/offline-pack/LICENSE.txt text eol=lf

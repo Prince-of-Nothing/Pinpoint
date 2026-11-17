@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Pinpoint · Offline packs</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23080d16'/%3E%3Cpath d='M16 25s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12Z' fill='none' stroke='%2358e0b3' stroke-width='2'/%3E%3Ccircle cx='16' cy='12.5' r='2.4' fill='%23f0b35e'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="./offline.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="../map/index.html" aria-label="Pinpoint map foundation">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Pinpoint</span>
+    </a>
+
+    <div class="topbar-meta">
+      <span class="topbar-label">Offline packs</span>
+      <span class="sw-state" id="sw-status" data-state="pending">
+        <span class="sw-dot" aria-hidden="true"></span>
+        <span id="sw-status-text">Starting service worker…</span>
+      </span>
+    </div>
+  </header>
+
+  <div class="shell">
+    <aside class="rail" aria-label="Offline pack manager">
+      <section class="rail-section manifest-section" aria-labelledby="manifest-heading">
+        <p class="rail-kicker" id="manifest-heading">Pack manifest</p>
+        <div class="manifest-title">
+          <h1 id="manifest-name">Monaco</h1>
+          <p class="manifest-version mono" id="manifest-version">Loading…</p>
+        </div>
+
+        <dl class="facts">
+          <div class="fact">
+            <dt>Download</dt>
+            <dd class="mono" id="manifest-size">—</dd>
+          </div>
+          <div class="fact">
+            <dt>Files</dt>
+            <dd class="mono" id="manifest-files">—</dd>
+          </div>
+          <div class="fact">
+            <dt>Zoom</dt>
+            <dd class="mono" id="manifest-zoom">—</dd>
+          </div>
+        </dl>
+
+        <p class="manifest-attribution" id="manifest-attribution">
+          © OpenStreetMap contributors / ODbL
+        </p>
+
+        <div class="download-block">
+          <div class="download-actions">
+            <button id="download" type="button" class="button button-primary" disabled>
+              Download pack
+            </button>
+            <button id="cancel" type="button" class="button button-ghost" hidden>
+              Cancel
+            </button>
+          </div>
+
+          <div class="progress" id="progress" hidden>
+            <div class="progress-track" role="progressbar" aria-labelledby="progress-label"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progress-bar">
+              <span class="progress-fill" id="progress-fill"></span>
+            </div>
+            <div class="progress-meta">
+              <span id="progress-label">Preparing…</span>
+              <span class="mono" id="progress-percent">0%</span>
+            </div>
+            <div class="progress-meta progress-detail">
+              <span class="mono" id="progress-bytes">0 B / 0 B</span>
+              <span class="mono" id="progress-speed">—</span>
+            </div>
+            <p class="progress-file mono" id="progress-file">—</p>
+          </div>
+
+          <p class="manual-note" id="manual-note" hidden>
+            Optional manual download · ≈220 MB. Nothing starts until you press
+            the button.
+          </p>
+
+          <p class="storage-note mono" id="storage">Storage: checking…</p>
+        </div>
+      </section>
+
+      <section class="rail-section catalog-section" aria-labelledby="catalog-heading">
+        <div class="section-heading">
+          <h2 id="catalog-heading">Available packs</h2>
+          <span class="count mono" id="catalog-count">2</span>
+        </div>
+        <ul class="catalog-list" id="catalog" aria-label="Available offline packs"></ul>
+        <p class="catalog-note">
+          Moldova is an optional manual download (~220 MB) served through
+          Pinpoint's same-origin <span class="mono">/offline/packs/moldova/</span>
+          proxy. GitHub release assets do not send CORS headers, so the browser
+          never fetches them directly.
+        </p>
+      </section>
+
+      <section class="rail-section installed-section" aria-labelledby="installed-heading">
+        <div class="section-heading">
+          <h2 id="installed-heading">Installed on this device</h2>
+          <span class="count mono" id="pack-count">0</span>
+        </div>
+
+        <p class="empty-copy" id="packs-empty">
+          No packs installed. Download the Monaco fixture to test, or Moldova
+          when the same-origin proxy is available.
+        </p>
+
+        <ul class="pack-list" id="packs" aria-label="Installed offline packs"></ul>
+      </section>
+
+      <section class="rail-section notes-section" aria-labelledby="notes-heading">
+        <h2 id="notes-heading">How this works</h2>
+        <ol class="notes">
+          <li>The manifest lists every file with its byte count and SHA-256.</li>
+          <li>Files are verified before they enter device storage.</li>
+          <li>The map reads tiles from OPFS through the service worker.</li>
+        </ol>
+        <p class="license-line" id="manifest-license">License: ODbL-1.0</p>
+      </section>
+
+      <div class="error-banner" id="error" role="alert" hidden>
+        <strong>Pack error</strong>
+        <span id="error-text"></span>
+      </div>
+    </aside>
+
+    <main class="map-panel" aria-label="Offline map">
+      <div id="map" class="map-canvas" role="application" aria-label="Offline vector map from the installed pack"></div>
+
+      <div class="map-empty" id="map-empty">
+        <div class="map-empty-inner">
+          <p class="map-coord mono">43.7384° N · 7.4246° E</p>
+          <p class="map-empty-title">No pack open</p>
+          <p class="map-empty-copy">
+            Install the Monaco pack, then the map renders from
+            <span class="mono">/offline-packs/monaco/monaco.pmtiles</span>
+            without a tile server.
+          </p>
+        </div>
+      </div>
+
+      <div class="map-status" id="map-status" data-state="idle" role="status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="map-status-text">Waiting for a pack</span>
+      </div>
+
+      <div class="map-scale mono" aria-hidden="true">z13.2 · PMTiles · OPFS</div>
+
+      <div class="map-attribution" id="attribution">
+        Map data
+        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap contributors</a>
+        / <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener noreferrer">ODbL</a>
+      </div>
+    </main>
+  </div>
+
+  <!-- Local browser build; publishes globalThis.pmtiles. Never load this from a CDN. -->
+  <script src="../vendor/pmtiles.js"></script>
+
+  <script type="module" src="./offline-demo.js"></script>
+</body>
+</html>

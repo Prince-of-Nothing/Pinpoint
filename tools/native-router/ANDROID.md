@@ -1,0 +1,135 @@
+# Android integration — native-router
+
+The routing crate is pure Rust (`osmpbfreader`, `flate2`/`miniz_oxide`, `serde`)
+and makes no platform calls, so it already cross-compiles to Android. This file
+records the build path and what is still missing for a real APK.
+
+**This spike does not build or ship an APK, and does not claim to.**
+
+## 1. Cross-compile the crate
+
+Prerequisites:
+
+- Rust target: `rustup target add aarch64-linux-android`
+- Android NDK (this machine: `%LOCALAPPDATA%\Android\Sdk\ndk\27.2.12479018`)
+- A host linker for build scripts/proc macros (VS Build Tools on Windows)
+
+```powershell
+$env:ANDROID_NDK_HOME = "$env:LOCALAPPDATA\Android\Sdk\ndk\27.2.12479018"
+$env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = `
+  "$env:ANDROID_NDK_HOME\toolchains\llvm\prebuilt\windows-x86_64\bin\aarch64-linux-android24-clang.cmd"
+
+cd tools/native-router
+cargo build --release --target aarch64-linux-android
+```
+
+The crate has no C dependencies, so no CMake or NDK build script is involved;
+the NDK is used only as the linker/sysroot for the final artifact.
+
+### Recorded result
+
+Run on 2026-11-17 with NDK `27.2.12479018`, rustup 1.100.0, target
+`aarch64-linux-android`:
+
+```text
+cargo build --release --target aarch64-linux-android --target-dir target-android
+...
+Finished `release` profile [optimized] target(s) in 1m 00s
+```
+
+`target-android/aarch64-linux-android/release/native-router` is 1,093,040 bytes,
+`ELF64` / `Machine: AArch64`, `NEEDED: libdl.so, libm.so, libc.so`.
+`libnative_router.rlib` is 219,888 bytes. This is **not** an APK and was not run
+on a device.
+
+This result predates the Wave 4 graph cache and maneuver generator. The crate is
+still pure Rust and the new code uses only `std::fs`, so no C dependency was
+added, but **the cross-build was not re-run in Wave 4**. Re-measure the artifact
+size before packaging.
+
+Use a separate `--target-dir` when the host `cargo`/`rustc` and the rustup
+toolchain differ (this machine has standalone Rust 1.99.1 first on `PATH` and
+rustup 1.100.0 with the Android target); mixing them produces stale artifact
+errors. Full command and output: `docs/offline/native-routing.md`.
+
+## 2. JNI/FFI shape (next step, not in this spike)
+
+The app should not call the CLI. Two viable wrappers, both small:
+
+### Option A — direct JNI (recommended for the first integration)
+
+Create a thin wrapper crate (or a `jni` feature in this crate) with:
+
+```toml
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+jni = "0.21"
+native-router = { path = "../native-router" }
+```
+
+Expose one long-lived native handle and two calls:
+
+```text
+Java_…_NativeRouter_nativeLoadGraph(env, class, graphPath) -> jlong
+Java_…_NativeRouter_nativeRoute(env, class, handle, fromLat, fromLon, toLat, toLon) -> jstring (JSON)
+Java_…_NativeRouter_nativeFreeGraph(env, class, handle)
+```
+
+- Load `graph.bin` once with `Graph::load` and box it behind the `jlong`
+  handle; do **not** parse the PBF or reload the graph per route.
+- Copy the returned JSON into a Java `String` and parse it there, or return a
+  small object with `distance_m`, `duration_s` and a `double[]` of coordinates.
+- Wrap the native call in `catch_unwind` so a Rust panic becomes a Java
+  exception instead of aborting the process.
+- Put `libnative_router.so` under
+  `android/app/src/main/jniLibs/arm64-v8a/` and load it with
+  `System.loadLibrary("native_router")`.
+- Package only `arm64-v8a` for the first cut; add `armeabi-v7a` and `x86_64`
+  (emulator) only when needed.
+
+### Option B — UniFFI
+
+Generate Kotlin bindings for `load_graph(path)` and `route(handle, …)`. More
+build tooling (uniffi-bindgen, Gradle task) but less hand-written JNI. Either
+option keeps routing local; do not add an HTTP fallback.
+
+## 3. What must change before shipping
+
+1. **Persist the graph — implemented in Wave 4.** `Graph::save(path)` /
+   `Graph::load(path)` provide the versioned, CRC-checked `graph.bin` format
+   described in `README.md`. The recommended mobile model is to build
+   `graph.bin` in the offline pack pipeline and ship it inside the Moldova pack,
+   verified by the existing SHA-256 manifest. Load it once from app-private
+   storage (`filesDir`); do **not** parse the PBF at app launch. A first-launch
+   build costs 8–46 s and 283 MiB peak on desktop and is not acceptable on a
+   phone.
+2. **Keep it local.** The Android path must never call an online routing
+   service. Outside-coverage checks (`RouteError::OutsideCoverage`) should show
+   "outside offline area" rather than silently falling back.
+3. **Battery/memory.** The cached graph is fully resident: 105.7 MiB of arrays,
+   149.1 MiB peak with A* on desktop. Measure on a mid-range arm64 device before
+   committing to a size. A packed CSR with `f32` coordinates and memory mapping
+   is the next optimization if that budget is too high.
+4. **Maneuvers — implemented in Wave 4 for the Rust path.** `Route.maneuvers`
+   carries `depart`/`straight`/`left`/`right`/`slight_*`/`sharp_*`/`uturn`/
+   `roundabout`/`arrive` with road names/refs, a 15° dead band and tag-based
+   roundabout detection. It still has no turn restrictions, lane guidance or
+   exit signage; Valhalla remains the production target for full semantics.
+5. **JNI wrapper and packaging.** Not written. Load the graph once behind a
+   `jlong` handle and route by handle (shape in section 2); do not expose the
+   CLI. Package only `arm64-v8a` for the first cut.
+6. **Re-run the cross-build and measure on device.** The recorded Wave 2 ELF
+   predates the graph cache/maneuvers. Rebuild with the NDK, then record load
+   time, route time and peak RSS on the device.
+
+## 4. Native Valhalla alternative
+
+The M1 pack already contains `moldova-valhalla.tar` (510,140 nodes,
+1,354,988 directed edges, car/pedestrian/bicycle). If the Rust router is not
+good enough, the alternative is the design's primary path: build Valhalla from
+source with the NDK/CMake toolchain for `arm64-v8a`, ship `libvalhalla.so` and
+load the tar from app storage. That keeps routing local too, but costs a C++
+toolchain and a much larger native artifact. The measured Rust numbers in
+`docs/offline/native-routing.md` are the input to that decision.

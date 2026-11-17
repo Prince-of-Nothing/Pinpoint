@@ -25,6 +25,7 @@ mod diagnostic_handlers;
 mod handlers;
 mod locations_handlers;
 mod migrations;
+mod offline_handlers;
 mod state;
 mod status;
 mod usernames;
@@ -154,6 +155,7 @@ pub fn router(state: AppState) -> Router {
         .merge(admin_router())
         .merge(diagnostic_router())
         .merge(status_routes())
+        .merge(offline_router())
         .route("/", get(web_handlers::index))
         .route("/privacy", get(web_handlers::privacy))
         .route("/app.js", get(web_handlers::app_js))
@@ -172,13 +174,69 @@ pub fn router(state: AppState) -> Router {
         .route("/app.css", get(web_handlers::app_css))
         .route("/favicon.svg", get(web_handlers::favicon))
         .route("/favicon.ico", get(web_handlers::favicon))
-        .route("/vendor/leaflet.js", get(web_handlers::leaflet_js))
-        .route("/vendor/leaflet.css", get(web_handlers::leaflet_css))
+        .route("/vendor/maplibre-gl.js", get(web_handlers::maplibre_js))
         .route(
-            "/vendor/leaflet/LICENSE",
-            get(web_handlers::leaflet_license),
+            "/vendor/maplibre-gl-worker.mjs",
+            get(web_handlers::maplibre_worker),
         )
-        .route("/vendor/images/:file", get(web_handlers::leaflet_image))
+        .route("/vendor/maplibre-gl.css", get(web_handlers::maplibre_css))
+        .route(
+            "/vendor/maplibre-gl.LICENSE.txt",
+            get(web_handlers::maplibre_license),
+        )
+        .route("/vendor/pmtiles.js", get(web_handlers::pmtiles_js))
+        .route(
+            "/vendor/pmtiles.LICENSE.txt",
+            get(web_handlers::pmtiles_license),
+        )
+        .route("/map-assets/map.js", get(web_handlers::map_foundation_js))
+        .route("/map-assets/style.json", get(web_handlers::map_style_json))
+        .route("/map-assets/README.md", get(web_handlers::map_readme))
+        .route(
+            "/map-assets/fixtures/README.md",
+            get(web_handlers::map_fixture_readme),
+        )
+        .route(
+            "/map-assets/fixtures/monaco.pmtiles",
+            get(web_handlers::map_fixture),
+        )
+        // Offline search, pack manager and service worker.
+        .route("/offline-search.js", get(web_handlers::offline_search_js))
+        .route("/offline.js", get(web_handlers::offline_js))
+        .route("/offline-catalog.js", get(web_handlers::offline_catalog_js))
+        .route("/sw.js", get(web_handlers::service_worker))
+        .route("/map-assets/search.js", get(web_handlers::search_js))
+        .route("/vendor/sqlite3.mjs", get(web_handlers::sqlite_module))
+        .route("/vendor/sqlite3.wasm", get(web_handlers::sqlite_wasm))
+        // Pack-manager demo and its fixture, served under /app/ so the
+        // service-worker precache and relative imports resolve.
+        .route("/app/offline-demo.html", get(web_handlers::offline_demo))
+        .route("/app/offline-demo.js", get(web_handlers::offline_demo_js))
+        .route("/app/offline.css", get(web_handlers::offline_css))
+        .route("/app/offline.js", get(web_handlers::offline_js))
+        .route(
+            "/app/offline-catalog.js",
+            get(web_handlers::offline_catalog_js),
+        )
+        .route(
+            "/app/fixtures/offline-pack/manifest.json",
+            get(web_handlers::offline_manifest),
+        )
+        .route(
+            "/app/fixtures/offline-pack/manifest-broken.json",
+            get(web_handlers::offline_manifest_broken),
+        )
+        .route(
+            "/app/fixtures/offline-pack/LICENSE.txt",
+            get(web_handlers::offline_license),
+        )
+        // Aliases used by the demo and the service-worker precache.
+        .route("/map/map.js", get(web_handlers::map_foundation_js))
+        .route("/map/style.json", get(web_handlers::map_style_json))
+        .route(
+            "/map/fixtures/monaco.pmtiles",
+            get(web_handlers::map_fixture),
+        )
         .route("/health", get(handlers::health))
         .route("/api/v1/sync-status", get(handlers::sync_status))
         .with_state(state)
@@ -221,6 +279,13 @@ pub fn auth_router() -> Router<AppState> {
         .route("/api/v1/auth/mfa/verify", post(auth_handlers::mfa_verify))
         .route("/api/v1/auth/mfa/status", get(auth_handlers::mfa_status))
         .route("/api/v1/auth/mfa", delete(auth_handlers::mfa_disable))
+}
+
+/// Offline pack download routes (`/offline/packs/*`): the committed manifest
+/// plus a Range-capable, same-origin proxy of the published release assets.
+/// Isolated in its own merge so web-app router work does not conflict here.
+pub fn offline_router() -> Router<AppState> {
+    offline_handlers::routes()
 }
 
 /// Admin console routes (`/api/v1/admin/*`). Role-gated per handler so the

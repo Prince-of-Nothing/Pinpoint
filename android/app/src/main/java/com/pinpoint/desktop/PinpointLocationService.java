@@ -56,8 +56,7 @@ public class PinpointLocationService extends Service implements LocationListener
             stopSelf();
             return START_NOT_STICKY;
         }
-        if (checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
-                != PackageManager.PERMISSION_GRANTED) {
+        if (!hasLocationPermission()) {
             Log.w("PinpointService", "foreground service started without location permission");
             stopSelf();
             return START_NOT_STICKY;
@@ -118,11 +117,17 @@ public class PinpointLocationService extends Service implements LocationListener
             return;
         }
         long minTimeMs = intervalSeconds * 1000L;
+        boolean fine = hasFineLocation();
         for (String provider : new String[] {
             LocationManager.GPS_PROVIDER,
             LocationManager.NETWORK_PROVIDER,
             LocationManager.PASSIVE_PROVIDER,
         }) {
+            if (LocationManager.GPS_PROVIDER.equals(provider) && !fine) {
+                // Approximate-only permission: the network provider still
+                // gives a usable city-level fix.
+                continue;
+            }
             try {
                 locationManager.requestLocationUpdates(
                     provider,
@@ -135,6 +140,17 @@ public class PinpointLocationService extends Service implements LocationListener
                 Log.w("PinpointService", "provider " + provider + " unavailable", error);
             }
         }
+    }
+
+    private boolean hasFineLocation() {
+        return checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)
+            == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean hasLocationPermission() {
+        return hasFineLocation()
+            || checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     private void createChannel() {

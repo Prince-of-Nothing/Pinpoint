@@ -261,7 +261,7 @@ code { background: #111827; padding: 0.05rem 0.3rem; border-radius: 0.25rem; }
 }
 
 /* ---------------------------------------------------------------------------
-   v1.1 map-first shell (Leaflet)
+   v1.1 map-first shell (MapLibre GL JS + PMTiles)
    --------------------------------------------------------------------------- */
 header { height: 60px; }
 
@@ -281,26 +281,36 @@ header { height: 60px; }
   background: #0a0f1c;
 }
 
-/* Dark treatment for the light OSM raster until a vector style exists. */
-.tiles-dark {
-  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9) saturate(0.65);
-}
-
-.leaflet-control-zoom a {
-  background: #0f172a;
-  color: #e5e7eb;
-  border-color: #1f2937;
-}
-.leaflet-control-zoom a:hover { background: #111c33; }
-.leaflet-control-attribution {
+/* Attribution is mandatory (OSM / OpenMapTiles / ODbL) and always visible. */
+.map-attribution {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.5rem;
+  z-index: 800;
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.35rem;
   background: rgba(11, 16, 32, 0.82);
   color: #9ca3af;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  pointer-events: auto;
 }
-.leaflet-control-attribution a { color: #9ca3af; }
-.leaflet-control-scale-line {
+.map-attribution a { color: #cbd5e1; text-decoration: none; }
+.map-attribution a:hover { color: var(--accent); }
+.map-attribution .sep { margin: 0 0.2rem; }
+
+/* Dark MapLibre controls match the shell. */
+.maplibregl-ctrl-group {
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid #1f2937;
+}
+.maplibregl-ctrl-group button + button { border-top-color: #1f2937; }
+.maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(180deg); }
+.maplibregl-ctrl-scale {
   background: rgba(11, 16, 32, 0.75);
   border-color: #9ca3af;
   color: #e5e7eb;
+  font-size: 0.68rem;
 }
 
 .map-topbar {
@@ -892,7 +902,6 @@ header { height: 60px; }
 .pin-self .pin-label {
   font-size: var(--map-label-size);
 }
-.leaflet-tooltip { font-size: var(--map-label-size); }
 
 .route-progress {
   display: flex;
@@ -992,4 +1001,41 @@ header { height: 60px; }
   border-color: var(--accent);
   color: #052e1b;
   opacity: 0.8;
+}
+
+/* Offline map prompt: visible only until the region pack is installed. */
+.offline-map-banner {
+  position: absolute;
+  right: 1rem;
+  bottom: 3.2rem;
+  z-index: 850;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: min(30rem, calc(100% - 2rem));
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: rgba(15, 23, 42, 0.96);
+  color: var(--text);
+  box-shadow: 0 0.6rem 1.8rem rgba(0, 0, 0, 0.35);
+}
+.offline-map-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+.offline-map-copy strong { font-size: 0.82rem; }
+.offline-map-copy span { color: var(--muted); }
+.offline-map-banner button { white-space: nowrap; }
+@media (max-width: 600px) {
+  .offline-map-banner {
+    left: 0.6rem;
+    right: 0.6rem;
+    bottom: 2.8rem;
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

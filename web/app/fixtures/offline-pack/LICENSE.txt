@@ -1,0 +1,9 @@
+Pinpoint offline pack: monaco
+
+Map data © OpenStreetMap contributors, available under the Open Database
+License (ODbL) 1.0: https://opendatacommons.org/licenses/odbl/1-0/
+Copyright and attribution: https://www.openstreetmap.org/copyright
+
+This file ships with the Monaco test fixture. Keep it with any redistributed
+copy. The PMTiles archive was derived from OpenStreetMap data with
+OpenMapTiles 3.16.0.

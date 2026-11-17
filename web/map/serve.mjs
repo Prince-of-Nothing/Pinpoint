@@ -26,8 +26,10 @@ const MIME_TYPES = {
   ".mjs": "text/javascript; charset=utf-8",
   ".pmtiles": "application/octet-stream",
   ".png": "image/png",
+  ".sqlite": "application/vnd.sqlite3",
   ".svg": "image/svg+xml",
   ".txt": "text/plain; charset=utf-8",
+  ".wasm": "application/wasm",
   ".webp": "image/webp",
 };
 

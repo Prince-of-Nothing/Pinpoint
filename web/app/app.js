@@ -137,7 +137,9 @@ async function enterApp() {
   show($("app-panel"), true);
   renderIdentity();
   updateAdminTab();
-  ensureMap().map.invalidateSize();
+  ensureMap()
+    .then((map) => map.map.invalidateSize())
+    .catch(() => {});
   if (!sharing) {
     sharing = initSharing({
       api,
@@ -527,9 +529,10 @@ window.addEventListener("unhandledrejection", (event) => {
 });
 
 // ---------------------------------------------------------------------------
-// Leaflet map (locally vendored; tiles via the same-origin proxy)
+// MapLibre/PMTiles map adapter (same-origin assets; app/map.js owns the map)
 // ---------------------------------------------------------------------------
 let mapApi = null;
+let mapPromise = null;
 let nav = null;
 let adminConsole = null;
 let sharing = null;
@@ -555,12 +558,24 @@ function ensureAdminConsole() {
 }
 
 function ensureMap() {
-  if (mapApi) return mapApi;
+  if (mapApi) return Promise.resolve(mapApi);
+  if (!mapPromise) {
+    mapPromise = createAppMap().catch((error) => {
+      mapPromise = null;
+      throw error;
+    });
+  }
+  return mapPromise;
+}
+
+async function createAppMap() {
+  const pmtilesUrl = await installedPmtilesUrl();
   mapApi = createMap({
     element: $("map"),
     center: [state.map.lat, state.map.lon],
     zoom: state.map.zoom,
     onClick: (point) => nav?.onMapClick(point),
+    ...(pmtilesUrl ? { pmtilesUrl } : {}),
   });
   nav = initNavigation({
     mapApi,
@@ -570,8 +585,85 @@ function ensureMap() {
   return mapApi;
 }
 
+async function installedPmtilesUrl() {
+  try {
+    const { listPacks, openPack } = await import("./offline.js");
+    const packs = await listPacks();
+    const pack = packs.find((entry) => entry.id === "moldova") || packs[0];
+    if (!pack) return null;
+    const opened = await openPack(pack.id);
+    return opened?.pmtilesUrl || null;
+  } catch (error) {
+    console.info(
+      "[pinpoint] no installed offline map pack; using the fixture",
+      error?.message || String(error),
+    );
+    return null;
+  }
+}
+
 function updateMap() {
-  ensureMap().setFriendMarkers(state.locations);
+  ensureMap()
+    .then((map) => map.setFriendMarkers(state.locations))
+    .catch(() => {});
+}
+
+async function registerOfflineWorker() {
+  if (!("serviceWorker" in navigator)) return false;
+  try {
+    await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+    return true;
+  } catch (error) {
+    console.info(
+      "[pinpoint] offline worker unavailable",
+      error?.message || String(error),
+    );
+    return false;
+  }
+}
+
+async function refreshOfflineBanner() {
+  const banner = $("offline-map-banner");
+  if (!banner) return;
+  try {
+    const { listPacks } = await import("./offline.js");
+    const packs = await listPacks();
+    const pack = packs.find((entry) => entry.id === "moldova") || packs[0];
+    banner.classList.toggle("hidden", Boolean(pack));
+    if (pack) {
+      $("offline-map-status").textContent = `${pack.name || pack.id} is installed`;
+      $("offline-map-download").hidden = true;
+    }
+  } catch (error) {
+    // Keep the prompt visible: the download may still work even when listing
+    // fails (for example before the service worker is active).
+    console.info("[pinpoint] offline pack list unavailable", error?.message || error);
+  }
+}
+
+async function downloadOfflineMap() {
+  const button = $("offline-map-download");
+  const status = $("offline-map-status");
+  button.disabled = true;
+  status.textContent = "Fetching the pack manifest…";
+  try {
+    await registerOfflineWorker();
+    const { downloadPack } = await import("./offline.js");
+    const installed = await downloadPack("/offline/packs/moldova/manifest.json", {
+      onProgress: (progress) => {
+        const percent = Number.isFinite(progress?.percent)
+          ? ` ${Math.round(progress.percent)}%`
+          : "";
+        status.textContent = `${progress?.phase || "Downloading"}${percent}`;
+      },
+    });
+    status.textContent = `${installed.name || installed.id} installed; reloading…`;
+    location.reload();
+  } catch (error) {
+    status.textContent = `Download failed: ${error?.message || error}`;
+    button.disabled = false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -753,7 +845,8 @@ $("diagnostic-form").addEventListener("submit", async (e) => {
 
 $("locate-button").addEventListener("click", async () => {
   try {
-    const fix = await ensureMap().locate();
+    const map = await ensureMap();
+    const fix = await map.locate();
     setStatus(`Located: ${fix.lat.toFixed(5)}, ${fix.lon.toFixed(5)}`);
   } catch (err) {
     setStatus(err.message, true);
@@ -799,6 +892,10 @@ $("crash-dismiss").addEventListener("click", () => {
   show($("crash-banner"), false);
   lastCrash = null;
 });
+
+$("offline-map-download")?.addEventListener("click", downloadOfflineMap);
+refreshOfflineBanner();
+registerOfflineWorker().then(() => refreshOfflineBanner());
 
 // Initial session check (cookie may already be valid).
 initAppearance();

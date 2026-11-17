@@ -37,6 +37,7 @@ Android / iOS    ─┘        (cookie + CSRF)      │              │
 | `security/` | One mechanism per file: password (Argon2id), session, CSRF, rate limit, encryption, audit, signing, MFA, OAuth primitives |
 | `patterns/` | Repository, Strategy, Command, State, Observer, Factory, Decorator, Proxy |
 | `map.rs`, `tilepacks.rs`, `bookmarks.rs` | Pins, offline tiles, on-device bookmarks |
+| `map_server.rs`, `map_window.rs` | Loopback Range server and the opt-in (`map-webview`) native/web browser map window; egui map remains the fallback |
 | `osm.rs` | Nominatim/OSRM/Overpass (friend coordinates never sent) |
 | `platform.rs` | All `cfg(target_os)` branches |
 | `webapp/`, `mobile/` | Portable web clients and mobile adapters |

@@ -88,7 +88,7 @@ designed so they can be separated later if scale requires it.
 
 | Layer | Frozen choice | MVP as built |
 |---|---|---|
-| Mobile client | Flutter | Same-origin web client (HTML/JS, Leaflet 1.9.4 vendored); Flutter deferred ([ADR 0004](../adr/web-client-for-mvp-demonstration.md)) |
+| Mobile client | Flutter | Same-origin web client (HTML/JS, MapLibre GL JS 6.18.0 + PMTiles 4.5.0 vendored); Flutter deferred ([ADR 0004](../adr/web-client-for-mvp-demonstration.md)) |
 | Backend | FastAPI + SQLAlchemy + Alembic | FastAPI 0.141, SQLAlchemy 2.1, Alembic 1.20, Pydantic 2 |
 | Database | PostgreSQL | PostgreSQL 16 with a least-privilege runtime role; SQLite in-memory for tests |
 | Queue/cache | Redis + Celery | Redis for rate limiting only; no Celery yet ([ADR 0005](../adr/store-latest-location-only.md)) |

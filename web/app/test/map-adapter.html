@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="pinpoint-map-data" content="/map-assets/fixtures/monaco.pmtiles" />
+    <meta name="pinpoint-map-style" content="/map-assets/style.json" />
+    <title>Pinpoint · Map adapter test page</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/vendor/maplibre-gl.css" />
+    <link rel="stylesheet" href="/app/app.css" />
+    <style>
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #0a0f1c;
+        color: #e5e7eb;
+        font: 13px/1.4 ui-sans-serif, system-ui, sans-serif;
+      }
+      #map {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        border: 0;
+        border-radius: 0;
+      }
+      #click-readout {
+        position: absolute;
+        left: 12px;
+        top: 12px;
+        z-index: 5;
+        padding: 4px 8px;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.62);
+      }
+      .map-attribution {
+        position: absolute;
+        left: auto;
+        right: 8px;
+        bottom: 8px;
+        z-index: 5;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: rgba(0, 0, 0, 0.62);
+        font-size: 11px;
+      }
+      .map-attribution a {
+        color: #cbd5e1;
+        text-decoration: none;
+      }
+      .map-attribution .sep {
+        margin: 0 0.2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="map" aria-label="Map adapter test"></div>
+    <div id="click-readout">—</div>
+    <div class="map-attribution">
+      Map data ©
+      <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>
+      <span class="sep">·</span>
+      <a href="https://www.openmaptiles.org/" target="_blank" rel="noopener noreferrer">OpenMapTiles</a>
+      <span class="sep">·</span>
+      <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener noreferrer">ODbL 1.0</a>
+    </div>
+    <script type="module" src="/app/map-adapter-driver.js"></script>
+  </body>
+</html>

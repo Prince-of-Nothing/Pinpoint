@@ -29,6 +29,8 @@ pub mod logging;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod mobile;
 pub mod models;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod offline_install;
 pub mod osm;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod patterns;

@@ -31,9 +31,10 @@
 //! ```
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
+use std::time::SystemTime;
 
-use axum::extract::Query;
+use axum::extract::{Extension, Query};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -213,14 +214,43 @@ fn parse_profile(raw: Option<&str>) -> Result<Profile, RouteFailure> {
 /// multiply the phone's peak memory for no user benefit.
 pub struct LocalRouter {
     graph_path: Option<PathBuf>,
-    graph: Mutex<Option<Arc<Graph>>>,
+    graph: Mutex<Option<LoadedGraph>>,
     route_gate: Mutex<()>,
+}
+
+struct LoadedGraph {
+    graph: Arc<Graph>,
+    len: u64,
+    modified: Option<SystemTime>,
+}
+
+impl LoadedGraph {
+    async fn matches(&self, path: &Path) -> bool {
+        match tokio::fs::metadata(path).await {
+            Ok(metadata) => {
+                metadata.len() == self.len
+                    && metadata.modified().ok() == self.modified
+                    && metadata.is_file()
+            }
+            Err(_) => false,
+        }
+    }
 }
 
 impl LocalRouter {
     /// Resolve the graph path from the environment or the app data directory.
     pub fn from_environment() -> Self {
         Self::new(resolve_graph_path())
+    }
+
+    /// Resolve the environment override first, then `<packs_dir>/moldova.graph.bin`.
+    /// The desktop map server uses this so a temp/test packs directory routes
+    /// with the graph the download manager just installed.
+    pub fn for_packs_dir(packs_dir: Option<&Path>) -> Self {
+        if std::env::var_os(GRAPH_ENV).is_some() {
+            return Self::from_environment();
+        }
+        Self::new(packs_dir.map(|dir| dir.join(DEFAULT_GRAPH_FILE)))
     }
 
     /// Build a router for an explicit graph path (used by unit tests).
@@ -238,18 +268,26 @@ impl LocalRouter {
     }
 
     /// Load the graph once, returning an `Arc` shared by later requests.
+    ///
+    /// The installed file's length and modification time are checked on each
+    /// request, so replacing `packs/moldova.graph.bin` after a download is
+    /// picked up without restarting the map server.
     async fn graph(&self) -> Result<Arc<Graph>, RouteFailure> {
-        let mut guard = self.graph.lock().await;
-        if let Some(graph) = guard.as_ref() {
-            return Ok(Arc::clone(graph));
-        }
-
         let Some(path) = self.graph_path.clone() else {
             return Err(RouteFailure::unavailable(format!(
                 "no local routing graph configured; set {GRAPH_ENV} or download the \
                  offline pack containing packs/{DEFAULT_GRAPH_FILE}"
             )));
         };
+
+        let mut guard = self.graph.lock().await;
+        if let Some(loaded) = guard.as_ref() {
+            if loaded.matches(&path).await {
+                return Ok(Arc::clone(&loaded.graph));
+            }
+            tracing::info!(path = %path.display(), "local routing graph changed; reloading");
+            *guard = None;
+        }
 
         let load_path = path.clone();
         let loaded = tokio::task::spawn_blocking(move || Graph::load(&load_path)).await;
@@ -264,14 +302,22 @@ impl LocalRouter {
 
         match loaded {
             Ok(graph) => {
-                let graph = Arc::new(graph);
+                let metadata = tokio::fs::metadata(&path).await.ok();
+                let loaded = LoadedGraph {
+                    graph: Arc::new(graph),
+                    len: metadata.as_ref().map(std::fs::Metadata::len).unwrap_or(0),
+                    modified: metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.modified().ok()),
+                };
                 tracing::info!(
                     path = %path.display(),
-                    nodes = graph.node_count(),
-                    edges = graph.edge_count(),
+                    nodes = loaded.graph.node_count(),
+                    edges = loaded.graph.edge_count(),
                     "local routing graph loaded"
                 );
-                *guard = Some(Arc::clone(&graph));
+                let graph = Arc::clone(&loaded.graph);
+                *guard = Some(loaded);
                 Ok(graph)
             }
             Err(error) => Err(RouteFailure::unavailable(format!(
@@ -315,12 +361,6 @@ impl LocalRouter {
     }
 }
 
-/// Process-wide router used by both loopback map servers.
-pub fn shared() -> &'static LocalRouter {
-    static SHARED: OnceLock<LocalRouter> = OnceLock::new();
-    SHARED.get_or_init(LocalRouter::from_environment)
-}
-
 /// Graph path from `PINPOINT_ROUTER_GRAPH` or `<app data>/packs/moldova.graph.bin`.
 pub fn resolve_graph_path() -> Option<PathBuf> {
     if let Some(raw) = std::env::var_os(GRAPH_ENV) {
@@ -333,12 +373,18 @@ pub fn resolve_graph_path() -> Option<PathBuf> {
 }
 
 /// `GET /map/route` handler mounted by the Android and desktop map servers.
-pub async fn map_route(Query(query): Query<RouteQuery>) -> Response {
+///
+/// Each server supplies its own [`LocalRouter`], bound to the same `packs/`
+/// directory it serves, so a downloaded graph is used without a restart.
+pub async fn map_route(
+    Extension(router): Extension<Arc<LocalRouter>>,
+    Query(query): Query<RouteQuery>,
+) -> Response {
     let request = match RouteRequest::from_query(&query) {
         Ok(request) => request,
         Err(failure) => return failure.into_response(),
     };
-    match shared().route(request).await {
+    match router.route(request).await {
         Ok(route) => (StatusCode::OK, Json(route)).into_response(),
         Err(failure) => failure.into_response(),
     }

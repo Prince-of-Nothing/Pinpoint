@@ -49,6 +49,40 @@ Total: **220,262,575 bytes (210 MB)**.
 - Manifest: version `moldova-20261116`; attribution and ODbL license present;
   no UTF-8 BOM. Rebuilds derive every `files[].url` from `base_url`.
 
+The same data release also carries the compact native routing cache produced
+from the Moldova PBF:
+
+| File | Bytes | SHA-256 |
+|---|---:|---|
+| `moldova.graph.bin` | 110,858,815 | `8cdbb0cb1d61c2d5857cb2677ab1343968223e4ae10892f0268c8feb0eb50e75` |
+
+## App install (Android and desktop map window)
+
+`src/offline_install.rs` is the native download manager shared by both
+loopback map servers. It installs exactly two files into the app's `packs/`
+directory:
+
+```text
+<app data>/packs/moldova.pmtiles     93,172,399 B
+<app data>/packs/moldova.graph.bin  110,858,815 B
+```
+
+The total is 204,031,214 bytes (**204 MB**). Both files come from
+`https://github.com/Prince-of-Nothing/Pinpoint/releases/download/data-moldova-20261116/`
+unless `PINPOINT_OFFLINE_BASE_URL` points at a mirror or a test fixture host.
+The page never downloads from GitHub; the Rust process streams each response
+to `packs/.<name>.part`, hashes it incrementally, checks the exact byte length
+and SHA-256, and only then atomically renames it into place. A failed,
+truncated or wrong-hash download leaves the previously installed file intact.
+
+The map servers expose `GET /map/offline/status`,
+`POST /map/offline/download`, `GET /map/config` and
+`GET|HEAD /packs/<name>.pmtiles` (Range `206`/`416`). The map page shows the
+size, polls progress, reports **Routing graph installed** vs **Download
+routing data**, and reloads onto `/packs/moldova.pmtiles` after an install.
+The route engine stays local: `/map/route` reads the downloaded graph through
+`native_router`; there is no online routing fallback or geocoder.
+
 ## Reproducibility inputs
 
 The OSM extract is pinned by SHA-256 in `scripts/offline/regions.json`.

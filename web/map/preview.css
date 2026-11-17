@@ -262,6 +262,122 @@ main {
   opacity: 0.55;
 }
 
+/* Compact offline-pack card. It only talks to the local map server and never
+   fetches a release asset from the page itself. */
+.offline-panel {
+  position: absolute;
+  z-index: 6;
+  top: 54px;
+  right: 14px;
+  width: min(292px, calc(100% - 28px));
+  padding: 11px 12px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 12px 34px rgb(0 0 0 / 18%);
+}
+
+.offline-panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.offline-panel__kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.offline-badge {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--control-hover);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.offline-panel[data-state="downloading"] .offline-badge {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+}
+
+.offline-panel[data-state="installed"] .offline-badge {
+  background: color-mix(in srgb, #34d399 20%, transparent);
+  color: #1c7a58;
+}
+
+.offline-panel[data-state="error"] .offline-badge {
+  background: color-mix(in srgb, #f87171 18%, transparent);
+  color: #b42318;
+}
+
+.offline-panel__detail,
+.offline-panel__graph,
+.offline-panel__error {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.offline-panel__detail {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.offline-panel__graph {
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.offline-panel__graph[data-installed="true"] {
+  color: var(--accent);
+}
+
+.offline-panel__error {
+  margin-top: 6px;
+  color: #b42318;
+  overflow-wrap: anywhere;
+}
+
+.offline-progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin: 8px 0 6px;
+  accent-color: var(--accent);
+}
+
+.offline-progress[hidden] {
+  display: none;
+}
+
+.offline-button {
+  width: 100%;
+  margin-top: 7px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.offline-button[hidden] {
+  display: none;
+}
+
+.offline-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 /* Local route panel over the shared map. The component owns its internals;
    this only places it and keeps the page's own dark/light tokens. */
 .route-panel {
@@ -333,6 +449,12 @@ main {
 
   .map-meta {
     display: none;
+  }
+
+  .offline-panel {
+    top: 58px;
+    right: 10px;
+    width: min(270px, calc(100% - 20px));
   }
 
   .route-panel {

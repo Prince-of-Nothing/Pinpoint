@@ -91,14 +91,23 @@
 
       <section id="app-panel" class="hidden app-shell">
         <div id="map" class="map" aria-label="Map"></div>
-        <div id="offline-map-banner" class="offline-map-banner hidden" role="status">
-          <div class="offline-map-copy">
-            <strong>Offline map</strong>
-            <span id="offline-map-status">Download the Moldova map to browse without a connection.</span>
+        <div id="map-empty-state" class="map-empty-state hidden" role="status">
+          <div class="map-empty-card">
+            <span class="eyebrow">Pinpoint</span>
+            <h2>Choose a map</h2>
+            <p class="muted">
+              Pinpoint opens offline-first. Turn on the online basemap, or
+              install the Moldova pack for offline use.
+            </p>
+            <div class="row">
+              <button type="button" id="empty-online">Use online map</button>
+              <button type="button" id="empty-download" class="secondary">Install Moldova (139 MB)</button>
+            </div>
+            <p class="muted small">
+              The online map sends tile requests to OpenFreeMap. Friend pins,
+              locations and account data are never sent.
+            </p>
           </div>
-          <button id="offline-map-download" type="button" class="secondary">
-            Download map (220 MB)
-          </button>
         </div>
         <div class="map-attribution">
           <span id="map-attribution-offline">
@@ -278,6 +287,22 @@
         </aside>
 
         <aside id="social-drawer" class="drawer">
+          <div class="drawer-head">
+            <div>
+              <span class="eyebrow">Your map</span>
+              <h2>Sharing &amp; memories</h2>
+            </div>
+            <button type="button" id="drawer-close" class="icon-btn" aria-label="Close panel">×</button>
+          </div>
+          <div id="offline-map-banner" class="offline-map-banner hidden" role="status">
+            <div class="offline-map-copy">
+              <strong>Offline map</strong>
+              <span id="offline-map-status">Download the Moldova map to browse without a connection.</span>
+            </div>
+            <button id="offline-map-download" type="button" class="secondary">
+              Download map (139 MB)
+            </button>
+          </div>
           <div class="card">
             <h2>Publish my location</h2>
             <form id="publish-form">
@@ -285,6 +310,25 @@
               <label>Longitude <input id="publish-lon" type="number" step="any" min="-180" max="180" required /></label>
               <button type="submit">Publish</button>
             </form>
+          </div>
+
+          <div class="card" id="today-card">
+            <div class="card-head">
+              <h2>Today</h2>
+              <span class="badge" id="today-count">0 points</span>
+            </div>
+            <p class="muted" id="today-summary">
+              Your private trail. Publish your location or use GPS to add a point.
+            </p>
+            <div class="row">
+              <button type="button" id="trail-toggle" class="secondary" disabled>
+                Show trail
+              </button>
+            </div>
+            <ol id="trail-list" class="trail-list"></ol>
+            <p class="muted small">
+              Only you can see this trail. It is kept for 24 hours.
+            </p>
           </div>
 
           <div class="card">
@@ -306,6 +350,29 @@
           <div class="card">
             <h2>Friend locations</h2>
             <ul id="locations-list" class="list"></ul>
+          </div>
+
+          <div class="card" id="notes-card">
+            <h2>Private notes</h2>
+            <p class="muted">
+              Photos and messages attached to a place. They stay on your
+              account; only you can see them.
+            </p>
+            <form id="note-form">
+              <label>Place label
+                <input id="note-label" type="text" maxlength="120" placeholder="Cafe, viewpoint, parking..." />
+              </label>
+              <label>Message
+                <textarea id="note-message" rows="3" maxlength="2000" required placeholder="What happened here?"></textarea>
+              </label>
+              <label>Photo (optional, JPEG or PNG)
+                <input id="note-photo" type="file" accept="image/jpeg,image/png" />
+              </label>
+              <img id="note-preview" class="note-preview hidden" alt="Selected photo preview" />
+              <p class="muted small">Saved at the map centre. Pan the map first.</p>
+              <button type="submit">Add note here</button>
+            </form>
+            <ul id="notes-list" class="list notes-list"></ul>
           </div>
 
           <div class="card">

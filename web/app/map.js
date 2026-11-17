@@ -23,6 +23,8 @@ const ROUTE_LINE_LAYER = "pinpoint-route-line";
 const SELF_SOURCE = "pinpoint-self-accuracy";
 const SELF_FILL_LAYER = "pinpoint-self-accuracy-fill";
 const SELF_LINE_LAYER = "pinpoint-self-accuracy-line";
+const TRAIL_SOURCE = "pinpoint-trail";
+const TRAIL_LAYER = "pinpoint-trail-line";
 
 const EMPTY_FEATURES = { type: "FeatureCollection", features: [] };
 
@@ -97,6 +99,8 @@ export function createMap({
   let selectedMarker = null;
   let selfMarker = null;
   let routeMarkers = [];
+  let trail = null;
+  let noteMarkers = [];
   let navigationControl = null;
   let scaleControl = null;
   let online = false;
@@ -131,12 +135,14 @@ export function createMap({
         // A style switch drops the adapter's accuracy layers; re-add them.
         map.on("style.load", () => {
           if (!destroyed) applySelfLocation();
+          if (!destroyed) applyTrail();
         });
       }
       applyView();
       applySelectedMarker();
       applySelfLocation();
       applyRoute();
+      applyTrail();
       applyFit();
       if (readOnlinePreference()) void setOnline(true, { persist: false });
       if (typeof onLoad === "function") onLoad(api);
@@ -231,6 +237,9 @@ export function createMap({
     drawRoute,
     clearRoute,
     fitRoute,
+    drawTrail,
+    clearTrail,
+    setNoteMarkers,
     locate,
     setTheme,
     getTheme,
@@ -448,6 +457,76 @@ export function createMap({
     route = null;
     pendingFit = null;
     applyRoute();
+  }
+
+  // -------------------------------------------------------------------------
+  // Daily trail and private notes
+  // -------------------------------------------------------------------------
+
+  function drawTrail(points) {
+    trail = (Array.isArray(points) ? points : [])
+      .map((point) => [Number(point.latitude ?? point.lat), Number(point.longitude ?? point.lon)])
+      .filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon));
+    applyTrail();
+  }
+
+  function clearTrail() {
+    trail = null;
+    applyTrail();
+  }
+
+  function applyTrail() {
+    if (!mapReady) return;
+    const live = base.getMap();
+    if (!live) return;
+    if (live.getLayer(TRAIL_LAYER)) live.removeLayer(TRAIL_LAYER);
+    if (live.getSource(TRAIL_SOURCE)) live.removeSource(TRAIL_SOURCE);
+    if (!trail || trail.length < 2) return;
+    live.addSource(TRAIL_SOURCE, {
+      type: "geojson",
+      data: {
+        type: "Feature",
+        properties: {},
+        geometry: {
+          type: "LineString",
+          coordinates: trail.map(([lat, lon]) => [lon, lat]),
+        },
+      },
+    });
+    addLayerBelowPins(live, {
+      id: TRAIL_LAYER,
+      type: "line",
+      source: TRAIL_SOURCE,
+      layout: { "line-cap": "round", "line-join": "round" },
+      paint: { "line-color": "#e3a458", "line-width": 4, "line-opacity": 0.85 },
+    });
+  }
+
+  function setNoteMarkers(notes, onOpen) {
+    if (destroyed) return;
+    noteMarkers.forEach((marker) => marker.remove());
+    noteMarkers = [];
+    const live = base.getMap();
+    if (!live || !Array.isArray(notes)) return;
+    for (const note of notes) {
+      const lat = Number(note.latitude);
+      const lon = Number(note.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      const element = document.createElement("button");
+      element.type = "button";
+      element.className = "note-marker";
+      element.title = note.label || "Private note";
+      element.setAttribute("aria-label", `Open note: ${note.label || note.message}`);
+      element.textContent = "✎";
+      element.addEventListener("click", (event) => {
+        event.preventDefault();
+        onOpen?.(note);
+      });
+      const marker = new maplibregl.Marker({ element, anchor: "bottom" })
+        .setLngLat([lon, lat])
+        .addTo(live);
+      noteMarkers.push(marker);
+    }
   }
 
   function applyRoute() {

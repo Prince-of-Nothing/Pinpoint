@@ -1867,7 +1867,7 @@ fn free_space_for(path: &Path) -> Option<u64> {
         return None;
     }
     let stats = unsafe { stats.assume_init() };
-    Some(stats.f_bavail as u64 * stats.f_frsize as u64)
+    Some(u64::from(stats.f_bavail) * u64::from(stats.f_frsize))
 }
 
 #[cfg(not(any(windows, unix)))]

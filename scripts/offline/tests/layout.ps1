@@ -29,8 +29,13 @@ function Assert-ManifestUrls([string]$BaseUrl) {
     if ($doc.source_bytes -ne $pbfBytes) { throw "manifest source bytes mismatch" }
     $expectedSource = "local:" + (Split-Path -Leaf $pbfPath)
     if ($doc.source_url -ne $expectedSource) { throw "manifest source url mismatch: $($doc.source_url) != $expectedSource" }
-    if ($doc.downloaded_at -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|\+00:00)$') {
-        throw "manifest downloaded_at is not UTC: $($doc.downloaded_at)"
+    # ConvertFrom-Json on pwsh 7 turns ISO timestamps into DateTime objects.
+    $stamp = $doc.downloaded_at
+    if ($stamp -is [datetime]) {
+        $stamp = $stamp.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    }
+    if ($stamp -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|\+00:00)$') {
+        throw "manifest downloaded_at is not UTC: $stamp"
     }
 }
 

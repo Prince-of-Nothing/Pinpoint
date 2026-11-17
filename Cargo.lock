@@ -3974,7 +3974,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pinpoint-desktop"
-version = "1.5.3"
+version = "2.0.0"
 dependencies = [
  "aead",
  "aes-gcm",

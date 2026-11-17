@@ -1,3 +1,108 @@
+# Pinpoint 2.0.0 - Release Notes
+
+**Released:** 2026-11-17 - **Version:** `2.0.0` (from `1.5.3`) -
+**Status:** First offline-map release.
+
+**Artifacts:** `pinpoint-android-2.0.0.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source `zip`/`tar.gz` archives for the `v2.0.0` tag.
+The Moldova map data is a separate, non-latest data release:
+`data-moldova-20261116`.
+
+## What is new
+
+### Offline maps
+
+- Versioned region packs built by `scripts/offline/`: Planetiler/OpenMapTiles
+  PMTiles basemap, a SQLite FTS5 search index and Valhalla routing tiles, with
+  a hashed manifest and atomic publication.
+- The Moldova pack is live: `moldova.pmtiles` (93,172,399 B),
+  `moldova-search.sqlite` (6,770,688 B, 36,913 places) and
+  `moldova-valhalla.tar` (120,319,488 B).
+- GitHub release assets do not send CORS headers, so the server serves the
+  pack from its own origin at `/offline/packs/moldova/*` and streams `Range`
+  requests (`206`) without buffering the 220 MB bundle.
+
+### Web app
+
+- MapLibre GL JS 6.18.0 and PMTiles 4.5.0 are vendored; the map has no CDN,
+  raster-tile service or remote style. OSM/OpenMapTiles/ODbL attribution is
+  always visible.
+- The offline pack manager downloads a manifest, verifies every byte count and
+  SHA-256 with WebCrypto, stores the pack in OPFS and serves it to MapLibre
+  through a service worker with HTTP Range support.
+- Offline search uses SQLite WASM 3.54.1 with FTS5 over the M1 `places` table.
+  It folds Romanian diacritics, keeps Cyrillic searchable and falls back to the
+  existing server search when no pack is installed.
+- The app offers a one-click Moldova download and uses the installed pack for
+  the map and search after reload.
+
+### Routing
+
+- A local Rust car router (`tools/native-router`) builds a directed graph from
+  the OSM extract, answers A* routes, emits turn-by-turn maneuvers with road
+  names, and persists a compact `graph.bin` cache.
+- Real Moldova route: Chișinău → Bălți, 134.1 km / 97.3 min, 2,037 points,
+  53 maneuvers; `graph.bin` is 105.7 MiB and loads in 0.265 s on desktop.
+- The route/turn-by-turn UI component is implemented and browser-tested.
+- The Valhalla WASM spike is documented; `@adret-maps/valhalla-wasm` routes the
+  M1 graph but is not shipped for 2.0 because of its alpha status and memory
+  footprint.
+
+### Android and desktop map windows
+
+- Android hosts the shared MapLibre page in a full-screen WebView served by a
+  loopback-only Axum server with HTTP Range support, a loopback navigation
+  allowlist and a click/share bridge.
+- The Android WebView now enables geolocation and requests fine/coarse
+  location and notification permissions at runtime; denial produces a visible
+  message instead of a silent failure. The 2.0.0 APK contains the permission
+  handler and requests code.
+- Desktop adds an opt-in `map-webview` window backed by the same loopback
+  server, with WebView2/WebKitGTK and a system-browser fallback.
+
+### Administration
+
+- `pinpoint-admin --promote-email <email>` promotes one existing active
+  account to the admin role using `DATABASE_URL`. It never creates or seeds a
+  user.
+
+## Verification
+
+- `scripts/v2/check.ps1`: Rust fmt/clippy/build/test, offline feature tests,
+  the six offline-pipeline tests and the native-router tests.
+- Browser: MapLibre foundation, offline search (58 checks), search UI (90
+  checks), route UI, map adapter, offline pack manager (224 checks) and the
+  offline-search mapping suite — all headless Chromium, zero external
+  requests, zero console/page errors.
+- Pack proxy: real GitHub asset test, manifest JSON, `206` ranges, `416`
+  out-of-range, CORS/preflight, traversal/whitelist rejection.
+- Android: `:app:assembleDebug -Pabi=arm64-v8a` succeeded; the APK is
+  66,765,317 bytes (this local build), arm64-v8a, minSdk 26, targetSdk 35, with
+  `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` and `POST_NOTIFICATIONS`.
+
+## Known limitations
+
+- Web offline routing is not shipped in 2.0.0. The web app keeps the existing
+  server `/map/route` endpoint; the local routing engine currently ships as the
+  native router library, not as a browser engine. Android/desktop local routing
+  must be wired into the map window in a follow-up.
+- The Android/desktop map window currently hosts the MapLibre map page, not the
+  full authenticated web app. Native pack download into the app's `packs/`
+  directory is not wired yet; the web app's OPFS download is.
+- No physical Android device or emulator run was available. The APK was built
+  and its packaged classes verified statically.
+- Valhalla WASM remains an alpha prototype and is not part of the release.
+- iOS was not built; it needs macOS/Xcode.
+- WebKitGTK and WKWebView runtime behavior was not exercised here.
+
+## Upgrade
+
+Install over 1.5.3. Open the web app or the offline-pack demo, download the
+Moldova pack once, and the map/search work after a reload without a network.
+The 1.5.3 online build remains available until this release is deployed.
+
+---
+
 # Pinpoint 1.5.3 - Release Notes
 
 **Released:** 2026-11-16 - **Version:** `1.5.3` (from `1.5.2`) -

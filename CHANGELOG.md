@@ -10,26 +10,32 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
-## [Unreleased]
+## [2.0.0] - 2026-11-17
 ### Added
-- [FEATURE] Admin bootstrap: `pinpoint-admin --promote-email <email>` promotes one existing active account to the admin role using `DATABASE_URL`, without creating or seeding a user.
-- [FEATURE] Offline packs are downloadable from the server's own origin: `/offline/packs/moldova/manifest.json` serves the committed manifest with same-origin file URLs, and `/offline/packs/moldova/<file>` streams the published release asset with `Range` passthrough, `Accept-Ranges` and CORS, so the web app and the WebView can fetch the pack even though GitHub release assets send no CORS headers.
-- [FEATURE] Web map foundation: vendored MapLibre GL JS 6.18.0 and PMTiles 4.5.0, a no-CDN `web/map/` module and preview, and the 94 KB ODbL Monaco fixture with a headless smoke test.
-- [FEATURE] Web app map: `/map.js` is now a thin adapter over the shared MapLibre + PMTiles foundation, with same-origin `/map-assets/*` and `/vendor/*` routes, byte-range fixture serving, visible OSM/OpenMapTiles/ODbL attribution and a headless adapter test. Leaflet was removed from the web app.
-- [FEATURE] Offline app search: `web/app/offline-search.js` uses the installed pack's SQLite FTS5 index through the service worker and falls back to the existing server search when no pack is installed.
 - [FEATURE] Offline map data pipeline and search CLI: `scripts/offline/` builds a versioned region pack (Planetiler/OpenMapTiles PMTiles basemap, `pinpoint-offline-index` SQLite FTS5 search index, Valhalla routing tiles, hashed manifest) and `pinpoint-offline-index` (`offline-build`) builds and verifies the search index.
+- [FEATURE] Moldova offline pack: the 220 MB pack (93 MB PMTiles, 6.8 MB search index with 36,913 places, 120 MB Valhalla tar) is published as the non-latest `data-moldova-20261116` data release.
+- [FEATURE] Web map foundation: vendored MapLibre GL JS 6.18.0 and PMTiles 4.5.0, a no-CDN `web/map/` module and preview, and the 94 KB ODbL Monaco fixture with a headless smoke test.
+- [FEATURE] Web app map: `/map.js` is a thin adapter over the shared MapLibre + PMTiles foundation, with same-origin `/map-assets/*` and `/vendor/*` routes, byte-range fixture serving, visible OSM/OpenMapTiles/ODbL attribution and a headless adapter test. Leaflet was removed from the web app.
 - [FEATURE] Offline web search: vendored SQLite WASM 3.54.1 with FTS5, a same-origin `web/map/search.js` API over the M1 `places`/`places_fts` index, the ODbL Bălți/Кишинёв fixture and an HTTP/Chromium smoke test.
-### Changed
-- [INFRA] CI gates the offline pipeline with a fixture-based `offline-checks` job (search-index tests, clippy, PowerShell script tests) on relevant PRs, keeps the manual Monaco pack smoke separate and records ADR-0020 for the MapLibre/PMTiles/Valhalla map subsystem.
-### Fixed
-- [FIX] Offline packs build in a staging work directory, verify there, and only then replace the published five-file pack, so a failed run never publishes a manifest or partial artifacts; downloads and container images are hash/digest pinned and manifests carry publish URLs.
-- [FIX] Android: the WebView now enables geolocation and requests fine/coarse location and notification permissions at runtime, so the system dialog appears and GPS works; denial shows a visible message instead of silently stopping the location service.
-- [FIX] Offline pack fixture: pin `web/app/fixtures/offline-pack/LICENSE.txt` to LF so its 405 bytes and SHA-256 match the manifest on Windows checkouts; CRLF conversion previously made the real Monaco download fail verification.
+- [FEATURE] Offline search UI component with debouncing, keyboard selection and accessible states.
+- [FEATURE] Offline app search: `web/app/offline-search.js` uses the installed pack's SQLite FTS5 index through the service worker and falls back to the existing server search when no pack is installed.
 - [FEATURE] Web offline packs: a same-origin pack catalog, manifest and SHA-256 verification, OPFS storage, a Range-capable service worker, download/update/delete UI, and a headless OPFS smoke test.
+- [FEATURE] Same-origin pack proxy: `/offline/packs/moldova/manifest.json` rewrites file URLs to the server origin and `/offline/packs/moldova/<file>` streams the published release asset with `Range` passthrough, `Accept-Ranges` and CORS, because GitHub release assets send no CORS headers.
+- [FEATURE] Route and turn-by-turn UI component with distance/time summary, maneuver banner, Start/Stop and Clear.
+- [FEATURE] Local native routing: a Rust A* car router over the OSM extract with road names, 53 maneuvers on the Chișinău → Bălți route (134.1 km / 97.3 min), and a compact `graph.bin` cache (105.7 MiB, 0.265 s load).
+- [FEATURE] Offline routing spike: a local-only Valhalla WASM harness, the Chișinău → Bălți route evidence and the web/MapLibre route API contract in `docs/offline/routing-spike.md`.
 - [FEATURE] Desktop map window (opt-in `map-webview`): a loopback axum server with HTTP Range serves `web/map/` and `web/vendor/`, and a separate `wry` WebView process opens the same MapLibre page; the egui map stays as the fallback and a system-browser hand-off covers missing WebView2/WebKitGTK runtimes.
 - [FEATURE] Android: the shared MapLibre page now runs in a full-screen WebView, served from a loopback-only Axum server with HTTP Range support, a loopback navigation allowlist and a click/share JavaScript bridge.
-- [FEATURE] Offline routing spike: a local-only Valhalla WASM harness, the Chișinău → Bălți route evidence and the web/MapLibre route API contract in `docs/offline/routing-spike.md`.
-
+- [FEATURE] Admin bootstrap: `pinpoint-admin --promote-email <email>` promotes one existing active account to the admin role using `DATABASE_URL`, without creating or seeding a user.
+### Changed
+- [INFRA] CI gates the offline pipeline with a fixture-based `offline-checks` job (search-index tests, clippy, PowerShell script tests) on relevant PRs, keeps the manual Monaco pack smoke separate and records ADR-0020 for the MapLibre/PMTiles/Valhalla map subsystem.
+- [INFRA] `scripts/v2/check.ps1` is the v2 release gate: Rust fmt/clippy/build/test, offline feature tests, the six offline-pipeline tests, native-router tests and every standalone web smoke test.
+- [DOCS] `docs/offline/v2-release.md` records the integration, device and deployment checklist.
+### Fixed
+- [FIX] Offline packs build in a staging work directory, verify there, and only then replace the published five-file pack, so a failed run never publishes a manifest or partial artifacts; downloads and container images are hash/digest pinned and manifests carry publish URLs.
+- [FIX] Search hardening: empty/truncated PBF rejection, punctuation-safe FTS queries, importance-weighted ranking and address-only nodes.
+- [FIX] Android: the WebView now enables geolocation and requests fine/coarse location and notification permissions at runtime, so the system dialog appears and GPS works; denial shows a visible message instead of silently stopping the location service.
+- [FIX] Offline pack fixture: pin `web/app/fixtures/offline-pack/LICENSE.txt` to LF so its 405 bytes and SHA-256 match the manifest on Windows checkouts; CRLF conversion previously made the real Monaco download fail verification.
 ## [1.5.3] - 2026-11-16
 ### Fixed
 - [SECURITY] Account erasure: deleted user ids are tombstoned and filtered from every persist snapshot, so a concurrent background refresh can no longer upsert the account back after `DELETE FROM pinpoint_users` (1.5.2 removed the row, then the post-delete persist re-inserted it from a stale in-memory store).

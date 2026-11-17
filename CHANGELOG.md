@@ -10,7 +10,7 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
-## [Unreleased]
+## [2.2.0] - 2026-11-17
 ### Added
 - [FEATURE] Mobile/desktop map: the map window downloads the published Moldova PMTiles archive and routing graph into the app's `packs/` directory through a shared native installer; both artifacts are streamed, SHA-256 verified and atomically installed, `/map/config` points the page at `/packs/moldova.pmtiles` after install, both servers stream pack ranges, and the route panel uses the downloaded graph.
 

@@ -1,3 +1,60 @@
+# Pinpoint 2.2.0 - Release Notes
+
+**Released:** 2026-11-17 - **Version:** `2.2.0` (from `2.1.0`) -
+**Status:** Mobile offline map and routing data install.
+
+**Artifacts:** `pinpoint-android-2.2.0.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source archives for the `v2.2.0` tag.
+
+## What is new
+
+- The Android/desktop map window now installs the real Moldova data itself:
+  `moldova.pmtiles` (93,172,399 B) and `moldova.graph.bin` (110,858,815 B),
+  204 MB total. Both files are streamed to temp files, SHA-256 verified and
+  atomically renamed; a partial or corrupt download never replaces a good one.
+- A compact "Download Moldova map (204 MB)" card shows progress and the
+  installed state. `/map/config` switches the page from the Monaco fixture to
+  `/packs/moldova.pmtiles` after install, and both map servers stream pack
+  ranges (`206`/`416`).
+- The route panel uses the downloaded graph; no online routing service is used.
+- `GET /map/offline/status` is pollable; `POST /map/offline/download` runs one
+  background install at a time.
+
+## Verification
+
+- `cargo fmt --all -- --check`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo build --locked` pass.
+- `cargo test --locked`: **338 passed**, 0 failed, 3 ignored; 293 lib tests
+  including 12 offline-installer fixture tests.
+- Browser E2E: **12/12** — config starts on Monaco, download progress advances,
+  installed badge, routing graph installed, `/map/config` returns the pack URL,
+  page switches to it, Range `206`, downloaded graph routes locally, zero
+  external/failed requests and zero console/page errors.
+- Real production download: both files installed and verified:
+  `93172399/93172399` and `110858815/110858815`.
+- Android: `aarch64-linux-android` check passes; Gradle debug APK
+  **72,356,421 bytes** with 643 `offline_install` symbols and the download UI
+  strings.
+
+## Known limitations
+
+- No physical Android device/emulator run; the arm64 APK was built and
+  statically inspected.
+- The browser E2E uses the 94 KB Monaco fixture plus a synthetic graph; the real
+  204 MB install was verified natively, but a real-tile browser render was not
+  screenshotted.
+- `installed` checks the exact byte length on status polls; SHA-256 is verified
+  at install time and not re-hashed on every poll.
+- Car only; no turn restrictions, lane guidance, traffic, closures or ferries.
+- iOS not checked.
+
+## Upgrade
+
+Install over 2.1.0, open the map window, and press "Download Moldova map
+(204 MB)" once. The map and local routing work offline after the download.
+
+---
+
 # Pinpoint 2.1.0 - Release Notes
 
 **Released:** 2026-11-17 - **Version:** `2.1.0` (from `2.0.1`) -

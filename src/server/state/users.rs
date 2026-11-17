@@ -171,6 +171,52 @@ impl AppState {
         id
     }
 
+    /// Strict user insert for registration.
+    ///
+    /// Unlike [`Self::sql_insert_user`], this returns an error when Postgres is
+    /// configured and the row cannot be written. Registration must never
+    /// answer 201 for an account that exists only in this process's memory: a
+    /// background refresh or another replica would drop it.
+    pub async fn sql_insert_user_strict(
+        &self,
+        email: &str,
+        full_name: &str,
+        role: &str,
+        password_hash: Option<&str>,
+    ) -> Result<i64, String> {
+        if let Some(pool) = &self.pg {
+            let id: i64 =
+                match sqlx::query_scalar::<_, i64>("SELECT NEXTVAL('pinpoint_user_id_seq')")
+                    .fetch_one(pool)
+                    .await
+                {
+                    Ok(id) => id,
+                    Err(_) => sqlx::query_scalar::<_, i64>(
+                        "SELECT COALESCE(MAX(id), 0) + 1 FROM pinpoint_users",
+                    )
+                    .fetch_one(pool)
+                    .await
+                    .map_err(|error| error.to_string())?,
+                };
+            sqlx::query(
+                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, auth_method, public_key, recovery_code_hash, identity_subject) VALUES ($1, $2, $3, $4, true, false, $5, 'email', NULL, NULL, NULL)",
+            )
+            .bind(id)
+            .bind(email)
+            .bind(full_name)
+            .bind(role)
+            .bind(password_hash)
+            .execute(pool)
+            .await
+            .map_err(|error| error.to_string())?;
+            return Ok(id);
+        }
+        let mut store = self.store.lock().unwrap();
+        let id = store.next_user_id;
+        store.next_user_id += 1;
+        Ok(id)
+    }
+
     /// Direct user update; no-op when DB unreachable/in-memory mode.
     pub async fn sql_update_user(
         &self,

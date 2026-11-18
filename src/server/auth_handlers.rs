@@ -1,7 +1,7 @@
 //! Auth service handlers (/api/v1/auth/*) with real server-side sessions.
 use axum::{
-    extract::{Extension, State},
-    http::StatusCode,
+    extract::{Extension, OriginalUri, State},
+    http::{HeaderMap, StatusCode},
     Json,
 };
 use rand::RngCore;
@@ -25,9 +25,21 @@ fn user_json(u: &crate::models::User) -> Value {
     })
 }
 
-fn session_cookie(session_id: &str) -> String {
-    // Local dev over loopback HTTP: no `Secure` flag so the browser stores it.
-    format!("session_id={session_id}; Path=/; HttpOnly; SameSite=Lax")
+fn session_cookie(session_id: &str, secure: bool) -> String {
+    // `Secure` only over HTTPS: local dev on loopback HTTP must still store it.
+    let secure = if secure { "; Secure" } else { "" };
+    format!("session_id={session_id}; Path=/; HttpOnly; SameSite=Lax{secure}")
+}
+
+/// HTTPS detection: TLS proxies (Render) forward the original scheme in
+/// `X-Forwarded-Proto`; an absolute-form `https` request URI also counts.
+fn request_is_secure(headers: &HeaderMap, uri: &axum::http::Uri) -> bool {
+    uri.scheme_str() == Some("https")
+        || headers
+            .get("x-forwarded-proto")
+            .and_then(|value| value.to_str().ok())
+            .map(|proto| proto.eq_ignore_ascii_case("https"))
+            .unwrap_or(false)
 }
 
 pub(crate) fn clear_cookie() -> String {
@@ -38,6 +50,7 @@ fn session_response(
     user: &crate::models::User,
     csrf: &str,
     session_id: &str,
+    secure: bool,
 ) -> axum::response::Response {
     let mut resp = (
         StatusCode::OK,
@@ -54,8 +67,10 @@ fn session_response(
         .into_response();
     resp.headers_mut()
         .insert("X-CSRF-Token", csrf.parse().unwrap());
-    resp.headers_mut()
-        .insert("Set-Cookie", session_cookie(session_id).parse().unwrap());
+    resp.headers_mut().insert(
+        "Set-Cookie",
+        session_cookie(session_id, secure).parse().unwrap(),
+    );
     resp
 }
 
@@ -70,6 +85,8 @@ fn unauthenticated() -> axum::response::Response {
 /// `POST /auth/login` — password verification + real session cookie.
 pub async fn login(
     State(state): State<AppState>,
+    headers: HeaderMap,
+    OriginalUri(uri): OriginalUri,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
     let email = body.get("email").and_then(Value::as_str).unwrap_or("");
@@ -168,12 +185,14 @@ pub async fn login(
     }
 
     let (session_id, csrf) = state.create_session(user.id, "email", false).await;
-    session_response(&user, &csrf, &session_id)
+    session_response(&user, &csrf, &session_id, request_is_secure(&headers, &uri))
 }
 
 /// `POST /auth/register`.
 pub async fn register(
     State(state): State<AppState>,
+    headers: HeaderMap,
+    OriginalUri(uri): OriginalUri,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
     let email = body
@@ -262,8 +281,12 @@ pub async fn register(
         .into_response();
     resp.headers_mut()
         .insert("X-CSRF-Token", csrf.parse().unwrap());
-    resp.headers_mut()
-        .insert("Set-Cookie", session_cookie(&session_id).parse().unwrap());
+    resp.headers_mut().insert(
+        "Set-Cookie",
+        session_cookie(&session_id, request_is_secure(&headers, &uri))
+            .parse()
+            .unwrap(),
+    );
     resp
 }
 
@@ -618,6 +641,7 @@ fn anonymous_response(
     csrf: &str,
     session_id: &str,
     recovery_code: &str,
+    secure: bool,
 ) -> axum::response::Response {
     let mut resp = (
         status,
@@ -633,14 +657,18 @@ fn anonymous_response(
         .into_response();
     resp.headers_mut()
         .insert("X-CSRF-Token", csrf.parse().unwrap());
-    resp.headers_mut()
-        .insert("Set-Cookie", session_cookie(session_id).parse().unwrap());
+    resp.headers_mut().insert(
+        "Set-Cookie",
+        session_cookie(session_id, secure).parse().unwrap(),
+    );
     resp
 }
 
 /// `POST /auth/anonymous` — create a device-bound anonymous account.
 pub async fn anonymous(
     State(state): State<AppState>,
+    headers: HeaderMap,
+    OriginalUri(uri): OriginalUri,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
     let device_name = body
@@ -694,6 +722,7 @@ pub async fn anonymous(
         &csrf,
         &session_id,
         &recovery_code,
+        request_is_secure(&headers, &uri),
     )
 }
 
@@ -701,6 +730,8 @@ pub async fn anonymous(
 /// device with a recovery code. The code rotates on every use (single-use).
 pub async fn anonymous_recover(
     State(state): State<AppState>,
+    headers: HeaderMap,
+    OriginalUri(uri): OriginalUri,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
     let code = body
@@ -734,7 +765,14 @@ pub async fn anonymous_recover(
     };
 
     let (session_id, csrf) = state.create_session(user.id, "anonymous", false).await;
-    anonymous_response(StatusCode::OK, &user, &csrf, &session_id, &new_code)
+    anonymous_response(
+        StatusCode::OK,
+        &user,
+        &csrf,
+        &session_id,
+        &new_code,
+        request_is_secure(&headers, &uri),
+    )
 }
 
 #[cfg(test)]
@@ -743,6 +781,27 @@ mod registration_tests {
     use axum::body::Body;
     use axum::http::Request;
     use tower::ServiceExt;
+
+    #[test]
+    fn session_cookie_sets_secure_only_on_https() {
+        assert!(session_cookie("abc", true).contains("; Secure"));
+        assert!(!session_cookie("abc", false)
+            .to_ascii_lowercase()
+            .contains("secure"));
+    }
+
+    #[test]
+    fn request_is_secure_reads_forwarded_proto() {
+        let uri = axum::http::Uri::from_static("/api/v1/auth/login");
+        let mut headers = HeaderMap::new();
+        assert!(!request_is_secure(&headers, &uri));
+        headers.insert("x-forwarded-proto", "HTTPS".parse().unwrap());
+        assert!(request_is_secure(&headers, &uri));
+        assert!(request_is_secure(
+            &HeaderMap::new(),
+            &axum::http::Uri::from_static("https://pinpoint.example/api/v1/auth/login")
+        ));
+    }
 
     #[tokio::test]
     async fn registration_returns_a_usable_session() {

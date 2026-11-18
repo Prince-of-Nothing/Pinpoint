@@ -41,7 +41,7 @@ pub use crate::models::{FriendLocation, Friendship, LocationShare, User};
 
 use axum::{
     extract::State,
-    http::{header, HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     middleware::Next,
     routing::{delete, get, patch, post},
     Json, Router,
@@ -141,6 +141,32 @@ pub async fn converge(
         state.persist().await;
         eprintln!("CONVERGE persisted");
     }
+    res
+}
+
+/// Baseline security headers on every response. HTML/assets already carry a
+/// stricter set via `web_handlers::secure`; API JSON had none. Does not touch
+/// `Content-Security-Policy`, so the HTML policy is neither replaced nor
+/// duplicated.
+async fn security_headers(
+    req: axum::http::Request<axum::body::Body>,
+    next: Next,
+) -> axum::response::Response {
+    let mut res = next.run(req).await;
+    let headers = res.headers_mut();
+    headers.insert(
+        header::STRICT_TRANSPORT_SECURITY,
+        HeaderValue::from_static("max-age=31536000; includeSubDomains"),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
+    headers.insert(header::X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+    headers.insert(
+        header::REFERRER_POLICY,
+        HeaderValue::from_static("no-referrer"),
+    );
     res
 }
 
@@ -245,6 +271,8 @@ pub fn router(state: AppState) -> Router {
             session_state,
             session_auth,
         ))
+        // Outermost, so 401/403 shorts from the layers above still get them.
+        .layer(axum::middleware::from_fn(security_headers))
 }
 
 /// Auth service routes (`/api/v1/auth/*`). Independently scalable.

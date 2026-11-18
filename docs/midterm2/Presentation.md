@@ -128,8 +128,8 @@ the packs and routes on the installed graph.
 
 ## Slide 9 - Native clients (25 s)
 
-**Visual:** `assets/06-native.png` (desktop map shell; the screenshot predates
-the Today tab); `assets/05-mobile.png` is the phone fallback.
+**Visual:** none current; the APK is verified but there is no current native
+screenshot showing the Today tab. Use the four APK metrics on the slide.
 
 **Say:**
 > The same Rust core ships a desktop client and an Android APK. The signed

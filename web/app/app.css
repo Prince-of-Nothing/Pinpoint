@@ -41,6 +41,7 @@
 
 body {
   margin: 0;
+  padding-top: var(--safe-top);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   background: var(--bg);
   color: var(--text);

@@ -101,7 +101,7 @@ that holds the evidence or the step.
 - [ ] Do **not** press Directions while offline; web routing is not offline
       (`Demo-Script.md` section 2, `5:30`).
 - [ ] Fallback list skimmed: blank map prompt, stale UI (Ctrl+Shift+R,
-      cache `pinpoint-offline-v4`), route failure keeps the warm panel
+      cache `pinpoint-offline-v5`), route failure keeps the warm panel
       (`Demo-Script.md` section 4).
 - [ ] If live fails twice, switch to `docs/midterm2/assets/` and keep talking.
 

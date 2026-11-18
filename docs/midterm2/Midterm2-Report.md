@@ -418,4 +418,5 @@ curl https://pinpoint-uj4y.onrender.com/health
 ---
 
 *Prepared for Midterm 2. Screenshots are from the demo environment; the PNGs
-carry no embedded version. The native screenshot predates the Today tab.*
+carry no embedded version. The native build is verified from the APK; no
+current native screenshot is included.*

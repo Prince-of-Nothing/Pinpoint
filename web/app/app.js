@@ -1063,7 +1063,7 @@ function setDrawer(open) {
   drawer.classList.toggle("open", open);
   drawerToggle.setAttribute("aria-expanded", String(open));
 }
-setDrawer(window.innerWidth >= 900);
+setDrawer(false);
 drawerToggle.addEventListener("click", () => {
   setDrawer(drawerToggle.getAttribute("aria-expanded") !== "true");
 });

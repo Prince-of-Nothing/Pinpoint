@@ -22,10 +22,9 @@ seeded users, no demo pins and no shared passwords in the repository.
 3. Register **A** (presenter) and **B** (friend) with your own emails. The
    generated handles (for example `calm-otter-42`) appear as `@handle` beside
    the email in the top bar. Friend rows show the **display name**, not the
-   handle. The drawer with Friends, Who can see me, Friend locations and
-   Private notes is open on a wide window; use the **☰** button if it is
-   collapsed.
-4. A -> Friends -> enter B's handle -> **Send request**. B -> reload (Ctrl+R)
+   handle. The drawer (**☰**, bottom-right on the map) holds Friends, Who can
+   see me, Friend locations and Private notes.
+4. A: **☰** -> Friends -> enter B's handle -> **Send request**. B -> reload (Ctrl+R)
    -> wait for the **PENDING** badge and the **Accept** button -> **Accept**.
    A -> reload -> wait for **ACCEPTED** and the **Sharing** button. A reload
    fills the lists asynchronously: allow 8-20 seconds on the live deploy.
@@ -36,7 +35,7 @@ seeded users, no demo pins and no shared passwords in the repository.
    In **B**, choose **Use online map**; B does not need the pack. The "Choose a
    map" card is intentional. The canvas is ready in about 3 s warm, up to 10 s
    on the first request after idle.
-6. Prepare the new screens:
+6. Prepare the new screens (the drawer starts closed; open it with **☰**, bottom-right):
    - In **A**: Map -> publish `47.0105, 28.8638`, then `47.0180, 28.8400`.
      **Clear each number field before typing (Ctrl+A, then type).** Clicking a
      `type=number` field and typing appends digits: the rehearsal produced
@@ -99,7 +98,7 @@ appeared about 4 s after **Directions**.
 
 ### 2:00 - The consent story (2 min 30 s)
 
-1. In **Window B**: Friends -> A -> **Sharing**.
+1. In **Window B**: **☰** -> Friends -> A -> **Sharing**.
 2. Enable sharing, choose **Exact location**, **1 hour**.
 3. Read the summary aloud before accepting: friend, precision, duration. Do
    not read the exact clock minute: the server stamps the expiry when the
@@ -135,9 +134,9 @@ to `47.0, 28.8` and the list prints four decimals.)
 
 ### 4:30 - Today and private notes (90 s)
 
-1. In A: **Today** -> point at the two-point trail, newest first -> press
+1. In A: **☰** -> **Today** -> point at the two-point trail, newest first -> press
    **Show trail** (a reload resets the toggle to Show).
-2. Open **Private notes** -> the photo note -> **Show on map**.
+2. Open **☰** -> **Private notes** -> the photo note -> **Show on map**.
 3. Say: "The trail is mine only; it is kept for 24 hours. The note and photo
    are on my account, not a third-party service. Only my account can read or
    delete them through the app; they are not end-to-end encrypted."
@@ -196,7 +195,7 @@ different. The **Friend locations** row is the proof of the share.
   windows and wait 8-20 s; the lists fill asynchronously. A fixed 1-2 s wait
   will read empty lists.
 - **Old cached UI:** Ctrl+Shift+R once; the service worker cache version is
-  `pinpoint-offline-v3`.
+  `pinpoint-offline-v4`.
 - **Route fails or says "Routing is busy, try again.":** click **Directions**
   again. The server allows two concurrent routes and caches identical
   endpoints for 5 minutes; a repeated request returned in 2.6 s. The route
@@ -219,7 +218,7 @@ different. The **Friend locations** row is the proof of the share.
 1. Map + route (45 s).
 2. B shares exact 1 hour; A sees exact; B pauses; A reloads and sees nothing;
    B revokes (90 s).
-3. A: Today trail + one private note (45 s).
+3. A: **☰** -> Today trail + one private note (45 s).
 4. A: offline toggle + search Bălți, no reload (20 s).
 
 ## 6. If the admin console is requested

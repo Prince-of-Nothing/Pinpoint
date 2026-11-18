@@ -9,7 +9,7 @@ Essential development docs stay in this directory:
 - [Privacy](./PRIVACY.md) and [issue taxonomy](./ISSUE_TAXONOMY.md)
 - [API contract](./reference/api-contract.md)
 - [Architecture Decision Records](./adr/README.md)
-- [Midterm 2 package](./midterm2/README.md) - report, demo script and slide deck
+- [Midterm 2 package](./midterm2/README.md) - report, demo, deck, handout, Q&A and checklist
 
 Design, SDLC, thesis, component, UML, tutorial and project docs live in the [Pinpoint wiki](https://github.com/Prince-of-Nothing/Pinpoint/wiki).
 

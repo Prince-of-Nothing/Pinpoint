@@ -6,7 +6,7 @@ from the live **v2.6.1** system.
 | File | What it is | Use |
 |---|---|---|
 | [`Midterm2-Report.md`](./Midterm2-Report.md) | Full report: problem, scope, architecture, consent/security, data, verification, limitations, next steps, traceability | Submit as the written documentation |
-| [`Midterm2-Report.pdf`](./Midterm2-Report.pdf) | 8-page A4 PDF of the report | Submit or print |
+| [`Midterm2-Report.pdf`](./Midterm2-Report.pdf) | 9-page A4 PDF of the report | Submit or print |
 | [`Demo-Script.md`](./Demo-Script.md) | Pre-flight, exact run of show, expected values, fallbacks, 3-minute cut, phone steps | Rehearse and run the live demo |
 | [`Presentation.md`](./Presentation.md) | 13-slide outline with speaker notes, timing and Q&A preparation | Rehearse the talk |
 | [`slides.html`](./slides.html) | Self-contained visual deck (dark Pinpoint theme, keyboard navigation, print to PDF) | Present or export to PDF |
@@ -16,7 +16,7 @@ from the live **v2.6.1** system.
 | [`Q-and-A.md`](./Q-and-A.md) | 20 likely questions with verified/reported/not-built answers | Prepare for questions |
 | [`Admin-Demo.md`](./Admin-Demo.md) | Admin promotion and verification runbook | Use only with the deployment DB |
 | [`reviews/`](./reviews) | Deck QA, artifact, live security/a11y and fact-check evidence | Supporting evidence, not submitted prose |
-| [`assets/`](./assets) | Current screenshots: login, map, Today, notes, mobile, native theme, offline pack, offline route | Slides and report references |
+| [`assets/`](./assets) | Current screenshots: login, map, Today, notes, mobile, native theme, offline pack, native offline route | Slides and report references |
 
 ## Quick start
 
@@ -42,7 +42,7 @@ start docs\midterm2\slides.html
 
 1. Warm the Render service and confirm `"version":"2.6.1"`.
 2. Register two email accounts; pre-accept the friendship.
-3. Choose a map and seed two published points + one photo note in account A.
+3. Choose a map and publish two points + one photo note in account A.
 4. Run the route once (Chișinău → Bălți; expect 136.4 km / 2 h 04).
 5. Install the 2.6.1 APK on the phone and open the Today tab once.
 6. Read the **Known limits** slide and the demo fallbacks.
@@ -56,7 +56,8 @@ The screenshots in `assets/` were captured from the live web app and the native
 map harness on 18 November 2026. The UI checks live in
 `C:\Users\Dinusauuuur\AppData\Local\Temp\opencode\today-ui-check.mjs` and
 `today-ui-live.mjs` on the author's machine; they are not committed because
-they use a temporary Chrome profile and test accounts.
+they use a temporary Chrome profile and test accounts. The 9/9 and 7/7 numbers
+are therefore reported manual runs, not reproducible from this repository.
 
 ## Admin note
 

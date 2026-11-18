@@ -3,7 +3,7 @@
 **Project:** Pinpoint - privacy-first location sharing for trusted friends  
 **Version:** 2.6.1  
 **Date:** 18 November 2026  
-**Author:** [Your name]  
+**Author:** Pleșu Dinu  
 **Live system:** https://pinpoint-uj4y.onrender.com  
 **Source:** https://github.com/Prince-of-Nothing/Pinpoint  
 **Release:** https://github.com/Prince-of-Nothing/Pinpoint/releases/tag/v2.6.1
@@ -153,6 +153,12 @@ precision is rejected rather than falling through to exact.
 inactive. The UI preserves the original expiry when pausing and never rewrites
 precision on a pause.
 
+**Emergency exception (known gap).** Triggering an emergency alert sets
+`is_active = true` on every share the caller owns, including paused ones, and
+resolving the alert does not restore the previous state. Deleted shares stay
+gone. This needs a dedicated, time-boxed emergency visibility grant before
+public use.
+
 **Ownership.** Only the owner can pause, resume, edit or delete a share. A
 missing or foreign share returns the same not-found envelope.
 
@@ -161,9 +167,11 @@ and are owner-scoped; another user cannot list or delete them.
 
 **Sessions.** Argon2id password hashes, opaque 256-bit server-side sessions,
 `HttpOnly` + `SameSite=Lax` cookies, a CSRF token bound to the session and
-echoed in `X-CSRF-Token` on every unsafe request. Sessions are revocable;
-"sign out everywhere" and password changes invalidate them. Login locks an
-account after five failures. The current build does **not** set the `Secure`
+echoed in `X-CSRF-Token` on every unsafe request. Logout, "sign out
+everywhere" and password changes revoke the session in the database, but the
+per-process session cache means another replica can accept a revoked session
+until its idle timeout. Login locks an account after five failures. The current
+build does **not** set the `Secure`
 cookie flag even on HTTPS, has no `__Host-` prefix and no HSTS; there is no
 per-IP server-side rate limit yet. These are known hardening gaps.
 
@@ -174,9 +182,11 @@ are never sent to Nominatim/OSRM/Overpass; a search sends only the query, and a
 route sends only the endpoints being routed (which can be a friend's pin the
 user chose to route to).
 
-**Transport.** HTTPS off loopback; plain HTTP is only accepted for loopback
-development (ADR-0006). The web client is same-origin, with a strict CSP,
-`frame-ancestors 'none'`, no third-party scripts and no trackers. The CSP
+**Transport.** HTTPS off loopback; plain HTTP is accepted for loopback
+development or an explicitly allowlisted internal host (ADR-0006). App assets,
+API calls and OSM proxies are same-origin, with a strict CSP,
+`frame-ancestors 'none'`, no third-party scripts and no trackers. The opt-in
+online basemap loads style and tiles from OpenFreeMap. The CSP
 allows inline styles (MapLibre) and `wasm-unsafe-eval` (SQLite); those are
 documented relaxations. HSTS is not sent.
 
@@ -197,8 +207,8 @@ admin audit.
 | `pinpoint_location_history` | Owner-only trail points | 7 days; 24 hours returned |
 | `pinpoint_place_notes` | Private text/photo notes | Until the owner deletes them or the account |
 | `pinpoint_checkins` / `pinpoint_emergencies` | Owner-scoped safety state | Owner-only; deleted with account |
-| `pinpoint_diagnostic_reports` | User-initiated PII-free reports | Admin triage |
-| `pinpoint_admin_audit` | Append-only admin actions | Read-only audit |
+| `pinpoint_diagnostic_reports` | User-initiated reports: numeric id + public handle, no email/IP/coordinates | Admin triage |
+| `pinpoint_admin_audit` | Admin actions; append-only through the API, removed or anonymised on erasure | Read-only audit |
 
 Direct writes are used for sessions, friendships, shares, the latest location,
 the trail and notes. A whole-store snapshot still upserts users, check-ins and
@@ -262,8 +272,9 @@ unarchived).
 - Live web UI: **9/9** manual assertions (empty-map prompt, online map,
   two-point trail, trail toggle, photo preview, note save + map marker, mobile
   no horizontal overflow); transcript not archived.
-- Offline web: **7/7** manual assertions (Moldova install, offline reload,
-  offline map, offline search); transcript not archived.
+- Offline web: **7/7** manual assertions (Moldova install, map and local
+  search with the network off; the page is not reloaded); transcript not
+  archived.
 - Sharing UI unit checks: **17/17** (reproducible: `node web/app/test/sharing-ui.mjs`).
 
 ### 6.4 Artifact checks
@@ -292,7 +303,7 @@ unarchived).
 
 The 8-minute run is: sign in; online map + Chișinău -> Bălți route; consent
 share with exact precision and 1 hour; friend sees exact coordinates; pause and
-revoke; Today trail; private photo note; offline reload + search; native APK.
+revoke; Today trail; private photo note; offline map + local search; native APK.
 The demo uses **real accounts registered on the live system**, not seeded demo
 rows.
 
@@ -306,10 +317,10 @@ rows.
 | Explicit, directional share with precision and expiry | `src/server/locations_handlers.rs`, `tests/location_consent.rs`, live UI |
 | Pause/resume/revoke; owner-only | `tests/location_consent.rs`, live 14/14 on v2.6.1 |
 | Exact coordinates are not rounded | `tests/location_consent.rs::exact_share_keeps_full_precision` |
-| Private 24-hour trail | `tests/today.rs`, `docs/midterm2/assets/03-today-card.png` |
+| Private 24-hour trail | `tests/today.rs`, `assets/03-today-card.png` |
 | Private text/photo notes | `tests/today.rs`, `assets/04-note-card.png` |
-| Map, search, route | live OpenFreeMap/Nominatim/OSRM, `assets/map-clean.png`, `assets/08-route.png` |
-| Offline pack, map and search | `assets/07-offline.png`, offline 7/7 |
+| Map, search, route | live OpenFreeMap/Nominatim/OSRM, `assets/map-clean.png`, `assets/08-route.png` (native router) |
+| Offline pack, map and search | `assets/07-offline.png` (native map page), offline 7/7 manual |
 | Account deletion and session revocation | `tests/account_delete.rs`, live erasure |
 | Diagnostics and admin gates | `tests/router_probe.rs`, `src/server/admin_handlers.rs` |
 | Security headers, CSP, same-origin assets (HTML/assets; API JSON headers pending) | `tests/assets.rs`, `src/server/web_handlers.rs` |
@@ -327,8 +338,10 @@ rows.
   routes on the installed graph.
 - **Native photos are not implemented.** The web client supports photo notes;
   the native client sends text notes and labels attached photos.
-- **No continuous background tracking.** The trail records explicit publishes,
-  not a 24/7 GPS trace.
+- **No always-on tracking by default.** The trail records explicit publishes,
+  not a 24/7 GPS trace. The Android client can optionally publish the latest
+  location on a fixed interval, with a persistent notification and an off
+  switch.
 - **Anonymous accounts are not demo-safe on the multi-replica deployment.**
   Use email accounts.
 - **Transport/cookie hardening is incomplete.** The live session cookie is
@@ -337,6 +350,9 @@ rows.
   assets do. Fix before exposing real accounts.
 - **Auth abuse limits are per account, not per IP.** Login locks after five
   failures, but register/anonymous signup have no server-side IP limit.
+- **Session revocation is not instant on every replica.** The session cache is
+  per process, so a replica that already cached a session can accept it after
+  logout or a password change until its idle timeout expires.
 - **Dependency audit.** Nine transitive crates are unmaintained or carry a
   soundness warning with no fixed upgrade; `audit.toml` records them as
   accepted risk. No known vulnerability is open.
@@ -354,10 +370,13 @@ rows.
 5. Mobile photo picker + image decoding.
 6. Replace the per-request full refresh with targeted queries and a shared
    session/rate-limit cache; load-test the multi-replica path.
-7. Fix the macOS installer test race and make all CI jobs deterministic.
+7. Replace or pin the nine advisory crates so `cargo audit` stays clean, and
+   keep the CI jobs deterministic.
 8. Add a background-location design with explicit consent, retention and a
    visible indicator before claiming a "daily tracer" beyond explicit
    publishes.
+9. Replace emergency share reactivation with an explicit, time-boxed
+   emergency visibility grant that restores the previous pause state.
 
 ---
 
@@ -399,4 +418,4 @@ curl https://pinpoint-uj4y.onrender.com/health
 ---
 
 *Prepared for Midterm 2. Screenshots are from the demo environment; the PNGs
-carry no embedded version. The native screenshot is the v2.6.0 theme build.*
+carry no embedded version. The native screenshot predates the Today tab.*

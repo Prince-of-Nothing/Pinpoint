@@ -70,7 +70,7 @@ The profile and screenshots are temporary artifacts, not committed:
 | `/api/v1/auth/me` during that load | expected failure | `net::ERR_FAILED` (no cached API response; `/api/` is excluded from `sw.js`) |
 | PMTiles Range from OPFS while offline | PASS | `206`, 65 bytes, magic `PMTiles` |
 | SQLite Range from OPFS while offline | PASS | `206`, 16 bytes, magic `SQLite format 3` |
-| Offline search engine | PASS | 8 hits in 55-61 ms; first hit Bălți |
+| Offline search engine | PASS | 8 hits in 55-61 ms; first hit Bălți at 47.7624, 27.9286 |
 | App's own `getOfflineSearch` wrapper | PASS | 8 hits in 80 ms with the network cut |
 | Standalone offline map from OPFS | PASS | `Moldova - offline vector tiles`; SW `networkFetches: 0` |
 | Warm app, no reload: search after the cut | PASS | 8 results in the real `#search-results` list; field must be cleared first |
@@ -84,6 +84,9 @@ failed request: https://pinpoint-uj4y.onrender.com/api/v1/auth/me  net::ERR_FAIL
 navigator.serviceWorker.controller = https://pinpoint-uj4y.onrender.com/sw.js
 ```
 
+The page gives no offline explanation: `#status` is empty and the login form
+looks like a normal signed-out reload.
+
 Why this happens:
 
 - `web/app/app.js` (initial boot, around lines 1182-1191) calls
@@ -96,11 +99,11 @@ Why this happens:
   offline reload is a login screen, not the map.
 
 **Important test trap:** `page.setOfflineMode(true)` (the same page-level CDP
-network condition DevTools uses) does **not** stop the service worker's own
-fetches. A page-only "offline" reload can therefore pass because the service
-worker still reaches the network for `/api/v1/auth/me`. That is a false
-positive, not evidence that the demo works without a connection. This review
-cut the network for the whole browser with a dead forward proxy
+network condition DevTools uses) applies to the page target; it does not by
+itself guarantee that the service worker's network access is cut. A page-only
+"offline" reload can therefore pass for the wrong reason. That is not evidence
+that the demo works without a connection. This review cut the network for the
+whole browser with a dead forward proxy
 (`--proxy-server=http://127.0.0.1:1 --proxy-bypass-list=<-loopback>`), so the
 service worker's own network fetches failed too.
 
@@ -196,7 +199,8 @@ const engine = await openSearch({
 const hits = engine.search("Balti", 8);                 // 8 local hits
 ```
 
-The app's own wrapper was checked too:
+The ASCII query `Balti` is enough; the index folds diacritics and returns
+`Bălți`. The app's own wrapper was checked too:
 
 ```js
 const { getOfflineSearch } = await import("/offline-search.js");
@@ -217,6 +221,11 @@ const hits = search.search("Balti", 8);                  // 8 local hits
    `pack416: 0`, `shellCacheHits: 30`, `networkFetches: 0`,
    `offlineFallbacks: 1`.
 
+The manager's left manifest panel still says Monaco because the standalone
+demo boots with the Monaco fixture selected; the map status and the
+"Installed on this device" row say Moldova. That is a cosmetic demo quirk, not
+an app failure.
+
 ### 4.5 Warm-page no-reload path (the recommended correction)
 
 An additional throwaway account was used for this check.
@@ -227,9 +236,10 @@ An additional throwaway account was used for this check.
 3. Cut the network for both the page and the service-worker target:
    `page.setOfflineMode(true)` plus
    `Network.emulateNetworkConditions({ offline: true, ... })` on the
-   `service_worker` target. The probe
+   `service_worker` target. The app's probe
    `fetch("/api/v1/auth/me", { cache: "no-store" })` failed with
-   `TypeError: Failed to fetch`, so the cut reached the service worker.
+   `TypeError: Failed to fetch`. The whole-browser dead-proxy run in §4.2 is
+   the definitive network-cut test; this run checks the no-reload UI path.
 4. Clear the search field (`Ctrl+A`, `Backspace`), type `Balti`, press `Enter`.
 5. The app stayed signed in and returned eight results:
    `Bălți | BALTI | BALTI | Baltika | Bălți Oraș | Bălți Oraș | Metan Bălți | AUTO MALL Bălți`.
@@ -237,14 +247,15 @@ An additional throwaway account was used for this check.
    still returned `206`.
 6. Restore the network and delete the account.
 
-The warm app screenshot shows the already-rendered map. New tile reads after
-the cut were proved separately by the standalone manager recenter (§4.4) and
-the `206` PMTiles probe; the warm-page run did not pan the app map.
+The warm app screenshot shows the already-rendered map, centred on Chișinău
+rather than the Monaco fixture, so the installed Moldova pack is the active
+source. New tile reads after the cut were proved separately by the standalone
+manager recenter (§4.4) and the `206` PMTiles probe; the warm-page run did not
+pan the app map.
 
-Do not skip step 4. In an earlier run where the previous "Balti" query was
-still in the field, the second submission appended the text and returned
-"No places found near here." The field is not cleared automatically after a
-search, so the presenter must clear it before the offline query.
+Do not skip step 4. The field is not cleared automatically after a search; an
+earlier run that reused the field submitted `BaltiBalti` and returned
+"No places found near here." Clear it before the offline query.
 
 ### 4.6 Cleanup
 
@@ -275,8 +286,8 @@ All paths are under
 | `06-offline-demo-map.png` | Offline standalone manager rendering Moldova tiles from OPFS |
 | `07-delete-account-form.png` | Delete-account confirmation form |
 | `08-account-deleted.png` | `Account deleted.` and the login panel |
+| `12-warm-debug-offline-search.png` | Negative control: same cut, field became `BaltiBalti`; "No places found near here." |
 | `13-warm-offline-search-final.png` | **The fix:** warm signed-in page, network cut, eight local "Balti" results in the real app |
-| `12-warm-debug-offline-search.png` | Negative control: same cut with the old query still in the field; "No places found near here." |
 
 The key pair is `05-true-offline-reload.png` (the app gate fails) and
 `13-warm-offline-search-final.png` (the no-reload demo path works).
@@ -310,11 +321,12 @@ with a version that does not destroy the session:
 6. Go back online.
 ```
 
-This corrected sequence was verified with the network cut on both the page and
-the service worker: the real app stayed signed in and `#search-results`
-returned eight rows, starting with Bălți. The field must be cleared first; if
-the old query is still there, the app appends the new text and shows
-"No places found near here."
+This corrected sequence was verified with the page and service-worker targets
+set offline: the real app stayed signed in and `#search-results` returned
+eight rows, starting with Bălți. The field must be cleared first; reusing the
+old query submitted `BaltiBalti` and gave "No places found near here." The
+0:30 route step already searches Bălți, which also warms the local search
+engine; keep that step before the offline step.
 
 The reload is not a shell-cache problem. The shell is cached and loads in
 164 ms; the app then calls `/api/v1/auth/me`, which has no offline response,
@@ -325,25 +337,51 @@ user record for offline display, or add an explicit "offline session" state;
 keep all server-side authorization as it is). A code change needs a new test
 and a re-run of this check.
 
-### 6.2 The pack size in the script and the UI is wrong
+The 3-minute cut has the same problem: its step 4 says
+`A: offline reload + search Bălți (30 s)`. Change it to "A: stay on the
+signed-in page, go offline, clear the search field, search Bălți".
 
-The live manifest is **220,262,575 bytes** (about 220 MB), not 139 MB. The
-profile's storage estimate was **225,798,620 bytes** (about 226 MB) including
-the shell cache. Update:
+Also replace the fallback "Offline reload fails: load the app twice online
+before going offline so the service worker and OPFS are warm" with: "An
+offline reload shows the login screen because `/api/v1/auth/me` is not cached;
+do not reload - use the no-reload sequence above."
 
-- `Demo-Script.md` expected values row:
-  `"Offline pack | Moldova, 139 MB transfer, 204 MB installed"` ->
-  `"Offline pack | Moldova, 220 MB transfer, 220 MB pack / ~226 MB browser storage"`.
+### 6.2 The pack size: doc is right, the live UI is still wrong
+
+The live manifest is **220,262,575 bytes** (about 220 MB). The current
+`Demo-Script.md` expected-values row already says "Moldova installed in web
+OPFS (~220 MB); native pack 138.5/204 MB", so that row needs no change; the
+native pack was not tested here.
+
+The live web UI still advertises the old size:
+
 - `web/app/index.html` labels `Install Moldova (139 MB)` and
-  `Download map (139 MB)` -> 220 MB. (Not changed in this review; no app code
-  was edited.)
-- Any slide or README text that still says 139 MB / 204 MB.
+  `Download map (139 MB)` -> 220 MB.
+- Any slide or README text that still says 139 MB / 204 MB for the **web**
+  pack.
+
+The web manifest includes all three files, including the 120,319,488-byte
+`moldova-valhalla.tar`. The web client has no offline routing path, so the
+web install downloads 120 MB that it does not use. Either drop the tar from
+the web catalog (the map+search install would be about 100 MB) or keep it and
+label the button 220 MB. The profile's storage estimate was
+**225,798,620 bytes** (about 226 MB) including the shell cache, so
+"~220 MB pack / ~226 MB browser storage" is the accurate web wording.
 
 ### 6.3 Keep "do not press Directions offline"
 
 This is correct. The review did not exercise Directions offline. The offline
 pack contains a Valhalla tar, but the web client has no offline routing path
 wired to it.
+
+### 6.4 Pre-flight: A must have the pack installed
+
+The current one-time setup says "Choose a map in both profiles: **Use online
+map**, or install **Moldova**". The 5:30 offline step assumes an installed
+Moldova pack. If A chose "Use online map", there is no OPFS pack and the
+offline step cannot work. Change the pre-flight to require Moldova in A
+(or start from a profile with the pack already installed); the online map is
+fine for B or for the online segment only.
 
 ---
 
@@ -356,8 +394,8 @@ wired to it.
 - **Offline demo as scripted with a reload: FAIL.** A real network cut makes
   the app show the login panel, so the map and search box are not reachable.
   The DevTools-only page emulation that hides this must not be used as proof.
-- **Corrected no-reload demo: PASS.** With the warm signed-in page left open,
-  the network cut reached the service worker, the app stayed signed in, and
-  the real search box returned eight Bălți rows. Use this sequence and clear
+- **Corrected no-reload demo: PASS.** With the warm signed-in page left open
+  and the page/service-worker targets set offline, the app stayed signed in,
+  and the real search box returned eight Bălți rows. Use this sequence and clear
   the search field first. Fixing the offline boot path would be the only way
   to keep the reload version.

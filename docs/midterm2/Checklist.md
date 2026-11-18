@@ -10,11 +10,17 @@ that holds the evidence or the step.
 
 - [ ] Report: `docs/midterm2/Midterm2-Report.md` (problem, scope, architecture,
       consent/security, data, verification, limitations, traceability).
-- [ ] PDF copy if the course wants one: `docs/midterm2/Pinpoint-Midterm2.pdf`
+- [ ] Report PDF if the course wants one:
+      `docs/midterm2/Midterm2-Report.pdf` (regenerate from the report).
+- [ ] Deck PDF backup: `docs/midterm2/Pinpoint-Midterm2.pdf`
       (regenerate by opening `docs/midterm2/slides.html` and pressing `P`).
 - [ ] Demo script: `docs/midterm2/Demo-Script.md`.
 - [ ] Presentation outline with speaker notes:
       `docs/midterm2/Presentation.md`.
+- [ ] Printable handout: `docs/midterm2/Handout.md`.
+- [ ] Q&A preparation: `docs/midterm2/Q-and-A.md`.
+- [ ] Admin runbook (only if DB access is available):
+      `docs/midterm2/Admin-Demo.md`.
 - [ ] Package index and live links: `docs/midterm2/README.md`.
 - [ ] Changelog entry under `[Unreleased]`: `CHANGELOG.md`.
 - [ ] Version consistent everywhere: `Cargo.toml` line 3, report header,
@@ -57,7 +63,7 @@ that holds the evidence or the step.
 - [ ] Consent story: section 2, `2:00` - B shares exact/1 hour, A sees exact,
       B pauses, A reloads and sees nothing, B resumes, B revokes.
 - [ ] Today trail and private photo note: section 2, `4:00`.
-- [ ] Offline reload and search: section 2, `5:30`.
+- [ ] Offline map and local search, no reload: section 2, `5:30`.
 - [ ] Phone and close: section 2, `6:30`.
 - [ ] Expected values memorised: section 3 (route, `47.0245, 28.8322`,
       `47.02, 28.83`, `47.0, 28.8`, 2-point trail, Moldova pack installed in the web OPFS).
@@ -90,8 +96,8 @@ that holds the evidence or the step.
       (`Demo-Script.md` section 1, step 5; `assets/07-offline.png`).
 - [ ] App loaded twice online first, so the service worker and OPFS are warm
       (`Demo-Script.md` section 4).
-- [ ] DevTools > Network > Offline works on this machine; reload renders the
-      map and search returns **Bălți** locally.
+- [ ] DevTools > Network > Offline works on this machine; the loaded map stays
+      and search returns **Bălți** locally (do not reload).
 - [ ] Do **not** press Directions while offline; web routing is not offline
       (`Demo-Script.md` section 2, `5:30`).
 - [ ] Fallback list skimmed: blank map prompt, stale UI (Ctrl+Shift+R,
@@ -116,8 +122,8 @@ that holds the evidence or the step.
 | Claim | Where it lives |
 |---|---|
 | 328 unit tests, 24 test binaries; consent/today/contract/assets/router suites | `Midterm2-Report.md` section 6.1 |
-| Live API run 14/14 on v2.6.1 (24/24 on v2.5.2) | `Midterm2-Report.md` section 6.2 |
-| Browser 9/9, offline 7/7, sharing UI 17/17 | `Midterm2-Report.md` section 6.3 |
+| Live API run 14/14 on v2.6.1 (24/24 on v2.5.2), manual and unarchived | `Midterm2-Report.md` section 6.2 |
+| Browser 9/9, offline 7/7, sharing UI 17/17 (first two manual/unarchived) | `Midterm2-Report.md` section 6.3 |
 | APK size, versionCode, signing SHA-256, `/health` | `Midterm2-Report.md` section 6.4 |
 | Screenshots of every screen | `docs/midterm2/assets/` |
 | Requirement -> test traceability | `Midterm2-Report.md` section 8 |
@@ -131,7 +137,7 @@ that holds the evidence or the step.
 | -13 | Open Window A (profile 1) and Window B (Edge/guest); sign in A, sign in B | `Demo-Script.md` section 1, step 2 |
 | -10 | Friend request + accept; both reload | `Demo-Script.md` section 1, step 4 |
 | -8 | Choose map in both; install Moldova if needed | `Demo-Script.md` section 1, step 5 |
-| -6 | Seed two points, Today trail, one photo note in A | `Demo-Script.md` section 1, step 6 |
+| -6 | Publish two points, open Today, add one photo note in A | `Demo-Script.md` section 1, step 6 |
 | -4 | Run the route once (136.4 km / 2 h 04) | `Demo-Script.md` section 1, step 7 |
 | -3 | Phone on charger, APK open on Today as B | `Demo-Script.md` section 1, step 8 |
 | -2 | Deck open at slide 1; PDF backup reachable; `slides.html` zoom reset | `docs/midterm2/slides.html` |

@@ -2,7 +2,7 @@
 
 **Format:** live demo, 6-8 minutes (a 3-minute cut is at the end).  
 **System:** https://pinpoint-uj4y.onrender.com (v2.6.1).  
-**Phone APK:** https://github.com/Prince-of-Nothing/Pinpoint/releases/latest  
+**Phone APK:** https://github.com/Prince-of-Nothing/Pinpoint/releases/tag/v2.6.1  
 **Deck:** [`Presentation.md`](./Presentation.md) and [`slides.html`](./slides.html).
 
 The demo uses **two real accounts registered on the live system**. There are no
@@ -22,13 +22,14 @@ seeded users, no demo pins and no shared passwords in the repository.
    -> **Accept**. A -> reload.
 5. Choose a map in both profiles: **Use online map**, or install **Moldova**
    and wait for "Moldova is installed", then reload.
-6. Seed the new screens in A:
-   - Map -> publish `47.0105, 28.8638` and `47.0245, 28.8322`.
-   - Today -> **Refresh**; confirm two points and **Show trail** (the current
-     web client draws the trail when the points are present; the native client
-     always draws it on the map).
-   - Private notes -> add a note with a real photo (landmark/selfie) and a
-     short message.
+6. Prepare the new screens:
+   - Map in A -> publish `47.0105, 28.8638` and `47.0180, 28.8400`.
+   - Map in B -> publish `47.0245, 28.8322` (this is the point A will see).
+   - Today in A -> confirm two points (Ctrl+R if the page is stale) and press
+     **Show trail** (the current web client draws the trail when the points are
+     present; the native client always draws it on the map).
+   - Private notes in A -> add a note with a landmark photo (no faces or
+     personal images) and a short message.
 7. Run the route once in A so the route panel is warm: search **Chișinău** ->
    first result -> **Set as origin**; search **Bălți** -> first result ->
    **Directions**. Expect **136.4 km / 2 h 04**.
@@ -85,16 +86,17 @@ change is visible.
 1. In A: **Today** -> point at the two-point trail and press **Show trail**.
 2. Open **Private notes** -> the photo note -> **Show on map**.
 3. Say: "The trail is mine only; it is kept for 24 hours. The note and photo
-   are on my account, not a third-party service. Only I can read or delete
-   them."
+   are on my account, not a third-party service. Only my account can read or
+   delete them through the app; they are not end-to-end encrypted."
 4. Delete the note after showing it (optional) to demonstrate owner-only
    delete.
 
 ### 5:30 - Offline (60 s)
 
-1. In A: DevTools -> Network -> **Offline** -> reload.
-2. The app shell loads, the installed Moldova map renders, and search
-   **Bălți** returns local results.
+1. In A: DevTools -> Network -> **Offline**. Do **not** reload: `/api/v1/auth/me`
+   is not cached, so a reload returns to Sign in.
+2. The installed Moldova map stays on screen, and search **Bălți** returns
+   local results.
 3. **Do not press Directions here** - offline web routing is not implemented.
 4. Go back online.
 
@@ -129,8 +131,9 @@ change is visible.
   `pinpoint-offline-v3`.
 - **Route fails:** use the pre-run route panel; it stays in the page. The
   online route uses public OSRM.
-- **Offline reload fails:** load the app twice online before going offline so
-  the service worker and OPFS are warm.
+- **Offline after a reload:** `/api/v1/auth/me` is not cached, so the app
+  returns to Sign in. Do not reload offline; go offline after the map and pack
+  are loaded.
 - **Share sheet confirmation:** the browser `confirm` dialog is deliberate; the
   Cancel path sends no request.
 - **Phone widgets:** the release APK is the ARM build. Test one tap before the
@@ -142,7 +145,7 @@ change is visible.
 2. B shares exact 1 hour; A sees exact; B pauses; A reloads and sees nothing;
    B revokes (60 s).
 3. A: Today trail + one private note (45 s).
-4. A: offline reload + search Bălți (30 s).
+4. A: go offline (no reload), map + search Bălți (30 s).
 
 ## 6. If the admin console is requested
 

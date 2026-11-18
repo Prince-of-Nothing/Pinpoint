@@ -50,7 +50,8 @@ External services are limited to map data: OpenFreeMap tiles, Nominatim search
 and OSRM routing. Country packs come from `pinpoint-maps`. The friend list,
 account data and trail are never sent to those services; a search sends only the
 query, and a route sends only the endpoints being routed. Transport is HTTPS off
-loopback; plain HTTP is accepted only for loopback development (ADR-0006).
+loopback; plain HTTP is accepted only for loopback development or an explicitly
+allowlisted internal host (ADR-0006).
 
 <div style="page-break-after: always;"></div>
 
@@ -62,16 +63,21 @@ loopback; plain HTTP is accepted only for loopback development (ADR-0006).
   are applied by the server; an unknown precision is rejected, never treated as
   exact.
 - **Expiry and pause fail closed.** `expires_at` is checked on every read; a
-  paused share is inactive; pausing preserves the original expiry.
+  paused share is inactive; pausing preserves the original expiry. Exception:
+  triggering an emergency alert reactivates the caller's existing shares,
+  including paused ones, until changed again; deleted shares stay gone. This is
+  a known gap.
 - **Owner-only control.** Only the owner can pause, resume, edit or delete a
   share. A missing or foreign share returns the same not-found envelope.
 - **Owner-scoped safety state.** Check-ins and emergency alerts require
   authentication; another user cannot list or delete them.
-- **Sessions.** Argon2id password hashes, opaque 256-bit server-side sessions, `HttpOnly` + `SameSite=Lax` cookies, a session-bound CSRF token echoed in `X-CSRF-Token`. Sign-out everywhere and password changes revoke sessions. Login locks an account after five failures; there is no per-IP server-side rate limit. The current build does not set `Secure`, has no `__Host-` prefix and no HSTS.
+- **Sessions.** Argon2id password hashes, opaque 256-bit server-side sessions, `HttpOnly` + `SameSite=Lax` cookies, a session-bound CSRF token echoed in `X-CSRF-Token`. Sign-out everywhere and password changes revoke sessions in the database; another replica may accept a cached copy until its idle timeout. Login locks an account after five failures; there is no per-IP server-side rate limit. The current build does not set `Secure`, has no `__Host-` prefix and no HSTS.
 - **Data minimization.** Latest location plus a bounded history (24 h visible,
-  7 d retained) and private notes. No continuous background tracking.
-- **Web hardening.** Same-origin assets, strict CSP, `frame-ancestors 'none'`,
-  no third-party scripts, no trackers, no IP geolocation. OSM attribution is
+  7 d retained) and private notes. No continuous background tracking by
+  default; opt-in Android interval sharing shows a persistent notification.
+- **Web hardening.** Same-origin app assets, API and OSM proxies; strict CSP,
+  `frame-ancestors 'none'`, no third-party scripts, no trackers, no IP
+  geolocation. The opt-in basemap loads OpenFreeMap tiles. OSM attribution is
   always visible (ODbL).
 
 ## Verification
@@ -82,7 +88,7 @@ loopback; plain HTTP is accepted only for loopback development (ADR-0006).
 | Library unit tests | **328** tests, 24 test binaries |
 | Live functional run on v2.6.1 (two email accounts) | **14/14**, manual, transcript not archived |
 | Live web UI checks | **9/9**, manual, transcript not archived |
-| Offline web checks (install, reload, map, search) | **7/7**, manual, transcript not archived |
+| Offline web checks (install, offline map, local search; no reload) | **7/7**, manual, transcript not archived |
 | Sharing UI unit checks | 17/17 |
 
 The live run covers registration/login, friend request/accept, two exact
@@ -116,7 +122,8 @@ Contract and consent suites pin the wire format and the rule: `tests/contract.rs
   routes on the installed graph.
 - Native photos are not implemented; the native note list labels an attached
   photo and points to the web client.
-- The trail records explicit publishes, not a 24/7 GPS trace.
+- The trail records explicit publishes, not a 24/7 GPS trace; Android interval
+  sharing is opt-in and shows a notification.
 - Anonymous accounts are not demo-safe on the multi-replica deployment; use email accounts.
 - Transport/cookie hardening is incomplete: the live cookie is not `Secure` and has no `__Host-` prefix; HSTS and API JSON security headers are missing. Fix before real accounts.
 - Auth abuse limits are per account, not per IP; register and anonymous signup have no server-side IP limit.

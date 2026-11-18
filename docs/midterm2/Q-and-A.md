@@ -233,4 +233,4 @@ OpenFreeMap, Nominatim/OSRM, OSM data and the pack tooling.
 Ownership note: the repository history has multiple authors (Pleșu Dinu,
 Mordret, Andrei Cliucovschi and others). This answer describes the submission
 you can walk through, not a claim to every commit; check `git shortlog` before
-claiming a specific one. Edit this answer to match your actual contribution.
+claiming a specific one.

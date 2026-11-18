@@ -290,7 +290,7 @@
         <tr><td>Consent</td><td>friendship ≠ consent · exact precision · pause/revoke · expiry · owner-only</td><td><span class="accent">10/10</span></td></tr>
         <tr><td>Today / notes</td><td>owner-only trail and notes · validation · 401</td><td><span class="accent">2/2</span></td></tr>
         <tr><td>Contract / assets</td><td>CSRF · owner paths · CSP · no API cache</td><td><span class="accent">22/22</span></td></tr>
-        <tr><td>Offline</td><td>install · reload offline · map · search</td><td><span class="accent">7/7 manual</span></td></tr>
+        <tr><td>Offline</td><td>install · map offline · local search</td><td><span class="accent">7/7 manual</span></td></tr>
         <tr><td>Artifact</td><td>APK signature, versionCode, ABIs</td><td><span class="accent">verified</span></td></tr>
       </table>
       <div class="num">10 / 13</div>
@@ -307,13 +307,14 @@
             <li>A refreshes: exact point is visible.</li>
             <li>B pauses → A sees nothing; B resumes → back; B revokes → gone.</li>
             <li>A: Today trail + private photo note.</li>
-            <li>A: offline reload + search Bălți.</li>
+            <li>A: go offline (no reload), map + search Bălți.</li>
             <li>Close on the phone Today tab.</li>
           </ol>
           <p class="caption">Full steps and fallbacks: <b>Demo-Script.md</b></p>
         </div>
         <div>
-          <img class="shot fit-width" src="assets/map-clean.png" alt="Pinpoint map with search and OSM attribution" />
+          <img class="shot fit-width" src="assets/map-clean.png" alt="Pinpoint map with search" />
+          <p class="caption">© OpenStreetMap contributors · tiles by OpenFreeMap</p>
         </div>
       </div>
       <div class="num">11 / 13</div>
@@ -331,7 +332,7 @@
             <li>Offline web routes are not built.</li>
             <li>Native photos are not built.</li>
             <li>Trail = explicit publishes, not background GPS.</li>
-            <li>Audit: 9 unmaintained transitive deps accepted.</li>
+            <li>Audit: 9 unmaintained/unsound deps accepted.</li>
             <li>Cookie <code>Secure</code>/HSTS and API headers are missing.</li>
           </ul>
         </div>

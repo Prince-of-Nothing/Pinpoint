@@ -18,7 +18,7 @@ are the fallback if the live app or network fails.
 "Privacy-first location sharing for trusted friends"; v2.6.1; live URL.
 
 **Say:**
-> Good morning. I'm [name], and this is Pinpoint: location sharing for trusted
+> Good morning. I'm Dinu, and this is Pinpoint: location sharing for trusted
 > friends, built around one rule - friendship is not consent.
 
 ## Slide 2 - The problem (30 s)
@@ -107,10 +107,11 @@ the packs and routes on the installed graph.
 **Visual:** Screenshot `assets/07-offline.png` and `assets/08-route.png`.
 
 **Say:**
-> The offline pack is a real artifact, not a mock. Moldova is about 139
-> megabytes to download and 204 megabytes installed; the web client stores it
-> in OPFS and the service worker serves it with range requests. The map and
-> search work with the network off. The native map server routes on the
+> The offline pack is a real artifact, not a mock. The native pack is 138.5
+> megabytes to download and 204 megabytes installed; the web OPFS pack is 220.3
+> megabytes (93.2 PMTiles + 6.8 search SQLite + 120.3 Valhalla). The web client
+> stores it in OPFS and the service worker serves it with range requests. The
+> map and search work with the network off. The native map server routes on the
 > installed graph; online routing in the web client uses OSRM.
 
 ## Slide 8 - Today and private notes (30 s)
@@ -127,8 +128,8 @@ the packs and routes on the installed graph.
 
 ## Slide 9 - Native clients (25 s)
 
-**Visual:** `assets/06-native.png` (desktop theme); `assets/05-mobile.png` is the
-phone fallback.
+**Visual:** `assets/06-native.png` (desktop map shell; the screenshot predates
+the Today tab); `assets/05-mobile.png` is the phone fallback.
 
 **Say:**
 > The same Rust core ships a desktop client and an Android APK. The signed
@@ -183,7 +184,8 @@ full 6-8 minute run and its fallbacks are in
 - MFA login works; web enrolment and email password reset are not built.
 - Offline web routing is not built.
 - Native photos are not built.
-- The trail records explicit publishes, not background GPS.
+- The trail records explicit publishes, not background GPS; Android interval
+  sharing is opt-in with a notification.
 - The dependency audit flags nine unmaintained/unsound transitive crates with no
   fixed upgrade; they are recorded as accepted risk in `audit.toml`.
 

@@ -383,3 +383,18 @@ async fn today_endpoints_are_owner_paths_with_csrf_on_writes() {
     assert_eq!(requests[4].path, "/api/v1/locations/notes/2");
     assert_eq!(requests[4].header("x-csrf-token"), Some("csrf-abc"));
 }
+
+#[tokio::test]
+async fn mfa_disable_posts_the_code_with_csrf() {
+    let server = MockServer::start(vec![login_ok(), MockResponse::json(200, "{}")]);
+    let client = login(&server).await;
+    client.mfa_disable("123456").await.expect("disable MFA");
+
+    let requests = server.requests();
+    let post = &requests[1];
+    assert_eq!(post.method, "POST");
+    assert_eq!(post.path, "/api/v1/auth/mfa/disable");
+    assert_eq!(post.header("x-csrf-token"), Some("csrf-abc"));
+    let body: serde_json::Value = serde_json::from_str(&post.body).expect("json body");
+    assert_eq!(body["code"], "123456");
+}

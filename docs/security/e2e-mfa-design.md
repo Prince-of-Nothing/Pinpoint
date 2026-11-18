@@ -13,7 +13,7 @@ details.
 - `src/security/mfa.rs` — RFC 6238 TOTP with HMAC-SHA256, 30s step, ±1 step tolerance, constant-time compare.
 - `generate_secret()` (160-bit random), `totp(secret, unix)`, `verify_totp(...) -> Option<step>`, `otpauth_uri(...)`.
 - Tests: round-trip + drift, unique secrets, uri shape, fail-closed on bad secret.
-- **Endpoints implemented:** `/auth/mfa/enroll`, `/auth/mfa/verify`, `/auth/mfa/status`, `DELETE /auth/mfa` (`src/server/auth_handlers.rs`); login gate requires `totp` when enabled; replay-safe via `mfa_last_step`.
+- **Endpoints implemented:** `/auth/mfa/enroll`, `/auth/mfa/verify`, `/auth/mfa/status`, `POST /auth/mfa/disable {code}` (`src/server/auth_handlers.rs`); login gate requires `totp` when enabled; replay-safe via `mfa_last_step`.
 - **Remaining integration:** `mfa_pending` session gate once the session store lands; TOTP recovery codes.
 
 ## 2. E2E encryption (implemented, MVP scope)

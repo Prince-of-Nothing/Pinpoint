@@ -42,7 +42,8 @@ Companion to [`session-management.md`](session-management.md) and
   2. User scans the URI in an authenticator app.
   3. `POST /api/v1/auth/mfa/verify {code}` → `mfa_enabled = true`, step consumed.
   4. `GET /api/v1/auth/mfa/status` → `{mfa_enabled}`.
-  5. `DELETE /api/v1/auth/mfa` → clears secret + flag (requires a valid session).
+  5. `POST /api/v1/auth/mfa/disable {code}` → clears secret + flag only after a
+     valid unused TOTP code (a stolen session alone cannot remove MFA).
 - **Login gate:** when `mfa_enabled`, `POST /auth/login` requires a valid
   `totp` in the body; a missing/invalid/replayed code returns
   `MFA_REQUIRED` / `INVALID_MFA_CODE`.

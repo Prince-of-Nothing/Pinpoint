@@ -33,7 +33,7 @@ the historical/target design and are **not** the current contract.
 |---|---|---|---|
 | POST | `/auth/register` | — | `{email, password, full_name}` → `201` session + user |
 | POST | `/auth/login` | — | `{email, password, totp?}` → `200` session + user; `MFA_REQUIRED` if enrolled without a valid code |
-| POST | `/auth/anonymous` | — | `{device_name?, public_key?}` → `201` session + user + **one-time** `recovery_code` |
+| POST | `/auth/anonymous` | - | `{device_name?, public_key?}` → `201` session + user + **one-time** `recovery_code`; `409 ALREADY_SIGNED_IN` while a session is active |
 | POST | `/auth/anonymous/recover` | — | `{recovery_code}` → `200` session + rotated `recovery_code`; old code is invalid |
 | POST | `/auth/session` | cookie | validate the cookie, return `{user}` + `X-CSRF-Token` |
 | GET | `/auth/me` | cookie | current user |
@@ -46,7 +46,7 @@ the historical/target design and are **not** the current contract.
 | POST | `/auth/mfa/enroll` | cookie | generate a TOTP secret + `otpauth_uri` |
 | POST | `/auth/mfa/verify` | cookie | `{code}` → enable MFA |
 | GET | `/auth/mfa/status` | cookie | `{mfa_enabled}` |
-| DELETE | `/auth/mfa` | cookie + CSRF | disable MFA |
+| POST | `/auth/mfa/disable` | cookie + CSRF | `{code}` → disable MFA; `401 INVALID_MFA_CODE` for missing/invalid/replayed codes, `400 MFA_NOT_ENROLLED` |
 
 Session responses include `csrf_token` in the body **and** an `X-CSRF-Token`
 header. The cookie value is stored server-side only as a SHA-256 hash.

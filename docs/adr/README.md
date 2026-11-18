@@ -47,6 +47,7 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0019 | [Self-Service Account Deletion](./0019-self-service-account-deletion.md) | Accepted |
 | 0020 | [Hybrid MapLibre Offline Maps (PMTiles + SQLite FTS5 + Valhalla)](./0020-hybrid-maplibre-offline-maps.md) | Proposed |
 | 0021 | [Global Map Catalog and Manifest-Driven Offline Regions](./0021-global-map-catalog.md) | Proposed |
+| 0022 | [MFA Disable Requires a TOTP Proof](./0022-mfa-disable-requires-totp.md) | Accepted |
 
 See the table above; the current architecture summary is in
 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). Design and SDLC context is in the

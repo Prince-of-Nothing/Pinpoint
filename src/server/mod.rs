@@ -306,7 +306,7 @@ pub fn auth_router() -> Router<AppState> {
         .route("/api/v1/auth/mfa/enroll", post(auth_handlers::mfa_enroll))
         .route("/api/v1/auth/mfa/verify", post(auth_handlers::mfa_verify))
         .route("/api/v1/auth/mfa/status", get(auth_handlers::mfa_status))
-        .route("/api/v1/auth/mfa", delete(auth_handlers::mfa_disable))
+        .route("/api/v1/auth/mfa/disable", post(auth_handlers::mfa_disable))
 }
 
 /// Offline pack download routes (`/offline/packs/*`): the committed manifest

@@ -473,9 +473,15 @@ impl ApiClient {
         Ok(body["mfa_enabled"].as_bool().unwrap_or(false))
     }
 
-    pub async fn mfa_disable(&self) -> anyhow::Result<()> {
+    /// MFA: disable with a current 6-digit code. A session alone is not
+    /// enough, so a stolen cookie cannot remove the second factor.
+    pub async fn mfa_disable(&self, code: &str) -> anyhow::Result<()> {
         let response = self
-            .request(reqwest::Method::DELETE, "/api/v1/auth/mfa", None)
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/auth/mfa/disable",
+                Some(serde_json::json!({ "code": code })),
+            )
             .await?;
         Self::check(response, "MFA disable failed").await?;
         Ok(())
@@ -1278,8 +1284,8 @@ impl crate::backend::Backend for ApiClient {
     fn mfa_status<'a>(&'a self) -> crate::backend::BackendFuture<'a, bool> {
         Box::pin(async move { ApiClient::mfa_status(self).await })
     }
-    fn mfa_disable<'a>(&'a self) -> crate::backend::BackendFuture<'a, ()> {
-        Box::pin(async move { ApiClient::mfa_disable(self).await })
+    fn mfa_disable<'a>(&'a self, code: &'a str) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::mfa_disable(self, code).await })
     }
     fn change_password<'a>(
         &'a self,

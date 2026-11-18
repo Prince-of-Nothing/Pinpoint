@@ -30,11 +30,11 @@ function Check($name, [scriptblock]$fn, $expect) {
     }
 }
 
-function NodeTotp($secretBase64) {
+function NodeTotp($secretBase64, [int]$offsetSeconds = 0) {
     $code = docker run --rm node:alpine node -e @"
 const c=require('crypto');
 const k=Buffer.from('$secretBase64','base64');
-const now=Math.floor(Date.now()/1000);
+const now=Math.floor(Date.now()/1000)+$offsetSeconds;
 const m=Buffer.alloc(8);m.writeBigUInt64BE(BigInt(Math.floor(now/30)));
 const h=c.createHmac('sha256',k).update(m).digest();
 const o=h[31]&0xf;
@@ -60,8 +60,8 @@ Check "gateway headers" {
 } "True|True|True|True"
 
 Write-Host "== Auth =="
-# Rerun-safe: clear MFA from a previous run so login works without TOTP.
-try { Invoke-RestMethod -Method Delete -Uri "$Base/api/v1/auth/mfa" | Out-Null } catch { }
+# MFA disable now requires a current TOTP code (ADR-0022). A fresh database or
+# an in-app disable is the only way to clear a previous run's enrolment.
 $l = Invoke-RestMethod -Method Post -Uri "$Base/api/v1/auth/login" -ContentType "application/json" -Body '{"email":"alice@example.com","password":"DemoPass123!"}'
 Check "login alice (id=2)" { $l.user.id } "2"
 Check "login wrong password 401" {
@@ -90,6 +90,8 @@ $code2 = NodeTotp $e.secret
 Check "mfa replay rejected" {
     try { Invoke-RestMethod -Method Post -Uri "$Base/api/v1/auth/mfa/verify" -ContentType "application/json" -Body "{`"code`":`"$code`"} " | ConvertTo-Json -Compress } catch { $_.ErrorDetails.Message | ConvertFrom-Json | ForEach-Object { $_.error.code } }
 } "INVALID_MFA_CODE"
+$code3 = NodeTotp $e.secret 30
+Check "mfa disable needs a code" { (Invoke-RestMethod -Method Post -Uri "$Base/api/v1/auth/mfa/disable" -ContentType "application/json" -Body "{`"code`":`"$code3`"}").mfa_enabled } "False"
 
 Write-Host "== Users & friendships =="
 Check "list users = seeded 3 (cross-service eventual)" {

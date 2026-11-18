@@ -359,14 +359,21 @@ impl PinpointAppUI {
                 (d.mfa_enabled, d.totp_pending_secret.clone())
             };
             if enabled {
-                ui.label("MFA is ON for this account.");
-                if ui.button("Disable MFA").clicked() {
+                ui.label(
+                    "MFA is ON for this account. Enter a current authenticator code to disable it.",
+                );
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.mfa_code)
+                        .hint_text("6-digit code")
+                        .desired_width(140.0),
+                );
+                if ui.button("Disable MFA").clicked() && self.mfa_code.trim().len() == 6 {
+                    let code = self.mfa_code.clone();
                     let app = Arc::clone(&self.app);
-                    let rt_ctx = ctx.clone();
                     self.rt.spawn(async move {
-                        let _ = app.mfa_disable().await;
+                        let _ = app.mfa_disable(code).await;
                     });
-                    let _ = rt_ctx;
+                    self.mfa_code.clear();
                 }
             } else if let Some(secret) = pending {
                 ui.label(

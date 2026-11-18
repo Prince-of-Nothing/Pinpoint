@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Pinpoint - Midterm 2</title>
+  <style>
+    :root {
+      --bg: #0c1512;
+      --panel: #12201b;
+      --panel-2: #172a22;
+      --border: #2a3c33;
+      --text: #f0eadc;
+      --muted: #a5b2a6;
+      --accent: #e3a458;
+      --accent-ink: #241708;
+      --danger: #e06c5a;
+      --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+      --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); }
+    body { overflow: hidden; }
+    .slide {
+      display: none;
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      padding: 5.2vh 6vw 6vh;
+      flex-direction: column;
+      justify-content: center;
+      background: var(--bg);
+      page-break-after: always;
+      overflow: hidden;
+    }
+    .slide.active { display: flex; }
+    .slide::after {
+      content: "Pinpoint  ·  Midterm 2  ·  v2.6.1";
+      position: absolute;
+      left: 6vw;
+      bottom: 2.4vh;
+      font-size: 0.72rem;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+    .slide .num {
+      position: absolute;
+      right: 6vw;
+      bottom: 2.4vh;
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+    }
+    h1, h2, h3 { font-family: var(--serif); font-weight: 600; margin: 0; }
+    h1 { font-size: clamp(2.4rem, 5vw, 4.6rem); line-height: 1.03; letter-spacing: -0.02em; }
+    h2 { font-size: clamp(1.7rem, 3.1vw, 2.7rem); line-height: 1.1; margin-bottom: 1.1rem; }
+    h3 { font-size: 1.15rem; margin-bottom: 0.35rem; }
+    p, li { font-size: clamp(0.95rem, 1.25vw, 1.16rem); line-height: 1.5; color: var(--text); }
+    .muted { color: var(--muted); }
+    .eyebrow { color: var(--accent); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 0.7rem; }
+    .accent { color: var(--accent); }
+    .hero {
+      background: radial-gradient(circle at 82% 18%, #172a22 0%, #0e1a15 38%, #0c1512 72%);
+    }
+    .hero .brand { font-family: var(--serif); font-size: clamp(3.2rem, 8vw, 8rem); line-height: 0.92; letter-spacing: -0.04em; }
+    .hero .sub { max-width: 42rem; margin-top: 1.4rem; color: var(--muted); font-size: clamp(1rem, 1.5vw, 1.35rem); }
+    .hero .meta { margin-top: 2.2rem; display: flex; gap: 1.4rem; flex-wrap: wrap; color: var(--muted); font-size: 0.82rem; letter-spacing: 0.04em; }
+    .cols { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 0.7rem; }
+    .col, .card {
+      background: rgba(18, 32, 27, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 0.8rem;
+      padding: 1.1rem 1.15rem;
+    }
+    .col .big { font-family: var(--serif); font-size: 2.2rem; color: var(--accent); line-height: 1; margin-bottom: 0.5rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.8rem; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
+    .grid-6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+    .card h3 { color: var(--accent); }
+    .card p { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.92rem; }
+    .arrowbox { display: flex; align-items: center; gap: 1rem; margin: 1rem 0 1.4rem; flex-wrap: wrap; }
+    .person { min-width: 7.5rem; text-align: center; padding: 0.9rem 1rem; border-radius: 0.7rem; border: 1px solid var(--border); background: var(--panel); }
+    .person b { display: block; font-family: var(--serif); font-size: 1.2rem; }
+    .person span { color: var(--muted); font-size: 0.8rem; }
+    .arrow { position: relative; flex: 1; min-width: 8rem; border-top: 3px solid var(--accent); }
+    .arrow::after { content: ""; position: absolute; right: -2px; top: -8px; border: 7px solid transparent; border-left-color: var(--accent); }
+    .arrow small { position: absolute; left: 50%; top: -1.9rem; transform: translateX(-50%); white-space: nowrap; color: var(--accent); font-size: 0.78rem; letter-spacing: 0.03em; }
+    .noarrow { color: var(--danger); font-size: 0.84rem; margin-top: 0.35rem; }
+    .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 0.65rem 1rem; margin-top: 0.8rem; }
+    .check { display: flex; gap: 0.6rem; align-items: flex-start; font-size: 0.95rem; line-height: 1.4; }
+    .check::before { content: "✓"; color: var(--accent); font-weight: 800; }
+    .shot { width: 100%; max-height: 62vh; object-fit: contain; border: 1px solid var(--border); border-radius: 0.7rem; background: var(--panel); }
+    .shot.tall { max-height: 68vh; }
+    .card-shot { width: auto; max-width: 100%; max-height: 60vh; display: block; margin: 0 auto; }
+    .caption { color: var(--muted); font-size: 0.78rem; margin-top: 0.4rem; }
+    .bullets { margin: 0.3rem 0 0 1.1rem; padding: 0; }
+    .bullets li { margin-bottom: 0.45rem; }
+    .table { width: 100%; border-collapse: collapse; margin-top: 0.8rem; font-size: 0.9rem; }
+    .table th, .table td { text-align: left; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .table th { color: var(--accent); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; }
+    .table td { color: var(--text); }
+    .metric { text-align: center; padding: 0.9rem 0.7rem; border: 1px solid var(--border); border-radius: 0.7rem; background: var(--panel); }
+    .metric b { display: block; font-family: var(--serif); font-size: 2rem; color: var(--accent); line-height: 1; }
+    .metric span { color: var(--muted); font-size: 0.78rem; letter-spacing: 0.03em; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+    .two-col h3 { color: var(--accent); }
+    .two-col ul { margin: 0.2rem 0 0 1.05rem; padding: 0; }
+    .two-col li { margin-bottom: 0.45rem; }
+    .close { align-items: flex-start; justify-content: center; }
+    .close .big { font-family: var(--serif); font-size: clamp(3rem, 9vw, 8rem); line-height: 0.9; letter-spacing: -0.04em; }
+    .close .url { margin-top: 1.6rem; font-size: 1.05rem; color: var(--accent); }
+    .nav { position: fixed; right: 1.2rem; bottom: 1rem; display: flex; gap: 0.4rem; z-index: 5; }
+    .nav button { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 0.45rem; padding: 0.5rem 0.75rem; font: inherit; cursor: pointer; min-height: 40px; }
+    .nav button:hover { border-color: var(--accent); color: var(--accent); }
+    @media print {
+      @page { size: A4 landscape; margin: 0; }
+      html, body { height: auto; overflow: visible; background: var(--bg); }
+      .slide { display: flex !important; width: 100%; height: 100vh; page-break-after: always; }
+      .nav { display: none !important; }
+      * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <main id="deck">
+    <section class="slide active hero">
+      <div class="eyebrow">Midterm 2  ·  18 November 2026</div>
+      <div class="brand">Pinpoint</div>
+      <div class="sub">Privacy-first location sharing for trusted friends. Friendship is not consent.</div>
+      <div class="meta">
+        <span>v2.6.1</span><span>Rust · Axum · PostgreSQL</span><span>Web · Desktop · Android</span>
+      </div>
+      <div class="num">1 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">The problem</div>
+      <h2>Sharing became permanent by default.</h2>
+      <div class="cols">
+        <div class="col"><div class="big">01</div><h3>Friend = full access</h3><p>Once accepted, the other person can often watch you indefinitely.</p></div>
+        <div class="col"><div class="big">02</div><h3>Stale looks live</h3><p>A dead phone still leaves a dot on the map, with no honest freshness state.</p></div>
+        <div class="col"><div class="big">03</div><h3>Control is buried</h3><p>Pausing, narrowing precision or revoking is hard to find and easy to miss.</p></div>
+      </div>
+      <div class="num">2 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">The rule</div>
+      <h2>A share is a decision, not a friendship.</h2>
+      <div class="arrowbox">
+        <div class="person"><b>Alice</b><span>owner</span></div>
+        <div class="arrow"><small>exact · 1 hour · revocable</small></div>
+        <div class="person"><b>Bob</b><span>friend</span></div>
+      </div>
+      <div class="grid-3">
+        <div class="card"><h3>Directional</h3><p>Alice → Bob never implies Bob → Alice.</p></div>
+        <div class="card"><h3>Precision</h3><p>Exact, approximate or city only; the server applies it on read.</p></div>
+        <div class="card"><h3>Time + control</h3><p>Expiry, pause, resume, revoke; rejected or expired shares fail closed.</p></div>
+      </div>
+      <p class="noarrow">Friendship alone shows nothing. The crossed arrow is the default.</p>
+      <div class="num">3 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Delivered · v2.6.1</div>
+      <h2>One Rust core, three clients, one consent contract.</h2>
+      <div class="grid-6">
+        <div class="card"><h3>Identity</h3><p>Email registration, Argon2id, opaque sessions, revoke, delete account.</p></div>
+        <div class="card"><h3>Friends</h3><p>Request by handle, accept/reject, remove. Emails are not searchable.</p></div>
+        <div class="card"><h3>Consent sharing</h3><p>Exact / approximate / city, 1 h, pause, resume, revoke, live state.</p></div>
+        <div class="card"><h3>Map</h3><p>OpenFreeMap, OSM search, Chișinău → Bălți route, saved places.</p></div>
+        <div class="card"><h3>Offline</h3><p>Moldova pack in OPFS, offline map + search; native graph routing.</p></div>
+        <div class="card"><h3>Today + notes</h3><p>Private 24 h trail; private text/photo notes on the map.</p></div>
+      </div>
+      <div class="num">4 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Architecture</div>
+      <h2>Server-side enforcement, never the client.</h2>
+      <div class="grid-2" style="grid-template-columns: 1.1fr 0.9fr;">
+        <div>
+          <div class="grid-3" style="grid-template-columns: 1fr 1fr 1fr;">
+            <div class="card"><h3>Web</h3><p>ES modules · MapLibre · PMTiles</p></div>
+            <div class="card"><h3>Desktop</h3><p>Rust · eframe/egui</p></div>
+            <div class="card"><h3>Android</h3><p>same Rust core · signed APK</p></div>
+          </div>
+          <p style="text-align:center; color:var(--accent); font-size:1.4rem; margin:0.6rem 0;">↓ session + CSRF ↓</p>
+          <div class="card" style="text-align:center;"><h3 style="font-size:1.35rem;">Rust API · Axum</h3><p>/api/v1 · validation · authorization · rate limits</p></div>
+          <p style="text-align:center; color:var(--accent); font-size:1.4rem; margin:0.6rem 0;">↓</p>
+          <div class="card" style="text-align:center;"><h3 style="font-size:1.2rem;">PostgreSQL</h3><p>users · sessions · friendships · shares · locations · trail · notes</p></div>
+        </div>
+        <div class="card">
+          <h3>Edges</h3>
+          <ul class="bullets">
+            <li><b>OpenFreeMap</b> — opt-in online tiles</li>
+            <li><b>Nominatim / OSRM</b> — search and driving routes</li>
+            <li><b>pinpoint-maps</b> — country packs, hashes, range serving</li>
+            <li><b>No trackers, no third-party scripts</b></li>
+          </ul>
+          <p class="caption">Plain HTTP is loopback-only; production is HTTPS.</p>
+        </div>
+      </div>
+      <div class="num">5 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Security + privacy</div>
+      <h2>The server re-checks consent on every read.</h2>
+      <div class="checks">
+        <div class="check">Argon2id password hashes</div>
+        <div class="check">Opaque, server-side sessions</div>
+        <div class="check">HttpOnly + SameSite + Secure cookies</div>
+        <div class="check">CSRF double-submit on every unsafe method</div>
+        <div class="check">Owner, friendship, active flag, expiry, precision</div>
+        <div class="check">Check-ins and emergencies owner-only</div>
+        <div class="check">Strict CSP, same-origin assets, no trackers</div>
+        <div class="check">Rate limits and lockout on auth</div>
+        <div class="check">Friend coordinates never sent to OSM services</div>
+        <div class="check">Private trail and notes are owner-only</div>
+      </div>
+      <p class="caption" style="margin-top:1.2rem;">Security-sensitive rows are written directly to PostgreSQL; a stale replica cannot resurrect a revoked share.</p>
+      <div class="num">6 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Offline</div>
+      <h2>A country pack, not a mock.</h2>
+      <div class="grid-2">
+        <div>
+          <img class="shot" src="assets/07-offline.png" alt="Moldova offline pack installed" />
+          <div class="caption">Moldova: 139 MB transfer, 204 MB installed. OPFS + range requests.</div>
+        </div>
+        <div>
+          <img class="shot" src="assets/08-route.png" alt="Local route on the installed Moldova graph" />
+          <div class="caption">Native map server routes on the installed graph; web routing is online (OSRM).</div>
+        </div>
+      </div>
+      <div class="num">7 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Today + private notes</div>
+      <h2>The personal side of the map.</h2>
+      <div class="grid-2">
+        <div>
+          <img class="shot card-shot" src="assets/03-today-card.png" alt="Today trail with two points" />
+          <div class="caption">Private 24-hour trail; 7-day server retention; owner-only.</div>
+        </div>
+        <div>
+          <img class="shot card-shot" src="assets/04-note-card.png" alt="Private photo note on the map" />
+          <div class="caption">Photo downscaled in the browser, bounded to 675 KB, validated and owner-only.</div>
+        </div>
+      </div>
+      <div class="num">8 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Native clients</div>
+      <h2>Same core, same consent rules.</h2>
+      <div class="grid-2" style="grid-template-columns: 1.2fr 0.8fr; align-items:center;">
+        <div>
+          <img class="shot" src="assets/06-native.png" alt="Native desktop theme" />
+          <div class="caption">Map-first desktop shell; the Android build uses the same screens and theme.</div>
+        </div>
+        <div>
+          <div class="metric" style="margin-bottom:0.7rem;"><b>2.6.1</b><span>Android version</span></div>
+          <div class="metric" style="margin-bottom:0.7rem;"><b>20601</b><span>versionCode</span></div>
+          <div class="metric" style="margin-bottom:0.7rem;"><b>13.6 MB</b><span>signed APK</span></div>
+          <div class="metric"><b>arm64 + armv7</b><span>universal release</span></div>
+          <p class="caption" style="margin-top:0.7rem;">Today tab with the trail and text notes. Photos remain web-only in this build.</p>
+        </div>
+      </div>
+      <div class="num">9 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Verification</div>
+      <h2>Evidence, not claims.</h2>
+      <div class="grid-3" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="metric"><b>328</b><span>library tests</span></div>
+        <div class="metric"><b>24</b><span>test binaries</span></div>
+        <div class="metric"><b>14/14</b><span>live v2.6.1 checks</span></div>
+        <div class="metric"><b>9/9</b><span>live UI checks</span></div>
+      </div>
+      <table class="table">
+        <tr><th>Gate</th><th>Coverage</th><th>Result</th></tr>
+        <tr><td>Rust gate</td><td>fmt · clippy -D warnings · build · test</td><td><span class="accent">pass</span></td></tr>
+        <tr><td>Consent</td><td>friendship ≠ consent · exact precision · pause/revoke · expiry · owner-only</td><td><span class="accent">10/10</span></td></tr>
+        <tr><td>Today / notes</td><td>owner-only trail and notes · validation · 401</td><td><span class="accent">2/2</span></td></tr>
+        <tr><td>Contract / assets</td><td>CSRF · owner paths · CSP · no API cache</td><td><span class="accent">22/22</span></td></tr>
+        <tr><td>Offline</td><td>install · reload offline · map · search</td><td><span class="accent">7/7</span></td></tr>
+        <tr><td>Artifact</td><td>APK signature, versionCode, ABIs</td><td><span class="accent">verified</span></td></tr>
+      </table>
+      <div class="num">10 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Live demo</div>
+      <h2>Two friends, one consent story.</h2>
+      <div class="grid-2" style="grid-template-columns: 0.95fr 1.05fr; align-items:center;">
+        <div>
+          <ol class="bullets" style="margin-left:1.2rem;">
+            <li>Sign in as A; show the online map and the Chișinău → Bălți route.</li>
+            <li>B shares <b>exact</b> for <b>1 hour</b>, confirms the summary.</li>
+            <li>A refreshes: exact point is visible.</li>
+            <li>B pauses → A sees nothing; B resumes → back; B revokes → gone.</li>
+            <li>A: Today trail + private photo note.</li>
+            <li>A: offline reload + search Bălți.</li>
+            <li>Close on the phone Today tab.</li>
+          </ol>
+          <p class="caption">Full steps and fallbacks: <b>Demo-Script.md</b></p>
+        </div>
+        <div>
+          <img class="shot" src="assets/map-clean.png" alt="Pinpoint map with search and OSM attribution" />
+        </div>
+      </div>
+      <div class="num">11 / 13</div>
+    </section>
+
+    <section class="slide">
+      <div class="eyebrow">Limitations + next</div>
+      <h2>Explicit edges, honest next steps.</h2>
+      <div class="two-col">
+        <div>
+          <h3>Known limits</h3>
+          <ul>
+            <li>Admin demo needs DB promotion; no seeded admin.</li>
+            <li>MFA login works; web enrolment is not built.</li>
+            <li>Offline web routes are not built.</li>
+            <li>Native photos are not built.</li>
+            <li>Trail = explicit publishes, not background GPS.</li>
+            <li>macOS CI has an unrelated installer flake.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Next</h3>
+          <ul>
+            <li>Admin bootstrap without SQL.</li>
+            <li>Web MFA + account recovery.</li>
+            <li>Friend-visible notes with per-note consent.</li>
+            <li>Offline web routing.</li>
+            <li>Mobile photo picker.</li>
+            <li>Targeted queries + load test; deterministic CI.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="num">12 / 13</div>
+    </section>
+
+    <section class="slide close hero">
+      <div class="eyebrow">Thank you</div>
+      <div class="big">Privacy is<br />the product.</div>
+      <p class="sub">Explicit, directional, precise by choice, revocable - and enforced by the server.</p>
+      <p class="url">https://pinpoint-uj4y.onrender.com</p>
+      <p class="muted" style="margin-top:0.4rem;">Questions?</p>
+      <div class="num">13 / 13</div>
+    </section>
+  </main>
+
+  <nav class="nav" aria-label="Slides">
+    <button type="button" id="prev" aria-label="Previous slide">←</button>
+    <button type="button" id="next" aria-label="Next slide">→</button>
+    <button type="button" id="print" aria-label="Print to PDF">Print</button>
+  </nav>
+
+  <script>
+    const slides = [...document.querySelectorAll(".slide")];
+    let index = 0;
+    function show(next) {
+      index = Math.max(0, Math.min(slides.length - 1, next));
+      slides.forEach((slide, i) => slide.classList.toggle("active", i === index));
+      history.replaceState(null, "", `#${index + 1}`);
+    }
+    const fromHash = Number(location.hash.replace("#", "")) - 1;
+    show(Number.isFinite(fromHash) ? fromHash : 0);
+    addEventListener("keydown", (event) => {
+      if (["ArrowRight", "ArrowDown", "PageDown", " "].includes(event.key)) {
+        event.preventDefault();
+        show(index + 1);
+      } else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(event.key)) {
+        event.preventDefault();
+        show(index - 1);
+      } else if (event.key === "Home") {
+        show(0);
+      } else if (event.key === "End") {
+        show(slides.length - 1);
+      } else if (event.key.toLowerCase() === "p") {
+        print();
+      }
+    });
+    document.getElementById("prev").addEventListener("click", () => show(index - 1));
+    document.getElementById("next").addEventListener("click", () => show(index + 1));
+    document.getElementById("print").addEventListener("click", () => print());
+  </script>
+</body>
+</html>

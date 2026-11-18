@@ -3,7 +3,39 @@
 
 const $ = (id) => document.getElementById(id);
 const KEY = "pinpoint.mapAppearance.v1";
+const THEME_KEY = "pinpoint.theme.v1";
 const DEFAULTS = { label: 12, icon: 26 };
+
+function initTheme() {
+  const root = document.documentElement;
+  const toggle = $("theme-toggle");
+  let theme = "light";
+  try {
+    theme = localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
+  } catch (_) {
+    // storage blocked: light is the safe default
+  }
+  const render = () => {
+    root.dataset.theme = theme;
+    if (!toggle) return;
+    toggle.textContent = theme === "dark" ? "Light" : "Dark";
+    toggle.setAttribute(
+      "aria-label",
+      theme === "dark" ? "Switch to light theme" : "Switch to dark theme",
+    );
+    toggle.setAttribute("aria-pressed", String(theme === "dark"));
+  };
+  render();
+  toggle?.addEventListener("click", () => {
+    theme = theme === "dark" ? "light" : "dark";
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch (_) {
+      // keep the session usable when storage is blocked
+    }
+    render();
+  });
+}
 
 function load() {
   try {
@@ -44,6 +76,7 @@ function save(settings) {
 }
 
 export function initAppearance() {
+  initTheme();
   let settings = load();
   apply(settings);
 

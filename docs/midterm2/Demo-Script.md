@@ -22,9 +22,8 @@ seeded users, no demo pins and no shared passwords in the repository.
 3. Register **A** (presenter) and **B** (friend) with your own emails. The
    generated handles (for example `calm-otter-42`) appear as `@handle` beside
    the email in the top bar. Friend rows show the **display name**, not the
-   handle. The drawer with Friends, Who can see me, Friend locations and
-   Private notes is open on a wide window; use the **☰** button if it is
-   collapsed.
+   handle. The drawer (**☰**, bottom-right on the map) holds Friends, Who can
+   see me, Friend locations and Private notes.
 4. A -> Friends -> enter B's handle -> **Send request**. B -> reload (Ctrl+R)
    -> wait for the **PENDING** badge and the **Accept** button -> **Accept**.
    A -> reload -> wait for **ACCEPTED** and the **Sharing** button. A reload
@@ -196,7 +195,7 @@ different. The **Friend locations** row is the proof of the share.
   windows and wait 8-20 s; the lists fill asynchronously. A fixed 1-2 s wait
   will read empty lists.
 - **Old cached UI:** Ctrl+Shift+R once; the service worker cache version is
-  `pinpoint-offline-v3`.
+  `pinpoint-offline-v4`.
 - **Route fails or says "Routing is busy, try again.":** click **Directions**
   again. The server allows two concurrent routes and caches identical
   endpoints for 5 minutes; a repeated request returned in 2.6 s. The route

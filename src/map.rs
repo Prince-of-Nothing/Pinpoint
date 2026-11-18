@@ -431,6 +431,32 @@ pub fn render_map_with(
             }
         }
 
+        // Private daily trail (owner-only), under the pins.
+        if state.history.len() > 1 {
+            let points: Vec<Pos2> = state
+                .history
+                .iter()
+                .map(|point| {
+                    project_to_rect(
+                        point.latitude,
+                        point.longitude,
+                        state.map_center_lat,
+                        state.map_center_lon,
+                        z,
+                        map_rect,
+                    )
+                })
+                .collect();
+            painter.add(egui::Shape::line(
+                points.clone(),
+                Stroke::new(7.0_f32, theme::BG),
+            ));
+            painter.add(egui::Shape::line(
+                points,
+                Stroke::new(3.5_f32, theme::ACCENT.gamma_multiply(0.8)),
+            ));
+        }
+
         // Selected search/reverse-geocode place (web `.marker.center`).
         if let Some(place) = &state.selected_place {
             let p = project_to_rect(

@@ -24,6 +24,7 @@ pub(crate) mod route;
 pub(crate) mod share_sheet;
 pub(crate) mod sharing;
 pub(crate) mod theme;
+pub(crate) mod today;
 pub(crate) mod trips;
 
 use crate::app::{CurrentScreen, PinpointApp};
@@ -85,6 +86,16 @@ enum PendingAction {
         lon: f64,
         accuracy: f64,
     },
+    CreateNote {
+        latitude: f64,
+        longitude: f64,
+        label: String,
+        message: String,
+    },
+    DeleteNote {
+        id: i64,
+    },
+    RefreshToday,
     SearchPlaces {
         query: String,
     },
@@ -228,6 +239,9 @@ pub struct PinpointAppUI {
     register_full_name: String,
     // Friends screen
     friend_handle: String,
+    // Today screen: private notes composer
+    note_label: String,
+    note_message: String,
     // Sharing screen
     share_direction: String,
     share_precision: String,
@@ -363,6 +377,8 @@ impl PinpointAppUI {
             register_password: String::new(),
             register_full_name: String::new(),
             friend_handle: String::new(),
+            note_label: String::new(),
+            note_message: String::new(),
             share_direction: "to_friend".to_string(),
             share_precision: "exact".to_string(),
             share_duration: String::new(),
@@ -828,6 +844,22 @@ impl PinpointAppUI {
                 }
                 PendingAction::PublishLocation { lat, lon, accuracy } => {
                     let _ = app.publish_location(lat, lon, accuracy).await;
+                }
+                PendingAction::CreateNote {
+                    latitude,
+                    longitude,
+                    label,
+                    message,
+                } => {
+                    let _ = app
+                        .create_place_note(latitude, longitude, label, message)
+                        .await;
+                }
+                PendingAction::DeleteNote { id } => {
+                    let _ = app.delete_place_note(id).await;
+                }
+                PendingAction::RefreshToday => {
+                    let _ = app.refresh_today().await;
                 }
                 PendingAction::SearchPlaces { query } => {
                     let v = crate::security::validation::validate_search_query(&query);
@@ -1311,6 +1343,7 @@ impl PinpointAppUI {
         };
         let screens = [
             (CurrentScreen::Map, key::MAP),
+            (CurrentScreen::Today, "Today"),
             (CurrentScreen::Friends, key::FRIENDS),
             (CurrentScreen::Sharing, key::SHARING),
             (CurrentScreen::Places, key::PLACES),
@@ -1795,6 +1828,7 @@ impl eframe::App for PinpointAppUI {
                         ui.add_space(8.0);
                         let mut tools: Vec<(CurrentScreen, &str, &str)> = vec![
                             (CurrentScreen::Map, "Map", "M"),
+                            (CurrentScreen::Today, "Today", "T"),
                             (CurrentScreen::Friends, "Friends", "F"),
                             (CurrentScreen::Sharing, "Share", "S"),
                             (CurrentScreen::Places, "Places", "P"),
@@ -1972,6 +2006,13 @@ impl eframe::App for PinpointAppUI {
             match self.app.current_screen() {
                 CurrentScreen::Map => {
                     self.draw_map_screen(ui, ctx);
+                }
+                CurrentScreen::Today => {
+                    if self.app.is_signed_in() {
+                        self.draw_today_screen(ui, ctx);
+                    } else {
+                        self.draw_sign_in_required(ui, ctx, "Today");
+                    }
                 }
                 CurrentScreen::Login => self.draw_login_form(ui, ctx),
                 CurrentScreen::Register => self.draw_register(ui, ctx),

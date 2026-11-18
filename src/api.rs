@@ -13,7 +13,7 @@
 
 use crate::models::{
     AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
-    LocationShare, LoginResponse, SessionInfo, User,
+    LocationPoint, LocationShare, LoginResponse, PlaceNote, SessionInfo, User,
 };
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use serde::{Deserialize, Serialize};
@@ -645,6 +645,58 @@ impl ApiClient {
             .await?;
         let response = Self::check(response, "Failed to fetch my location").await?;
         Ok(response.json().await?)
+    }
+
+    pub async fn get_location_history(&self) -> anyhow::Result<Vec<LocationPoint>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/locations/history", None)
+            .await?;
+        let response = Self::check(response, "Failed to fetch the daily trail").await?;
+        Ok(response.json().await?)
+    }
+
+    pub async fn get_place_notes(&self) -> anyhow::Result<Vec<PlaceNote>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/locations/notes", None)
+            .await?;
+        let response = Self::check(response, "Failed to fetch private notes").await?;
+        Ok(response.json().await?)
+    }
+
+    pub async fn create_place_note(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        label: &str,
+        message: &str,
+        photo: Option<&str>,
+    ) -> anyhow::Result<PlaceNote> {
+        let mut body = serde_json::json!({
+            "latitude": latitude,
+            "longitude": longitude,
+            "label": label,
+            "message": message,
+        });
+        if let Some(photo) = photo {
+            body["photo"] = serde_json::Value::String(photo.to_string());
+        }
+        let response = self
+            .request(reqwest::Method::POST, "/api/v1/locations/notes", Some(body))
+            .await?;
+        let response = Self::check(response, "Failed to save the private note").await?;
+        Ok(response.json().await?)
+    }
+
+    pub async fn delete_place_note(&self, id: i64) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::DELETE,
+                &format!("/api/v1/locations/notes/{id}"),
+                None,
+            )
+            .await?;
+        Self::check(response, "Failed to delete the private note").await?;
+        Ok(())
     }
 
     pub async fn delete_share(&self, share_id: i64) -> anyhow::Result<()> {
@@ -1326,6 +1378,29 @@ impl crate::backend::Backend for ApiClient {
         &'a self,
     ) -> crate::backend::BackendFuture<'a, crate::models::FriendLocation> {
         Box::pin(async move { ApiClient::get_my_location(self).await })
+    }
+    fn get_location_history(
+        &self,
+    ) -> crate::backend::BackendFuture<'_, Vec<crate::models::LocationPoint>> {
+        Box::pin(async move { ApiClient::get_location_history(self).await })
+    }
+    fn get_place_notes(&self) -> crate::backend::BackendFuture<'_, Vec<crate::models::PlaceNote>> {
+        Box::pin(async move { ApiClient::get_place_notes(self).await })
+    }
+    fn create_place_note<'a>(
+        &'a self,
+        latitude: f64,
+        longitude: f64,
+        label: &'a str,
+        message: &'a str,
+        photo: Option<&'a str>,
+    ) -> crate::backend::BackendFuture<'a, crate::models::PlaceNote> {
+        Box::pin(async move {
+            ApiClient::create_place_note(self, latitude, longitude, label, message, photo).await
+        })
+    }
+    fn delete_place_note<'a>(&'a self, id: i64) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::delete_place_note(self, id).await })
     }
     fn map_capabilities(&self) -> crate::backend::BackendFuture<'_, crate::osm::MapCapabilities> {
         Box::pin(async move { ApiClient::map_capabilities(self).await })

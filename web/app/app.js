@@ -1058,15 +1058,98 @@ $("locate-button").addEventListener("click", async () => {
 
 const drawer = $("social-drawer");
 const drawerToggle = $("drawer-toggle");
-function setDrawer(open) {
-  drawer.classList.toggle("closed", !open);
-  drawer.classList.toggle("open", open);
+const drawerHead = drawer.querySelector(".drawer-head");
+const tabs = [...document.querySelectorAll(".tab-bar [data-tab]")];
+const TAB_CARDS = {
+  friends: "friends-card",
+  sharing: "shares-card",
+  today: "today-card",
+  account: "account-card",
+};
+const SHEET_IDS = ["place-sheet", "share-sheet", "route-panel"];
+let drawerCloseTimer = null;
+
+function setActiveTab(name) {
+  for (const button of tabs) {
+    const active = button.dataset.tab === name;
+    button.classList.toggle("active", active);
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  }
+}
+
+function setDrawer(open, animate = true) {
+  clearTimeout(drawerCloseTimer);
+  drawer.classList.remove("closing");
+  if (open) {
+    drawer.classList.remove("closed");
+    drawer.classList.add("open");
+  } else if (animate && drawer.classList.contains("open")) {
+    drawer.classList.remove("open");
+    drawer.classList.add("closing");
+    drawerCloseTimer = setTimeout(() => {
+      drawer.classList.add("closed");
+      drawer.classList.remove("closing");
+    }, 180);
+  } else {
+    drawer.classList.remove("open");
+    drawer.classList.add("closed");
+  }
   drawerToggle.setAttribute("aria-expanded", String(open));
+  if (!open) setActiveTab("map");
 }
 setDrawer(false);
 drawerToggle.addEventListener("click", () => {
   setDrawer(drawerToggle.getAttribute("aria-expanded") !== "true");
 });
+
+for (const button of tabs) {
+  button.addEventListener("click", () => {
+    const name = button.dataset.tab;
+    if (name === "map") {
+      for (const id of SHEET_IDS) $(id).classList.add("hidden");
+      setDrawer(false);
+      return;
+    }
+    setDrawer(true);
+    setActiveTab(name);
+    $(TAB_CARDS[name])?.scrollIntoView({
+      block: "start",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
+  });
+}
+
+// Drag the sheet by its header; the body keeps its normal scroll.
+let dragStartY = 0;
+let dragDistance = 0;
+let drawerDragging = false;
+
+drawerHead.addEventListener("pointerdown", (event) => {
+  if (event.button !== 0 || event.target.closest("button")) return;
+  drawerDragging = true;
+  dragStartY = event.clientY;
+  dragDistance = 0;
+  drawer.classList.add("dragging");
+  drawerHead.setPointerCapture(event.pointerId);
+});
+drawerHead.addEventListener("pointermove", (event) => {
+  if (!drawerDragging) return;
+  dragDistance = Math.max(0, event.clientY - dragStartY);
+  drawer.style.transform = `translateY(${dragDistance}px)`;
+});
+function endDrawerDrag() {
+  if (!drawerDragging) return;
+  drawerDragging = false;
+  drawer.classList.remove("dragging");
+  drawer.style.transform = "";
+  if (dragDistance > 90) setDrawer(false, false);
+  dragDistance = 0;
+}
+drawerHead.addEventListener("pointerup", endDrawerDrag);
+drawerHead.addEventListener("pointercancel", endDrawerDrag);
 
 $("account-name-form").addEventListener("submit", (e) => {
   e.preventDefault();

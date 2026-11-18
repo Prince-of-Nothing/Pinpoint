@@ -1,10 +1,13 @@
 # cargo-audit policy.
 #
-# Accepted 2026-11-18: every entry below is an unmaintained/unsound warning
-# with no fixed upgrade available. They are transitive desktop dependencies
-# (eframe/zbus/glib) plus chrono, which is used only for RFC 3339 timestamps.
-# No known vulnerability is open. Re-check when eframe/zbus ship updates; the
-# chrono replacement is tracked in the post-midterm dependency work.
+# Accepted 2026-11-18: every entry below is an unmaintained/unsound warning.
+# None has a fixed upgrade in the current dependency tree: glib is patched in
+# 0.20.0, but the pinned eframe/zbus chain still resolves 0.18.5. They are
+# transitive desktop dependencies (eframe/zbus/glib) plus chrono, which is used
+# only for RFC 3339 timestamps. No known vulnerability is open elsewhere.
+# Re-check when eframe/zbus ship updates; remove the glib ignore once they
+# resolve >= 0.20.0; the chrono replacement is tracked in the post-midterm
+# dependency work.
 [advisories]
 ignore = [
   "RUSTSEC-2026-0543", # chrono is unmaintained

@@ -57,5 +57,13 @@
             android:exported="false"
             android:foregroundServiceType="location"
             android:stopWithTask="false" />
+
+        <receiver
+            android:name=".LocationWarmupReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.pinpoint.desktop.LOCATION_WARMUP" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

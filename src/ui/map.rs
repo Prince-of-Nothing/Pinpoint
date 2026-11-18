@@ -8,6 +8,25 @@ use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_map_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        // Android asks once on the first map view, then centres on the fix
+        // when the system dialog is accepted. Desktop and iOS stay unchanged.
+        let android = cfg!(target_os = "android");
+        if android && !self.location_prompted {
+            self.location_prompted = true;
+            if crate::platform::ensure_location_permission()
+                == crate::platform::LocationPermission::Granted
+            {
+                self.spawn_action(PendingAction::Locate, ctx);
+            } else {
+                self.location_pending = true;
+                self.app.set_notice(Some(
+                    "Allow location access to show your position on the map.".to_string(),
+                ));
+            }
+        } else if self.location_pending && crate::platform::location_permission_granted() {
+            self.location_pending = false;
+            self.spawn_action(PendingAction::Locate, ctx);
+        }
         if Self::is_compact(ctx) {
             self.draw_mobile_map_screen(ui, ctx);
             return;
@@ -685,42 +704,17 @@ impl PinpointAppUI {
                 .fixed_pos(egui::pos2(width - 56.0, top + 120.0))
                 .show(ctx, |ui| {
                     ui.vertical(|ui| {
-                        if ui
-                            .add(
-                                egui::Button::new("+")
-                                    .min_size(egui::vec2(44.0, 44.0))
-                                    .corner_radius(egui::CornerRadius::same(20)),
-                            )
-                            .clicked()
-                        {
+                        if ui.add(round_button("+")).clicked() {
                             zoom_delta = 1;
                         }
-                        if ui
-                            .add(
-                                egui::Button::new("−")
-                                    .min_size(egui::vec2(44.0, 44.0))
-                                    .corner_radius(egui::CornerRadius::same(20)),
-                            )
-                            .clicked()
-                        {
+                        if ui.add(round_button("−")).clicked() {
                             zoom_delta = -1;
                         }
-                        if ui
-                            .add(
-                                egui::Button::new("◎")
-                                    .min_size(egui::vec2(44.0, 44.0))
-                                    .corner_radius(egui::CornerRadius::same(20)),
-                            )
-                            .clicked()
-                        {
+                        if ui.add(round_button("◎")).clicked() {
                             locate = true;
                         }
                         if ui
-                            .add(
-                                egui::Button::new(if map_dark { "L" } else { "D" })
-                                    .min_size(egui::vec2(44.0, 44.0))
-                                    .corner_radius(egui::CornerRadius::same(20)),
-                            )
+                            .add(round_button(if map_dark { "L" } else { "D" }))
                             .on_hover_text(if map_dark {
                                 "Use light map"
                             } else {
@@ -730,24 +724,12 @@ impl PinpointAppUI {
                         {
                             toggle_style = true;
                         }
-                        if ui
-                            .add(
-                                egui::Button::new("↗")
-                                    .min_size(egui::vec2(44.0, 44.0))
-                                    .corner_radius(egui::CornerRadius::same(20)),
-                            )
-                            .on_hover_text("Route")
-                            .clicked()
-                        {
+                        if ui.add(round_button("↗")).on_hover_text("Route").clicked() {
                             open_route = true;
                         }
                         if crate::platform::map_webview_supported() {
                             if ui
-                                .add(
-                                    egui::Button::new(if webview_visible { "▣" } else { "▦" })
-                                        .min_size(egui::vec2(44.0, 44.0))
-                                        .corner_radius(egui::CornerRadius::same(20)),
-                                )
+                                .add(round_button(if webview_visible { "▣" } else { "▦" }))
                                 .on_hover_text("Offline MapLibre map")
                                 .clicked()
                             {
@@ -756,11 +738,7 @@ impl PinpointAppUI {
                             if !webview_visible {
                                 if let Some((lat, lon)) = self.webview_map_click {
                                     if ui
-                                        .add(
-                                            egui::Button::new("⌖")
-                                                .min_size(egui::vec2(44.0, 44.0))
-                                                .corner_radius(egui::CornerRadius::same(20)),
-                                        )
+                                        .add(round_button("⌖"))
                                         .on_hover_text(format!(
                                             "Share WebView point ({lat:.4}, {lon:.4})"
                                         ))
@@ -771,14 +749,7 @@ impl PinpointAppUI {
                                 }
                             }
                         }
-                        if ui
-                            .add(
-                                egui::Button::new("☰")
-                                    .min_size(egui::vec2(44.0, 44.0))
-                                    .corner_radius(egui::CornerRadius::same(20)),
-                            )
-                            .clicked()
-                        {
+                        if ui.add(round_button("☰")).clicked() {
                             menu = true;
                         }
                     });
@@ -1098,6 +1069,15 @@ impl PinpointAppUI {
             }
         }
     }
+}
+
+/// Floating map control: solid panel fill so the glyph stays readable over
+/// the light basemap.
+fn round_button(text: &str) -> egui::Button<'_> {
+    egui::Button::new(text)
+        .min_size(egui::vec2(44.0, 44.0))
+        .corner_radius(egui::CornerRadius::same(20))
+        .fill(theme::PANEL)
 }
 
 /// Percent-encode a URL path/query component (UTF-8 bytes, unreserved kept).

@@ -298,6 +298,17 @@ pub fn ensure_location_permission() -> LocationPermission {
     LocationPermission::Granted
 }
 
+/// Read the foreground location grant without showing a system dialog.
+#[cfg(target_os = "android")]
+pub fn location_permission_granted() -> bool {
+    android_intent::has_permission()
+}
+
+#[cfg(not(target_os = "android"))]
+pub fn location_permission_granted() -> bool {
+    true
+}
+
 /// Request "all the time" background location (and the notification
 /// permission on Android 13+). Android 11+ may require the user to choose
 /// "Allow all the time" in app settings after this request.
@@ -1407,6 +1418,13 @@ mod android_intent {
         Ok(false)
     }
 
+    pub(super) fn has_permission() -> bool {
+        with_activity(|env, activity| -> anyhow::Result<bool> {
+            has_location_permission(env, activity)
+        })
+        .unwrap_or(false)
+    }
+
     pub(super) fn ensure_permission() -> super::LocationPermission {
         let granted = with_activity(|env, activity| -> anyhow::Result<bool> {
             has_location_permission(env, activity)
@@ -1416,11 +1434,21 @@ mod android_intent {
             return super::LocationPermission::Granted;
         }
         let requested = with_activity(|env, activity| -> anyhow::Result<()> {
-            let permission = JString::new(env, "android.permission.ACCESS_FINE_LOCATION")?;
             let class_name = jni::strings::JNIString::from("java/lang/String");
             let class = env.find_class(class_name)?;
-            let array = env.new_object_array(1, &class, JObject::null())?;
-            array.set_element(env, 0, &permission)?;
+            // Android 12+ ignores a fine-location request that does not also
+            // ask for coarse; request both in one dialog.
+            let array = env.new_object_array(2, &class, JObject::null())?;
+            for (index, permission) in [
+                "android.permission.ACCESS_FINE_LOCATION",
+                "android.permission.ACCESS_COARSE_LOCATION",
+            ]
+            .iter()
+            .enumerate()
+            {
+                let permission = JString::new(env, *permission)?;
+                array.set_element(env, index, &permission)?;
+            }
             let name = jni::strings::JNIString::from("requestPermissions");
             let runtime =
                 jni::signature::RuntimeMethodSignature::from_str("([Ljava/lang/String;I)V")?;

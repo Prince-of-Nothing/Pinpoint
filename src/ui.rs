@@ -321,6 +321,9 @@ pub struct PinpointAppUI {
     mobile_nav_open: bool,
     mobile_publish_open: bool,
     mobile_selected_place: Option<crate::osm::SearchPlace>,
+    /// First map view asked for location; a grant retries the fix once.
+    location_prompted: bool,
+    location_pending: bool,
     /// Last point reported by the Android MapLibre WebView bridge.
     webview_map_click: Option<(f64, f64)>,
     // On-device PIN app lock
@@ -439,6 +442,8 @@ impl PinpointAppUI {
             mobile_nav_open: false,
             mobile_publish_open: false,
             mobile_selected_place: None,
+            location_prompted: false,
+            location_pending: false,
             webview_map_click: None,
             lock_enabled,
             locked: lock_enabled,
@@ -1051,35 +1056,60 @@ impl PinpointAppUI {
                 PendingAction::PublishGpsLocation => {
                     let _ = app.publish_my_location().await;
                 }
-                PendingAction::Locate => match app.locate() {
-                    Some((lat, lon, accuracy)) => {
-                        let data = app.data();
-                        let mut d = data.lock().unwrap();
-                        let (user_id, user_name) = d
-                            .user
-                            .as_ref()
-                            .map(|u| (u.id, u.full_name.clone()))
-                            .unwrap_or((0, "Me".to_string()));
-                        d.my_location = Some(crate::models::FriendLocation {
-                            user_id,
-                            user_name,
-                            latitude: lat,
-                            longitude: lon,
-                            precision_level: "exact".to_string(),
-                            updated_at: chrono::Utc::now().to_rfc3339(),
-                            accuracy: Some(accuracy),
-                        });
-                        d.map_center_lat = lat;
-                        d.map_center_lon = lon;
-                        d.map_zoom = d.map_zoom.max(14);
-                        drop(d);
-                        app.set_notice(Some(format!("Located: {lat:.5}, {lon:.5}")));
+                PendingAction::Locate => {
+                    if crate::platform::ensure_location_permission()
+                        != crate::platform::LocationPermission::Granted
+                    {
+                        app.set_notice(Some(
+                            "Allow location access in system settings, then tap Locate again."
+                                .to_string(),
+                        ));
+                        return;
                     }
-                    None => app.set_error(Some(
-                        "Location unavailable — no GPS fix. Set PINPOINT_GPS_FIX or publish manually."
-                            .to_string(),
-                    )),
-                },
+                    let fix = match app.locate() {
+                        Some(fix) => Some(fix),
+                        None => {
+                            app.set_notice(Some("Getting your location...".to_string()));
+                            tokio::task::spawn_blocking(|| {
+                                crate::platform::request_single_fix(std::time::Duration::from_secs(
+                                    20,
+                                ))
+                            })
+                            .await
+                            .ok()
+                            .flatten()
+                        }
+                    };
+                    match fix {
+                        Some((lat, lon, accuracy)) => {
+                            let data = app.data();
+                            let mut d = data.lock().unwrap();
+                            let (user_id, user_name) = d
+                                .user
+                                .as_ref()
+                                .map(|u| (u.id, u.full_name.clone()))
+                                .unwrap_or((0, "Me".to_string()));
+                            d.my_location = Some(crate::models::FriendLocation {
+                                user_id,
+                                user_name,
+                                latitude: lat,
+                                longitude: lon,
+                                precision_level: "exact".to_string(),
+                                updated_at: chrono::Utc::now().to_rfc3339(),
+                                accuracy: Some(accuracy),
+                            });
+                            d.map_center_lat = lat;
+                            d.map_center_lon = lon;
+                            d.map_zoom = d.map_zoom.max(14);
+                            drop(d);
+                            app.set_notice(Some(format!("Located: {lat:.5}, {lon:.5}")));
+                        }
+                        None => app.set_error(Some(
+                            "No location fix yet. Check that device Location is on, then try again."
+                                .to_string(),
+                        )),
+                    }
+                }
                 PendingAction::ExportGpx { name } => {
                     let route = app.data().lock().unwrap().last_route.clone();
                     match route {

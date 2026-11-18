@@ -116,7 +116,7 @@ change is visible.
 | Approximate | `47.02, 28.83` |
 | City only | `47.0, 28.8` |
 | Trail | 2 points, newest first, 24-hour window |
-| Offline pack | Moldova, 139 MB transfer, 204 MB installed |
+| Offline pack | Moldova installed in web OPFS (~220 MB); native pack 138.5/204 MB |
 | Live health | `"version":"2.6.1"` |
 
 ## 4. Fallbacks

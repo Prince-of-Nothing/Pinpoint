@@ -6,9 +6,16 @@ from the live **v2.6.1** system.
 | File | What it is | Use |
 |---|---|---|
 | [`Midterm2-Report.md`](./Midterm2-Report.md) | Full report: problem, scope, architecture, consent/security, data, verification, limitations, next steps, traceability | Submit as the written documentation |
+| [`Midterm2-Report.pdf`](./Midterm2-Report.pdf) | 8-page A4 PDF of the report | Submit or print |
 | [`Demo-Script.md`](./Demo-Script.md) | Pre-flight, exact run of show, expected values, fallbacks, 3-minute cut, phone steps | Rehearse and run the live demo |
 | [`Presentation.md`](./Presentation.md) | 13-slide outline with speaker notes, timing and Q&A preparation | Rehearse the talk |
 | [`slides.html`](./slides.html) | Self-contained visual deck (dark Pinpoint theme, keyboard navigation, print to PDF) | Present or export to PDF |
+| [`Pinpoint-Midterm2.pdf`](./Pinpoint-Midterm2.pdf) | 13-slide A4 landscape deck PDF | Present or keep as backup |
+| [`Handout.md`](./Handout.md) | Two-page printable summary of scope, security, evidence and limits | Give to the examiner |
+| [`Checklist.md`](./Checklist.md) | Pre-flight, accounts, phone, offline and evidence checklist | Tick before the defence |
+| [`Q-and-A.md`](./Q-and-A.md) | 20 likely questions with verified/reported/not-built answers | Prepare for questions |
+| [`Admin-Demo.md`](./Admin-Demo.md) | Admin promotion and verification runbook | Use only with the deployment DB |
+| [`reviews/`](./reviews) | Deck QA, artifact, live security/a11y and fact-check evidence | Supporting evidence, not submitted prose |
 | [`assets/`](./assets) | Current screenshots: login, map, Today, notes, mobile, native theme, offline pack, offline route | Slides and report references |
 
 ## Quick start

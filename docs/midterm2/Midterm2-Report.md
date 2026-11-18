@@ -18,21 +18,22 @@ location access until the owner creates an explicit, directional share with a
 chosen precision and (optionally) an expiry. The server enforces every access
 decision; the client is never trusted.
 
-The project is implemented as one Rust codebase with three client surfaces:
-a web client, a desktop client (eframe/egui), and an Android build of the same
-client. A Rust/Axum API persists users, friendships, shares, the latest
+The project is implemented as one Rust core (API, desktop and Android clients)
+plus a vanilla-ES-modules web client: three client surfaces. A Rust/Axum API
+persists users, friendships, shares, the latest
 location, a private 24-hour trail, private place notes, check-ins, emergencies
-and diagnostics in PostgreSQL. Offline map packs for Moldova and Romania are
-published from `pinpoint-maps`; the web client can install the Moldova pack
-into OPFS and search it without a network, while the native map server routes
-on the installed graph.
+and diagnostics in PostgreSQL. Offline map packs are published from
+`pinpoint-maps`; the Moldova pack ships in both clients, while Romania data is
+published upstream but is not yet listed in either client catalog. The web
+client installs the Moldova pack into OPFS and searches it without a network;
+the native map server routes on the installed graph.
 
 At Midterm 2 the delivered system is **v2.6.1**, deployed and verified live:
 registration and sessions, friendships, consent-based sharing, pause/revoke,
 exact/approximate/city-only precision, the private Today trail, private photo
 notes, offline map/search, online search and routing, account deletion,
 diagnostics, and a signed Android APK. No demo accounts and no seeded pins are
-shipped; every account is registered through the public flow.
+shipped; demo accounts are registered through the public flow.
 
 The report covers the problem, the delivered scope, architecture, consent and
 security model, data model, verification evidence, the demo, limitations and
@@ -73,13 +74,13 @@ Goals:
 | Area | Delivered | Status |
 |---|---|---|
 | Identity | Email registration, login, optional TOTP, opaque sessions, sign-out, sign-out everywhere, password change, account deletion | Live |
-| Friends | Request by exact handle, accept/reject, remove; handles are public, emails are not searchable | Live |
+| Friends | Request by exact handle, accept/reject, remove; handles are public, emails are not searchable by other residents | Live |
 | Sharing consent | Explicit share sheet with named friend, precision, duration, a confirmation summary, and an active/paused/expired/revoked state | Live |
 | Location | Publish manual or GPS coordinates; friend reads only through an active, unexpired, owner-created share | Live |
-| Daily trail | A private 24-hour trail of the owner's published points, listed and drawn on the map; owner-only, 7-day server retention | Live |
-| Private notes | Label + message + optional JPEG/PNG photo attached to a place; downscaled in the browser, bounded to 675 KB, owner-only | Live (web); text-only native |
+| Daily trail | A private 24-hour trail of the owner's published points, listed and drawn on the map; owner-only, pruned to 7 days on the next publish | Live |
+| Private notes | Label + message + optional JPEG/PNG photo attached to a place; downscaled in the browser, server-enforced at about 675 KB decoded, owner-only | Live (web); text-only native |
 | Map | OpenFreeMap online basemap, OSM search, OSRM driving directions, saved/recent places and routes | Live |
-| Offline | Moldova pack (139 MB transfer, 204 MB installed), OPFS install, service-worker range serving, offline search; Romania pack in the catalog | Live web; native map server |
+| Offline | Moldova native pack: 138.5 MB transfer / 204.0 MB installed; web OPFS pack: 220.3 MB (93.2 MB PMTiles + 6.8 MB search SQLite + 120.3 MB Valhalla); OPFS install, service-worker range serving, offline search. Romania data is published from `pinpoint-maps` but is not in either client catalog | Live web; native map server |
 | Account | Active sessions with revoke, display name, diagnostics report, delete account | Live |
 | Admin | Role-gated overview, users, diagnostics triage and append-only audit | Implemented; demo needs DB promotion |
 | Clients | Web, desktop, Android APK (`arm64-v8a` + `armeabi-v7a`), native map server | v2.6.1 |
@@ -98,7 +99,7 @@ flowchart TB
     MapWin["Native map server<br/>/map/* + packs"]
   end
 
-  API["Rust API<br/>Axum /api/v1<br/>session + CSRF + rate limits"]
+  API["Rust API<br/>Axum /api/v1<br/>session + CSRF + account lockout"]
   PG[("PostgreSQL<br/>users, sessions, friendships,<br/>shares, locations, history, notes,<br/>check-ins, emergencies, diagnostics")]
   Tiles["OpenFreeMap<br/>online basemap"]
   OSM["OSM services<br/>Nominatim / OSRM"]
@@ -114,10 +115,11 @@ flowchart TB
 
 The API is a single Rust service (the binaries can also run split by service:
 auth, users, locations, map, diagnostics, admin). PostgreSQL is authoritative;
-the in-memory store is used by unit tests and local demo mode. Every request
-goes through the same middleware order: security headers, session validation,
-CSRF check on unsafe methods, input validation, authorization, then the
-handler.
+the in-memory store is used by unit tests and local demo mode. HTML and static
+responses are sent by handlers that apply the security headers, session
+validation and CSP. JSON API responses currently do not carry the same header
+set. During a request, handlers validate input, check authorization, and then
+write the response.
 
 ### Request flow for a friend location read
 
@@ -158,20 +160,25 @@ missing or foreign share returns the same not-found envelope.
 and are owner-scoped; another user cannot list or delete them.
 
 **Sessions.** Argon2id password hashes, opaque 256-bit server-side sessions,
-`HttpOnly` + `SameSite=Lax` + `Secure` cookies in production, a CSRF token
-bound to the session and echoed in `X-CSRF-Token` on every unsafe request.
-Sessions are revocable; "sign out everywhere" and password changes invalidate
-them. Login and registration are rate-limited and lock out repeated failures.
+`HttpOnly` + `SameSite=Lax` cookies, a CSRF token bound to the session and
+echoed in `X-CSRF-Token` on every unsafe request. Sessions are revocable;
+"sign out everywhere" and password changes invalidate them. Login locks an
+account after five failures. The current build does **not** set the `Secure`
+cookie flag even on HTTPS, has no `__Host-` prefix and no HSTS; there is no
+per-IP server-side rate limit yet. These are known hardening gaps.
 
 **Data minimization.** The server stores the latest location plus a bounded
 history (24 hours visible; 7 days retained) and private notes. It does not
-store continuous background tracking. Friend coordinates are never sent to
-Nominatim/OSRM/Overpass; those calls receive only the query or the route
-endpoints.
+store continuous background tracking. The friend list, account data and trail
+are never sent to Nominatim/OSRM/Overpass; a search sends only the query, and a
+route sends only the endpoints being routed (which can be a friend's pin the
+user chose to route to).
 
 **Transport.** HTTPS off loopback; plain HTTP is only accepted for loopback
 development (ADR-0006). The web client is same-origin, with a strict CSP,
-`frame-ancestors 'none'`, no third-party scripts and no trackers.
+`frame-ancestors 'none'`, no third-party scripts and no trackers. The CSP
+allows inline styles (MapLibre) and `wasm-unsafe-eval` (SQLite); those are
+documented relaxations. HSTS is not sent.
 
 ## 5. Data and persistence
 
@@ -183,7 +190,7 @@ admin audit.
 | Table | Purpose | Retention / access |
 |---|---|---|
 | `pinpoint_users` | Account, role, password hash, MFA fields | Until account deletion |
-| `pinpoint_sessions` | Opaque session id, CSRF token, activity | Idle/absolute expiry; revoked on logout |
+| `pinpoint_sessions` | Opaque session id, CSRF token, activity | Sliding idle expiry; revoked on logout |
 | `pinpoint_friendships` | Requester/receiver/status | Until removed or account deletion |
 | `pinpoint_shares` | Owner, friendship, direction, precision, expiry, active | Until revoked; expired rows fail closed |
 | `pinpoint_locations` | Latest published location per user | Replaced on publish; deleted with account |
@@ -193,11 +200,11 @@ admin audit.
 | `pinpoint_diagnostic_reports` | User-initiated PII-free reports | Admin triage |
 | `pinpoint_admin_audit` | Append-only admin actions | Read-only audit |
 
-Direct writes are used for the security-sensitive rows that must survive a
-multi-replica refresh: users, sessions, friendships, shares, the latest
-location, the trail and notes. A whole-store snapshot no longer overwrites
-these tables, so a stale replica cannot resurrect a revoked share or lose a
-new publish.
+Direct writes are used for sessions, friendships, shares, the latest location,
+the trail and notes. A whole-store snapshot still upserts users, check-ins and
+emergencies, so a stale replica can revert a password, role or MFA change and
+can resurrect a deleted check-in. This is a known multi-replica gap scheduled
+before public use.
 
 ## 6. Verification and evidence
 
@@ -219,7 +226,7 @@ binaries. Relevant suites:
 |---|---|---|
 | `tests/location_consent.rs` | 10 passed | friendship is not consent; exact precision; pause/revoke owner-only; expiry; invalid values; owner-scoped check-ins/emergencies |
 | `tests/today.rs` | 2 passed | owner-only trail; owner-only notes; validation; unauthorised rejection |
-| `tests/contract.rs` | 11 passed | auth envelope, CSRF double-submit, numeric IDs, new history/notes paths |
+| `tests/contract.rs` | 11 passed | auth envelope, CSRF header on unsafe methods, numeric IDs, new history/notes paths |
 | `tests/assets.rs` | 11 passed | same-origin assets, CSP, service-worker cache rule, new UI wiring |
 | `tests/router_probe.rs` | 17 passed | route table, health, auth gates, admin gates |
 | `tests/account_delete.rs` | 1 passed | confirmation + password + cascade |
@@ -227,7 +234,8 @@ binaries. Relevant suites:
 
 ### 6.2 Live API checks
 
-A two-account live run on the deployed service verifies:
+A manual two-account live run on the deployed service checked these flows
+(14 assertions):
 
 - email registration and login;
 - friend request and accept;
@@ -243,28 +251,32 @@ A two-account live run on the deployed service verifies:
 
 Latest live run on **v2.6.1**: **14/14 functional checks** passed (two email
 accounts; trail, notes, exact share, pause/resume/revoke and account deletion).
-The only failed assertion was the script's expected version string (`2.6.0`),
-while the server correctly reports `2.6.1`. An earlier demo-hardening run on
-v2.5.2 passed **24/24** checks.
+This was a manual run; its transcript is not archived in the repository. The
+functional assertions all passed; the separate version-string assertion in the
+old script still expected `2.6.0`, while the server correctly reports `2.6.1`.
+An earlier demo-hardening run on v2.5.2 passed **24/24** checks (also
+unarchived).
 
 ### 6.3 Browser checks
 
-- Live web UI: **9/9** (empty-map prompt, online map, two-point trail, trail
-  toggle, photo preview, note save + map marker, mobile no horizontal
-  overflow).
-- Offline web: **7/7** (Moldova install, offline reload, offline map, offline
-  search).
-- Sharing UI unit checks: **17/17**.
+- Live web UI: **9/9** manual assertions (empty-map prompt, online map,
+  two-point trail, trail toggle, photo preview, note save + map marker, mobile
+  no horizontal overflow); transcript not archived.
+- Offline web: **7/7** manual assertions (Moldova install, offline reload,
+  offline map, offline search); transcript not archived.
+- Sharing UI unit checks: **17/17** (reproducible: `node web/app/test/sharing-ui.mjs`).
 
 ### 6.4 Artifact checks
 
 - Release `v2.6.1`: `pinpoint-android-2.6.1.apk`, **13,632,525 B**,
   versionName `2.6.1`, versionCode `20601`, `arm64-v8a` + `armeabi-v7a`,
-  signed with the Pinpoint release key (SHA-256
+  signed with the Pinpoint release certificate (SHA-256
   `2b326ca140f5d34ac61672fb3a5ec2596ced91f9a2fd618d50b52fe89dea7e49`).
 - Live `/health`: version `2.6.1`, PostgreSQL connected.
-- CI: Rust, wasm, map QA and offline data checks pass. The macOS job has an
-  unrelated flaky `offline_install` test; it is not part of the demo path.
+- CI: the v2.6.1 tag run fails only the dependency audit. The build, test,
+  wasm, macOS and Windows jobs pass. The audit flags nine unmaintained or
+  unsound transitive crates with no fixed upgrade; `audit.toml` now records
+  them as accepted risk, and no known vulnerability is open.
 
 ## 7. Demo and presentation
 
@@ -292,15 +304,15 @@ rows.
 | Friends by handle; accept/reject/remove | `tests/router_probe.rs`, live UI, `tests/location_consent.rs` |
 | Friendship alone grants no location | `tests/location_consent.rs::friend_locations_require_an_active_share` |
 | Explicit, directional share with precision and expiry | `src/server/locations_handlers.rs`, `tests/location_consent.rs`, live UI |
-| Pause/resume/revoke; owner-only | `tests/location_consent.rs`, live 24/24 |
+| Pause/resume/revoke; owner-only | `tests/location_consent.rs`, live 14/14 on v2.6.1 |
 | Exact coordinates are not rounded | `tests/location_consent.rs::exact_share_keeps_full_precision` |
-| Private 24-hour trail | `tests/today.rs`, `docs/midterm2/assets/03-today.png` |
-| Private text/photo notes | `tests/today.rs`, `assets/04-notes.png` |
-| Map, search, route | live OpenFreeMap/Nominatim/OSRM, `assets/02-map.png`, `assets/08-route.png` |
+| Private 24-hour trail | `tests/today.rs`, `docs/midterm2/assets/03-today-card.png` |
+| Private text/photo notes | `tests/today.rs`, `assets/04-note-card.png` |
+| Map, search, route | live OpenFreeMap/Nominatim/OSRM, `assets/map-clean.png`, `assets/08-route.png` |
 | Offline pack, map and search | `assets/07-offline.png`, offline 7/7 |
 | Account deletion and session revocation | `tests/account_delete.rs`, live erasure |
 | Diagnostics and admin gates | `tests/router_probe.rs`, `src/server/admin_handlers.rs` |
-| Security headers, CSP, same-origin assets | `tests/assets.rs`, `src/server/web_handlers.rs` |
+| Security headers, CSP, same-origin assets (HTML/assets; API JSON headers pending) | `tests/assets.rs`, `src/server/web_handlers.rs` |
 
 ## 9. Limitations and risks
 
@@ -319,9 +331,15 @@ rows.
   not a 24/7 GPS trace.
 - **Anonymous accounts are not demo-safe on the multi-replica deployment.**
   Use email accounts.
-- **macOS CI flake.** `offline_install::tests::installs_two_regions_into_separate_directories`
-  is timing-sensitive on the macOS runner; Linux/Windows and the release job
-  pass.
+- **Transport/cookie hardening is incomplete.** The live session cookie is
+  `HttpOnly; SameSite=Lax` but not `Secure` and has no `__Host-` prefix; HSTS is
+  absent. JSON API responses do not carry the security-header set that HTML and
+  assets do. Fix before exposing real accounts.
+- **Auth abuse limits are per account, not per IP.** Login locks after five
+  failures, but register/anonymous signup have no server-side IP limit.
+- **Dependency audit.** Nine transitive crates are unmaintained or carry a
+  soundness warning with no fixed upgrade; `audit.toml` records them as
+  accepted risk. No known vulnerability is open.
 - **Scale.** The service is a modular monolith with a per-request convergence
   refresh; it is sized for a demonstration and small trusted groups, not a
   global consumer workload.
@@ -380,5 +398,5 @@ curl https://pinpoint-uj4y.onrender.com/health
 
 ---
 
-*Prepared for Midterm 2. All screenshots are from the deployed v2.6.0/v2.6.1
-system; the native screenshot is the v2.6.0 theme build.*
+*Prepared for Midterm 2. Screenshots are from the demo environment; the PNGs
+carry no embedded version. The native screenshot is the v2.6.0 theme build.*

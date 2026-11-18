@@ -13,6 +13,8 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Changed
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
+### Added
+- [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 
 ## [2.6.1] - 2026-11-18
 ### Added

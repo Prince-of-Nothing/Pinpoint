@@ -92,6 +92,7 @@
     .shot { width: 100%; max-height: 62vh; object-fit: contain; border: 1px solid var(--border); border-radius: 0.7rem; background: var(--panel); }
     .shot.tall { max-height: 68vh; }
     .card-shot { width: auto; max-width: 100%; max-height: 60vh; display: block; margin: 0 auto; }
+    .shot.fit-width { width: 100%; height: auto; max-height: none; }
     .caption { color: var(--muted); font-size: 0.78rem; margin-top: 0.4rem; }
     .bullets { margin: 0.3rem 0 0 1.1rem; padding: 0; }
     .bullets li { margin-bottom: 0.45rem; }
@@ -109,7 +110,7 @@
     .close { align-items: flex-start; justify-content: center; }
     .close .big { font-family: var(--serif); font-size: clamp(3rem, 9vw, 8rem); line-height: 0.9; letter-spacing: -0.04em; }
     .close .url { margin-top: 1.6rem; font-size: 1.05rem; color: var(--accent); }
-    .nav { position: fixed; right: 1.2rem; bottom: 1rem; display: flex; gap: 0.4rem; z-index: 5; }
+    .nav { position: fixed; right: 1.2rem; top: 1rem; bottom: auto; display: flex; gap: 0.4rem; z-index: 5; }
     .nav button { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 0.45rem; padding: 0.5rem 0.75rem; font: inherit; cursor: pointer; min-height: 40px; }
     .nav button:hover { border-color: var(--accent); color: var(--accent); }
     @media print {
@@ -125,7 +126,7 @@
   <main id="deck">
     <section class="slide active hero">
       <div class="eyebrow">Midterm 2  ·  18 November 2026</div>
-      <div class="brand">Pinpoint</div>
+      <h1 class="brand">Pinpoint</h1>
       <div class="sub">Privacy-first location sharing for trusted friends. Friendship is not consent.</div>
       <div class="meta">
         <span>v2.6.1</span><span>Rust · Axum · PostgreSQL</span><span>Web · Desktop · Android</span>
@@ -157,7 +158,7 @@
         <div class="card"><h3>Precision</h3><p>Exact, approximate or city only; the server applies it on read.</p></div>
         <div class="card"><h3>Time + control</h3><p>Expiry, pause, resume, revoke; rejected or expired shares fail closed.</p></div>
       </div>
-      <p class="noarrow">Friendship alone shows nothing. The crossed arrow is the default.</p>
+      <p class="noarrow">Friendship alone shows nothing. No arrow is the default.</p>
       <div class="num">3 / 13</div>
     </section>
 
@@ -186,7 +187,7 @@
             <div class="card"><h3>Android</h3><p>same Rust core · signed APK</p></div>
           </div>
           <p style="text-align:center; color:var(--accent); font-size:1.4rem; margin:0.6rem 0;">↓ session + CSRF ↓</p>
-          <div class="card" style="text-align:center;"><h3 style="font-size:1.35rem;">Rust API · Axum</h3><p>/api/v1 · validation · authorization · rate limits</p></div>
+          <div class="card" style="text-align:center;"><h3 style="font-size:1.35rem;">Rust API · Axum</h3><p>/api/v1 · validation · authorization · account lockout</p></div>
           <p style="text-align:center; color:var(--accent); font-size:1.4rem; margin:0.6rem 0;">↓</p>
           <div class="card" style="text-align:center;"><h3 style="font-size:1.2rem;">PostgreSQL</h3><p>users · sessions · friendships · shares · locations · trail · notes</p></div>
         </div>
@@ -210,16 +211,16 @@
       <div class="checks">
         <div class="check">Argon2id password hashes</div>
         <div class="check">Opaque, server-side sessions</div>
-        <div class="check">HttpOnly + SameSite + Secure cookies</div>
-        <div class="check">CSRF double-submit on every unsafe method</div>
+        <div class="check">HttpOnly + SameSite cookies</div>
+        <div class="check">Session-bound CSRF token on every unsafe method</div>
         <div class="check">Owner, friendship, active flag, expiry, precision</div>
         <div class="check">Check-ins and emergencies owner-only</div>
         <div class="check">Strict CSP, same-origin assets, no trackers</div>
-        <div class="check">Rate limits and lockout on auth</div>
-        <div class="check">Friend coordinates never sent to OSM services</div>
+        <div class="check">Account lockout; no per-IP limit yet</div>
+        <div class="check">No friend list, account or trail sent to OSM services</div>
         <div class="check">Private trail and notes are owner-only</div>
       </div>
-      <p class="caption" style="margin-top:1.2rem;">Security-sensitive rows are written directly to PostgreSQL; a stale replica cannot resurrect a revoked share.</p>
+      <p class="caption" style="margin-top:1.2rem;">Every friend-location read re-checks the share row: owner, direction, active flag, expiry and precision.</p>
       <div class="num">6 / 13</div>
     </section>
 
@@ -229,11 +230,11 @@
       <div class="grid-2">
         <div>
           <img class="shot" src="assets/07-offline.png" alt="Moldova offline pack installed" />
-          <div class="caption">Moldova: 139 MB transfer, 204 MB installed. OPFS + range requests.</div>
+          <div class="caption">Moldova: web OPFS pack 220 MB; native pack 138.5 MB transfer / 204 MB installed. Range requests.</div>
         </div>
         <div>
           <img class="shot" src="assets/08-route.png" alt="Local route on the installed Moldova graph" />
-          <div class="caption">Native map server routes on the installed graph; web routing is online (OSRM).</div>
+          <div class="caption">Native map server routes on the installed graph; web routing is online (OSRM). <b>134.4 km · 1 h 38 min · Auto.</b></div>
         </div>
       </div>
       <div class="num">7 / 13</div>
@@ -245,11 +246,11 @@
       <div class="grid-2">
         <div>
           <img class="shot card-shot" src="assets/03-today-card.png" alt="Today trail with two points" />
-          <div class="caption">Private 24-hour trail; 7-day server retention; owner-only.</div>
+          <div class="caption">Private 24-hour trail; pruned to 7 days on publish; owner-only.</div>
         </div>
         <div>
           <img class="shot card-shot" src="assets/04-note-card.png" alt="Private photo note on the map" />
-          <div class="caption">Photo downscaled in the browser, bounded to 675 KB, validated and owner-only.</div>
+          <div class="caption">Photo downscaled in the browser; server-enforced at about 675 KB decoded; owner-only.</div>
         </div>
       </div>
       <div class="num">8 / 13</div>
@@ -267,7 +268,7 @@
           <div class="metric" style="margin-bottom:0.7rem;"><b>2.6.1</b><span>Android version</span></div>
           <div class="metric" style="margin-bottom:0.7rem;"><b>20601</b><span>versionCode</span></div>
           <div class="metric" style="margin-bottom:0.7rem;"><b>13.6 MB</b><span>signed APK</span></div>
-          <div class="metric"><b>arm64 + armv7</b><span>universal release</span></div>
+          <div class="metric"><b>arm64 + armv7</b><span>two-ABI release</span></div>
           <p class="caption" style="margin-top:0.7rem;">Today tab with the trail and text notes. Photos remain web-only in this build.</p>
         </div>
       </div>
@@ -289,7 +290,7 @@
         <tr><td>Consent</td><td>friendship ≠ consent · exact precision · pause/revoke · expiry · owner-only</td><td><span class="accent">10/10</span></td></tr>
         <tr><td>Today / notes</td><td>owner-only trail and notes · validation · 401</td><td><span class="accent">2/2</span></td></tr>
         <tr><td>Contract / assets</td><td>CSRF · owner paths · CSP · no API cache</td><td><span class="accent">22/22</span></td></tr>
-        <tr><td>Offline</td><td>install · reload offline · map · search</td><td><span class="accent">7/7</span></td></tr>
+        <tr><td>Offline</td><td>install · reload offline · map · search</td><td><span class="accent">7/7 manual</span></td></tr>
         <tr><td>Artifact</td><td>APK signature, versionCode, ABIs</td><td><span class="accent">verified</span></td></tr>
       </table>
       <div class="num">10 / 13</div>
@@ -312,7 +313,7 @@
           <p class="caption">Full steps and fallbacks: <b>Demo-Script.md</b></p>
         </div>
         <div>
-          <img class="shot" src="assets/map-clean.png" alt="Pinpoint map with search and OSM attribution" />
+          <img class="shot fit-width" src="assets/map-clean.png" alt="Pinpoint map with search and OSM attribution" />
         </div>
       </div>
       <div class="num">11 / 13</div>
@@ -330,7 +331,8 @@
             <li>Offline web routes are not built.</li>
             <li>Native photos are not built.</li>
             <li>Trail = explicit publishes, not background GPS.</li>
-            <li>macOS CI has an unrelated installer flake.</li>
+            <li>Audit: 9 unmaintained transitive deps accepted.</li>
+            <li>Cookie <code>Secure</code>/HSTS and API headers are missing.</li>
           </ul>
         </div>
         <div>
@@ -342,6 +344,8 @@
             <li>Offline web routing.</li>
             <li>Mobile photo picker.</li>
             <li>Targeted queries + load test; deterministic CI.</li>
+            <li>Per-IP auth limits; cookie/HSTS hardening.</li>
+            <li>Replace chrono; shrink audit ignores.</li>
           </ul>
         </div>
       </div>

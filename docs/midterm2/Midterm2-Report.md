@@ -24,7 +24,8 @@ persists users, friendships, shares, the latest
 location, a private 24-hour trail, private place notes, check-ins, emergencies
 and diagnostics in PostgreSQL. Offline map packs are published from
 `pinpoint-maps`; the Moldova pack ships in both clients, while Romania data is
-published upstream but is not yet listed in either client catalog. The web
+published upstream; the native Maps panel lists Romania as available, while
+the web catalog currently lists Moldova only. The web
 client installs the Moldova pack into OPFS and searches it without a network;
 the native map server routes on the installed graph.
 
@@ -80,7 +81,7 @@ Goals:
 | Daily trail | A private 24-hour trail of the owner's published points, listed and drawn on the map; owner-only, pruned to 7 days on the next publish | Live |
 | Private notes | Label + message + optional JPEG/PNG photo attached to a place; downscaled in the browser, server-enforced at about 675 KB decoded, owner-only | Live (web); text-only native |
 | Map | OpenFreeMap online basemap, OSM search, OSRM driving directions, saved/recent places and routes | Live |
-| Offline | Moldova native pack: 138.5 MB transfer / 204.0 MB installed; web OPFS pack: 220.3 MB (93.2 MB PMTiles + 6.8 MB search SQLite + 120.3 MB Valhalla); OPFS install, service-worker range serving, offline search. Romania data is published from `pinpoint-maps` but is not in either client catalog | Live web; native map server |
+| Offline | Moldova native pack: 138.5 MB transfer / 204.0 MB installed; web OPFS pack: 220.3 MB (93.2 MB PMTiles + 6.8 MB search SQLite + 120.3 MB Valhalla); OPFS install, service-worker range serving, offline search. Romania is listed in the native Maps panel; the web catalog lists Moldova only | Live web; native map server |
 | Account | Active sessions with revoke, display name, diagnostics report, delete account | Live |
 | Admin | Role-gated overview, users, diagnostics triage and append-only audit | Implemented; demo needs DB promotion |
 | Clients | Web, desktop, Android APK (`arm64-v8a` + `armeabi-v7a`), native map server | v2.6.1 |
@@ -153,11 +154,9 @@ precision is rejected rather than falling through to exact.
 inactive. The UI preserves the original expiry when pausing and never rewrites
 precision on a pause.
 
-**Emergency exception (known gap).** Triggering an emergency alert sets
-`is_active = true` on every share the caller owns, including paused ones, and
-resolving the alert does not restore the previous state. Deleted shares stay
-gone. This needs a dedicated, time-boxed emergency visibility grant before
-public use.
+**Emergency behaviour.** Triggering an emergency alert publishes the caller's
+latest location and records the alert; it leaves every share's pause state
+unchanged. Deleted shares stay gone, and a paused share stays invisible.
 
 **Ownership.** Only the owner can pause, resume, edit or delete a share. A
 missing or foreign share returns the same not-found envelope.
@@ -166,13 +165,14 @@ missing or foreign share returns the same not-found envelope.
 and are owner-scoped; another user cannot list or delete them.
 
 **Sessions.** Argon2id password hashes, opaque 256-bit server-side sessions,
-`HttpOnly` + `SameSite=Lax` cookies, a CSRF token bound to the session and
-echoed in `X-CSRF-Token` on every unsafe request. Logout, "sign out
+`HttpOnly` + `SameSite=Lax` cookies with `Secure` on HTTPS, a CSRF token bound
+to the session and echoed in `X-CSRF-Token` on every unsafe request. HSTS and
+the baseline security headers are sent on API JSON as well as HTML/assets.
+Logout, "sign out
 everywhere" and password changes revoke the session in the database, but the
 per-process session cache means another replica can accept a revoked session
-until its idle timeout. Login locks an account after five failures. The current
-build does **not** set the `Secure`
-cookie flag even on HTTPS, has no `__Host-` prefix and no HSTS; there is no
+until its idle timeout. Login locks an account after five failures. The build
+has no `__Host-` prefix and no
 per-IP server-side rate limit yet. These are known hardening gaps.
 
 **Data minimization.** The server stores the latest location plus a bounded
@@ -334,8 +334,9 @@ rows.
 - **MFA enrolment is not in the web UI.** The login form accepts TOTP, but
   enrolment is desktop/API only. There is no email password reset.
 - **Offline web directions are unavailable.** The web client always calls
-  `/map/route`; the offline pack supports map + search. The native map server
-  routes on the installed graph.
+  `/map/route`; the offline pack supports map + search. A cold offline reload
+  lands on Sign in; map and local search work only in an already-loaded tab.
+  The native map server routes on the installed graph.
 - **Native photos are not implemented.** The web client supports photo notes;
   the native client sends text notes and labels attached photos.
 - **No always-on tracking by default.** The trail records explicit publishes,
@@ -344,10 +345,9 @@ rows.
   switch.
 - **Anonymous accounts are not demo-safe on the multi-replica deployment.**
   Use email accounts.
-- **Transport/cookie hardening is incomplete.** The live session cookie is
-  `HttpOnly; SameSite=Lax` but not `Secure` and has no `__Host-` prefix; HSTS is
-  absent. JSON API responses do not carry the security-header set that HTML and
-  assets do. Fix before exposing real accounts.
+- **Transport/cookie hardening is partial.** The session cookie is `Secure` on
+  HTTPS and API JSON carries HSTS/nosniff/XFO/Referrer-Policy, but there is no
+  `__Host-` prefix and no per-IP auth limit.
 - **Auth abuse limits are per account, not per IP.** Login locks after five
   failures, but register/anonymous signup have no server-side IP limit.
 - **Session revocation is not instant on every replica.** The session cache is

@@ -55,6 +55,9 @@ jobs:
         uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # Accepted risk, mirrored in audit.toml: unmaintained/unsound
+          # transitive crates with no fixed upgrade in the current tree.
+          ignore: RUSTSEC-2026-0543,RUSTSEC-2024-0436,RUSTSEC-2024-0370,RUSTSEC-2026-0249,RUSTSEC-2026-0192,RUSTSEC-2026-0371,RUSTSEC-2026-0370,RUSTSEC-2026-0372,RUSTSEC-2024-0429
 
   wasm:
     # Compile-check web clients for wasm32 (Trunk entry bins + wasm cfg paths).

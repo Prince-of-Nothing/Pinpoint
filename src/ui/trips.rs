@@ -5,6 +5,13 @@ use eframe::egui::{self};
 
 impl PinpointAppUI {
     pub fn draw_trips_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        egui::ScrollArea::vertical()
+            .id_salt("trips_screen")
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.draw_trips_body(ui, ctx));
+    }
+
+    fn draw_trips_body(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Trips & check-ins");
         ui.add_space(8.0);
         theme::card(ui, |ui| {

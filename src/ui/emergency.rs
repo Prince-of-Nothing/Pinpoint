@@ -5,6 +5,13 @@ use eframe::egui::{self, Color32, RichText};
 
 impl PinpointAppUI {
     pub fn draw_emergency_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        egui::ScrollArea::vertical()
+            .id_salt("emergency_screen")
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.draw_emergency_body(ui, ctx));
+    }
+
+    fn draw_emergency_body(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Emergency");
         ui.add_space(4.0);
         theme::caption(ui, "Alerts are visible to every accepted friend.");

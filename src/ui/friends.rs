@@ -7,6 +7,13 @@ use eframe::egui::{self};
 
 impl PinpointAppUI {
     pub fn draw_friends_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        egui::ScrollArea::vertical()
+            .id_salt("friends_screen")
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.draw_friends_body(ui, ctx));
+    }
+
+    fn draw_friends_body(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Friends Management");
         ui.add_space(4.0);
         theme::caption(ui, "Requests, accepted friends and sharing");
@@ -39,7 +46,7 @@ impl PinpointAppUI {
                 for req in &received {
                     let id = req.id;
                     let name = req.requester_name.clone();
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(name);
                         ui.add_space(4.0);
                         if theme::primary_button(ui, "Accept").clicked() {
@@ -107,7 +114,7 @@ impl PinpointAppUI {
                     } else {
                         friend.requester_name.clone()
                     };
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.label(&name);
                         if ui.button("Sharing").clicked() {
                             self.share_sheet =

@@ -6,6 +6,13 @@ use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_kiosk_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        egui::ScrollArea::vertical()
+            .id_salt("kiosk_screen")
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.draw_kiosk_body(ui, ctx));
+    }
+
+    fn draw_kiosk_body(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Kiosk & Share Check-In");
         ui.add_space(4.0);
         theme::caption(ui, "Check in from a shared kiosk link");

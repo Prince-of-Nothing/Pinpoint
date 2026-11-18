@@ -10,6 +10,10 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [2.6.1] - 2026-11-18
+### Added
+- [FEATURE] Native Today: the desktop/Android client now has a Today tab with the owner-only 24-hour trail list, the trail drawn on the map, a text-note composer at the map centre, and a private-notes list with delete. Photos remain available in the web client.
+
 ## [2.6.0] - 2026-11-18
 ### Added
 - [FEATURE] Native UI: one shared dark theme from the web palette, a compact top bar with a scrollable screen tab row, filled/padded cards, 44 pt touch targets, and a map-first map screen shared by desktop and Android.

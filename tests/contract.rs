@@ -337,3 +337,49 @@ async fn publish_location_sends_float_accuracy() {
     assert!(body["accuracy"].is_number());
     assert_eq!(requests[1].header("x-csrf-token"), Some("csrf-abc"));
 }
+
+#[tokio::test]
+async fn today_endpoints_are_owner_paths_with_csrf_on_writes() {
+    let history = r#"[{"id":1,"user_id":7,"latitude":47.0105,"longitude":28.8638,"accuracy":5.0,"recorded_at":"2026-11-18T00:00:00+00:00"}]"#;
+    let note = r#"{"id":2,"user_id":7,"latitude":47.0245,"longitude":28.8322,"label":"Cafe","message":"Flat white","photo":null,"created_at":"2026-11-18T00:01:00+00:00"}"#;
+    let server = MockServer::start(vec![
+        login_ok(),
+        MockResponse::json(200, history),
+        MockResponse::json(200, &format!("[{note}]")),
+        MockResponse::json(201, note),
+        MockResponse::json(200, r#"{"message":"Note deleted."}"#),
+    ]);
+    let client = login(&server).await;
+
+    let points = client.get_location_history().await.expect("history");
+    assert_eq!(points.len(), 1);
+    assert_eq!(points[0].latitude, 47.0105);
+    let notes = client.get_place_notes().await.expect("notes");
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0].label, "Cafe");
+    let created = client
+        .create_place_note(47.0245, 28.8322, "Cafe", "Flat white", None)
+        .await
+        .expect("create note");
+    assert_eq!(created.id, 2);
+    client
+        .delete_place_note(created.id)
+        .await
+        .expect("delete note");
+
+    let requests = server.requests();
+    assert_eq!(requests[1].method, "GET");
+    assert_eq!(requests[1].path, "/api/v1/locations/history");
+    assert!(requests[1].header("x-csrf-token").is_none());
+    assert_eq!(requests[2].path, "/api/v1/locations/notes");
+    assert_eq!(requests[3].method, "POST");
+    assert_eq!(requests[3].path, "/api/v1/locations/notes");
+    assert_eq!(requests[3].header("x-csrf-token"), Some("csrf-abc"));
+    let body: serde_json::Value = serde_json::from_str(&requests[3].body).expect("json body");
+    assert_eq!(body["label"], "Cafe");
+    assert_eq!(body["message"], "Flat white");
+    assert!(body.get("photo").is_none());
+    assert_eq!(requests[4].method, "DELETE");
+    assert_eq!(requests[4].path, "/api/v1/locations/notes/2");
+    assert_eq!(requests[4].header("x-csrf-token"), Some("csrf-abc"));
+}

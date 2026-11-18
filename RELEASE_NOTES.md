@@ -1,3 +1,33 @@
+# Pinpoint 2.6.1 - Release Notes
+
+**Released:** 2026-11-18 - **Version:** `2.6.1` (from `2.6.0`) -
+**Status:** Native Today screen (trail + private notes).
+
+**Artifacts:** `pinpoint-android-2.6.1.apk` (universal: `arm64-v8a` and
+`armeabi-v7a`) and the source archives for the `v2.6.1` tag.
+
+## What is new
+
+- The desktop/Android client now has a **Today** tab: the owner-only
+  24-hour trail as a list, the trail drawn on the map, a text-note composer
+  at the map centre, and a private-notes list with delete.
+- Photos remain web-only for now; the native client has no image decoder or
+  picker in this build.
+
+## Verification
+
+- `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`,
+  `cargo test --locked`: pass.
+- `tests/contract.rs`: new owner-path/CSRF checks for history, note create
+  and note delete.
+- The live 2.6.0 API is already serving both owner-only endpoints.
+
+## Upgrade
+
+Install over 2.6.0. Existing accounts, shares, packs and notes are preserved.
+
+---
+
 # Pinpoint 2.6.0 - Release Notes
 
 **Released:** 2026-11-18 - **Version:** `2.6.0` (from `2.5.2`) -

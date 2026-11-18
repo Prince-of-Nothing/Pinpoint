@@ -398,6 +398,10 @@ pub struct AppData {
     pub admin_report_open: i64,
     // New feature state (populated by the server where applicable).
     pub my_location: Option<FriendLocation>,
+    /// Owner-only 24-hour trail (newest last).
+    pub history: Vec<LocationPoint>,
+    /// Owner-only private notes (newest last).
+    pub notes: Vec<PlaceNote>,
     pub check_ins: Vec<CheckIn>,
     pub emergencies: Vec<EmergencyAlert>,
     pub users: Vec<User>,

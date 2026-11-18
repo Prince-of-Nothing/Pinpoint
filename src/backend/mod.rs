@@ -25,7 +25,7 @@ pub mod rest;
 
 use crate::models::{
     AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
-    LocationShare, SessionInfo, User,
+    LocationPoint, LocationShare, PlaceNote, SessionInfo, User,
 };
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use std::future::Future;
@@ -149,6 +149,20 @@ pub trait Backend: BackendBounds {
         accuracy: f64,
     ) -> BackendFuture<'a, ()>;
     fn get_my_location<'a>(&'a self) -> BackendFuture<'a, FriendLocation>;
+
+    /// Owner-only 24-hour trail, oldest first.
+    fn get_location_history(&self) -> BackendFuture<'_, Vec<LocationPoint>>;
+    /// Owner-only private place notes.
+    fn get_place_notes(&self) -> BackendFuture<'_, Vec<PlaceNote>>;
+    fn create_place_note<'a>(
+        &'a self,
+        latitude: f64,
+        longitude: f64,
+        label: &'a str,
+        message: &'a str,
+        photo: Option<&'a str>,
+    ) -> BackendFuture<'a, PlaceNote>;
+    fn delete_place_note<'a>(&'a self, id: i64) -> BackendFuture<'a, ()>;
 
     fn map_capabilities(&self) -> BackendFuture<'_, MapCapabilities>;
     fn map_search<'a>(

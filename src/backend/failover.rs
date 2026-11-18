@@ -12,7 +12,7 @@
 use crate::backend::{Backend, BackendFuture, DynBackend};
 use crate::models::{
     AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
-    LocationShare, SessionInfo, User,
+    LocationPoint, LocationShare, PlaceNote, SessionInfo, User,
 };
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::security::circuit_breaker::CircuitBreaker;
@@ -515,6 +515,56 @@ impl Backend for FailoverBackend {
             self.try_all("get_my_location", |b| {
                 let b = b.clone();
                 async move { b.get_my_location().await }
+            })
+            .await
+        })
+    }
+
+    fn get_location_history(&self) -> BackendFuture<'_, Vec<LocationPoint>> {
+        Box::pin(async move {
+            self.try_all("get_location_history", |b| {
+                let b = b.clone();
+                async move { b.get_location_history().await }
+            })
+            .await
+        })
+    }
+
+    fn get_place_notes(&self) -> BackendFuture<'_, Vec<PlaceNote>> {
+        Box::pin(async move {
+            self.try_all("get_place_notes", |b| {
+                let b = b.clone();
+                async move { b.get_place_notes().await }
+            })
+            .await
+        })
+    }
+
+    fn create_place_note<'a>(
+        &'a self,
+        latitude: f64,
+        longitude: f64,
+        label: &'a str,
+        message: &'a str,
+        photo: Option<&'a str>,
+    ) -> BackendFuture<'a, PlaceNote> {
+        Box::pin(async move {
+            self.try_all("create_place_note", |b| {
+                let b = b.clone();
+                async move {
+                    b.create_place_note(latitude, longitude, label, message, photo)
+                        .await
+                }
+            })
+            .await
+        })
+    }
+
+    fn delete_place_note<'a>(&'a self, id: i64) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("delete_place_note", |b| {
+                let b = b.clone();
+                async move { b.delete_place_note(id).await }
             })
             .await
         })

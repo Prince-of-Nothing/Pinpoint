@@ -136,6 +136,7 @@ pub enum CurrentScreen {
     Map,
     Register,
     Login,
+    Today,
     Friends,
     Sharing,
     Places,
@@ -999,6 +1000,9 @@ impl PinpointApp {
         if let Err(e) = self.refresh_friend_locations().await {
             self.set_error(Some(e.to_string()));
         }
+        if let Err(e) = self.refresh_today().await {
+            self.set_error(Some(e.to_string()));
+        }
     }
 
     pub async fn refresh_friendships(&self) -> anyhow::Result<()> {
@@ -1019,6 +1023,37 @@ impl PinpointApp {
         let locations = self.backend.get_friend_locations().await?;
         let mut data = self.data.lock().unwrap();
         data.locations = locations;
+        Ok(())
+    }
+
+    /// Owner-only trail and private notes for the Today screen.
+    pub async fn refresh_today(&self) -> anyhow::Result<()> {
+        let history = self.backend.get_location_history().await?;
+        let notes = self.backend.get_place_notes().await?;
+        let mut data = self.data.lock().unwrap();
+        data.history = history;
+        data.notes = notes;
+        Ok(())
+    }
+
+    pub async fn create_place_note(
+        &self,
+        latitude: f64,
+        longitude: f64,
+        label: String,
+        message: String,
+    ) -> anyhow::Result<PlaceNote> {
+        let note = self
+            .backend
+            .create_place_note(latitude, longitude, &label, &message, None)
+            .await?;
+        self.refresh_today().await?;
+        Ok(note)
+    }
+
+    pub async fn delete_place_note(&self, id: i64) -> anyhow::Result<()> {
+        self.backend.delete_place_note(id).await?;
+        self.refresh_today().await?;
         Ok(())
     }
 
@@ -1227,6 +1262,9 @@ impl PinpointApp {
                     self.set_error(Some(e.to_string()));
                 }
                 if let Err(e) = self.refresh_my_location().await {
+                    self.set_error(Some(e.to_string()));
+                }
+                if let Err(e) = self.refresh_today().await {
                     self.set_error(Some(e.to_string()));
                 }
             }

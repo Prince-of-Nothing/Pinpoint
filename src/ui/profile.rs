@@ -198,7 +198,7 @@ impl PinpointAppUI {
                 }
                 ui.label(
                     RichText::new(
-                        "Only while signed in. Location is latest-only; no history is kept. \
+                        "Only while signed in. Latest location is overwritten; your private trail stays on your account. \
                          Android may stop the service when the app is force-stopped.",
                     )
                     .size(10.0)
@@ -210,7 +210,9 @@ impl PinpointAppUI {
         theme::card(ui, |ui| {
             theme::card_title(ui, "Safety");
             ui.label("Share expiry, pause, and delete live under Sharing. Emergency alerts under Emergency.");
-            ui.label("Location is latest-only; no history is stored.");
+            ui.label(
+                "Latest location is overwritten; your private 24-hour trail stays on your account.",
+            );
         });
         ui.add_space(8.0);
         theme::card(ui, |ui| {

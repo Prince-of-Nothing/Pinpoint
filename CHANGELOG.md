@@ -10,6 +10,12 @@ Release flags: `[FEATURE]` new capability · `[FIX]` bug fix ·
 The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
+## [Unreleased]
+### Changed
+- [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
+### Added
+- [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
+
 ## [2.6.1] - 2026-11-18
 ### Added
 - [FEATURE] Native Today: the desktop/Android client now has a Today tab with the owner-only 24-hour trail list, the trail drawn on the map, a text-note composer at the map centre, and a private-notes list with delete. Photos remain available in the web client.

@@ -2503,9 +2503,16 @@ mod tests {
     async fn wait_finished(installer: &Arc<OfflineInstaller>) -> OfflineStatus {
         for _ in 0..600 {
             let status = installer.status().await;
-            let running = matches!(status.pack.phase, Phase::Downloading | Phase::Verifying)
+            let phase_running = matches!(status.pack.phase, Phase::Downloading | Phase::Verifying)
                 || matches!(status.graph.phase, Phase::Downloading | Phase::Verifying);
-            if !running {
+            // The job clears `running` just after the last phase settles; wait
+            // for it so the next start_region cannot see AlreadyRunning.
+            let job_running = installer
+                .job
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner())
+                .running;
+            if !phase_running && !job_running {
                 return status;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;

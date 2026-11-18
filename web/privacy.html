@@ -15,7 +15,8 @@
     Pinpoint is a privacy-first location-sharing project. This page explains what
     the Android app and the web client at <a href="/">the same host</a> collect,
     why, and how to remove it. The short version: no advertising, no trackers,
-    no third-party analytics, no data sales, and no location history.
+    no third-party analytics, no data sales, and no friend-visible location
+    history.
   </p>
 
   <h2>What we collect</h2>
@@ -24,7 +25,8 @@
     <tr><td>Email and Argon2id password hash</td><td>Sign-in and account identification</td><td>Until account deletion</td></tr>
     <tr><td>Display name and public username</td><td>Shown to people you share with; the username is how friends find you</td><td>Until changed or deleted</td></tr>
     <tr><td>Role and account flags</td><td>Access control and lockout</td><td>Until changed or deleted</td></tr>
-    <tr><td>Current location publish</td><td>Served only to recipients of an active, explicit share</td><td>Overwritten by the next publish; no history stored</td></tr>
+    <tr><td>Current location publish</td><td>Served only to recipients of an active, explicit share</td><td>Latest overwritten by the next publish; a private 24-hour trail is visible only to you and is pruned to 7 days on the next publish</td></tr>
+    <tr><td>Background sharing (Android, opt-in)</td><td>Publishes the latest location on the interval you choose while the app is in the background</td><td>Off by default; a persistent notification stays visible and you can stop it at any time</td></tr>
     <tr><td>Share permissions</td><td>The consent records themselves</td><td>Until revoked or expired</td></tr>
     <tr><td>Friend relations</td><td>Precondition for sharing</td><td>Until removed</td></tr>
     <tr><td>Session metadata</td><td>Keep you signed in and let you revoke devices</td><td>Until sign-out, revoke, expiry or account deletion</td></tr>
@@ -34,9 +36,9 @@
   <h2>What we do not do</h2>
   <ul>
     <li>No advertising, profiling, third-party analytics or data sales.</li>
-    <li>No location history: the server stores only the latest publish.</li>
+    <li>No friend-visible location history: the server stores the latest publish plus a private 24-hour trail that only you can read. The trail is pruned to 7 days on the next publish.</li>
     <li>No IP-based geolocation, WebRTC location, or tracking IP addresses for analytics.</li>
-    <li>No friend data sent to OpenStreetMap. Only your own searches, routes and map tiles reach the OSM services.</li>
+    <li>No friend list, account data or trail sent to OpenStreetMap. Your searches, map tiles and the route endpoints you choose reach the OSM services.</li>
     <li>No hidden requests. The only automatic external request is at most one GitHub releases check a day for the same app version, plus one after installing a new version. It sends only <code>Pinpoint/&lt;version&gt;</code> as the User-Agent. GitHub sees the request IP, as with any HTTPS request. You can turn it off in Profile &amp; settings.</li>
   </ul>
 
@@ -50,9 +52,9 @@
 
   <h2>Transport, storage and devices</h2>
   <p>
-    Location updates travel over HTTPS. The backend stores only the latest
-    location record per user so it can deliver an active share; there is no
-    location history. In the current 1.5.0 hosted build the backend can read the
+    Location updates travel over HTTPS. The backend stores the latest location
+    record per user so it can deliver an active share, plus a private trail that
+    only the owner can read; there is no friend-visible location history. In the current 1.5.0 hosted build the backend can read the
     latest coordinates to enforce precision and consent — do not treat this build
     as end-to-end encrypted for server-delivered locations. The app also derives
     a per-user E2E key from your password and keeps it in the device keychain;
@@ -75,7 +77,7 @@
   <ul>
     <li><strong>Access / export:</strong> your profile and current sharing state are visible in the app; open a GitHub issue for a machine-readable export.</li>
     <li><strong>Rectification:</strong> edit your display name in Profile &amp; settings or the web Account panel.</li>
-    <li><strong>Erasure:</strong> delete your account in Profile &amp; settings → Danger zone, or the web Account → Delete account. This immediately removes your profile, friendships, shares, current location, check-ins, emergencies and sessions.</li>
+    <li><strong>Erasure:</strong> delete your account in Profile &amp; settings → Danger zone, or the web Account → Delete account. This immediately removes your profile, friendships, shares, current location, private trail, notes, check-ins, emergencies and sessions.</li>
     <li><strong>Objection / withdrawal:</strong> revoke a share or turn off the update check at any time.</li>
   </ul>
 

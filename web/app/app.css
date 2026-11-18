@@ -365,7 +365,7 @@ body:has(#app-panel:not(.hidden)) #session-bar {
 .map-attribution {
   position: absolute;
   left: 0.6rem;
-  bottom: 4.6rem;
+  bottom: 7.7rem;
   z-index: 800;
   padding: 0.2rem 0.5rem;
   border-radius: 0.4rem;
@@ -422,7 +422,7 @@ body:has(#app-panel:not(.hidden)) #session-bar {
 .map-topbar {
   position: absolute;
   top: auto;
-  bottom: 0.9rem;
+  bottom: 4.6rem;
   left: 1rem;
   right: 1rem;
   display: flex;
@@ -469,7 +469,7 @@ body:has(#app-panel:not(.hidden)) #session-bar {
 .search-results {
   position: absolute;
   top: auto;
-  bottom: 4.9rem;
+  bottom: 7.6rem;
   left: 1rem;
   width: min(560px, calc(100% - 2rem));
   max-height: min(48vh, 420px);
@@ -501,7 +501,7 @@ body:has(#app-panel:not(.hidden)) #session-bar {
 
 .side-panel {
   position: absolute;
-  bottom: 1rem;
+  bottom: 4.7rem;
   left: 50%;
   transform: translateX(-50%);
   width: min(520px, calc(100% - 2rem));
@@ -589,7 +589,7 @@ body:has(#app-panel:not(.hidden)) #session-bar {
   position: absolute;
   top: auto;
   right: 0;
-  bottom: 0;
+  bottom: 4.6rem;
   left: 0;
   margin: 0 auto;
   width: min(640px, 100%);
@@ -601,16 +601,25 @@ body:has(#app-panel:not(.hidden)) #session-bar {
   padding: 0 1rem 1.25rem;
   background: var(--glass-strong);
   border: 1px solid var(--border);
-  border-bottom: 0;
-  border-radius: 1.25rem 1.25rem 0 0;
+  border-radius: 1.25rem;
   box-shadow: 0 -18px 44px rgba(24, 16, 44, 0.18);
   z-index: 900;
   overscroll-behavior: contain;
+  transition: transform 180ms ease;
 }
+.drawer.dragging { transition: none; animation: none; }
 .drawer.open { animation: sheet-in 180ms ease-out; }
+.drawer.closing {
+  animation: sheet-out 180ms ease-in forwards;
+  pointer-events: none;
+}
 @keyframes sheet-in {
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes sheet-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(24px); }
 }
 .drawer-head {
   position: sticky;
@@ -620,9 +629,23 @@ body:has(#app-panel:not(.hidden)) #session-bar {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.9rem 0 0.75rem;
+  padding: 1.35rem 0 0.75rem;
   background: var(--glass-strong);
   border-bottom: 1px solid var(--border);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.drawer.dragging .drawer-head { cursor: grabbing; }
+.drawer-grab {
+  position: absolute;
+  top: 0.45rem;
+  left: 50%;
+  width: 42px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: var(--border);
 }
 .drawer-head h2 {
   margin: 0.1rem 0 0;
@@ -646,6 +669,7 @@ body:has(#app-panel:not(.hidden)) #session-bar {
   border-bottom: 1px solid var(--border);
   border-radius: 0;
   backdrop-filter: none;
+  scroll-margin-top: 6rem;
 }
 .drawer .card:last-of-type { border-bottom: 0; }
 .drawer.closed { display: none; }
@@ -656,21 +680,69 @@ body:has(#app-panel:not(.hidden)) #session-bar {
 #route-drag { pointer-events: none; cursor: default; }
 
 /* The sheet owns the bottom edge; hide the floating search while it is open. */
-body:has(.drawer.open) .map-topbar,
-body:has(.drawer.open) .category-chips {
+body:has(.drawer:is(.open, .closing)) .map-topbar,
+body:has(.drawer:is(.open, .closing)) .category-chips {
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
 }
 
-body:has(.drawer.open) > header h1,
-body:has(.drawer.open) #session-bar {
+body:has(.drawer:is(.open, .closing)) > header h1,
+body:has(.drawer:is(.open, .closing)) #session-bar {
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
 }
 
 body:has(.search-results:not(.hidden)) .category-chips { display: none; }
+
+/* Bottom tab bar: opaque, 44 px targets, sits above the map and sheet. */
+.tab-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 0.5rem;
+  z-index: 960;
+  display: flex;
+  width: min(560px, calc(100% - 1.5rem));
+  padding: 0.2rem;
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.tab {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.35rem 0.2rem;
+  border: 0;
+  border-radius: 0.75rem;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 550;
+}
+.tab::after {
+  content: "";
+  width: 18px;
+  height: 2px;
+  border-radius: 999px;
+  background: transparent;
+}
+.tab:hover { background: var(--panel-2); color: var(--text); }
+.tab.active { color: var(--pin-self); }
+.tab.active::after { background: currentColor; }
+
+body:has(#login-panel:not(.hidden)) .tab-bar,
+body:has(#recovery-panel:not(.hidden)) .tab-bar { display: none; }
+
+body:has(#app-panel:not(.hidden)) #status { bottom: 4.8rem; }
 
 /* Markers */
 .pin-friend, .pin-selected, .pin-route-end {
@@ -735,7 +807,7 @@ body:has(.search-results:not(.hidden)) .category-chips { display: none; }
     max-height: 78vh;
     padding: 0 0.9rem 1.1rem;
   }
-  .side-panel { bottom: 0.75rem; width: calc(100% - 1.5rem); }
+  .side-panel { bottom: 4.5rem; width: calc(100% - 1.5rem); }
   .sheet { margin: 0; }
   .search-form { max-width: none; }
 }
@@ -743,7 +815,7 @@ body:has(.search-results:not(.hidden)) .category-chips { display: none; }
 .category-chips {
   position: absolute;
   top: auto;
-  bottom: 4.9rem;
+  bottom: 7.6rem;
   left: 1rem;
   display: flex;
   gap: 0.35rem;
@@ -763,7 +835,7 @@ body:has(.search-results:not(.hidden)) .category-chips { display: none; }
 .category-chips button:hover { border-color: var(--accent); color: var(--accent); }
 
 @media (max-width: 900px) {
-  .category-chips { bottom: 4.7rem; }
+  .category-chips { bottom: 7.5rem; }
 }
 
 .list .link {
@@ -1606,7 +1678,7 @@ input[type="file"]::file-selector-button {
   #session-bar button { padding: 0.4rem 0.65rem; min-height: 40px; }
   .drawer {
     padding: 0 0.9rem 1rem;
-    border-radius: 1rem 1rem 0 0;
+    border-radius: 1rem;
   }
   .drawer.closed { display: none; }
   .map-empty-card { padding: 1.1rem; }

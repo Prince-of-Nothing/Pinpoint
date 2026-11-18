@@ -34,7 +34,7 @@ use crate::osm::OsmClient;
 use crash_dialog::CrashDialog;
 use eframe::egui::{self, Align, RichText};
 use route::RoutePlan;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
 
 #[derive(Clone)]
@@ -242,6 +242,9 @@ pub struct PinpointAppUI {
     // Today screen: private notes composer
     note_label: String,
     note_message: String,
+    /// Draft of the last note the server confirmed, so the composer clears
+    /// only after the POST succeeds (and only if it was not edited since).
+    note_saved: Arc<Mutex<Option<(String, String)>>>,
     // Sharing screen
     share_direction: String,
     share_precision: String,
@@ -379,6 +382,7 @@ impl PinpointAppUI {
             friend_handle: String::new(),
             note_label: String::new(),
             note_message: String::new(),
+            note_saved: Arc::new(Mutex::new(None)),
             share_direction: "to_friend".to_string(),
             share_precision: "exact".to_string(),
             share_duration: String::new(),
@@ -780,6 +784,7 @@ impl PinpointAppUI {
 
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
         let app = Arc::clone(&self.app);
+        let note_saved = Arc::clone(&self.note_saved);
         self.rt.spawn(async move {
             match action {
                 PendingAction::Login {
@@ -851,15 +856,29 @@ impl PinpointAppUI {
                     label,
                     message,
                 } => {
-                    let _ = app
-                        .create_place_note(latitude, longitude, label, message)
-                        .await;
+                    match app
+                        .create_place_note(latitude, longitude, label.clone(), message.clone())
+                        .await
+                    {
+                        Ok(_) => {
+                            *note_saved.lock().unwrap() = Some((label, message));
+                            app.set_notice(Some("Note saved.".to_string()));
+                        }
+                        Err(e) => app.set_error(Some(e.to_string())),
+                    }
                 }
-                PendingAction::DeleteNote { id } => {
-                    let _ = app.delete_place_note(id).await;
-                }
+                PendingAction::DeleteNote { id } => match app.delete_place_note(id).await {
+                    Ok(()) => app.set_notice(Some("Note deleted.".to_string())),
+                    Err(e) => app.set_error(Some(e.to_string())),
+                },
                 PendingAction::RefreshToday => {
-                    let _ = app.refresh_today().await;
+                    app.set_loading(true);
+                    let result = app.refresh_today().await;
+                    app.set_loading(false);
+                    match result {
+                        Ok(()) => app.set_notice(Some("Today refreshed.".to_string())),
+                        Err(e) => app.set_error(Some(e.to_string())),
+                    }
                 }
                 PendingAction::SearchPlaces { query } => {
                     let v = crate::security::validation::validate_search_query(&query);

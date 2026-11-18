@@ -988,20 +988,21 @@ impl PinpointApp {
         if screen == CurrentScreen::Login || screen == CurrentScreen::Register {
             return;
         }
-        // Surface the first refresh failure instead of silently dropping it.
-        if let Err(e) = self.refresh_friendships().await {
-            self.set_error(Some(e.to_string()));
-            return;
+        // Each section loads independently: one failure must not hide the
+        // rest. Surface the first refresh failure instead of dropping it.
+        let mut first_error: Option<anyhow::Error> = None;
+        for result in [
+            self.refresh_friendships().await,
+            self.refresh_shares().await,
+            self.refresh_friend_locations().await,
+            self.refresh_today().await,
+        ] {
+            if first_error.is_none() {
+                first_error = result.err();
+            }
         }
-        if let Err(e) = self.refresh_shares().await {
-            self.set_error(Some(e.to_string()));
-            return;
-        }
-        if let Err(e) = self.refresh_friend_locations().await {
-            self.set_error(Some(e.to_string()));
-        }
-        if let Err(e) = self.refresh_today().await {
-            self.set_error(Some(e.to_string()));
+        if let Some(error) = first_error {
+            self.set_error(Some(error.to_string()));
         }
     }
 
@@ -1026,14 +1027,57 @@ impl PinpointApp {
         Ok(())
     }
 
+    /// `shortcut:` the backend layer flattens the HTTP status into the error
+    /// text, so the 401 is detected from the envelope code or status prefix.
+    /// Upgrade to a typed error if the backend layer ever exposes one.
+    fn is_unauthorized(error: &anyhow::Error) -> bool {
+        let text = error.to_string();
+        text.starts_with("UNAUTHENTICATED") || text.starts_with("401")
+    }
+
     /// Owner-only trail and private notes for the Today screen.
     pub async fn refresh_today(&self) -> anyhow::Result<()> {
-        let history = self.backend.get_location_history().await?;
-        let notes = self.backend.get_place_notes().await?;
+        let user_id = self.data.lock().unwrap().user.as_ref().map(|u| u.id);
+        let history = self.backend.get_location_history().await;
+        let notes = self.backend.get_place_notes().await;
         let mut data = self.data.lock().unwrap();
-        data.history = history;
-        data.notes = notes;
-        Ok(())
+        // A logout or account switch while these were in flight must not write
+        // the previous account's private lists into the new session.
+        if data.user.as_ref().map(|u| u.id) != user_id {
+            return Ok(());
+        }
+        // An expired session keeps the old lists on screen, so drop them.
+        if history.as_ref().err().is_some_and(Self::is_unauthorized)
+            || notes.as_ref().err().is_some_and(Self::is_unauthorized)
+        {
+            data.history.clear();
+            data.notes.clear();
+            let error = history
+                .as_ref()
+                .err()
+                .or(notes.as_ref().err())
+                .map(|e| e.to_string())
+                .unwrap_or_else(|| "Sign in required.".to_string());
+            return Err(anyhow::anyhow!(error));
+        }
+        // Load both lists independently: a notes failure still keeps history.
+        let mut first_error: Option<String> = None;
+        match history {
+            Ok(history) => data.history = history,
+            Err(e) => first_error = Some(e.to_string()),
+        }
+        match notes {
+            Ok(notes) => data.notes = notes,
+            Err(e) => {
+                if first_error.is_none() {
+                    first_error = Some(e.to_string());
+                }
+            }
+        }
+        match first_error {
+            Some(error) => Err(anyhow::anyhow!(error)),
+            None => Ok(()),
+        }
     }
 
     pub async fn create_place_note(
@@ -1043,6 +1087,17 @@ impl PinpointApp {
         label: String,
         message: String,
     ) -> anyhow::Result<PlaceNote> {
+        // Same limits as the server so an over-long note fails locally.
+        let label = label.trim().to_string();
+        let message = message.trim().to_string();
+        if label.chars().count() > 120 {
+            self.set_error(Some("Label must be at most 120 characters.".to_string()));
+            return Err(anyhow::anyhow!("Label must be at most 120 characters."));
+        }
+        if message.is_empty() || message.chars().count() > 2000 {
+            self.set_error(Some("Message must be 1..2000 characters.".to_string()));
+            return Err(anyhow::anyhow!("Message must be 1..2000 characters."));
+        }
         let note = self
             .backend
             .create_place_note(latitude, longitude, &label, &message, None)

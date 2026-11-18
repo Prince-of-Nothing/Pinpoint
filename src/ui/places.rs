@@ -5,6 +5,13 @@ use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_places_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        egui::ScrollArea::vertical()
+            .id_salt("places_screen")
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.draw_places_body(ui, ctx));
+    }
+
+    fn draw_places_body(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Places — route, nearby POIs & address lookup");
         ui.add_space(8.0);
 

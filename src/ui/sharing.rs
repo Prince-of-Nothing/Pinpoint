@@ -5,6 +5,13 @@ use eframe::egui::{self};
 
 impl PinpointAppUI {
     pub fn draw_sharing_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        egui::ScrollArea::vertical()
+            .id_salt("sharing_screen")
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.draw_sharing_body(ui, ctx));
+    }
+
+    fn draw_sharing_body(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Location Sharing");
         ui.add_space(4.0);
         theme::caption(ui, "Choose who sees your location, and how precisely");
@@ -39,8 +46,14 @@ impl PinpointAppUI {
 
             ui.add_space(4.0);
 
-            ui.horizontal(|ui| {
+            let compact = Self::is_compact(ui.ctx());
+            if compact {
                 ui.label("Direction:");
+            }
+            ui.horizontal_wrapped(|ui| {
+                if !compact {
+                    ui.label("Direction:");
+                }
                 ui.selectable_value(
                     &mut self.share_direction,
                     "to_friend".to_string(),
@@ -57,8 +70,13 @@ impl PinpointAppUI {
             });
 
             ui.add_space(4.0);
-            ui.horizontal(|ui| {
+            if compact {
                 ui.label("Precision:");
+            }
+            ui.horizontal_wrapped(|ui| {
+                if !compact {
+                    ui.label("Precision:");
+                }
                 ui.selectable_value(
                     &mut self.share_precision,
                     "exact".to_string(),
@@ -79,8 +97,13 @@ impl PinpointAppUI {
             });
 
             ui.add_space(4.0);
-            ui.horizontal(|ui| {
+            if compact {
                 ui.label("Expires in (hours, blank = never):");
+            }
+            ui.horizontal(|ui| {
+                if !compact {
+                    ui.label("Expires in (hours, blank = never):");
+                }
                 ui.add(
                     egui::TextEdit::singleline(&mut self.share_duration)
                         .hint_text("e.g. 24")
@@ -129,7 +152,7 @@ impl PinpointAppUI {
                     };
                     let is_active = share.is_active;
                     let share_id = share.id;
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         ui.colored_label(
                             precision_color,
                             format!(

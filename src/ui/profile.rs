@@ -45,6 +45,13 @@ impl PinpointAppUI {
     }
 
     pub fn draw_profile_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        egui::ScrollArea::vertical()
+            .id_salt("profile_screen")
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.draw_profile_body(ui, ctx));
+    }
+
+    fn draw_profile_body(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         if !self.sessions_requested {
             self.sessions_requested = true;
             self.spawn_action(PendingAction::RefreshSessions, ctx);
@@ -61,7 +68,7 @@ impl PinpointAppUI {
         drop(data);
         ui.label(format!("Signed in as: {email}"));
         if !username.is_empty() {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(format!("Public username: @{username}"));
                 if ui.button("Copy").clicked() {
                     ui.ctx().copy_text(username.clone());
@@ -226,7 +233,7 @@ impl PinpointAppUI {
                     "Locations stay hidden until the PIN is entered after launch or \
                      returning to the app.",
                 );
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button("Lock now").clicked() {
                         self.locked = true;
                         self.pin_input.clear();
@@ -393,7 +400,7 @@ impl PinpointAppUI {
         ui.add_space(8.0);
 
         theme::card(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 theme::card_title(ui, "Active sessions");
                 if ui.button("Refresh").clicked() {
                     self.spawn_action(PendingAction::RefreshSessions, ctx);

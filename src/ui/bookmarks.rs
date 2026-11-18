@@ -5,6 +5,13 @@ use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_bookmarks_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        egui::ScrollArea::vertical()
+            .id_salt("bookmarks_screen")
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.draw_bookmarks_body(ui, ctx));
+    }
+
+    fn draw_bookmarks_body(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.heading("Saved places (on-device only)");
         ui.add_space(8.0);
         let store = crate::bookmarks::BookmarkStore::default_location();

@@ -777,9 +777,17 @@ impl PinpointAppUI {
         self.app.set_screen(screen);
     }
 
-    /// Touch/narrow layout: below ~700 pt the desktop tab strip cannot fit.
+    /// Touch/narrow layout: always on phones, below 820 pt on desktop.
     fn is_compact(ctx: &egui::Context) -> bool {
-        ctx.screen_rect().width() < 700.0
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            let _ = ctx;
+            true
+        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        {
+            ctx.screen_rect().width() < 820.0
+        }
     }
 
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
@@ -1240,42 +1248,76 @@ impl PinpointAppUI {
                 self.app.current_screen(),
                 CurrentScreen::Login | CurrentScreen::Register
             );
+            let mut back = false;
+            let mut nav_open = self.mobile_nav_open;
+            let mut sign_in = false;
+            let mut sign_out = false;
             ui.horizontal(|ui| {
-                if auth_screen {
-                    if ui.button("←").clicked() {
-                        self.app.set_screen(CurrentScreen::Map);
+                let lead = if auth_screen { "←" } else { "☰" };
+                if ui
+                    .add(egui::Button::new(lead).min_size(egui::vec2(44.0, 44.0)))
+                    .clicked()
+                {
+                    if auth_screen {
+                        back = true;
+                    } else {
+                        nav_open = !nav_open;
                     }
-                } else if ui.button("☰").clicked() {
-                    self.mobile_nav_open = !self.mobile_nav_open;
                 }
-                theme::wordmark(ui);
-                if self.app.is_offline_mode() {
-                    ui.label(
-                        RichText::new(i18n::t(lang, key::OFFLINE_MODE))
-                            .size(11.0)
-                            .strong()
-                            .color(theme::ACCENT),
-                    );
-                }
+                // Compact wordmark: the desktop one is too tall for a phone row.
+                ui.label(
+                    RichText::new("Pinpoint")
+                        .size(18.0)
+                        .strong()
+                        .color(theme::TEXT),
+                );
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    if self.app.is_loading() {
-                        ui.spinner();
-                    }
                     if !auth_screen {
                         if signed_in {
                             if ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
-                                self.spawn_action(PendingAction::Logout, ctx);
+                                sign_out = true;
                             }
                         } else if theme::primary_button(ui, i18n::t(lang, key::SIGN_IN)).clicked() {
-                            self.app.set_screen(CurrentScreen::Login);
+                            sign_in = true;
                         }
                     }
                 });
             });
-            if let Some(err) = self.app.error_message() {
-                ui.colored_label(theme::DANGER, err);
-            } else if let Some(notice) = self.app.notice_message() {
-                ui.colored_label(theme::SUCCESS, notice);
+            self.mobile_nav_open = nav_open;
+            if back {
+                self.app.set_screen(CurrentScreen::Map);
+            }
+            if sign_in {
+                self.app.set_screen(CurrentScreen::Login);
+            }
+            if sign_out {
+                self.spawn_action(PendingAction::Logout, ctx);
+            }
+            // Offline state and the spinner share the status line so the
+            // action row stays a single tap target.
+            let offline = self.app.is_offline_mode();
+            let status = self
+                .app
+                .error_message()
+                .map(|text| (text, theme::DANGER))
+                .or_else(|| self.app.notice_message().map(|text| (text, theme::SUCCESS)));
+            if offline || status.is_some() || self.app.is_loading() {
+                ui.horizontal_wrapped(|ui| {
+                    if self.app.is_loading() {
+                        ui.spinner();
+                    }
+                    if offline {
+                        ui.label(
+                            RichText::new(i18n::t(lang, key::OFFLINE_MODE))
+                                .size(11.0)
+                                .strong()
+                                .color(theme::ACCENT),
+                        );
+                    }
+                    if let Some((text, color)) = status {
+                        ui.colored_label(color, text);
+                    }
+                });
             }
             ui.add_space(6.0);
             return;
@@ -1797,14 +1839,17 @@ impl eframe::App for PinpointAppUI {
                     ui.painter().rect_filled(handle, 2.0, theme::BORDER);
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("Tools").size(22.0).strong());
+                        ui.label(RichText::new("More").size(22.0).strong());
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui.button("×").clicked() {
                                 chosen = Some(current.clone());
                             }
                         });
                     });
-                    theme::caption(ui, "Everything Pinpoint can do, one tap away.");
+                    theme::caption(
+                        ui,
+                        "Places, saved pins and settings. The tabs stay at the bottom.",
+                    );
                     ui.add_space(8.0);
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         let tile_width = (ui.available_width() - 8.0) / 2.0;
@@ -1846,10 +1891,6 @@ impl eframe::App for PinpointAppUI {
                         });
                         ui.add_space(8.0);
                         let mut tools: Vec<(CurrentScreen, &str, &str)> = vec![
-                            (CurrentScreen::Map, "Map", "M"),
-                            (CurrentScreen::Today, "Today", "T"),
-                            (CurrentScreen::Friends, "Friends", "F"),
-                            (CurrentScreen::Sharing, "Share", "S"),
                             (CurrentScreen::Places, "Places", "P"),
                             (CurrentScreen::Bookmarks, "Saved", "B"),
                             (CurrentScreen::Trips, "Trips", "T"),
@@ -1972,8 +2013,8 @@ impl eframe::App for PinpointAppUI {
                         for (screen, label) in [
                             (CurrentScreen::Map, "Map"),
                             (CurrentScreen::Friends, "Friends"),
-                            (CurrentScreen::Sharing, "Share"),
-                            (CurrentScreen::Bookmarks, "Saved"),
+                            (CurrentScreen::Sharing, "Sharing"),
+                            (CurrentScreen::Today, "Today"),
                             (CurrentScreen::Profile, "Me"),
                         ] {
                             let selected = current == screen;

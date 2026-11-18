@@ -26,7 +26,7 @@ never trusted.
 | Private trail | Owner-only 24-hour trail, listed and drawn on the map; pruned to 7 days on the next publish |
 | Private notes | Label + message + optional JPEG/PNG photo, downscaled in-browser, server-enforced at about 675 KB decoded, owner-only (web; text-only native) |
 | Map | OpenFreeMap basemap, OSM search, OSRM driving directions, saved/recent places and routes |
-| Offline | Moldova native pack: 138.5 MB transfer / 204.0 MB installed; web OPFS pack: 220.3 MB; OPFS install, service-worker range serving, offline search. Romania is not in either client catalog |
+| Offline | Moldova native pack: 138.5 MB transfer / 204.0 MB installed; web OPFS pack: 220.3 MB; OPFS install, service-worker range serving, offline search. Romania is listed in the native Maps panel; the web catalog lists Moldova only |
 | Account | Active sessions with revoke, display name, diagnostics report, delete account |
 | Admin | Role-gated overview, users, diagnostics triage, append-only audit (needs DB promotion) |
 | Clients | Web, desktop, Android APK (`arm64-v8a` + `armeabi-v7a`), native map server |
@@ -63,15 +63,13 @@ allowlisted internal host (ADR-0006).
   are applied by the server; an unknown precision is rejected, never treated as
   exact.
 - **Expiry and pause fail closed.** `expires_at` is checked on every read; a
-  paused share is inactive; pausing preserves the original expiry. Exception:
-  triggering an emergency alert reactivates the caller's existing shares,
-  including paused ones, until changed again; deleted shares stay gone. This is
-  a known gap.
+  paused share is inactive; pausing preserves the original expiry. An emergency
+  alert publishes the latest point without changing share pause states.
 - **Owner-only control.** Only the owner can pause, resume, edit or delete a
   share. A missing or foreign share returns the same not-found envelope.
 - **Owner-scoped safety state.** Check-ins and emergency alerts require
   authentication; another user cannot list or delete them.
-- **Sessions.** Argon2id password hashes, opaque 256-bit server-side sessions, `HttpOnly` + `SameSite=Lax` cookies, a session-bound CSRF token echoed in `X-CSRF-Token`. Sign-out everywhere and password changes revoke sessions in the database; another replica may accept a cached copy until its idle timeout. Login locks an account after five failures; there is no per-IP server-side rate limit. The current build does not set `Secure`, has no `__Host-` prefix and no HSTS.
+- **Sessions.** Argon2id password hashes, opaque 256-bit server-side sessions, `HttpOnly` + `SameSite=Lax` cookies with `Secure` on HTTPS, a session-bound CSRF token echoed in `X-CSRF-Token`. HSTS and the baseline security headers are sent on API JSON too. Sign-out everywhere and password changes revoke sessions in the database; another replica may accept a cached copy until its idle timeout. Login locks an account after five failures; there is no per-IP server-side rate limit. There is no `__Host-` prefix.
 - **Data minimization.** Latest location plus a bounded history (24 h visible,
   7 d retained) and private notes. No continuous background tracking by
   default; opt-in Android interval sharing shows a persistent notification.
@@ -125,7 +123,7 @@ Contract and consent suites pin the wire format and the rule: `tests/contract.rs
 - The trail records explicit publishes, not a 24/7 GPS trace; Android interval
   sharing is opt-in and shows a notification.
 - Anonymous accounts are not demo-safe on the multi-replica deployment; use email accounts.
-- Transport/cookie hardening is incomplete: the live cookie is not `Secure` and has no `__Host-` prefix; HSTS and API JSON security headers are missing. Fix before real accounts.
+- Transport/cookie hardening is partial: the cookie is `Secure` on HTTPS and API JSON carries HSTS/nosniff/XFO/Referrer-Policy, but there is no `__Host-` prefix.
 - Auth abuse limits are per account, not per IP; register and anonymous signup have no server-side IP limit.
 - CI: the v2.6.1 tag run fails only the dependency audit; build, test, wasm,
   macOS and Windows pass. Nine unmaintained/unsound transitive crates with no

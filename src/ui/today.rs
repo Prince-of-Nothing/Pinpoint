@@ -16,6 +16,15 @@ fn short_time(raw: &str) -> String {
 
 impl PinpointAppUI {
     pub fn draw_today_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        // Clear the composer only after the POST succeeds, and only if the
+        // user has not typed a new draft in the meantime.
+        if let Some((label, message)) = self.note_saved.lock().unwrap().take() {
+            if self.note_label.trim() == label && self.note_message.trim() == message {
+                self.note_label.clear();
+                self.note_message.clear();
+            }
+        }
+
         let (history, notes, center_lat, center_lon) = {
             let binding = self.app.data();
             let data = binding.lock().unwrap();
@@ -85,6 +94,7 @@ impl PinpointAppUI {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.note_label)
                             .hint_text("Cafe, viewpoint, parking...")
+                            .char_limit(120)
                             .desired_width(f32::INFINITY),
                     );
                     ui.add_space(4.0);
@@ -93,7 +103,8 @@ impl PinpointAppUI {
                         egui::TextEdit::multiline(&mut self.note_message)
                             .hint_text("What happened here?")
                             .desired_rows(3)
-                            .desired_width(f32::INFINITY),
+                            .desired_width(f32::INFINITY)
+                            .char_limit(2000),
                     );
                     theme::caption(ui, "Saved at the map centre. Photos are web-only for now.");
                     ui.horizontal(|ui| {
@@ -113,8 +124,6 @@ impl PinpointAppUI {
                                     },
                                     ctx,
                                 );
-                                self.note_label.clear();
-                                self.note_message.clear();
                             }
                         }
                         theme::caption(ui, format!("Map centre: {center_lat:.5}, {center_lon:.5}"));

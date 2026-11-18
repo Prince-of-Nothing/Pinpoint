@@ -15,6 +15,11 @@ The per-item flagged list for this release is in
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
+### Fixed
+- [FIX] Native Today: action errors are surfaced, the note draft clears only after a successful POST and only if unchanged, refresh sections load independently, and a 401 clears private lists without letting an in-flight refresh cross accounts.
+### Security
+- [SECURITY] Emergency alerts publish the latest point without reactivating paused shares; the point is written directly to PostgreSQL.
+- [SECURITY] The session cookie is `Secure` on HTTPS, and every response (including API JSON and 401/403) now carries HSTS, `nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`.
 
 ## [2.6.1] - 2026-11-18
 ### Added

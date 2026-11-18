@@ -778,3 +778,108 @@ async fn check_ins_and_emergencies_require_auth_and_are_owner_scoped() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn emergency_does_not_reactivate_paused_shares() {
+    let state = pinpoint_desktop::server::AppState::new();
+    let app = pinpoint_desktop::server::router(state);
+    let (alice_cookie, alice_csrf, _, _) =
+        register(&app, "emergency-alice@example.invalid", "Alice").await;
+    let (bob_cookie, bob_csrf, _, bob_username) =
+        register(&app, "emergency-bob@example.invalid", "Bob").await;
+    let (carol_cookie, carol_csrf, _, _) =
+        register(&app, "emergency-carol@example.invalid", "Carol").await;
+
+    // Bob shares with both; only Alice's share gets paused.
+    let paused_friendship = accepted_friendship(
+        &app,
+        &alice_cookie,
+        &alice_csrf,
+        &bob_cookie,
+        &bob_csrf,
+        &bob_username,
+    )
+    .await;
+    let active_friendship = accepted_friendship(
+        &app,
+        &carol_cookie,
+        &carol_csrf,
+        &bob_cookie,
+        &bob_csrf,
+        &bob_username,
+    )
+    .await;
+    let mut share_ids = Vec::new();
+    for friendship_id in [paused_friendship, active_friendship] {
+        let resp = app
+            .clone()
+            .oneshot(authed_req(
+                "POST",
+                "/api/v1/locations/shares",
+                &bob_cookie,
+                &bob_csrf,
+                &format!(r#"{{"friendship_id":{friendship_id}}}"#),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        share_ids.push(body_json(resp).await["id"].as_i64().expect("share id"));
+    }
+    let (paused_share_id, active_share_id) = (share_ids[0], share_ids[1]);
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "PATCH",
+            &format!("/api/v1/locations/shares/{paused_share_id}"),
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"is_active":false}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // The emergency publishes a point but must not widen consent.
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/emergency",
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"latitude":47.2,"longitude":28.9}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+
+    let shares = get_json(&app, "/api/v1/locations/shares", &bob_cookie).await;
+    let by_id = |id: i64| {
+        shares
+            .as_array()
+            .expect("array")
+            .iter()
+            .find(|s| s["id"] == id)
+            .cloned()
+            .expect("share")
+    };
+    assert_eq!(
+        by_id(paused_share_id)["is_active"],
+        false,
+        "paused share must stay paused: {shares}"
+    );
+    assert_eq!(
+        by_id(active_share_id)["is_active"],
+        true,
+        "active share must stay active: {shares}"
+    );
+    assert_eq!(
+        get_json(&app, "/api/v1/locations/friends", &alice_cookie).await,
+        json!([]),
+        "an emergency must not expose a paused share"
+    );
+    let visible = get_json(&app, "/api/v1/locations/friends", &carol_cookie).await;
+    assert_eq!(visible.as_array().expect("array").len(), 1);
+    assert_eq!(visible[0]["latitude"].as_f64().unwrap(), 47.2);
+}

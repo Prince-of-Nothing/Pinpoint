@@ -824,6 +824,55 @@ async fn split_service_mounts_status_with_its_own_kind() {
 }
 
 #[tokio::test]
+async fn api_json_carries_baseline_security_headers() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    // An unauthenticated API call: the 401 JSON must still be hardened.
+    let app = router(AppState::new());
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/auth/sessions")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    let headers = resp.headers();
+    assert_eq!(
+        headers["strict-transport-security"],
+        "max-age=31536000; includeSubDomains"
+    );
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+    assert_eq!(headers["x-frame-options"], "DENY");
+    assert_eq!(headers["referrer-policy"], "no-referrer");
+}
+
+#[tokio::test]
+async fn health_carries_baseline_security_headers() {
+    let app = pinpoint_desktop::server::router(pinpoint_desktop::server::AppState::new());
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let headers = resp.headers();
+    assert_eq!(
+        headers["strict-transport-security"],
+        "max-age=31536000; includeSubDomains"
+    );
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+    assert_eq!(headers["x-frame-options"], "DENY");
+    assert_eq!(headers["referrer-policy"], "no-referrer");
+}
+
+#[tokio::test]
 async fn privacy_route_matches() {
     let app = pinpoint_desktop::server::router(pinpoint_desktop::server::AppState::new());
     let resp = app

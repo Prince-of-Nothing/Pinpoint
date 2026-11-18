@@ -211,7 +211,7 @@
       <div class="checks">
         <div class="check">Argon2id password hashes</div>
         <div class="check">Opaque, server-side sessions</div>
-        <div class="check">HttpOnly + SameSite cookies</div>
+        <div class="check">HttpOnly + SameSite + Secure on HTTPS</div>
         <div class="check">Session-bound CSRF token on every unsafe method</div>
         <div class="check">Owner, friendship, active flag, expiry, precision</div>
         <div class="check">Check-ins and emergencies owner-only</div>
@@ -323,11 +323,11 @@
           <ul>
             <li>Admin demo needs DB promotion; no seeded admin.</li>
             <li>MFA login works; web enrolment is not built.</li>
-            <li>Offline web routes are not built.</li>
+            <li>Offline web: no cold start; reload lands on Sign in.</li>
             <li>Native photos are not built.</li>
             <li>Trail = explicit publishes, not background GPS.</li>
             <li>Audit: 9 unmaintained/unsound deps accepted.</li>
-            <li>Cookie <code>Secure</code>/HSTS and API headers are missing.</li>
+            <li>No per-IP auth limit; session cache is per replica.</li>
           </ul>
         </div>
         <div>

@@ -749,7 +749,7 @@ pub async fn delete_check_in(
         .into_response()
 }
 
-/// `POST /locations/emergency` â€” panic share: records an alert + activates all shares.
+/// `POST /locations/emergency` â€” panic share: records an alert + publishes the point.
 pub async fn trigger_emergency(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -767,44 +767,50 @@ pub async fn trigger_emergency(
             "latitude must be -90..90, longitude -180..180",
         );
     }
-    let mut store = state.store.lock().unwrap();
-    let me = match store.find_user_by_id(cu.user_id).cloned() {
-        Some(u) => u,
-        None => return error_envelope("USER_NOT_FOUND", "User not found."),
-    };
-    // Publish the emergency point as the latest location + activate shares.
-    if let Some(loc) = store.locations.iter_mut().find(|l| l.user_id == me.id) {
-        loc.latitude = lat;
-        loc.longitude = lon;
-        loc.updated_at = chrono::Utc::now().to_rfc3339();
-    } else {
-        store.locations.push(crate::models::FriendLocation {
+    let (alert, location) = {
+        let mut store = state.store.lock().unwrap();
+        let me = match store.find_user_by_id(cu.user_id).cloned() {
+            Some(u) => u,
+            None => return error_envelope("USER_NOT_FOUND", "User not found."),
+        };
+        // Publish the emergency point as the latest location. Paused shares
+        // stay paused: an emergency must not override the owner's consent.
+        if let Some(loc) = store.locations.iter_mut().find(|l| l.user_id == me.id) {
+            loc.latitude = lat;
+            loc.longitude = lon;
+            loc.updated_at = chrono::Utc::now().to_rfc3339();
+        } else {
+            store.locations.push(crate::models::FriendLocation {
+                user_id: me.id,
+                user_name: me.full_name.clone(),
+                latitude: lat,
+                longitude: lon,
+                precision_level: "exact".into(),
+                updated_at: chrono::Utc::now().to_rfc3339(),
+                accuracy: None,
+            });
+        }
+        let id = store.next_emergency_id;
+        store.next_emergency_id += 1;
+        let alert = crate::models::EmergencyAlert {
+            id,
             user_id: me.id,
             user_name: me.full_name.clone(),
             latitude: lat,
             longitude: lon,
-            precision_level: "exact".into(),
-            updated_at: chrono::Utc::now().to_rfc3339(),
-            accuracy: None,
-        });
-    }
-    for s in store.shares.iter_mut() {
-        if s.owner_id == me.id {
-            s.is_active = true;
-        }
-    }
-    let id = store.next_emergency_id;
-    store.next_emergency_id += 1;
-    let alert = crate::models::EmergencyAlert {
-        id,
-        user_id: me.id,
-        user_name: me.full_name.clone(),
-        latitude: lat,
-        longitude: lon,
-        created_at: chrono::Utc::now().to_rfc3339(),
-        resolved: false,
+            created_at: chrono::Utc::now().to_rfc3339(),
+            resolved: false,
+        };
+        store.emergencies.push(alert.clone());
+        (
+            alert,
+            store.locations.iter().find(|l| l.user_id == me.id).cloned(),
+        )
     };
-    store.emergencies.push(alert.clone());
+    // Persist the emergency point so a refresh cannot revert the location.
+    if let Some(location) = &location {
+        state.sql_upsert_location(location).await;
+    }
     (
         StatusCode::CREATED,
         Json(json!({

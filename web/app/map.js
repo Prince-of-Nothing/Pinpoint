@@ -402,7 +402,14 @@ export function createMap({
           setSelfLocation(fix, { fly: true });
           resolve(fix);
         },
-        () => reject(new Error("Location permission denied — search instead.")),
+        (error) => {
+          const messages = {
+            1: "Location permission is blocked. Allow it in your browser's site settings, then try again.",
+            2: "Location is unavailable. Turn on device Location and try again.",
+            3: "Location request timed out. Try again.",
+          };
+          reject(new Error(messages[error?.code] ?? "Location unavailable - try again."));
+        },
         { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 },
       );
     });

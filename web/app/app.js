@@ -751,6 +751,28 @@ function ensureMap() {
   return mapPromise;
 }
 
+let locationPrompted = false;
+
+/**
+ * Ask for geolocation once after sign-in when the browser has not decided.
+ * Automatic failures stay quiet; the crosshair is the explicit retry.
+ */
+async function promptLocationOnce(map) {
+  if (locationPrompted) return;
+  locationPrompted = true;
+  try {
+    const status = await navigator.permissions?.query?.({ name: "geolocation" });
+    if (status?.state === "denied") return;
+  } catch (_) {
+    // Permission API unavailable; let getCurrentPosition decide.
+  }
+  try {
+    await map.locate();
+  } catch (_) {
+    // Denied or timed out: no nag on the automatic attempt.
+  }
+}
+
 async function createAppMap() {
   const pmtilesUrl = await installedPmtilesUrl();
   mapApi = createMap({
@@ -796,6 +818,7 @@ function updateMap() {
       map.setNoteMarkers(state.notes, (note) => showNote(note));
       if (state.trailVisible) map.drawTrail(state.history);
       else map.clearTrail();
+      if (state.user) promptLocationOnce(map);
     })
     .catch(() => {});
 }

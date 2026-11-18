@@ -423,22 +423,40 @@ pub async fn mfa_status(
     (StatusCode::OK, Json(json!({ "mfa_enabled": enabled }))).into_response()
 }
 
-/// `DELETE /auth/mfa` — disable MFA (clears secret + flag).
+/// `POST /auth/mfa/disable` - disable MFA after proving a current TOTP code.
+///
+/// A live session alone is not enough: a stolen cookie must not remove the
+/// second factor. The code uses the same replay guard as `/auth/mfa/verify`.
 pub async fn mfa_disable(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
+    Json(body): Json<Value>,
 ) -> impl IntoResponse {
     let Some(Extension(cu)) = cu else {
         return unauthenticated();
     };
+    let code = body.get("code").and_then(Value::as_str).unwrap_or("");
+    let now = chrono::Utc::now().timestamp() as u64;
     let mut store = state.store.lock().unwrap();
     let Some(user) = store.users.iter_mut().find(|u| u.id == cu.user_id) else {
         return unauthenticated();
     };
-    user.totp_secret = None;
-    user.mfa_enabled = false;
-    user.mfa_last_step = 0;
-    (StatusCode::OK, Json(json!({ "mfa_enabled": false }))).into_response()
+    let Some(secret) = user.totp_secret.clone() else {
+        return error_envelope("MFA_NOT_ENROLLED", "No MFA secret to disable.");
+    };
+    match crate::security::mfa::verify_totp(&secret, code, now) {
+        Some(step) if step > user.mfa_last_step => {
+            user.totp_secret = None;
+            user.mfa_enabled = false;
+            user.mfa_last_step = 0;
+            (StatusCode::OK, Json(json!({ "mfa_enabled": false }))).into_response()
+        }
+        _ => (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"error": {"code": "INVALID_MFA_CODE", "message": "Invalid or already-used authenticator code."}})),
+        )
+            .into_response(),
+    }
 }
 
 /// `POST /auth/password/change` and `/auth/password/force-change`.
@@ -667,10 +685,20 @@ fn anonymous_response(
 /// `POST /auth/anonymous` — create a device-bound anonymous account.
 pub async fn anonymous(
     State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
     headers: HeaderMap,
     OriginalUri(uri): OriginalUri,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
+    // One active session per install: a repeated tap must not create a second
+    // anonymous account or a second session.
+    if cu.is_some() {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({"error": {"code": "ALREADY_SIGNED_IN", "message": "A session is already active. Sign out before creating another anonymous account."}})),
+        )
+            .into_response();
+    }
     let device_name = body
         .get("device_name")
         .and_then(Value::as_str)
@@ -847,5 +875,254 @@ mod registration_tests {
             StatusCode::OK,
             "the new session must authenticate"
         );
+    }
+
+    async fn json_body(response: axum::response::Response) -> Value {
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    fn response_cookie(response: &axum::response::Response) -> String {
+        response
+            .headers()
+            .get("set-cookie")
+            .expect("response must set the session cookie")
+            .to_str()
+            .unwrap()
+            .split(';')
+            .next()
+            .unwrap()
+            .to_string()
+    }
+
+    async fn post_json(
+        app: &axum::Router,
+        uri: &str,
+        cookie: &str,
+        csrf: &str,
+        body: Value,
+    ) -> axum::response::Response {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(uri)
+                    .header("content-type", "application/json")
+                    .header("cookie", cookie)
+                    .header("x-csrf-token", csrf)
+                    .body(Body::from(body.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+    }
+
+    async fn mfa_status(app: &axum::Router, cookie: &str) -> bool {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/mfa/status")
+                    .header("cookie", cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        json_body(response).await["mfa_enabled"].as_bool().unwrap()
+    }
+
+    #[tokio::test]
+    async fn password_change_requires_the_current_password_and_revokes_sessions() {
+        let app = crate::server::router(AppState::new());
+        let response = post_json(
+            &app,
+            "/api/v1/auth/register",
+            "",
+            "",
+            json!({
+                "email": "password-user@example.com",
+                "password": "StrongPass!2026",
+                "full_name": "Password User"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let cookie = response_cookie(&response);
+        let registration = json_body(response).await;
+        let csrf = registration["csrf_token"].as_str().unwrap().to_string();
+
+        let missing = post_json(
+            &app,
+            "/api/v1/auth/password/change",
+            &cookie,
+            &csrf,
+            json!({
+                "new_password": "NewStrong!2026",
+                "confirm_password": "NewStrong!2026"
+            }),
+        )
+        .await;
+        assert_eq!(missing.status(), StatusCode::UNAUTHORIZED);
+
+        let wrong = post_json(
+            &app,
+            "/api/v1/auth/password/change",
+            &cookie,
+            &csrf,
+            json!({
+                "current_password": "NotThePassword",
+                "new_password": "NewStrong!2026",
+                "confirm_password": "NewStrong!2026"
+            }),
+        )
+        .await;
+        assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
+
+        let changed = post_json(
+            &app,
+            "/api/v1/auth/password/change",
+            &cookie,
+            &csrf,
+            json!({
+                "current_password": "StrongPass!2026",
+                "new_password": "NewStrong!2026",
+                "confirm_password": "NewStrong!2026"
+            }),
+        )
+        .await;
+        assert_eq!(changed.status(), StatusCode::OK);
+
+        let me = app
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/auth/me")
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(me.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn mfa_disable_requires_a_current_totp_code() {
+        let app = crate::server::router(AppState::new());
+        let response = post_json(
+            &app,
+            "/api/v1/auth/register",
+            "",
+            "",
+            json!({
+                "email": "mfa-user@example.com",
+                "password": "StrongPass!2026",
+                "full_name": "MFA User"
+            }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let cookie = response_cookie(&response);
+        let registration = json_body(response).await;
+        let csrf = registration["csrf_token"].as_str().unwrap().to_string();
+
+        let response = post_json(&app, "/api/v1/auth/mfa/enroll", &cookie, &csrf, json!({})).await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let enrollment = json_body(response).await;
+        let secret = enrollment["secret"].as_str().unwrap().to_string();
+
+        let now = chrono::Utc::now().timestamp() as u64;
+        let code = crate::security::mfa::totp(&secret, now).unwrap();
+        let response = post_json(
+            &app,
+            "/api/v1/auth/mfa/verify",
+            &cookie,
+            &csrf,
+            json!({ "code": code }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Missing proof must not disable MFA.
+        let response = post_json(&app, "/api/v1/auth/mfa/disable", &cookie, &csrf, json!({})).await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert!(mfa_status(&app, &cookie).await);
+
+        // A valid unused code disables it and clears the secret.
+        let next = crate::security::mfa::totp(&secret, now + 30).unwrap();
+        let response = post_json(
+            &app,
+            "/api/v1/auth/mfa/disable",
+            &cookie,
+            &csrf,
+            json!({ "code": next }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(!mfa_status(&app, &cookie).await);
+
+        // The used code cannot be replayed after the secret is cleared.
+        let response = post_json(
+            &app,
+            "/api/v1/auth/mfa/disable",
+            &cookie,
+            &csrf,
+            json!({ "code": next }),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn anonymous_does_not_create_another_account_for_an_active_session() {
+        let state = AppState::new();
+        let store = state.store.clone();
+        let sessions = state.sessions.clone();
+        let app = crate::server::router(state);
+
+        let response = post_json(
+            &app,
+            "/api/v1/auth/anonymous",
+            "",
+            "",
+            json!({"device_name": "test device"}),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let cookie = response_cookie(&response);
+        let body = json_body(response).await;
+        let csrf = body["csrf_token"].as_str().unwrap().to_string();
+
+        let users_before = { store.lock().unwrap().users.len() };
+        let sessions_before = { sessions.lock().unwrap().len() };
+
+        let response = post_json(
+            &app,
+            "/api/v1/auth/anonymous",
+            &cookie,
+            &csrf,
+            json!({"device_name": "test device"}),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!({ store.lock().unwrap().users.len() }, users_before);
+        assert_eq!({ sessions.lock().unwrap().len() }, sessions_before);
+    }
+
+    #[tokio::test]
+    async fn list_sessions_is_scoped_to_one_user() {
+        let state = AppState::new();
+        state.create_session(1, "anonymous", false).await;
+        state.create_session(2, "anonymous", false).await;
+
+        let one = state.list_sessions(1).await;
+        let two = state.list_sessions(2).await;
+        assert_eq!(one.len(), 1);
+        assert_eq!(two.len(), 1);
+        assert!(one.iter().all(|session| session.user_id == 1));
+        assert!(two.iter().all(|session| session.user_id == 2));
     }
 }

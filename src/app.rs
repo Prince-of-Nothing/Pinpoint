@@ -68,7 +68,9 @@ pub enum PendingMutation {
     MFAVerify {
         code: String,
     },
-    MFADisable,
+    MFADisable {
+        code: String,
+    },
 }
 
 impl PendingMutation {
@@ -88,7 +90,7 @@ impl PendingMutation {
             PendingMutation::UpdateUser { .. } => "Update profile",
             PendingMutation::ChangePassword { .. } => "Change password",
             PendingMutation::MFAVerify { .. } => "Verify MFA",
-            PendingMutation::MFADisable => "Disable MFA",
+            PendingMutation::MFADisable { .. } => "Disable MFA",
         }
     }
 }
@@ -555,8 +557,8 @@ impl PinpointApp {
             PendingMutation::MFAVerify { code } => {
                 self.backend.mfa_verify(code).await?;
             }
-            PendingMutation::MFADisable => {
-                self.backend.mfa_disable().await?;
+            PendingMutation::MFADisable { code } => {
+                self.backend.mfa_disable(code).await?;
             }
         }
         Ok(())
@@ -810,6 +812,9 @@ impl PinpointApp {
     /// Create a device-bound anonymous account and return its one-time
     /// recovery code. The code is never logged.
     pub async fn sign_in_anonymous(&self, device_name: String) -> anyhow::Result<String> {
+        if self.is_signed_in() {
+            return Err(anyhow::anyhow!("A session is already active."));
+        }
         self.set_loading(true);
         self.set_error(None);
         let result = self.backend.anonymous(&device_name).await;
@@ -1627,8 +1632,8 @@ impl PinpointApp {
         }
     }
 
-    pub async fn mfa_disable(&self) -> anyhow::Result<()> {
-        let result = self.backend.mfa_disable().await;
+    pub async fn mfa_disable(&self, code: String) -> anyhow::Result<()> {
+        let result = self.backend.mfa_disable(code.trim()).await;
         match result {
             Ok(()) => {
                 let mut data = self.data.lock().unwrap();
@@ -1637,9 +1642,9 @@ impl PinpointApp {
                 Ok(())
             }
             Err(e) => {
-                self.queue_mutation(PendingMutation::MFADisable);
+                self.queue_mutation(PendingMutation::MFADisable { code });
                 self.set_error(Some(format!(
-                    "All backends unavailable — queued for sync ({} pending)",
+                    "All backends unavailable - queued for sync ({} pending)",
                     self.pending_mutation_count()
                 )));
                 Err(e)

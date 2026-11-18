@@ -333,11 +333,11 @@ impl Backend for FailoverBackend {
         })
     }
 
-    fn mfa_disable<'a>(&'a self) -> BackendFuture<'a, ()> {
+    fn mfa_disable<'a>(&'a self, code: &'a str) -> BackendFuture<'a, ()> {
         Box::pin(async move {
             self.try_all("mfa_disable", |b| {
                 let b = b.clone();
-                async move { b.mfa_disable().await }
+                async move { b.mfa_disable(code).await }
             })
             .await
         })

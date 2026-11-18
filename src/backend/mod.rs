@@ -101,7 +101,7 @@ pub trait Backend: BackendBounds {
     fn mfa_enroll<'a>(&'a self) -> BackendFuture<'a, (String, String)>;
     fn mfa_verify<'a>(&'a self, code: &'a str) -> BackendFuture<'a, ()>;
     fn mfa_status<'a>(&'a self) -> BackendFuture<'a, bool>;
-    fn mfa_disable<'a>(&'a self) -> BackendFuture<'a, ()>;
+    fn mfa_disable<'a>(&'a self, code: &'a str) -> BackendFuture<'a, ()>;
 
     /// Returns `Ok(true)` when the backend revoked sessions (regular change),
     /// `Ok(false)` when the current session remains valid (forced change).

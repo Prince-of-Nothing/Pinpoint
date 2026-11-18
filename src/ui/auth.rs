@@ -82,10 +82,11 @@ impl PinpointAppUI {
             ui.add_space(8.0);
             let field_width = if compact { 300.0 } else { 250.0 };
             let now = std::time::Instant::now();
-            let anonymous_busy = self
-                .anonymous_busy_until
-                .map(|until| until > now)
-                .unwrap_or(false);
+            let anonymous_busy = self.app.is_loading()
+                || self
+                    .anonymous_busy_until
+                    .map(|until| until > now)
+                    .unwrap_or(false);
             ui.horizontal_wrapped(|ui| {
                 if ui
                     .add_enabled(!anonymous_busy, egui::Button::new("Continue anonymously"))

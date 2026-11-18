@@ -118,7 +118,7 @@ Timeouts: **idle 12 h demo / 30 min prod** (configurable), **absolute 30 days**
 | GET | `/api/v1/auth/me` | current user from the session |
 | POST | `/api/v1/auth/link` | attach an identity to an anonymous session |
 | POST | `/api/v1/auth/mfa/verify` | clear `mfa_pending` (replay-safe TOTP) |
-| DELETE | `/api/v1/auth/mfa` | disable MFA |
+| POST | `/api/v1/auth/mfa/disable` | valid unused TOTP code → disable MFA |
 
 ## 7. Split-service behavior
 

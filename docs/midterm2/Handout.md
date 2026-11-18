@@ -144,4 +144,8 @@ Contract and consent suites pin the wire format and the rule: `tests/contract.rs
 4. As the owner, open **Today** for the two-point private trail and **Private
    notes** for the photo note; state that both are owner-only.
 5. Go offline, reload, show the installed Moldova map and an offline search for
-   Bălți; close on the signed 2.6.1 APK and the live `/health` version.
+   Bălți; close on the arm64 debug APK (first map view asks for location) and
+   the live `/health` version.
+
+The demo phone build is the arm64 debug APK with the location-permission fix;
+the signed v2.6.1 release APK predates it.

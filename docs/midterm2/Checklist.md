@@ -48,7 +48,8 @@ that holds the evidence or the step.
 - [ ] App loads and shows the login page:
       https://pinpoint-uj4y.onrender.com (`assets/01-login.png` is the expected
       look).
-- [ ] Release page has the APK:
+- [ ] Demo APK present: `Pinpoint-mobile-2.6.1-debug.apk` (arm64 debug key;
+      the signed release page APK predates the location-permission fix).
       https://github.com/Prince-of-Nothing/Pinpoint/releases/tag/v2.6.1.
 - [ ] Local gate green if asked to prove it:
       `docs/midterm2/Midterm2-Report.md` Appendix B
@@ -83,9 +84,12 @@ that holds the evidence or the step.
 
 ## 6. Phone
 
-- [ ] APK 2.6.1 installed from the release page above; signed ARM build
-      (`Midterm2-Report.md` section 6.4).
-- [ ] Signed in as B and the Today tab opened once before the talk
+- [ ] Demo APK installed; uninstall the signed release build first (different
+      key), then install the arm64 debug APK above.
+- [ ] Location allowed on the first map view: **While using the app** +
+      **Precise**. The map shows the self dot and
+      **Located: 47.01050, 28.86380**; tap **◎** to re-centre.
+- [ ] Signed in as A and the Today tab opened once before the talk
       (`Demo-Script.md` section 1, step 8).
 - [ ] One tap tested on the actual device; if the phone misbehaves, fall back
       to the web demo (`Demo-Script.md` section 4, "Phone widgets").
@@ -101,7 +105,7 @@ that holds the evidence or the step.
 - [ ] Do **not** press Directions while offline; web routing is not offline
       (`Demo-Script.md` section 2, `5:30`).
 - [ ] Fallback list skimmed: blank map prompt, stale UI (Ctrl+Shift+R,
-      cache `pinpoint-offline-v5`), route failure keeps the warm panel
+      cache `pinpoint-offline-v6`), route failure keeps the warm panel
       (`Demo-Script.md` section 4).
 - [ ] If live fails twice, switch to `docs/midterm2/assets/` and keep talking.
 

@@ -2,7 +2,8 @@
 
 **Format:** live demo, 6-8 minutes (a short cut is at the end).  
 **System:** https://pinpoint-uj4y.onrender.com (v2.6.1).  
-**Phone APK:** https://github.com/Prince-of-Nothing/Pinpoint/releases/tag/v2.6.1  
+**Phone APK:** `Pinpoint-mobile-2.6.1-debug.apk` (arm64 debug build; the signed
+v2.6.1 release APK predates the location-permission fix).  
 **Deck:** [`Presentation.md`](./Presentation.md) and [`slides.html`](./slides.html).  
 **Rehearsed:** 18 Nov 2026 against the live system with two fresh email
 accounts. Every account created for the rehearsal was deleted afterwards.
@@ -59,9 +60,14 @@ seeded users, no demo pins and no shared passwords in the repository.
    destination (the rehearsal got `0 m · 1 min`).
    Expect **136.4 km · 2 h 4 min · driving**, 34 steps, and two route buttons
    (`136.4 km · 2 h 4 min` and `133.4 km · 2 h 17 min`).
-8. Phone: install the **2.6.1 APK** and sign in as **A**, not B. The 2-point
-   trail and the private note belong to A; B's account has only the single
-   published point. Open the Today tab once. (Not covered by this rehearsal.)
+8. Phone: install **`Pinpoint-mobile-2.6.1-debug.apk`** (arm64). Uninstall the
+   signed release build first if present: the signing key differs. Sign in as **A**,
+   not B. On the first map view Android asks for location: choose **While using
+   the app** and **Precise**. The map centres on Chisinau and shows the self dot;
+   the notice reads **Located: 47.01050, 28.86380**. If the prompt was dismissed,
+   tap the **◎** crosshair on the right. The 2-point trail and the private note
+   belong to A; B's account has only the single published point. Open the Today
+   tab once. (Not covered by this rehearsal.)
 
 **Do not use anonymous accounts for the live demo.** On the multi-replica
 deployment they can collide or expire immediately.
@@ -166,7 +172,7 @@ The note with a photo took about 19 s from submit to the row appearing.
 ### 7:00 - Phone and close (45 s)
 
 1. On the phone: open the **Today** tab and show A's trail and text note.
-2. Show the theme/map and the signed 2.6.1 APK.
+2. Show the theme/map, tap **◎** to re-centre, and show the arm64 debug build.
 3. Close on the live `/status` page or the health endpoint.
 
 ## 3. Expected values
@@ -195,7 +201,7 @@ different. The **Friend locations** row is the proof of the share.
   windows and wait 8-20 s; the lists fill asynchronously. A fixed 1-2 s wait
   will read empty lists.
 - **Old cached UI:** Ctrl+Shift+R once; the service worker cache version is
-  `pinpoint-offline-v5`.
+  `pinpoint-offline-v6`.
 - **Route fails or says "Routing is busy, try again.":** click **Directions**
   again. The server allows two concurrent routes and caches identical
   endpoints for 5 minutes; a repeated request returned in 2.6 s. The route
@@ -210,8 +216,10 @@ different. The **Friend locations** row is the proof of the share.
   "Moldova is installed" still load from the service worker.
 - **Share sheet confirmation:** the browser `confirm` dialog is deliberate;
   the Cancel path sends no request (only grant/widen prompts).
-- **Phone widgets:** the release APK is the ARM build. Test one tap before the
-  talk; if the phone is unusual, fall back to the web demo. Not rehearsed.
+- **Phone widgets:** use the arm64 debug APK; the first map view asks for
+  location ("While using the app" + Precise). Test the permission and one tap
+  before the talk; if the phone is unusual, fall back to the web demo. Not
+  rehearsed.
 
 ## 5. Short cut (about 3:30 measured)
 

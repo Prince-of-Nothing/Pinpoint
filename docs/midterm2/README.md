@@ -11,6 +11,8 @@ from the live **v2.6.1** system.
 | [`Presentation.md`](./Presentation.md) | 13-slide outline with speaker notes, timing and Q&A preparation | Rehearse the talk |
 | [`slides.html`](./slides.html) | Self-contained visual deck (dark Pinpoint theme, keyboard navigation, print to PDF) | Present or export to PDF |
 | [`Pinpoint-Midterm2.pdf`](./Pinpoint-Midterm2.pdf) | 13-slide A4 landscape deck PDF | Present or keep as backup |
+| [`Pinpoint-DAS.pptx`](./Pinpoint-DAS.pptx) | DAS version of the 13-slide deck in the UTM 16:9 template (blue/white, PT Serif/PT Sans, UTM background) | Present in the DAS template |
+| [`Pinpoint-DAS.pdf`](./Pinpoint-DAS.pdf) | PDF export of the DAS deck | Backup or print |
 | [`Handout.md`](./Handout.md) | Two-page printable summary of scope, security, evidence and limits | Give to the examiner |
 | [`Checklist.md`](./Checklist.md) | Pre-flight, accounts, phone, offline and evidence checklist | Tick before the defence |
 | [`Q-and-A.md`](./Q-and-A.md) | 20 likely questions with verified/reported/not-built answers | Prepare for questions |

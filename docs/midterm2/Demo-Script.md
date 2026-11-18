@@ -20,8 +20,9 @@ seeded users, no demo pins and no shared passwords in the repository.
    generated handles (for example `calm-otter-42`).
 4. A -> Friends -> enter B's handle -> **Send request**. B -> reload (Ctrl+R)
    -> **Accept**. A -> reload.
-5. Choose a map in both profiles: **Use online map**, or install **Moldova**
-   and wait for "Moldova is installed", then reload.
+5. Maps: in **A**, install **Moldova**, wait for "Moldova is installed", then
+   reload (A needs the pack for the offline step). In **B**, choose **Use online
+   map**; B does not need the pack.
 6. Prepare the new screens:
    - Map in A -> publish `47.0105, 28.8638` and `47.0180, 28.8400`.
    - Map in B -> publish `47.0245, 28.8322` (this is the point A will see).
@@ -95,8 +96,8 @@ change is visible.
 
 1. In A: DevTools -> Network -> **Offline**. Do **not** reload: `/api/v1/auth/me`
    is not cached, so a reload returns to Sign in.
-2. The installed Moldova map stays on screen, and search **Bălți** returns
-   local results.
+2. The installed Moldova map stays on screen. Clear the search field first,
+   then search **Bălți**; it returns local results.
 3. **Do not press Directions here** - offline web routing is not implemented.
 4. Go back online.
 

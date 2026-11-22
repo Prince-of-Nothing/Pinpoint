@@ -1,7 +1,9 @@
 -- Per-table least-privilege grants (run AFTER services have created tables:
---   docker exec pinpoint-db psql -U pinpoint -d pinpoint -f /grants.sql
+--   docker exec -i pinpoint-db psql -U pinpoint -d pinpoint < db/02-grants.sql
 -- or via the bootstrap target). Owner-mapping mirrors ServiceKind in
--- src/server/state.rs: each binary writes only its own tables.
+-- src/server/state.rs: each binary writes only its own tables. Re-run
+-- db/03-fks.sql in the same pass so the foreign keys are applied after the
+-- tables exist.
 --
 -- auth service (pinpoint-auth): credentials + MFA fields.
 GRANT ALL ON pinpoint_users, pinpoint_state TO pinpoint_auth;

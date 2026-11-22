@@ -1,7 +1,7 @@
 #!/bin/sh
 # Create per-service least-privilege DB roles (run once at DB init).
 # Tables are created lazily by services at first boot; run db/02-grants.sql
-# afterwards for per-table grants (see docs/DEPLOYMENT.md).
+# and db/03-fks.sql afterwards (see the Docker section in README.md).
 # Local default uses identical dev passwords; production sets AUTH_DB_PWD etc.
 # via environment (never commit real secrets).
 set -eu

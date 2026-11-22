@@ -49,6 +49,8 @@ sequenceDiagram
 - Native: `message_identity_<user_id>` in the platform keychain; secrets never
   leave the device.
 - Web: non-extractable `CryptoKey` objects in IndexedDB, keyed by user id.
+  First use is a single readwrite transaction: two tabs opening at once
+  converge on one stored identity instead of publishing two bundles.
 - Server: `pinpoint_message_keys` (public bundle JSON) and
   `pinpoint_messages` (opaque envelope); migration 17. Account deletion removes
   the key and both message directions.

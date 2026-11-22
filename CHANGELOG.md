@@ -20,6 +20,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Messages: a native send failure now surfaces the error and restores the composer text instead of silently dropping the message.
 - [FIX] Compose: a fresh Postgres volume no longer dies in `db/init/03-fks.sql` before the services create their tables; the FK script skips with a notice and is re-run with `02-grants.sql` after first boot.
 - [FIX] Messages: native thread and inbox timestamps now render in the device's local time with the date for older messages instead of raw UTC; the web Chats tab shows the unread count.
 - [FIX] Messages: the safety number is now a symmetric pair value (canonical user-id order plus both bundles), so both friends see the same string; old peer-only records show Changed and must be compared again.

@@ -121,6 +121,8 @@ function resetToLogin() {
   state.trailVisible = false;
   state.messageConversations = [];
   state.messageUnread = 0;
+  const chatsLabel = $("chats-label");
+  if (chatsLabel) chatsLabel.textContent = "Chats";
   messagePeer = null;
   messageThread = [];
   messageSafety = null;
@@ -725,6 +727,8 @@ function renderMessages() {
   ul.innerHTML = "";
   const unread = Number(state.messageUnread) || 0;
   $("messages-unread").textContent = `${unread} unread`;
+  const tab = $("chats-label");
+  if (tab) tab.textContent = unread > 0 ? `Chats (${unread})` : "Chats";
   if (!state.messageConversations.length) {
     ul.innerHTML =
       '<li class="muted">No conversations yet. Add a friend and send the first message.</li>';

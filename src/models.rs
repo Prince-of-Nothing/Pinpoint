@@ -538,6 +538,20 @@ impl AppData {
     }
 }
 
+/// Local display timestamp for a message: `HH:MM` today, `YYYY-MM-DD HH:MM`
+/// otherwise. An unparsable timestamp is returned unchanged.
+pub fn format_message_time(iso: &str) -> String {
+    let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(iso) else {
+        return iso.to_string();
+    };
+    let local = parsed.with_timezone(&chrono::Local);
+    if local.date_naive() == chrono::Local::now().date_naive() {
+        local.format("%H:%M").to_string()
+    } else {
+        local.format("%Y-%m-%d %H:%M").to_string()
+    }
+}
+
 #[cfg(test)]
 mod geo_tests {
     use super::{bearing_deg, compass_label, format_distance, haversine_m, LocationShare};
@@ -602,7 +616,7 @@ mod geo_tests {
 
 #[cfg(test)]
 mod trust_tests {
-    use super::{AppData, SafetyState};
+    use super::{format_message_time, AppData, SafetyState};
 
     #[test]
     fn safety_state_tracks_verify_and_key_change() {
@@ -612,5 +626,15 @@ mod trust_tests {
         assert_eq!(data.safety_state(7, "aa:bb"), SafetyState::Verified);
         assert_eq!(data.safety_state(7, "cc:dd"), SafetyState::Changed);
         assert_eq!(data.safety_state(8, "aa:bb"), SafetyState::Unverified);
+    }
+
+    #[test]
+    fn message_time_uses_local_clock_and_falls_back() {
+        assert_eq!(format_message_time("not-a-date"), "not-a-date");
+        let now = chrono::Local::now().to_rfc3339();
+        assert_eq!(format_message_time(&now).len(), 5);
+        let old = format_message_time("2020-01-02T03:04:05+00:00");
+        assert_eq!(old.len(), 16, "older messages keep their date: {old}");
+        assert!(old.contains('-') && old.contains(':'));
     }
 }

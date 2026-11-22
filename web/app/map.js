@@ -524,7 +524,18 @@ export function createMap({
       element.className = "note-marker";
       element.title = note.label || "Private note";
       element.setAttribute("aria-label", `Open note: ${note.label || note.message}`);
-      element.textContent = "✎";
+      if (
+        typeof note.photo === "string" &&
+        /^data:image\/(jpeg|png);base64,/.test(note.photo)
+      ) {
+        const photo = document.createElement("img");
+        photo.className = "note-marker-photo";
+        photo.src = note.photo;
+        photo.alt = "";
+        element.appendChild(photo);
+      } else {
+        element.textContent = "✎";
+      }
       element.addEventListener("click", (event) => {
         event.preventDefault();
         onOpen?.(note);

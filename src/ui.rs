@@ -1871,7 +1871,7 @@ impl eframe::App for PinpointAppUI {
             let mut chosen_lang: Option<Lang> = None;
             let mut publish_requested = false;
             let mut refresh_requested = false;
-            let (is_admin, update_available) = {
+            let (is_admin, update_available, unread_messages) = {
                 let data = self.app.data();
                 let data = data.lock().unwrap();
                 let is_admin = data
@@ -1883,7 +1883,11 @@ impl eframe::App for PinpointAppUI {
                             && u.is_active
                     })
                     .unwrap_or(false);
-                (is_admin, data.update_status.is_available())
+                (
+                    is_admin,
+                    data.update_status.is_available(),
+                    data.unread_messages,
+                )
             };
             egui::TopBottomPanel::bottom("mobile_nav")
                 .resizable(false)
@@ -1979,15 +1983,21 @@ impl eframe::App for PinpointAppUI {
                             .show(ui, |ui| {
                                 for (index, (screen, label, icon)) in tools.iter().enumerate() {
                                     let selected = current == *screen;
+                                    let tile_label = if *screen == CurrentScreen::Messages
+                                        && unread_messages > 0
+                                    {
+                                        format!("{icon}\n{label} ({unread_messages})")
+                                    } else {
+                                        format!("{icon}\n{label}")
+                                    };
                                     let button = egui::Button::new(
-                                        RichText::new(format!("{icon}\n{label}"))
-                                            .size(13.0)
-                                            .strong()
-                                            .color(if selected {
+                                        RichText::new(tile_label).size(13.0).strong().color(
+                                            if selected {
                                                 theme::ACCENT_INK
                                             } else {
                                                 theme::TEXT
-                                            }),
+                                            },
+                                        ),
                                     )
                                     .fill(if selected {
                                         theme::ACCENT

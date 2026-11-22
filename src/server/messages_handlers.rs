@@ -502,6 +502,17 @@ mod tests {
         )
         .await;
         assert_eq!(json_body(response).await["unread"], 0);
+        // Re-reading an already-read thread must not write rows again.
+        let response = request_json(
+            &app,
+            "POST",
+            "/api/v1/messages/read",
+            &bob_cookie,
+            &bob_csrf,
+            Some(serde_json::json!({"friend_id": alice_id})),
+        )
+        .await;
+        assert_eq!(json_body(response).await["updated"], 0);
 
         // Non-friends can neither read the key nor the thread nor send.
         let response = request_json(

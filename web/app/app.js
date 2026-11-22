@@ -8,6 +8,7 @@ import { friendName, initSharing, shareRowModel } from "./sharing.js";
 import { initAppearance } from "./appearance.js";
 import {
   cryptoAvailable,
+  deleteIdentity,
   ensureIdentity,
   fingerprint,
   open,
@@ -269,11 +270,18 @@ async function deleteAccount() {
     return;
   }
   if (!window.confirm("Delete your account permanently? This cannot be undone.")) return;
+  const userId = state.user?.id;
   try {
     await api("/api/v1/users/me", {
       method: "DELETE",
       body: { confirm, current_password: password || null },
     });
+    // The account is gone server-side; drop the local message identity too.
+    try {
+      await deleteIdentity(userId);
+    } catch (_) {
+      // Best effort: a missing key is already deleted.
+    }
     resetToLogin();
     setStatus("Account deleted.");
   } catch (err) {
@@ -735,10 +743,16 @@ async function loadMessageThread(friendId) {
         "This friend has not enabled encrypted messages yet.";
     }
     renderMessageThread();
-    await api("/api/v1/messages/read", {
-      method: "POST",
-      body: { friend_id: friendId },
-    });
+    // Only write read state when the friend's copy actually changed.
+    const hasUnread = (thread.messages || []).some(
+      (message) => message.sender_id === friendId && !message.read_at,
+    );
+    if (hasUnread) {
+      await api("/api/v1/messages/read", {
+        method: "POST",
+        body: { friend_id: friendId },
+      });
+    }
     await refreshMessages();
   } catch (error) {
     $("message-thread").textContent =

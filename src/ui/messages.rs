@@ -17,7 +17,16 @@ impl PinpointAppUI {
             .is_none_or(|last| now.duration_since(last).as_secs() >= 5)
         {
             self.message_poll_at = Some(now);
-            self.spawn_action(PendingAction::RefreshMessages, ctx);
+            // An open thread must show incoming messages without a manual
+            // re-entry; the inbox only needs its own refresh when closed.
+            match self.message_selected {
+                Some(friend_id) => {
+                    self.spawn_action(PendingAction::LoadMessageThread { friend_id }, ctx);
+                }
+                None => {
+                    self.spawn_action(PendingAction::RefreshMessages, ctx);
+                }
+            }
         }
         ctx.request_repaint_after(std::time::Duration::from_secs(5));
 

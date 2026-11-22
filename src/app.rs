@@ -479,7 +479,13 @@ impl PinpointApp {
         };
         let my_public = identity.public_bundle();
         let peer_key = thread.peer.key.clone();
-        let marked_read = self.backend.mark_messages_read(friend_id).await.is_ok();
+        // Skip the write when there is nothing new: polling an open thread
+        // must not update every row's read timestamp every five seconds.
+        let has_unread = thread
+            .messages
+            .iter()
+            .any(|message| message.sender_id == friend_id && message.read_at.is_none());
+        let marked_read = has_unread && self.backend.mark_messages_read(friend_id).await.is_ok();
         let read_now = chrono::Utc::now().to_rfc3339();
         let messages: Vec<DecryptedMessage> = thread
             .messages

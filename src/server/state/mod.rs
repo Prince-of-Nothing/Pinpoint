@@ -87,6 +87,8 @@ pub enum ServiceKind {
     Users,
     Locations,
     MapOnly,
+    /// E2E message service (port 8007): public bundles, envelopes and read state.
+    Messages,
     /// Diagnostics ingestion service (port 8005): reports only.
     Diag,
     /// Admin API service (port 8006): users, audit, report triage.
@@ -102,6 +104,7 @@ impl ServiceKind {
             Self::Users => "users",
             Self::Locations => "locations",
             Self::MapOnly => "map",
+            Self::Messages => "messages",
             Self::Diag => "diag",
             Self::Admin => "admin",
         }
@@ -132,7 +135,7 @@ impl ServiceKind {
         matches!(self, Self::All | Self::Admin)
     }
     pub fn owns_messages(self) -> bool {
-        matches!(self, Self::All)
+        matches!(self, Self::All | Self::Messages)
     }
     pub fn owns_snapshot(self) -> bool {
         matches!(self, Self::All)
@@ -145,6 +148,7 @@ impl ServiceKind {
             Self::Users => 3,
             Self::Locations => 4,
             Self::MapOnly => 5,
+            Self::Messages => 8,
             Self::Diag => 6,
             Self::Admin => 7,
         }

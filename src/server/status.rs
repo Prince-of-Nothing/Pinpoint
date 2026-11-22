@@ -80,6 +80,7 @@ pub fn payload(state: &AppState) -> Value {
             "users": "/api/v1/users",
             "friendships": "/api/v1/friendships",
             "locations": "/api/v1/locations",
+            "messages": "/api/v1/messages",
             "map": "/map",
             "diagnostics": "/api/v1/diagnostics",
             "admin": "/api/v1/admin"

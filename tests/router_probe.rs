@@ -68,6 +68,34 @@ async fn map_tile_route_matches() {
 }
 
 #[tokio::test]
+async fn messages_service_mounts_its_routes() {
+    use pinpoint_desktop::server::{messages_router, AppState, ServiceKind};
+    assert_eq!(ServiceKind::Messages.label(), "messages");
+    assert!(ServiceKind::Messages.owns_messages());
+    // The split messages service must own envelopes and nothing else.
+    assert!(!ServiceKind::Messages.owns_users());
+    assert!(!ServiceKind::Messages.owns_friendships());
+    let app = messages_router().with_state(AppState::for_owner(ServiceKind::Messages));
+    for uri in [
+        "/api/v1/messages/unread",
+        "/api/v1/messages/conversations",
+        "/api/v1/messages/key/1",
+        "/api/v1/messages/1",
+    ] {
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::UNAUTHORIZED,
+            "{uri} must be mounted and require a session"
+        );
+    }
+}
+
+#[tokio::test]
 async fn minimal_param_route() {
     use axum::routing::get;
     let app = axum::Router::new().route("/:id", get(|| async { "hi" }));

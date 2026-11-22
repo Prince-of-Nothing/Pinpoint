@@ -8,6 +8,7 @@
 #   auth     → pinpoint-auth (src/bin/auth.rs, internal :8001)
 #   users    → pinpoint-users (src/bin/users.rs, internal :8002)
 #   locations→ pinpoint-locations (src/bin/locations.rs, internal :8003)
+#   messages → pinpoint-messages (src/bin/messages.rs, internal :8007)
 #   map      → pinpoint-map (src/bin/map.rs, internal :8004, stateless)
 #   db       → Postgres 16 (single primary; dumps every 5 min to pinpoint-backups)
 #   db-backup→ pg_dump loop (point-in-time recovery if the primary dies)
@@ -48,6 +49,7 @@ services:
       AUTH_DB_PWD: ${AUTH_DB_PWD:-pinpoint-auth-dev}
       USERS_DB_PWD: ${USERS_DB_PWD:-pinpoint-users-dev}
       LOCATIONS_DB_PWD: ${LOCATIONS_DB_PWD:-pinpoint-locations-dev}
+      MESSAGES_DB_PWD: ${MESSAGES_DB_PWD:-pinpoint-messages-dev}
       DIAG_DB_PWD: ${DIAG_DB_PWD:-pinpoint-diag-dev}
     volumes:
       - pinpoint-db-data:/var/lib/postgresql/data
@@ -187,6 +189,39 @@ services:
       - "8003"
 
   ###########################################################################
+  # messages — E2E message service (public bundles + opaque envelopes)
+  # Holds no plaintext: X25519/Ed25519 public keys, sealed messages, read state.
+  ###########################################################################
+  messages:
+    build:
+      context: .
+      dockerfile: Dockerfile.service
+      args:
+        BIN: pinpoint-messages
+    image: pinpoint:pinpoint-messages
+    restart: unless-stopped
+    scale: 2
+    deploy:
+      replicas: 2
+    environment:
+      BIND_ADDR: 0.0.0.0:8007
+      INTERNAL_PORT: "8007"
+      DATABASE_URL: postgresql://pinpoint_messages:${MESSAGES_DB_PWD:-pinpoint-messages-dev}@db:5432/pinpoint
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8007/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - pinpoint-net
+    expose:
+      - "8007"
+
+  ###########################################################################
   # map — Rust map service (tiles proxy + attribution + health, OSM ODbL)
   # Stateless — the safest service to scale; tile cache is per-process.
   ###########################################################################
@@ -297,6 +332,8 @@ services:
       users:
         condition: service_healthy
       locations:
+        condition: service_healthy
+      messages:
         condition: service_healthy
       map:
         condition: service_healthy

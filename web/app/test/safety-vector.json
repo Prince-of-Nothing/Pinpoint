@@ -1,0 +1,13 @@
+{
+  "alice_id": 1,
+  "bob_id": 2,
+  "alice": {
+    "ed25519": "gTl3Dqh9F19Wo1Rmw0x+zMuNipG07jeiXfYPW4/Js5Q=",
+    "x25519": "pOCSkrZRwni5dyxWn1+puxPZBrRqtoyd+dwrRAn4ogk="
+  },
+  "bob": {
+    "ed25519": "ypOsFwUYcHHWe4PH/w7+gQjo7EUwV113JoeTM9vavnw=",
+    "x25519": "Xf7dO2vUf2+ijuFdlp1bsOpTd01Ii9r53xxuASSz7yI="
+  },
+  "expected": "b5:99:68:c8:0e:74:87:b2:a7:42:db:c6:55:8a:77:8f"
+}

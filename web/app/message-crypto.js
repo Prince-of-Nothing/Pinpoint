@@ -319,12 +319,54 @@ export async function open(identity, sender, senderId, recipientId, sealed, asRe
   }
 }
 
-/** Safety fingerprint: SHA-256(x25519 || ed25519), first 16 bytes. */
+/** Single-bundle fingerprint (diagnostics; not the pair safety number). */
 export async function fingerprint(bundle) {
   try {
     const digest = await crypto.subtle.digest(
       "SHA-256",
       concat(unb64(bundle.x25519), unb64(bundle.ed25519)),
+    );
+    return [...new Uint8Array(digest)]
+      .slice(0, 16)
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join(":");
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Symmetric safety number for a pair. Both users hash the same bytes because
+ * the bundles are ordered by user id, so the string matches when compared in
+ * person. Mirrors `security::message_crypto::safety_number`.
+ */
+export async function safetyNumber(myBundle, myId, peerBundle, peerId) {
+  const mine = { id: Number(myId), bundle: myBundle };
+  const theirs = { id: Number(peerId), bundle: peerBundle };
+  if (
+    !mine.id ||
+    !theirs.id ||
+    mine.id === theirs.id ||
+    !mine.bundle?.x25519 ||
+    !mine.bundle?.ed25519 ||
+    !theirs.bundle?.x25519 ||
+    !theirs.bundle?.ed25519
+  ) {
+    return null;
+  }
+  try {
+    const [low, high] = mine.id < theirs.id ? [mine, theirs] : [theirs, mine];
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      concat(
+        new TextEncoder().encode("pinpoint-safety-v1"),
+        i64le(low.id),
+        unb64(low.bundle.x25519),
+        unb64(low.bundle.ed25519),
+        i64le(high.id),
+        unb64(high.bundle.x25519),
+        unb64(high.bundle.ed25519),
+      ),
     );
     return [...new Uint8Array(digest)]
       .slice(0, 16)

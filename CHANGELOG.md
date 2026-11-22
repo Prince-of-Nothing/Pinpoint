@@ -21,6 +21,7 @@ The per-item flagged list for this release is in
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
 - [FIX] Messages: native thread and inbox timestamps now render in the device's local time with the date for older messages instead of raw UTC; the web Chats tab shows the unread count.
+- [FIX] Messages: the safety number is now a symmetric pair value (canonical user-id order plus both bundles), so both friends see the same string; old peer-only records show Changed and must be compared again.
 - [FIX] Messages: the native thread polls while open so incoming messages appear without re-entering, the More tile shows the unread count, read state is written only when a friend's message is actually unread, and deleting a web account removes its local message identity.
 - [FIX] Messages: first use in two web tabs now stores one identity transactionally instead of letting both tabs publish different bundles, which made one tab's messages undecryptable.
 - [FIX] Native Today: action errors are surfaced, the note draft clears only after a successful POST and only if unchanged, refresh sections load independently, and a 401 clears private lists without letting an in-flight refresh cross accounts.

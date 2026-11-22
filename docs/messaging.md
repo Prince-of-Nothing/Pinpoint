@@ -59,9 +59,10 @@ sequenceDiagram
 
 ## Safety numbers
 
-Both clients show the peer's fingerprint:
-`SHA-256(x25519 || ed25519)`, first 16 bytes, colon-separated. The user can
-mark it **verified** after comparing it in person:
+Both clients show the same **pair** safety number: SHA-256 over a domain
+separator, both user ids and both public bundles, ordered by user id, first 16
+bytes, colon-separated. Because the order is canonical, Alice and Bob see the
+same string when they compare in person. The user can mark it **verified**:
 
 - native stores the record under `message_verified_<user_id>` in the keychain;
 - web stores it in `localStorage` per account and peer.
@@ -119,9 +120,10 @@ The feature follows the existing seams rather than duplicating them:
   `web/app/test/message-js-vector.json` (JS seal -> Rust open).
 - Browser: two isolated browser contexts register, become friends, exchange
   encrypted messages, see the safety number and read receipt.
-- Safety numbers: the web E2E marks a fingerprint verified, reloads and
-  reopens the chat (state persists), rotates the peer key (state becomes
-  Changed) and verifies again. Native was checked on the x86 emulator:
-  Mark as verified -> Verified, key rotation -> Changed with the warning, and
-  the verified record survives an app restart. `models::trust_tests` covers
-  unverified/verified/changed transitions.
+- Safety numbers: `security::message_crypto::safety_number` is symmetric and
+  pair-bound; `web/app/test/safety-vector.json` pins the Rust and JS outputs to
+  the same string. The web E2E checks that Alice and Bob display the same
+  number, then marks it verified, reloads, rotates the peer key (Changed) and
+  verifies again. Native was checked on the x86 emulator: Mark as verified ->
+  Verified, key rotation -> Changed with the warning, and the verified record
+  survives an app restart. `models::trust_tests` covers the state transitions.

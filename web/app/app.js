@@ -10,9 +10,9 @@ import {
   cryptoAvailable,
   deleteIdentity,
   ensureIdentity,
-  fingerprint,
   open,
   publicBundle,
+  safetyNumber,
   seal,
 } from "./message-crypto.js";
 
@@ -803,7 +803,9 @@ async function loadMessageThread(friendId) {
     }
     messageThread = rows;
     $("message-peer").textContent = thread.peer?.full_name || "Chat";
-    messageSafety = peerKey ? await fingerprint(peerKey) : null;
+    messageSafety = peerKey
+      ? await safetyNumber(myBundle, state.user.id, peerKey, friendId)
+      : null;
     renderMessageSafety();
     renderMessageThread();
     // Only write read state when the friend's copy actually changed.

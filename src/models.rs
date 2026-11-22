@@ -485,8 +485,8 @@ pub struct AppData {
     pub message_conversations: Vec<MessageConversation>,
     pub message_peer: Option<MessagePeer>,
     pub message_messages: Vec<DecryptedMessage>,
-    /// Locally verified safety numbers: peer user id -> fingerprint. Never
-    /// sent to the server; a changed fingerprint invalidates the record.
+    /// Locally verified safety numbers: peer user id -> symmetric pair number.
+    /// Never sent to the server; a changed number invalidates the record.
     pub message_verified: std::collections::HashMap<i64, String>,
     pub unread_messages: i64,
     pub check_ins: Vec<CheckIn>,

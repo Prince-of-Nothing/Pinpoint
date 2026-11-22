@@ -125,7 +125,8 @@ impl MessagePublicBundle {
         Some((PublicKey::from(x), verifying))
     }
 
-    /// Stable safety fingerprint (first 16 bytes of SHA-256, colon-separated).
+    /// Single-bundle fingerprint (first 16 bytes of SHA-256). Diagnostics
+    /// only; the value users compare is [`safety_number`].
     pub fn fingerprint(&self) -> Option<String> {
         let (x, e) = self.parse()?;
         let mut hasher = Sha256::new();
@@ -145,6 +146,46 @@ impl MessagePublicBundle {
     pub fn is_valid(&self) -> bool {
         self.parse().is_some()
     }
+}
+
+/// Symmetric safety number for a pair of users.
+///
+/// Both sides hash the same bytes because the bundles are ordered by user id,
+/// so Alice and Bob can compare the same string in person. The domain
+/// separator keeps this distinct from the single-bundle fingerprint.
+pub fn safety_number(
+    a_bundle: &MessagePublicBundle,
+    a_id: i64,
+    b_bundle: &MessagePublicBundle,
+    b_id: i64,
+) -> Option<String> {
+    if a_id <= 0 || b_id <= 0 || a_id == b_id {
+        return None;
+    }
+    let (low_id, low, high_id, high) = if a_id < b_id {
+        (a_id, a_bundle, b_id, b_bundle)
+    } else {
+        (b_id, b_bundle, a_id, a_bundle)
+    };
+    let (low_x, low_e) = low.parse()?;
+    let (high_x, high_e) = high.parse()?;
+    let mut hasher = Sha256::new();
+    hasher.update(b"pinpoint-safety-v1");
+    hasher.update(low_id.to_le_bytes());
+    hasher.update(low_x.as_bytes());
+    hasher.update(low_e.as_bytes());
+    hasher.update(high_id.to_le_bytes());
+    hasher.update(high_x.as_bytes());
+    hasher.update(high_e.as_bytes());
+    let digest = hasher.finalize();
+    Some(
+        digest
+            .iter()
+            .take(16)
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<Vec<_>>()
+            .join(":"),
+    )
 }
 
 /// Seal `plaintext` for `recipient` and keep a second copy readable by the
@@ -460,42 +501,50 @@ mod tests {
             bob.public_bundle().fingerprint().unwrap()
         );
     }
-}
 
-#[test]
-fn print_web_cross_language_fixture() {
-    let alice = MessageIdentity::from_secret_bundle(
-        &serde_json::json!({
-            "x25519": B64.encode([1u8; 32]),
-            "ed25519": B64.encode([2u8; 32]),
-        })
-        .to_string(),
-    )
-    .unwrap();
-    let bob = MessageIdentity::from_secret_bundle(
-        &serde_json::json!({
-            "x25519": B64.encode([3u8; 32]),
-            "ed25519": B64.encode([4u8; 32]),
-        })
-        .to_string(),
-    )
-    .unwrap();
-    let sealed = seal(&alice, &bob.public_bundle(), 1, 2, "rust-to-web").unwrap();
-    println!(
-        "FIXTURE={}",
-        serde_json::json!({
-            "alice_public": alice.public_bundle(),
-            "bob_public": bob.public_bundle(),
-            "bob_secret": {
-                "x25519": B64.encode([3u8; 32]),
-                "ed25519": B64.encode([4u8; 32]),
-            },
-            "sealed": sealed,
-            "sender_id": 1,
-            "recipient_id": 2,
-            "expected": "rust-to-web",
-        })
-    );
+    #[test]
+    fn safety_number_is_symmetric_and_pair_bound() {
+        let (alice, bob) = pair();
+        let (carol, _) = pair();
+        let ab = safety_number(&alice.public_bundle(), 1, &bob.public_bundle(), 2).unwrap();
+        let ba = safety_number(&bob.public_bundle(), 2, &alice.public_bundle(), 1).unwrap();
+        assert_eq!(ab, ba, "both users must see the same number");
+        assert_eq!(ab.len(), 47);
+        let ac = safety_number(&alice.public_bundle(), 1, &carol.public_bundle(), 3).unwrap();
+        assert_ne!(ab, ac);
+        assert!(safety_number(&alice.public_bundle(), 1, &bob.public_bundle(), 1).is_none());
+        assert!(safety_number(&alice.public_bundle(), 0, &bob.public_bundle(), 2).is_none());
+    }
+
+    #[test]
+    fn safety_vector_matches_the_web_implementation() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../web/app/test/safety-vector.json"))
+                .expect("safety fixture");
+        let alice: MessagePublicBundle = serde_json::from_value(fixture["alice"].clone()).unwrap();
+        let bob: MessagePublicBundle = serde_json::from_value(fixture["bob"].clone()).unwrap();
+        let expected = fixture["expected"].as_str().unwrap();
+        assert_eq!(
+            safety_number(
+                &alice,
+                fixture["alice_id"].as_i64().unwrap(),
+                &bob,
+                fixture["bob_id"].as_i64().unwrap(),
+            )
+            .as_deref(),
+            Some(expected)
+        );
+        assert_eq!(
+            safety_number(
+                &bob,
+                fixture["bob_id"].as_i64().unwrap(),
+                &alice,
+                fixture["alice_id"].as_i64().unwrap(),
+            )
+            .as_deref(),
+            Some(expected)
+        );
+    }
 }
 
 #[test]

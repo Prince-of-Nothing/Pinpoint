@@ -344,10 +344,10 @@ impl PinpointApp {
         self.data.lock().unwrap().message_verified = verified;
     }
 
-    /// Record that the user compared and accepted this peer's fingerprint.
+    /// Record that the user compared and accepted the pair safety number.
     /// A later key change no longer matches and shows as "changed".
-    pub fn verify_message_peer(&self, friend_id: i64, fingerprint: &str) {
-        if friend_id <= 0 || fingerprint.is_empty() {
+    pub fn verify_message_peer(&self, friend_id: i64, safety: &str) {
+        if friend_id <= 0 || safety.is_empty() {
             return;
         }
         let Some(user_id) = self.data.lock().unwrap().user.as_ref().map(|user| user.id) else {
@@ -355,8 +355,7 @@ impl PinpointApp {
         };
         let raw = {
             let mut data = self.data.lock().unwrap();
-            data.message_verified
-                .insert(friend_id, fingerprint.to_string());
+            data.message_verified.insert(friend_id, safety.to_string());
             serde_json::to_string(&data.message_verified).unwrap_or_default()
         };
         self.key_manager

@@ -237,6 +237,20 @@
             </div>
           </div>
 
+          <div id="message-sheet" class="sheet hidden" aria-live="polite">
+            <button type="button" class="sheet-close" id="message-close" aria-label="Close chat">&times;</button>
+            <h2 id="message-peer">Chat</h2>
+            <p id="message-safety" class="muted small"></p>
+            <div id="message-thread" class="message-thread"></div>
+            <form id="message-form">
+              <label>Message
+                <input id="message-input" type="text" maxlength="2000" autocomplete="off" placeholder="Write a message" />
+              </label>
+              <button type="submit">Send</button>
+            </form>
+            <p id="message-status" class="muted small" role="status"></p>
+          </div>
+
           <div id="route-panel" class="sheet hidden" aria-live="polite">
             <div class="sheet-drag" id="route-drag" title="Drag to move"></div>
             <button type="button" class="sheet-collapse" id="route-collapse" aria-label="Collapse route panel">▾</button>
@@ -331,6 +345,18 @@
             <p class="muted small">
               Only you can see this trail. It is kept for 24 hours.
             </p>
+          </div>
+
+          <div class="card" id="messages-card">
+            <div class="card-head">
+              <h2>Messages</h2>
+              <span class="badge" id="messages-unread">0 unread</span>
+            </div>
+            <p class="muted">
+              End-to-end encrypted 1:1 text. The server stores ciphertext only.
+            </p>
+            <p class="muted small" id="messages-crypto-note"></p>
+            <ul id="conversations-list" class="list"></ul>
           </div>
 
           <div class="card" id="friends-card">
@@ -527,6 +553,13 @@
               <path d="M12 7.2V12l3.2 1.9" />
             </svg>
             Today
+          </button>
+          <button type="button" class="tab" data-tab="chats">
+            <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+              <path d="M4 5.5h16v10.5H9.5L4.5 20V5.5Z" />
+              <path d="M8 9h8M8 12.5h5" />
+            </svg>
+            Chats
           </button>
           <button type="button" class="tab" data-tab="account">
             <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">

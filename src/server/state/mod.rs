@@ -12,6 +12,7 @@
 mod diagnostics;
 mod friendships;
 mod locations;
+pub(crate) mod messages;
 mod sessions;
 mod store;
 mod users;
@@ -53,6 +54,10 @@ fn strip_deleted_users(store: &mut Store, deleted: &HashSet<i64>) {
         .diagnostic_reports
         .retain(|r| r.user_id.is_none_or(|id| !deleted.contains(&id)));
     store.admin_audit.retain(|a| !deleted.contains(&a.actor_id));
+    store.message_keys.retain(|id, _| !deleted.contains(id));
+    store
+        .messages
+        .retain(|m| !deleted.contains(&m.sender_id) && !deleted.contains(&m.recipient_id));
 }
 
 /// Application state shared between handlers.
@@ -125,6 +130,9 @@ impl ServiceKind {
     }
     pub fn owns_audit(self) -> bool {
         matches!(self, Self::All | Self::Admin)
+    }
+    pub fn owns_messages(self) -> bool {
+        matches!(self, Self::All)
     }
     pub fn owns_snapshot(self) -> bool {
         matches!(self, Self::All)
@@ -227,12 +235,16 @@ impl AppState {
         store.next_emergency_id = 1;
         store.next_report_id = 1;
         store.next_audit_id = 1;
+        store.next_message_id = 1;
         if !self.load_users(&mut store).await {
             return false;
         }
         self.load_friendships(&mut store).await;
         self.load_locations_domain(&mut store).await;
         self.load_diagnostics(&mut store).await;
+        if self.owner.owns_messages() {
+            self.load_messages_domain(&mut store).await;
+        }
         *self.store.lock().unwrap() = store;
         true
     }

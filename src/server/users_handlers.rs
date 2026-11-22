@@ -319,6 +319,10 @@ async fn purge_user(state: &AppState, id: i64) -> Option<String> {
         store.emergencies.retain(|e| e.user_id != id);
         store.location_history.retain(|p| p.user_id != id);
         store.place_notes.retain(|n| n.user_id != id);
+        store.message_keys.remove(&id);
+        store
+            .messages
+            .retain(|m| m.sender_id != id && m.recipient_id != id);
         handle
     };
     state.delete_user_sessions(id).await;

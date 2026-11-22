@@ -1,6 +1,7 @@
 //! Friends screen
 use super::theme;
 use super::{PendingAction, PinpointAppUI};
+use crate::app::CurrentScreen;
 use crate::models::Friendship;
 use crate::ui::share_sheet::ShareSheet;
 use eframe::egui::{self};
@@ -116,6 +117,15 @@ impl PinpointAppUI {
                     };
                     ui.horizontal_wrapped(|ui| {
                         ui.label(&name);
+                        if ui.button("Message").clicked() {
+                            let friend_id = if Some(friend.requester_id) == my_id {
+                                friend.receiver_id
+                            } else {
+                                friend.requester_id
+                            };
+                            self.select_message_friend(friend_id, ctx);
+                            self.app.set_screen(CurrentScreen::Messages);
+                        }
                         if ui.button("Sharing").clicked() {
                             self.share_sheet =
                                 Some(ShareSheet::for_friendship(friend, my_id, &shares));

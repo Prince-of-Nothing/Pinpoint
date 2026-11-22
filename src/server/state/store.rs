@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::{
     AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
-    LocationPoint, LocationShare, PlaceNote, User,
+    LocationPoint, LocationShare, Message, PlaceNote, User,
 };
 
 /// Per-domain slices of the shared aggregate. `Store` keeps them as
@@ -42,6 +42,12 @@ pub struct Store {
     pub location_history: Vec<LocationPoint>,
     #[serde(skip)]
     pub place_notes: Vec<PlaceNote>,
+    /// E2E message public bundles by user id (JSON). Opaque to the server.
+    #[serde(skip)]
+    pub message_keys: std::collections::HashMap<i64, String>,
+    /// E2E message envelopes. Never part of the shared JSON snapshot.
+    #[serde(skip)]
+    pub messages: Vec<Message>,
     #[serde(default)]
     pub next_user_id: i64,
     #[serde(default)]
@@ -60,6 +66,8 @@ pub struct Store {
     pub next_history_id: i64,
     #[serde(skip)]
     pub next_note_id: i64,
+    #[serde(skip)]
+    pub next_message_id: i64,
 }
 
 impl Store {
@@ -74,6 +82,7 @@ impl Store {
             next_audit_id: 1,
             next_history_id: 1,
             next_note_id: 1,
+            next_message_id: 1,
             ..Default::default()
         }
     }

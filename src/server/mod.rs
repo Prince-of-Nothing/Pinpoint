@@ -24,6 +24,7 @@ mod auth_handlers;
 mod diagnostic_handlers;
 mod handlers;
 mod locations_handlers;
+mod messages_handlers;
 mod migrations;
 mod offline_handlers;
 mod state;
@@ -43,7 +44,7 @@ use axum::{
     extract::State,
     http::{header, HeaderMap, HeaderValue, StatusCode},
     middleware::Next,
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch, post, put},
     Json, Router,
 };
 use serde_json::json;
@@ -177,6 +178,7 @@ pub fn router(state: AppState) -> Router {
     auth_router()
         .merge(users_router())
         .merge(locations_router())
+        .merge(messages_router())
         .merge(map_router())
         .merge(admin_router())
         .merge(diagnostic_router())
@@ -185,6 +187,7 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(web_handlers::index))
         .route("/privacy", get(web_handlers::privacy))
         .route("/app.js", get(web_handlers::app_js))
+        .route("/message-crypto.js", get(web_handlers::message_crypto_js))
         .route("/map.js", get(web_handlers::map_js))
         .route("/nav.js", get(web_handlers::nav_js))
         .route("/sharing.js", get(web_handlers::sharing_js))
@@ -307,6 +310,28 @@ pub fn auth_router() -> Router<AppState> {
         .route("/api/v1/auth/mfa/verify", post(auth_handlers::mfa_verify))
         .route("/api/v1/auth/mfa/status", get(auth_handlers::mfa_status))
         .route("/api/v1/auth/mfa/disable", post(auth_handlers::mfa_disable))
+}
+
+/// E2E messaging routes. The server stores opaque envelopes only; all access
+/// checks happen in the handlers (accepted friends, own key, rate limit).
+pub fn messages_router() -> Router<AppState> {
+    Router::new()
+        .route("/api/v1/messages/key", put(messages_handlers::set_key))
+        .route(
+            "/api/v1/messages/key/:user_id",
+            get(messages_handlers::get_key),
+        )
+        .route("/api/v1/messages", post(messages_handlers::send))
+        .route(
+            "/api/v1/messages/conversations",
+            get(messages_handlers::conversations),
+        )
+        .route("/api/v1/messages/unread", get(messages_handlers::unread))
+        .route("/api/v1/messages/read", post(messages_handlers::mark_read))
+        .route(
+            "/api/v1/messages/:friend_id",
+            get(messages_handlers::thread),
+        )
 }
 
 /// Offline pack download routes (`/offline/packs/*`): the committed manifest

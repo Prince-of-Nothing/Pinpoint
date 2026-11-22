@@ -139,6 +139,16 @@ pub const MIGRATIONS: &[(u32, &str, &[&str])] = &[
             "CREATE INDEX IF NOT EXISTS idx_place_notes_user_time ON pinpoint_place_notes(user_id, created_at DESC)",
         ],
     ),
+    (
+        17,
+        "e2e_messages",
+        &[
+            "CREATE TABLE IF NOT EXISTS pinpoint_message_keys (user_id BIGINT PRIMARY KEY, bundle TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS pinpoint_messages (id BIGSERIAL PRIMARY KEY, sender_id BIGINT NOT NULL, recipient_id BIGINT NOT NULL, ephemeral_public_key TEXT NOT NULL, salt_to TEXT NOT NULL, nonce_to TEXT NOT NULL, ciphertext_to TEXT NOT NULL, salt_from TEXT NOT NULL, nonce_from TEXT NOT NULL, ciphertext_from TEXT NOT NULL, signature TEXT NOT NULL, created_at TEXT NOT NULL, read_at TEXT, UNIQUE(signature))",
+            "CREATE INDEX IF NOT EXISTS idx_messages_pair_time ON pinpoint_messages(sender_id, recipient_id, created_at DESC)",
+            "CREATE INDEX IF NOT EXISTS idx_messages_recipient_unread ON pinpoint_messages(recipient_id, read_at)",
+        ],
+    ),
 ];
 
 /// Apply all pending migrations (idempotent, recorded in version table).

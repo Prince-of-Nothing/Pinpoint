@@ -13,6 +13,7 @@ pub mod circuit_breaker;
 pub mod e2e;
 pub mod encryption;
 pub mod keychain;
+pub mod message_crypto;
 pub mod mfa;
 pub mod oauth;
 pub mod password;

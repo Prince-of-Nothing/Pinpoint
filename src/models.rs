@@ -488,6 +488,9 @@ pub struct AppData {
     /// Locally verified safety numbers: peer user id -> symmetric pair number.
     /// Never sent to the server; a changed number invalidates the record.
     pub message_verified: std::collections::HashMap<i64, String>,
+    /// Previously seen public bundles per peer (newest last). Public keys only;
+    /// used to verify messages signed before the peer rotated its identity.
+    pub message_peer_bundles: std::collections::HashMap<i64, Vec<MessagePublicBundle>>,
     pub unread_messages: i64,
     pub check_ins: Vec<CheckIn>,
     pub emergencies: Vec<EmergencyAlert>,
@@ -550,6 +553,27 @@ pub fn format_message_time(iso: &str) -> String {
     } else {
         local.format("%Y-%m-%d %H:%M").to_string()
     }
+}
+
+/// Upper bound on previous peer bundles kept per friend. Old bundles are
+/// public keys only; the cap stops a peer that rotates constantly from growing
+/// local storage without bound.
+pub const MAX_CACHED_PEER_BUNDLES: usize = 8;
+
+/// Append `bundle` to a peer cache unless it is already present. Returns
+/// `true` when a new bundle was added. Newest is last so callers try it first.
+pub fn cache_peer_bundle(
+    cache: &mut Vec<MessagePublicBundle>,
+    bundle: &MessagePublicBundle,
+) -> bool {
+    if cache.iter().any(|known| known == bundle) {
+        return false;
+    }
+    cache.push(bundle.clone());
+    if cache.len() > MAX_CACHED_PEER_BUNDLES {
+        cache.remove(0);
+    }
+    true
 }
 
 #[cfg(test)]
@@ -616,7 +640,10 @@ mod geo_tests {
 
 #[cfg(test)]
 mod trust_tests {
-    use super::{format_message_time, AppData, SafetyState};
+    use super::{
+        cache_peer_bundle, format_message_time, AppData, SafetyState, MAX_CACHED_PEER_BUNDLES,
+    };
+    use crate::security::message_crypto::MessageIdentity;
 
     #[test]
     fn safety_state_tracks_verify_and_key_change() {
@@ -636,5 +663,19 @@ mod trust_tests {
         let old = format_message_time("2020-01-02T03:04:05+00:00");
         assert_eq!(old.len(), 16, "older messages keep their date: {old}");
         assert!(old.contains('-') && old.contains(':'));
+    }
+
+    #[test]
+    fn peer_bundle_cache_dedupes_and_caps() {
+        let mut cache = Vec::new();
+        let first = MessageIdentity::generate().public_bundle();
+        assert!(cache_peer_bundle(&mut cache, &first));
+        assert!(!cache_peer_bundle(&mut cache, &first));
+        for _ in 0..(MAX_CACHED_PEER_BUNDLES + 3) {
+            let bundle = MessageIdentity::generate().public_bundle();
+            assert!(cache_peer_bundle(&mut cache, &bundle));
+        }
+        assert_eq!(cache.len(), MAX_CACHED_PEER_BUNDLES);
+        assert!(!cache.contains(&first), "oldest bundle should be evicted");
     }
 }

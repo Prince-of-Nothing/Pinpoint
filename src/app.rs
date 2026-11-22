@@ -2,7 +2,7 @@ use crate::backend::DynBackend;
 use crate::models::*;
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::patterns::state::StateContext;
-use crate::security::message_crypto::{open, seal, MessageIdentity};
+use crate::security::message_crypto::{open, seal, MessageIdentity, MessagePublicBundle};
 use crate::security::{AuditLogger, KeyManager, RateLimiter};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -317,6 +317,8 @@ impl PinpointApp {
                     .delete_secret(&Self::message_identity_secret(user_id));
                 self.key_manager
                     .delete_secret(&Self::message_verifications_secret(user_id));
+                self.key_manager
+                    .delete_secret(&Self::message_bundles_secret(user_id));
             }
         }
     }
@@ -327,6 +329,10 @@ impl PinpointApp {
 
     fn message_verifications_secret(user_id: i64) -> String {
         format!("message_verified_{user_id}")
+    }
+
+    fn message_bundles_secret(user_id: i64) -> String {
+        format!("message_bundles_{user_id}")
     }
 
     /// Load the account's locally verified safety numbers. Never sent to the
@@ -342,6 +348,40 @@ impl PinpointApp {
             .and_then(|raw| serde_json::from_str(&raw).ok())
             .unwrap_or_default();
         self.data.lock().unwrap().message_verified = verified;
+    }
+
+    /// Load the public bundles previously seen for each peer. They are public
+    /// keys, kept only to verify messages signed before a peer rotated.
+    fn load_message_bundles(&self) {
+        let Some(user_id) = self.data.lock().unwrap().user.as_ref().map(|user| user.id) else {
+            return;
+        };
+        let bundles = self
+            .key_manager
+            .load_secret(&Self::message_bundles_secret(user_id))
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_default();
+        self.data.lock().unwrap().message_peer_bundles = bundles;
+    }
+
+    /// Remember a peer bundle (public key only) if it is new. Persists the
+    /// cache so history remains verifiable after an app restart.
+    fn remember_peer_bundle(&self, friend_id: i64, bundle: &MessagePublicBundle) -> bool {
+        let Some(user_id) = self.data.lock().unwrap().user.as_ref().map(|user| user.id) else {
+            return false;
+        };
+        let raw = {
+            let mut data = self.data.lock().unwrap();
+            let cache = data.message_peer_bundles.entry(friend_id).or_default();
+            if !cache_peer_bundle(cache, bundle) {
+                return false;
+            }
+            serde_json::to_string(&data.message_peer_bundles).unwrap_or_default()
+        };
+        self.key_manager
+            .persist_secret(&Self::message_bundles_secret(user_id), raw.as_bytes());
+        true
     }
 
     /// Record that the user compared and accepted the pair safety number.
@@ -522,6 +562,26 @@ impl PinpointApp {
         };
         let my_public = identity.public_bundle();
         let peer_key = thread.peer.key.clone();
+        if let Some(key) = &peer_key {
+            self.remember_peer_bundle(friend_id, key);
+        }
+        // Newest bundle first, then previously seen ones. A peer that signed in
+        // on a new device rotates its Ed25519 key; old messages still verify
+        // against the bundle they were signed with.
+        let peer_bundles = {
+            let data = self.data.lock().unwrap();
+            let mut cached = data
+                .message_peer_bundles
+                .get(&friend_id)
+                .cloned()
+                .unwrap_or_default();
+            if let Some(current) = &peer_key {
+                if !cached.iter().any(|known| known == current) {
+                    cached.push(current.clone());
+                }
+            }
+            cached
+        };
         // Skip the write when there is nothing new: polling an open thread
         // must not update every row's read timestamp every five seconds.
         let has_unread = thread
@@ -535,23 +595,24 @@ impl PinpointApp {
             .iter()
             .map(|message| {
                 let mine = message.sender_id == me;
+                let sealed = message.sealed();
                 let text = if mine {
                     open(
                         &identity,
                         &my_public,
                         message.sender_id,
                         message.recipient_id,
-                        &message.sealed(),
+                        &sealed,
                         false,
                     )
                 } else {
-                    peer_key.as_ref().and_then(|key| {
+                    peer_bundles.iter().rev().find_map(|key| {
                         open(
                             &identity,
                             key,
                             message.sender_id,
                             message.recipient_id,
-                            &message.sealed(),
+                            &sealed,
                             true,
                         )
                     })
@@ -864,9 +925,11 @@ impl PinpointApp {
             data.message_peer = None;
             data.message_messages.clear();
             data.message_verified.clear();
+            data.message_peer_bundles.clear();
             data.unread_messages = 0;
         }
         self.load_message_verifications();
+        self.load_message_bundles();
         self.persist_session();
         if forced_change {
             self.set_screen(CurrentScreen::ChangePassword);

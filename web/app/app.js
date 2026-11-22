@@ -288,6 +288,7 @@ async function deleteAccount() {
     }
     try {
       localStorage.removeItem(verifiedStorageKey(userId));
+      localStorage.removeItem(bundlesStorageKey(userId));
     } catch (_) {
       // Storage can be unavailable in private mode.
     }
@@ -617,6 +618,62 @@ function verifiedStorageKey(userId) {
   return `pinpoint-message-verified-${userId}`;
 }
 
+const MAX_PEER_BUNDLES = 8;
+
+function bundlesStorageKey(userId) {
+  return `pinpoint-message-bundles-${userId}`;
+}
+
+function loadPeerBundles() {
+  if (!state.user) return {};
+  try {
+    return JSON.parse(localStorage.getItem(bundlesStorageKey(state.user.id))) || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function savePeerBundle(peerId, bundle) {
+  if (!state.user || !bundle?.x25519 || !bundle?.ed25519) return;
+  const all = loadPeerBundles();
+  const key = String(peerId);
+  const list = Array.isArray(all[key]) ? all[key] : [];
+  if (
+    list.some(
+      (known) =>
+        known.x25519 === bundle.x25519 && known.ed25519 === bundle.ed25519,
+    )
+  ) {
+    return;
+  }
+  list.push({ x25519: bundle.x25519, ed25519: bundle.ed25519 });
+  if (list.length > MAX_PEER_BUNDLES) {
+    list.splice(0, list.length - MAX_PEER_BUNDLES);
+  }
+  all[key] = list;
+  try {
+    localStorage.setItem(bundlesStorageKey(state.user.id), JSON.stringify(all));
+  } catch (_) {
+    // Storage can be unavailable in private mode.
+  }
+}
+
+function peerBundlesFor(peerId, current) {
+  const all = loadPeerBundles();
+  const list = Array.isArray(all[String(peerId)]) ? [...all[String(peerId)]] : [];
+  if (
+    current?.x25519 &&
+    current?.ed25519 &&
+    !list.some(
+      (known) =>
+        known.x25519 === current.x25519 && known.ed25519 === current.ed25519,
+    )
+  ) {
+    list.push(current);
+  }
+  return list;
+}
+
 function loadVerifiedPeers() {
   if (!state.user) return {};
   try {
@@ -783,21 +840,34 @@ async function loadMessageThread(friendId) {
     const thread = await api(`/api/v1/messages/${friendId}?limit=50`);
     messagePeer = thread.peer;
     const peerKey = thread.peer?.key || null;
+    if (peerKey) savePeerBundle(friendId, peerKey);
+    const peerBundles = peerKey ? peerBundlesFor(friendId, peerKey) : [];
     const myBundle = publicBundle(identity);
     const rows = [];
     for (const message of thread.messages || []) {
       const mine = message.sender_id === state.user.id;
-      const senderBundle = mine ? myBundle : peerKey;
       let text = null;
-      if (senderBundle) {
+      if (mine) {
         text = await open(
           identity,
-          senderBundle,
+          myBundle,
           message.sender_id,
           message.recipient_id,
           message,
-          !mine,
+          false,
         );
+      } else {
+        for (const bundle of [...peerBundles].reverse()) {
+          text = await open(
+            identity,
+            bundle,
+            message.sender_id,
+            message.recipient_id,
+            message,
+            true,
+          );
+          if (text !== null) break;
+        }
       }
       rows.push({ ...message, mine, text });
     }

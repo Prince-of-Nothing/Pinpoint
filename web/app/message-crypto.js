@@ -166,15 +166,23 @@ async function loadStored(userId) {
   });
 }
 
-async function saveStored(userId, identity) {
+async function storeIfAbsent(userId, identity) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const request = db
-      .transaction(DB_STORE, "readwrite")
-      .objectStore(DB_STORE)
-      .put(identity, String(userId));
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error || new Error("Could not store message key"));
+    const tx = db.transaction(DB_STORE, "readwrite");
+    const store = tx.objectStore(DB_STORE);
+    const request = store.get(String(userId));
+    let winner = identity;
+    request.onsuccess = () => {
+      if (request.result) {
+        winner = request.result;
+      } else {
+        store.put(identity, String(userId));
+      }
+    };
+    tx.oncomplete = () => resolve(winner);
+    tx.onerror = () => reject(tx.error || new Error("Could not store message key"));
+    tx.onabort = () => reject(tx.error || new Error("Could not store message key"));
   });
 }
 
@@ -184,8 +192,10 @@ export async function ensureIdentity(userId) {
   if (cache.has(key)) return cache.get(key);
   let identity = await loadStored(key);
   if (!identity) {
-    identity = await generateIdentity();
-    await saveStored(key, identity);
+    // Two tabs opening for the first time can generate different keys. The
+    // readwrite transaction serialises them: the first write wins and the
+    // loser adopts the stored key instead of publishing a second bundle.
+    identity = await storeIfAbsent(key, await generateIdentity());
   }
   cache.set(key, identity);
   return identity;

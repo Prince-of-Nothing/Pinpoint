@@ -34,6 +34,7 @@ let notePhotoData = null;
 let messageIdentity = null;
 let messageIdentityUserId = null;
 let messagePeer = null;
+let messageSafety = null;
 let messageThread = [];
 let messageBusy = false;
 
@@ -122,6 +123,7 @@ function resetToLogin() {
   state.messageUnread = 0;
   messagePeer = null;
   messageThread = [];
+  messageSafety = null;
   messageIdentity = null;
   messageIdentityUserId = null;
   accountNameDirty = false;
@@ -281,6 +283,11 @@ async function deleteAccount() {
       await deleteIdentity(userId);
     } catch (_) {
       // Best effort: a missing key is already deleted.
+    }
+    try {
+      localStorage.removeItem(verifiedStorageKey(userId));
+    } catch (_) {
+      // Storage can be unavailable in private mode.
     }
     resetToLogin();
     setStatus("Account deleted.");
@@ -604,6 +611,62 @@ function renderSessions(items) {
 // End-to-end encrypted messages (ECIES; see web/app/message-crypto.js)
 // ---------------------------------------------------------------------------
 
+function verifiedStorageKey(userId) {
+  return `pinpoint-message-verified-${userId}`;
+}
+
+function loadVerifiedPeers() {
+  if (!state.user) return {};
+  try {
+    return JSON.parse(localStorage.getItem(verifiedStorageKey(state.user.id))) || {};
+  } catch (_) {
+    return {};
+  }
+}
+
+function saveVerifiedPeer(peerId, value) {
+  if (!state.user || !value) return;
+  const verified = loadVerifiedPeers();
+  verified[String(peerId)] = value;
+  try {
+    localStorage.setItem(
+      verifiedStorageKey(state.user.id),
+      JSON.stringify(verified),
+    );
+  } catch (_) {
+    // Storage can be unavailable in private mode.
+  }
+}
+
+function renderMessageSafety() {
+  const label = $("message-safety");
+  const button = $("message-verify");
+  if (!label || !button) return;
+  if (!messagePeer?.key) {
+    label.textContent = messagePeer
+      ? "This friend has not enabled encrypted messages yet."
+      : "";
+    button.classList.add("hidden");
+    return;
+  }
+  if (!messageSafety) {
+    label.textContent = "";
+    button.classList.add("hidden");
+    return;
+  }
+  const verified = loadVerifiedPeers()[String(messagePeer.user_id)];
+  if (verified === messageSafety) {
+    label.textContent = `Safety number: ${messageSafety} \u00b7 Verified`;
+    button.classList.add("hidden");
+    return;
+  }
+  label.textContent = verified
+    ? `Safety number changed. Compare again: ${messageSafety}`
+    : `Safety number: ${messageSafety}`;
+  button.textContent = verified ? "Mark as verified again" : "Mark as verified";
+  button.classList.remove("hidden");
+}
+
 async function ensureMessageIdentity() {
   if (!state.user) return null;
   if (messageIdentity && messageIdentityUserId === state.user.id) {
@@ -694,8 +757,9 @@ async function openMessageThread(friendId, name) {
   setDrawer(false);
   messagePeer = { user_id: friendId, full_name: name || "Chat", key: null };
   messageThread = [];
+  messageSafety = null;
   $("message-peer").textContent = name || "Chat";
-  $("message-safety").textContent = "";
+  renderMessageSafety();
   $("message-thread").textContent = "Loading…";
   $("message-status").textContent = "";
   show($("message-sheet"), true);
@@ -735,13 +799,8 @@ async function loadMessageThread(friendId) {
     }
     messageThread = rows;
     $("message-peer").textContent = thread.peer?.full_name || "Chat";
-    if (peerKey) {
-      const safety = await fingerprint(peerKey);
-      $("message-safety").textContent = safety ? `Safety number: ${safety}` : "";
-    } else {
-      $("message-safety").textContent =
-        "This friend has not enabled encrypted messages yet.";
-    }
+    messageSafety = peerKey ? await fingerprint(peerKey) : null;
+    renderMessageSafety();
     renderMessageThread();
     // Only write read state when the friend's copy actually changed.
     const hasUnread = (thread.messages || []).some(
@@ -822,6 +881,12 @@ async function sendMessage(event) {
 
 $("message-close")?.addEventListener("click", () => show($("message-sheet"), false));
 $("message-form")?.addEventListener("submit", sendMessage);
+$("message-verify")?.addEventListener("click", () => {
+  if (!messagePeer || !messageSafety) return;
+  saveVerifiedPeer(messagePeer.user_id, messageSafety);
+  renderMessageSafety();
+  $("message-status").textContent = "Safety number verified on this device.";
+});
 setInterval(() => {
   if (!state.user) return;
   refreshMessages();

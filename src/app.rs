@@ -314,9 +314,53 @@ impl PinpointApp {
         if delete_secret {
             if let Some(user_id) = user_id {
                 self.key_manager
-                    .delete_secret(&format!("message_identity_{user_id}"));
+                    .delete_secret(&Self::message_identity_secret(user_id));
+                self.key_manager
+                    .delete_secret(&Self::message_verifications_secret(user_id));
             }
         }
+    }
+
+    fn message_identity_secret(user_id: i64) -> String {
+        format!("message_identity_{user_id}")
+    }
+
+    fn message_verifications_secret(user_id: i64) -> String {
+        format!("message_verified_{user_id}")
+    }
+
+    /// Load the account's locally verified safety numbers. Never sent to the
+    /// server; a missing or corrupt entry just starts unverified.
+    fn load_message_verifications(&self) {
+        let Some(user_id) = self.data.lock().unwrap().user.as_ref().map(|user| user.id) else {
+            return;
+        };
+        let verified = self
+            .key_manager
+            .load_secret(&Self::message_verifications_secret(user_id))
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .and_then(|raw| serde_json::from_str(&raw).ok())
+            .unwrap_or_default();
+        self.data.lock().unwrap().message_verified = verified;
+    }
+
+    /// Record that the user compared and accepted this peer's fingerprint.
+    /// A later key change no longer matches and shows as "changed".
+    pub fn verify_message_peer(&self, friend_id: i64, fingerprint: &str) {
+        if friend_id <= 0 || fingerprint.is_empty() {
+            return;
+        }
+        let Some(user_id) = self.data.lock().unwrap().user.as_ref().map(|user| user.id) else {
+            return;
+        };
+        let raw = {
+            let mut data = self.data.lock().unwrap();
+            data.message_verified
+                .insert(friend_id, fingerprint.to_string());
+            serde_json::to_string(&data.message_verified).unwrap_or_default()
+        };
+        self.key_manager
+            .persist_secret(&Self::message_verifications_secret(user_id), raw.as_bytes());
     }
 
     pub fn set_loading(&self, loading: bool) {
@@ -413,7 +457,7 @@ impl PinpointApp {
                 return Some(identity.clone());
             }
         }
-        let secret_name = format!("message_identity_{user_id}");
+        let secret_name = Self::message_identity_secret(user_id);
         let identity = self
             .key_manager
             .load_secret(&secret_name)
@@ -820,8 +864,10 @@ impl PinpointApp {
             data.message_conversations.clear();
             data.message_peer = None;
             data.message_messages.clear();
+            data.message_verified.clear();
             data.unread_messages = 0;
         }
+        self.load_message_verifications();
         self.persist_session();
         if forced_change {
             self.set_screen(CurrentScreen::ChangePassword);

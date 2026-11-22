@@ -2,7 +2,7 @@
 //! module only renders plaintext and never touches ciphertext.
 
 use super::{theme, PendingAction, PinpointAppUI};
-use crate::models::{DecryptedMessage, MessageConversation, MessagePeer};
+use crate::models::{DecryptedMessage, MessageConversation, MessagePeer, SafetyState};
 use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
@@ -156,13 +156,48 @@ impl PinpointAppUI {
             .and_then(|peer| peer.key.as_ref())
             .and_then(|key| key.fingerprint())
         {
-            ui.collapsing("Safety number", |ui| {
-                ui.monospace(fingerprint);
+            let stored = peer.map(|peer| {
+                let data = self.app.data();
+                let data = data.lock().unwrap();
+                data.message_verified.get(&peer.user_id).cloned()
+            });
+            let stored = stored.flatten();
+            let state = match stored.as_deref() {
+                Some(value) if value == fingerprint => SafetyState::Verified,
+                Some(_) => SafetyState::Changed,
+                None => SafetyState::Unverified,
+            };
+            ui.horizontal_wrapped(|ui| {
+                ui.collapsing("Safety number", |ui| {
+                    ui.monospace(&fingerprint);
+                    theme::caption(
+                        ui,
+                        "Compare this with your friend in person to rule out a key swap.",
+                    );
+                });
+                match state {
+                    SafetyState::Verified => {
+                        ui.label(RichText::new("Verified").size(12.0).color(theme::SUCCESS));
+                    }
+                    SafetyState::Changed => {
+                        ui.label(RichText::new("Changed").size(12.0).color(theme::ACCENT));
+                    }
+                    SafetyState::Unverified => {}
+                }
+                if state != SafetyState::Verified {
+                    if let Some(peer) = peer {
+                        if ui.button("Mark as verified").clicked() {
+                            self.app.verify_message_peer(peer.user_id, &fingerprint);
+                        }
+                    }
+                }
+            });
+            if state == SafetyState::Changed {
                 theme::caption(
                     ui,
-                    "Compare this with your friend in person to rule out a key swap.",
+                    "The safety number changed. Compare again before trusting it.",
                 );
-            });
+            }
         }
         ui.separator();
         if messages.is_empty() {

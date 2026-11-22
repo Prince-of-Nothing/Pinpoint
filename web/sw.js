@@ -14,7 +14,7 @@
  * name is versioned, and activation removes older Pinpoint caches.
  */
 
-const VERSION = "pinpoint-offline-v7";
+const VERSION = "pinpoint-offline-v8";
 const CACHE_PREFIX = "pinpoint-offline-";
 const SHELL_CACHE = `${CACHE_PREFIX}${VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}${VERSION}-runtime`;

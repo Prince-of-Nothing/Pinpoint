@@ -13,6 +13,7 @@ const HTML: &str = include_str!("../web/app/index.html");
 const CSS: &str = include_str!("../web/app/app.css");
 const JS: &str = include_str!("../web/app/app.js");
 const MAP_ADAPTER: &str = include_str!("../web/app/map.js");
+const MESSAGE_CRYPTO: &str = include_str!("../web/app/message-crypto.js");
 const MAP_FOUNDATION: &str = include_str!("../web/map/map.js");
 const ROUTE_UI: &str = include_str!("../web/app/route-ui.js");
 const ROUTE_CSS: &str = include_str!("../web/app/route.css");
@@ -58,7 +59,12 @@ fn today_and_notes_assets_are_wired() {
     ] {
         assert!(JS.contains(needle), "app.js lacks {needle}");
     }
-    for needle in ["setNoteMarkers", "drawTrail", "clearTrail"] {
+    for needle in [
+        "setNoteMarkers",
+        "note-marker-photo",
+        "drawTrail",
+        "clearTrail",
+    ] {
         assert!(MAP_ADAPTER.contains(needle), "map.js lacks {needle}");
     }
     assert!(
@@ -74,6 +80,7 @@ fn shipped_web_assets_have_no_third_party_hosts() {
         ("app.css", CSS),
         ("app.js", JS),
         ("map.js (adapter)", MAP_ADAPTER),
+        ("message-crypto.js", MESSAGE_CRYPTO),
         ("map/map.js (foundation)", MAP_FOUNDATION),
         ("route-ui.js", ROUTE_UI),
         ("route.css", ROUTE_CSS),

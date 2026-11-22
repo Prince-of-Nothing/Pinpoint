@@ -2,7 +2,9 @@
 //! module only renders plaintext and never touches ciphertext.
 
 use super::{theme, PendingAction, PinpointAppUI};
-use crate::models::{DecryptedMessage, MessageConversation, MessagePeer, SafetyState};
+use crate::models::{
+    format_message_time, DecryptedMessage, MessageConversation, MessagePeer, SafetyState,
+};
 use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
@@ -119,7 +121,7 @@ impl PinpointAppUI {
                         self.select_message_friend(conversation.user_id, ctx);
                     }
                     if let Some(last) = &conversation.last_message_at {
-                        theme::caption(ui, format!("Last message {last}"));
+                        theme::caption(ui, format!("Last message {}", format_message_time(last)));
                     }
                     ui.add_space(4.0);
                 }
@@ -237,10 +239,7 @@ impl PinpointAppUI {
                             .show(ui, |ui| {
                                 ui.set_max_width((ui.available_width() * 0.72).max(180.0));
                                 ui.label(RichText::new(text).size(14.0).color(ink));
-                                let time = message
-                                    .created_at
-                                    .get(11..16)
-                                    .unwrap_or(message.created_at.as_str());
+                                let time = format_message_time(&message.created_at);
                                 ui.label(RichText::new(time).size(10.0).color(if message.mine {
                                     theme::ACCENT_INK
                                 } else {

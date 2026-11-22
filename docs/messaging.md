@@ -50,10 +50,13 @@ sequenceDiagram
 ## Storage
 
 - Native: `message_identity_<user_id>` in the platform keychain; secrets never
-  leave the device.
+  leave the device. Previously seen peer public bundles are stored under
+  `message_bundles_<user_id>` (up to eight per peer, newest last).
 - Web: non-extractable `CryptoKey` objects in IndexedDB, keyed by user id.
   First use is a single readwrite transaction: two tabs opening at once
-  converge on one stored identity instead of publishing two bundles.
+  converge on one stored identity instead of publishing two bundles. Previous
+  peer bundles live in `localStorage` under
+  `pinpoint-message-bundles-<user_id>`.
 - Server: `pinpoint_message_keys` (public bundle JSON) and
   `pinpoint_messages` (opaque envelope); migration 17. Account deletion removes
   the key and both message directions.
@@ -78,10 +81,12 @@ the account removes the record with the message identity.
 - **One device per account for now.** Signing in on another device rotates the
   bundle; older messages stay on the old device. Multi-device fan-out is future
   work.
-- **A peer key rotation invalidates old signatures.** Only the current public
-  bundle is returned, so messages signed by the previous key can no longer be
-  verified and show "Unable to decrypt" instead of being hidden. Retaining old
-  bundles per message is future work.
+- **A peer key rotation keeps history but resets trust.** Clients keep up to
+  eight previous public bundles per peer locally (native keychain, web
+  `localStorage`) and try them newest-first when verifying, so messages signed
+  before the rotation stay readable. The safety number still switches to
+  **Changed**. If a peer rotates more than eight times, messages signed by a
+  bundle older than the retained window show "Unable to decrypt".
 - **No double ratchet.** A stolen long-lived private key can decrypt past
   messages; this is not Signal-grade forward secrecy.
 - **Text only.** No groups, attachments, calls, push notifications, typing
@@ -128,3 +133,9 @@ The feature follows the existing seams rather than duplicating them:
   verifies again. Native was checked on the x86 emulator: Mark as verified ->
   Verified, key rotation -> Changed with the warning, and the verified record
   survives an app restart. `models::trust_tests` covers the state transitions.
+- Peer bundle cache: a crypto test proves the new sender bundle rejects an old
+  message while the cached previous bundle accepts it; a models test covers
+  dedupe and the eight-bundle cap. Web and native E2E rotate a peer key after
+  verifying it: the safety number switches to Changed while the pre-rotation
+  message stays readable, on web after a page reload and on native after an app
+  restart.

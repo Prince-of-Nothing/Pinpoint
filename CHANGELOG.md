@@ -14,6 +14,7 @@ The per-item flagged list for this release is in
 ### Changed
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [FEATURE] Messages: keep up to eight previous peer public bundles locally (native keychain, web localStorage) and try them newest-first when verifying, so history stays readable after a friend changes device/key; the safety number still flags the change.
 - [FEATURE] Native map: a 1-2-5 metric scale bar in the lower-left corner, derived from the Web Mercator metres-per-pixel at the current centre and zoom.
 - [FEATURE] Messages: a dedicated `pinpoint-messages` service (port 8007) in the compose stack with a gateway route and a least-privilege `pinpoint_messages` database role; the combined `pinpoint-server` still mounts the same router.
 - [FEATURE] Messages: compare and locally verify a friend's safety number on web and native; a changed fingerprint is flagged as Changed and asks for a new comparison. The record stays on the device (keychain/localStorage) and is never sent to the server.

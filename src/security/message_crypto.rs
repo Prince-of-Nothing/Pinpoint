@@ -475,6 +475,21 @@ mod tests {
     }
 
     #[test]
+    fn previous_sender_bundle_verifies_before_rotation() {
+        let old_alice = MessageIdentity::generate();
+        let bob = MessageIdentity::generate();
+        let sealed = seal(&old_alice, &bob.public_bundle(), 1, 2, "before rotation").unwrap();
+        let new_alice = MessageIdentity::generate();
+        // The new bundle is the current one the server returns; it must not
+        // verify the old message, while the cached previous bundle must.
+        assert!(open(&bob, &new_alice.public_bundle(), 1, 2, &sealed, true).is_none());
+        assert_eq!(
+            open(&bob, &old_alice.public_bundle(), 1, 2, &sealed, true).unwrap(),
+            "before rotation"
+        );
+    }
+
+    #[test]
     fn invalid_text_is_rejected() {
         let (alice, bob) = pair();
         assert!(seal(&alice, &bob.public_bundle(), 1, 2, "   ").is_none());

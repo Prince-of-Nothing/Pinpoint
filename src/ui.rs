@@ -333,6 +333,9 @@ pub struct PinpointAppUI {
     // E2E messages
     message_selected: Option<i64>,
     message_draft: String,
+    /// Text restored after a failed send; the newer draft wins if the user
+    /// typed something else in the meantime.
+    message_draft_restore: Arc<Mutex<Option<String>>>,
     message_loaded: bool,
     message_poll_at: Option<std::time::Instant>,
     /// First map view asked for location; a grant retries the fix once.
@@ -458,6 +461,7 @@ impl PinpointAppUI {
             mobile_selected_place: None,
             message_selected: None,
             message_draft: String::new(),
+            message_draft_restore: Arc::new(Mutex::new(None)),
             message_loaded: false,
             message_poll_at: None,
             location_prompted: false,
@@ -816,6 +820,7 @@ impl PinpointAppUI {
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
         let app = Arc::clone(&self.app);
         let note_saved = Arc::clone(&self.note_saved);
+        let restore_draft = Arc::clone(&self.message_draft_restore);
         let repaint = ctx.clone();
         self.rt.spawn(async move {
             match action {
@@ -1136,7 +1141,12 @@ impl PinpointAppUI {
                     let _ = app.load_message_thread(friend_id).await;
                 }
                 PendingAction::SendMessage { friend_id, text } => {
-                    let _ = app.send_message(friend_id, text).await;
+                    if let Err(error) = app.send_message(friend_id, text.clone()).await {
+                        app.set_error(Some(format!("Could not send: {error}")));
+                        // The composer clears on submit; keep the text so a
+                        // transient failure does not lose the message.
+                        *restore_draft.lock().unwrap() = Some(text);
+                    }
                 }
                 PendingAction::ExportGpx { name } => {
                     let route = app.data().lock().unwrap().last_route.clone();

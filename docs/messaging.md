@@ -44,7 +44,8 @@ sequenceDiagram
   An open thread refreshes every five seconds on web and native, and the native
   More menu shows the unread count. Message times are rendered in the device's
   local time (native uses `format_message_time`; web uses `toLocaleString`), and
-  the web Chats tab carries the unread count.
+  the web Chats tab carries the unread count. A failed native send surfaces the
+  error and puts the text back in the composer instead of dropping it.
 
 ## Storage
 

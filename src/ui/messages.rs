@@ -10,6 +10,8 @@ use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_messages_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
+        let pending = self.message_draft_restore.lock().unwrap().take();
+        restore_message_draft(&mut self.message_draft, pending);
         if !self.message_loaded {
             self.message_loaded = true;
             self.spawn_action(PendingAction::RefreshMessages, ctx);
@@ -292,5 +294,33 @@ impl PinpointAppUI {
             data.message_messages.clear();
         }
         self.spawn_action(PendingAction::LoadMessageThread { friend_id }, ctx);
+    }
+}
+
+/// Put a failed send back in the composer, unless the user has typed a newer
+/// draft in the meantime (the newer text wins).
+pub(crate) fn restore_message_draft(current: &mut String, pending: Option<String>) {
+    if current.is_empty() {
+        if let Some(text) = pending {
+            *current = text;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::restore_message_draft;
+
+    #[test]
+    fn failed_send_restores_only_an_empty_composer() {
+        let mut draft = String::new();
+        restore_message_draft(&mut draft, Some("lost text".into()));
+        assert_eq!(draft, "lost text");
+
+        let mut newer = "typed again".to_string();
+        restore_message_draft(&mut newer, Some("old text".into()));
+        assert_eq!(newer, "typed again");
+        restore_message_draft(&mut newer, None);
+        assert_eq!(newer, "typed again");
     }
 }

@@ -12,6 +12,8 @@ GRANT ALL ON pinpoint_users, pinpoint_friendships, pinpoint_state TO pinpoint_us
 GRANT ALL ON pinpoint_counters TO pinpoint_users;
 -- admin service (pinpoint-admin) reuses the users role and adds observability.
 GRANT SELECT, UPDATE ON pinpoint_sessions TO pinpoint_users;
+-- Account deletion must remove the user's message key and both directions.
+GRANT DELETE ON pinpoint_messages, pinpoint_message_keys TO pinpoint_users;
 GRANT SELECT, INSERT, UPDATE ON pinpoint_diagnostic_reports TO pinpoint_users;
 GRANT SELECT, INSERT ON pinpoint_admin_audit TO pinpoint_users;
 GRANT USAGE, SELECT ON SEQUENCE pinpoint_report_id_seq, pinpoint_audit_id_seq TO pinpoint_users;
@@ -30,6 +32,17 @@ GRANT USAGE, SELECT ON SEQUENCE pinpoint_report_id_seq TO pinpoint_diag;
 GRANT ALL ON pinpoint_shares, pinpoint_locations, pinpoint_checkins, pinpoint_emergencies TO pinpoint_locations;
 GRANT SELECT ON pinpoint_users, pinpoint_friendships TO pinpoint_locations;
 GRANT UPDATE (next_share_id, next_checkin_id, next_emergency_id) ON pinpoint_counters TO pinpoint_locations;
+--
+-- messages service (pinpoint-messages): bundles + opaque envelopes; read-only
+-- users/friendships for the accepted-friends check and display names; shared
+-- sessions for authentication.
+GRANT ALL ON pinpoint_message_keys, pinpoint_messages TO pinpoint_messages;
+GRANT SELECT ON pinpoint_users, pinpoint_friendships TO pinpoint_messages;
+GRANT SELECT, UPDATE ON pinpoint_sessions TO pinpoint_messages;
+GRANT USAGE, SELECT ON SEQUENCE pinpoint_messages_id_seq TO pinpoint_messages;
+--
+-- Every service applies migrations at boot and records what it applied.
+GRANT SELECT, INSERT ON pinpoint_schema_migrations TO pinpoint_auth, pinpoint_users, pinpoint_locations, pinpoint_messages, pinpoint_diag;
 --
 -- map service: no database access (no DATABASE_URL).
 --

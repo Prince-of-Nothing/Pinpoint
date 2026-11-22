@@ -8,9 +8,9 @@
 ## Overview
 
 One Rust crate (`pinpoint-desktop`) serves every target. The API is Axum with
-four independently scalable routers (auth, users, locations, map) behind a
-gateway in compose deployments, or one combined `pinpoint-server` binary for
-the demo. All authorization and precision downgrading is server-side.
+five independently scalable routers (auth, users, locations, messages, map)
+behind a gateway in compose deployments, or one combined `pinpoint-server`
+binary for the demo. All authorization and precision downgrading is server-side.
 
 ```
 Desktop (eframe) ─┐
@@ -42,7 +42,7 @@ Android / iOS    ─┘        (cookie + CSRF)      │              │
 | `osm.rs` | Nominatim/OSRM/Overpass (friend coordinates never sent) |
 | `platform.rs` | All `cfg(target_os)` branches |
 | `webapp/`, `mobile/` | Portable web clients and mobile adapters |
-| `bin/` | One binary per deployable (`pinpoint-server`, `auth`, `users`, `locations`, `map`, `web`) |
+| `bin/` | One binary per deployable (`pinpoint-server`, `auth`, `users`, `locations`, `messages`, `map`, `web`) |
 
 ## Request pipeline
 

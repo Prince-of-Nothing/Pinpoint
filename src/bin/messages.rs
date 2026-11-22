@@ -1,0 +1,40 @@
+//! E2E messages service binary (pure Rust).
+//! Run: `cargo run --bin pinpoint-messages` (BIND_ADDR default 0.0.0.0:8007).
+//!
+//! Stores public bundles and opaque envelopes only. It reads users and
+//! friendships for the accepted-friends check and display names, but never
+//! writes them.
+use pinpoint_desktop::server::{
+    converge, health, messages_router, session_auth, status_routes, AppState, ServiceKind,
+};
+use std::time::Duration;
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt::init();
+    let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8007".to_string());
+    let state = AppState::from_env_for(ServiceKind::Messages).await;
+    let persist_state = state.clone();
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            persist_state.refresh_from_db().await;
+            persist_state.persist().await;
+        }
+    });
+    println!("pinpoint-messages listening on http://{addr}/");
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    let app_state = state.clone();
+    let session_state = state.clone();
+    let app = messages_router()
+        .merge(status_routes())
+        .route("/health", axum::routing::get(health))
+        .with_state(state)
+        .layer(axum::middleware::from_fn_with_state(app_state, converge))
+        .layer(axum::middleware::from_fn_with_state(
+            session_state,
+            session_auth,
+        ));
+    axum::serve(listener, app).await?;
+    Ok(())
+}

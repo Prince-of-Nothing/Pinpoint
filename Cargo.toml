@@ -31,6 +31,10 @@ name = "pinpoint-locations"
 path = "src/bin/locations.rs"
 
 [[bin]]
+name = "pinpoint-messages"
+path = "src/bin/messages.rs"
+
+[[bin]]
 name = "pinpoint-map"
 path = "src/bin/map.rs"
 

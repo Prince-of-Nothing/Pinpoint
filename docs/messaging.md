@@ -74,6 +74,10 @@ The feature follows the existing seams rather than duplicating them:
 
 - `server/state/messages.rs` is the repository/data-access layer over the
   in-memory `Store` and PostgreSQL; handlers never build SQL for the domain.
+- The compose stack runs the same router as `pinpoint-messages` on 8007
+  behind the gateway; a least-privilege `pinpoint_messages` role reads
+  users/friendships and sessions but writes only the two message tables. The
+  combined `pinpoint-server` binary mounts the same router for the demo.
 - `server/messages_handlers.rs` is the service/controller layer: one place for
   friendship authorization, envelope validation and rate limiting.
 - Native `PendingAction::{RefreshMessages, LoadMessageThread, SendMessage}` is

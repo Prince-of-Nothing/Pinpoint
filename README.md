@@ -31,8 +31,9 @@ production-hardened. See the functional-state matrix and per-item
   handles only, and real names/emails are revealed to accepted friends.
 - **Admin console** — role-gated modules: overview, all accounts (including
   anonymous and never-signed-in), role/active changes, safe purge, PII-free
-  diagnostics with triage, and an append-only audit trail. Dedicated services
-  run on 8005 (diagnostics) and 8006 (admin API).
+  diagnostics with triage, and an append-only audit trail. The compose stack
+  runs auth, users, locations, messages and map services behind a gateway;
+  diagnostics and the admin API use dedicated ports 8005 and 8006.
 - **Desktop client** — map, Nominatim search, OSRM routing (drive/walk/bike),
   Overpass POIs, bookmarks, check-ins, emergency, offline tile packs.
 - **Android client** - same Rust core packaged with Gradle + cargo-apk; responsive
@@ -130,7 +131,7 @@ the key secrets and caveats.
 
 ```bash
 docker compose up --build -d
-# gateway → http://127.0.0.1:8000/  · diagnostics :8005 · admin API :8006
+# gateway → http://127.0.0.1:8000/  · diagnostics :8005 · admin API :8006 · messages :8007
 # Alice/Bob as real headless clients:
 docker compose --profile demo up -d alice bob
 ```

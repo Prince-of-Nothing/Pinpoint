@@ -16,6 +16,46 @@ pub const DEFAULT_CENTER_LAT: f64 = 47.0105;
 pub const DEFAULT_CENTER_LON: f64 = 28.8638;
 pub const DEFAULT_ZOOM: u8 = 13;
 
+/// Web Mercator metres per screen pixel at `lat` and `zoom`.
+fn meters_per_pixel(lat: f64, zoom: u8) -> f64 {
+    156_543.033_92 * lat.to_radians().cos() / 2f64.powi(zoom as i32)
+}
+
+/// Pick a round metric scale that fits in `max_px`: `(metres, bar_px)`.
+///
+/// Uses the 1-2-5 series so the bar reads like a printed map. Returns `None`
+/// for an invalid latitude/zoom or a non-positive width.
+pub fn scale_bar_for(lat: f64, zoom: u8, max_px: f32) -> Option<(f64, f32)> {
+    if !(-85.0..=85.0).contains(&lat) || max_px <= 0.0 {
+        return None;
+    }
+    let mpp = meters_per_pixel(lat, zoom);
+    if !mpp.is_finite() || mpp <= 0.0 {
+        return None;
+    }
+    let target = mpp * max_px as f64;
+    let base = 10f64.powf(target.log10().floor());
+    let mut meters = base;
+    for factor in [1.0, 2.0, 5.0] {
+        let candidate = factor * base;
+        if candidate <= target {
+            meters = candidate;
+        }
+    }
+    Some((meters, (meters / mpp) as f32))
+}
+
+/// Human label for a scale-bar distance (`500 m`, `2 km`, `0.5 m`).
+pub fn format_scale_meters(meters: f64) -> String {
+    if meters >= 1000.0 {
+        format!("{:.0} km", meters / 1000.0)
+    } else if meters >= 1.0 {
+        format!("{meters:.0} m")
+    } else {
+        format!("{meters:.1} m")
+    }
+}
+
 /// Ensure `state` has a valid Slippy viewport (`z` in `2..=18`, center initialized).
 pub fn ensure_viewport(state: &mut AppData) {
     if state.map_zoom == 0 {
@@ -549,6 +589,38 @@ pub fn render_map_with(
             );
         }
 
+        // Metric scale bar (1-2-5 series) in the map's lower-left corner.
+        if let Some((meters, bar_px)) = scale_bar_for(state.map_center_lat, z, 90.0) {
+            let x0 = map_rect.left() + 12.0;
+            let y = map_rect.bottom() - 14.0;
+            let x1 = x0 + bar_px;
+            let ink = Color32::WHITE;
+            painter.rect_filled(
+                Rect::from_min_max(Pos2::new(x0 - 4.0, y - 18.0), Pos2::new(x1 + 4.0, y + 6.0)),
+                3.0,
+                Color32::from_black_alpha(150),
+            );
+            painter.line_segment(
+                [Pos2::new(x0, y), Pos2::new(x1, y)],
+                Stroke::new(2.0_f32, ink),
+            );
+            painter.line_segment(
+                [Pos2::new(x0, y - 4.0), Pos2::new(x0, y + 4.0)],
+                Stroke::new(2.0_f32, ink),
+            );
+            painter.line_segment(
+                [Pos2::new(x1, y - 4.0), Pos2::new(x1, y + 4.0)],
+                Stroke::new(2.0_f32, ink),
+            );
+            painter.text(
+                Pos2::new(x0, y - 6.0),
+                egui::Align2::LEFT_BOTTOM,
+                format_scale_meters(meters),
+                egui::FontId::proportional(10.0),
+                ink,
+            );
+        }
+
         painter.rect_stroke(
             map_rect,
             4.0_f32,
@@ -839,5 +911,19 @@ mod tests {
             Some(("Saved Cafe".into(), 47.03, 28.90))
         );
         assert!(bookmark_hit(&data, rect, pin + Vec2::new(40.0, 40.0), 20.0).is_none());
+    }
+
+    #[test]
+    fn scale_bar_uses_round_metric_values() {
+        let (meters, px) = scale_bar_for(47.0, 13, 90.0).unwrap();
+        assert_eq!(meters, 1000.0);
+        assert!(px > 20.0 && px <= 90.0, "bar width {px}");
+        let (high_zoom, _) = scale_bar_for(47.0, 18, 90.0).unwrap();
+        assert!(high_zoom < meters);
+        assert!(scale_bar_for(90.0, 13, 90.0).is_none());
+        assert!(scale_bar_for(47.0, 13, 0.0).is_none());
+        assert_eq!(format_scale_meters(1000.0), "1 km");
+        assert_eq!(format_scale_meters(500.0), "500 m");
+        assert_eq!(format_scale_meters(0.5), "0.5 m");
     }
 }

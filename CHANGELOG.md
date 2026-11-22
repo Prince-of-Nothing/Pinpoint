@@ -14,6 +14,7 @@ The per-item flagged list for this release is in
 ### Changed
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [FEATURE] Native map: a 1-2-5 metric scale bar in the lower-left corner, derived from the Web Mercator metres-per-pixel at the current centre and zoom.
 - [FEATURE] Messages: a dedicated `pinpoint-messages` service (port 8007) in the compose stack with a gateway route and a least-privilege `pinpoint_messages` database role; the combined `pinpoint-server` still mounts the same router.
 - [FEATURE] Messages: compare and locally verify a friend's safety number on web and native; a changed fingerprint is flagged as Changed and asks for a new comparison. The record stays on the device (keychain/localStorage) and is never sent to the server.
 - [FEATURE] Map: private note markers show their photo as a thumbnail (JPEG/PNG, owner-only), with the pencil glyph as fallback when a note has no photo. The service worker cache is now `pinpoint-offline-v8`.

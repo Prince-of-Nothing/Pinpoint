@@ -132,6 +132,10 @@ the key secrets and caveats.
 ```bash
 docker compose up --build -d
 # gateway → http://127.0.0.1:8000/  · diagnostics :8005 · admin API :8006 · messages :8007
+# first boot: wait until the services have created their tables, then apply
+# the least-privilege grants and the cross-domain foreign keys as superuser:
+docker exec -i pinpoint-db psql -U pinpoint -d pinpoint < db/02-grants.sql
+docker exec -i pinpoint-db psql -U pinpoint -d pinpoint < db/03-fks.sql
 # Alice/Bob as real headless clients:
 docker compose --profile demo up -d alice bob
 ```

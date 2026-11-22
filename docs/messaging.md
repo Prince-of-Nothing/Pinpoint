@@ -55,11 +55,29 @@ sequenceDiagram
   `pinpoint_messages` (opaque envelope); migration 17. Account deletion removes
   the key and both message directions.
 
+## Safety numbers
+
+Both clients show the peer's fingerprint:
+`SHA-256(x25519 || ed25519)`, first 16 bytes, colon-separated. The user can
+mark it **verified** after comparing it in person:
+
+- native stores the record under `message_verified_<user_id>` in the keychain;
+- web stores it in `localStorage` per account and peer.
+
+The record never leaves the device and is not a server claim. If the peer
+publishes a different fingerprint, the state becomes **Changed**, the old
+record is kept for comparison, and the user is asked to verify again. Deleting
+the account removes the record with the message identity.
+
 ## Limits
 
 - **One device per account for now.** Signing in on another device rotates the
   bundle; older messages stay on the old device. Multi-device fan-out is future
   work.
+- **A peer key rotation invalidates old signatures.** Only the current public
+  bundle is returned, so messages signed by the previous key can no longer be
+  verified and show "Unable to decrypt" instead of being hidden. Retaining old
+  bundles per message is future work.
 - **No double ratchet.** A stolen long-lived private key can decrypt past
   messages; this is not Signal-grade forward secrecy.
 - **Text only.** No groups, attachments, calls, push notifications, typing
@@ -99,3 +117,9 @@ The feature follows the existing seams rather than duplicating them:
   `web/app/test/message-js-vector.json` (JS seal -> Rust open).
 - Browser: two isolated browser contexts register, become friends, exchange
   encrypted messages, see the safety number and read receipt.
+- Safety numbers: the web E2E marks a fingerprint verified, reloads and
+  reopens the chat (state persists), rotates the peer key (state becomes
+  Changed) and verifies again. Native was checked on the x86 emulator:
+  Mark as verified -> Verified, key rotation -> Changed with the warning, and
+  the verified record survives an app restart. `models::trust_tests` covers
+  unverified/verified/changed transitions.

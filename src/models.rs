@@ -485,6 +485,9 @@ pub struct AppData {
     pub message_conversations: Vec<MessageConversation>,
     pub message_peer: Option<MessagePeer>,
     pub message_messages: Vec<DecryptedMessage>,
+    /// Locally verified safety numbers: peer user id -> fingerprint. Never
+    /// sent to the server; a changed fingerprint invalidates the record.
+    pub message_verified: std::collections::HashMap<i64, String>,
     pub unread_messages: i64,
     pub check_ins: Vec<CheckIn>,
     pub emergencies: Vec<EmergencyAlert>,
@@ -513,6 +516,26 @@ pub struct AppData {
     /// Map raster style: false = clean light OSM (Organic/Magic-Earth-like),
     /// true = the web client's dark treatment.
     pub map_dark: bool,
+}
+
+/// Local trust state for a peer's safety number. It is a user record on this
+/// device, not a cryptographic proof.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SafetyState {
+    Unverified,
+    Verified,
+    Changed,
+}
+
+impl AppData {
+    /// Compare the stored fingerprint for `peer_id` with the current bundle.
+    pub fn safety_state(&self, peer_id: i64, current: &str) -> SafetyState {
+        match self.message_verified.get(&peer_id) {
+            Some(stored) if stored == current => SafetyState::Verified,
+            Some(_) => SafetyState::Changed,
+            None => SafetyState::Unverified,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -574,5 +597,20 @@ mod geo_tests {
             .to_rfc3339();
         assert_eq!(freshness_state(&dead, now), "dead");
         assert_eq!(freshness_state("not-a-date", now), "unknown");
+    }
+}
+
+#[cfg(test)]
+mod trust_tests {
+    use super::{AppData, SafetyState};
+
+    #[test]
+    fn safety_state_tracks_verify_and_key_change() {
+        let mut data = AppData::default();
+        assert_eq!(data.safety_state(7, "aa:bb"), SafetyState::Unverified);
+        data.message_verified.insert(7, "aa:bb".into());
+        assert_eq!(data.safety_state(7, "aa:bb"), SafetyState::Verified);
+        assert_eq!(data.safety_state(7, "cc:dd"), SafetyState::Changed);
+        assert_eq!(data.safety_state(8, "aa:bb"), SafetyState::Unverified);
     }
 }

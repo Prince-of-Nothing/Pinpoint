@@ -578,6 +578,7 @@ body:has(#app-panel:not(.hidden)) #session-bar {
   font-size: 0.65rem;
   opacity: 0.72;
 }
+.message-verify { margin: 0 0 0.6rem; }
 
 .route-field {
   display: flex;

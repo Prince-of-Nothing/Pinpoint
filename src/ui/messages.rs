@@ -125,23 +125,24 @@ impl PinpointAppUI {
         peer: Option<&MessagePeer>,
         messages: &[DecryptedMessage],
     ) {
-        ui.horizontal(|ui| {
-            if compact && ui.button("←").clicked() {
+        ui.horizontal_wrapped(|ui| {
+            if compact && ui.button("Back").clicked() {
                 self.message_selected = None;
             }
             match peer {
                 Some(peer) => {
                     ui.heading(&peer.full_name);
-                    if peer.key.is_none() {
-                        theme::caption(ui, "Encryption key not published yet");
-                    }
                 }
                 None => {
                     ui.heading("Conversation");
-                    theme::caption(ui, "Loading or select a friend.");
                 }
             }
         });
+        if peer.is_none() {
+            theme::caption(ui, "Loading or select a friend.");
+        } else if peer.is_some_and(|peer| peer.key.is_none()) {
+            theme::caption(ui, "Encryption key not published yet.");
+        }
         if let Some(fingerprint) = peer
             .and_then(|peer| peer.key.as_ref())
             .and_then(|key| key.fingerprint())

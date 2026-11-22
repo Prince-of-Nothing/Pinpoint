@@ -209,17 +209,17 @@ impl AppState {
         } else {
             friendship.receiver_name.clone()
         };
+        let display = user
+            .map(|u| u.full_name.trim().to_string())
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| crate::server::usernames::username_for(friend));
         let key = store
             .message_keys
             .get(&friend)
             .and_then(|raw| serde_json::from_str::<MessagePublicBundle>(raw).ok());
         Some(MessagePeer {
             user_id: friend,
-            full_name: if name.is_empty() {
-                user.map(|u| u.full_name.clone()).unwrap_or_default()
-            } else {
-                name
-            },
+            full_name: if display.is_empty() { name } else { display },
             username: crate::server::usernames::username_for(friend),
             key,
         })

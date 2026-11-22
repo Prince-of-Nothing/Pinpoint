@@ -816,6 +816,7 @@ impl PinpointAppUI {
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
         let app = Arc::clone(&self.app);
         let note_saved = Arc::clone(&self.note_saved);
+        let repaint = ctx.clone();
         self.rt.spawn(async move {
             match action {
                 PendingAction::Login {
@@ -1290,6 +1291,7 @@ impl PinpointAppUI {
                     let _ = app.admin_update_report(id, status).await;
                 }
             }
+            repaint.request_repaint();
         });
         ctx.request_repaint();
     }

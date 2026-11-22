@@ -39,7 +39,10 @@ sequenceDiagram
   ceilings. It returns `409 NO_MESSAGE_KEY` until the friend has published a
   bundle.
 - Read state is a server-side `read_at` timestamp on the recipient's copy. The
-  sender sees "read" on their own thread.
+  sender sees "read" on their own thread. Read state is written only when the
+  friend's copy actually changed, so open-thread polling does not rewrite rows.
+  An open thread refreshes every five seconds on web and native, and the native
+  More menu shows the unread count.
 
 ## Storage
 

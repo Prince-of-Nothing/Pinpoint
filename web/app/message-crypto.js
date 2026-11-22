@@ -191,6 +191,18 @@ export async function ensureIdentity(userId) {
   return identity;
 }
 
+/** Drop the per-account identity. Best effort; used on account deletion. */
+export async function deleteIdentity(userId) {
+  const key = String(userId);
+  cache.delete(key);
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const request = db.transaction(DB_STORE, "readwrite").objectStore(DB_STORE).delete(key);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error || new Error("Could not delete message key"));
+  });
+}
+
 export function publicBundle(identity) {
   return identity.publicBundle;
 }

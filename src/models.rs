@@ -3,6 +3,7 @@
 //! `friendshipResponse`, `locationShareResponse`, `locationResponse`).
 
 use crate::osm::{Route, SearchPlace};
+use crate::security::message_crypto::MessagePublicBundle;
 use crate::update::UpdateStatus;
 use serde::{Deserialize, Serialize};
 
@@ -196,8 +197,85 @@ pub struct PlaceNote {
     pub created_at: String,
 }
 
-/// A trip / scheduled / manual check-in (latest retained per user + history
-/// list). Check-ins are explicit user actions, never auto-tracked.
+/// One end-to-end encrypted 1:1 message. The server stores only the opaque
+/// envelope; `ciphertext_to` is for the recipient and `ciphertext_from` is the
+/// sender's own copy.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Message {
+    pub id: i64,
+    pub sender_id: i64,
+    pub recipient_id: i64,
+    pub ephemeral_public_key: String,
+    pub salt_to: String,
+    pub nonce_to: String,
+    pub ciphertext_to: String,
+    pub salt_from: String,
+    pub nonce_from: String,
+    pub ciphertext_from: String,
+    pub signature: String,
+    pub created_at: String,
+    #[serde(default)]
+    pub read_at: Option<String>,
+}
+
+impl Message {
+    /// Project the stored row onto the crypto envelope for verification and
+    /// decryption.
+    pub fn sealed(&self) -> crate::security::message_crypto::SealedMessage {
+        crate::security::message_crypto::SealedMessage {
+            ephemeral_public_key: self.ephemeral_public_key.clone(),
+            salt_to: self.salt_to.clone(),
+            nonce_to: self.nonce_to.clone(),
+            ciphertext_to: self.ciphertext_to.clone(),
+            salt_from: self.salt_from.clone(),
+            nonce_from: self.nonce_from.clone(),
+            ciphertext_from: self.ciphertext_from.clone(),
+            signature: self.signature.clone(),
+        }
+    }
+}
+
+/// Inbox row: an accepted friend plus unread/last activity. No plaintext.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MessageConversation {
+    pub user_id: i64,
+    pub full_name: String,
+    pub username: String,
+    pub unread: i64,
+    pub last_message_at: Option<String>,
+}
+
+/// A message thread plus the peer's public key bundle needed to verify and
+/// decrypt the envelopes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MessageThread {
+    pub peer: MessagePeer,
+    pub messages: Vec<Message>,
+}
+
+/// Peer summary returned with a thread.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MessagePeer {
+    pub user_id: i64,
+    pub full_name: String,
+    pub username: String,
+    pub key: Option<MessagePublicBundle>,
+}
+
+/// One decrypted thread row for the UI. `text` is `None` when the envelope
+/// cannot be verified/decrypted (for example after a key rotation).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DecryptedMessage {
+    pub id: i64,
+    pub sender_id: i64,
+    pub mine: bool,
+    pub text: Option<String>,
+    pub created_at: String,
+    #[serde(default)]
+    pub read_at: Option<String>,
+}
+
+/// A trip / scheduled / manual check-in (latest retained per user + history/// list). Check-ins are explicit user actions, never auto-tracked.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CheckIn {
     pub id: i64,
@@ -402,6 +480,12 @@ pub struct AppData {
     pub history: Vec<LocationPoint>,
     /// Owner-only private notes (newest last).
     pub notes: Vec<PlaceNote>,
+    /// E2E message inbox and the currently opened thread (decrypted in the
+    /// app layer; the server only ever returns ciphertext).
+    pub message_conversations: Vec<MessageConversation>,
+    pub message_peer: Option<MessagePeer>,
+    pub message_messages: Vec<DecryptedMessage>,
+    pub unread_messages: i64,
     pub check_ins: Vec<CheckIn>,
     pub emergencies: Vec<EmergencyAlert>,
     pub users: Vec<User>,

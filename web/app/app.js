@@ -6,6 +6,14 @@ import { initNavigation } from "./nav.js";
 import { createAdminConsole } from "./admin.js";
 import { friendName, initSharing, shareRowModel } from "./sharing.js";
 import { initAppearance } from "./appearance.js";
+import {
+  cryptoAvailable,
+  ensureIdentity,
+  fingerprint,
+  open,
+  publicBundle,
+  seal,
+} from "./message-crypto.js";
 
 const state = {
   csrf: null,
@@ -15,11 +23,18 @@ const state = {
   history: [],
   notes: [],
   trailVisible: false,
+  messageConversations: [],
+  messageUnread: 0,
 };
 
 let accountNameDirty = false;
 let authBusy = false;
 let notePhotoData = null;
+let messageIdentity = null;
+let messageIdentityUserId = null;
+let messagePeer = null;
+let messageThread = [];
+let messageBusy = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -102,6 +117,12 @@ function resetToLogin() {
   state.history = [];
   state.notes = [];
   state.trailVisible = false;
+  state.messageConversations = [];
+  state.messageUnread = 0;
+  messagePeer = null;
+  messageThread = [];
+  messageIdentity = null;
+  messageIdentityUserId = null;
   accountNameDirty = false;
   mapApi?.clearRoute();
   mapApi?.clearSelfLocation();
@@ -111,6 +132,7 @@ function resetToLogin() {
   $("place-sheet").classList.add("hidden");
   $("route-panel").classList.add("hidden");
   $("share-sheet").classList.add("hidden");
+  $("message-sheet").classList.add("hidden");
   $("search-results").classList.add("hidden");
   $("saved-list").innerHTML = "";
   $("recent-list").innerHTML = "";
@@ -289,6 +311,7 @@ async function refresh() {
   renderToday();
   renderNotes();
   renderSessions(Array.isArray(sessions?.sessions) ? sessions.sessions : []);
+  await refreshMessages();
   updateMap();
   nav?.refreshStorage();
   updateMapEmptyState();
@@ -319,6 +342,14 @@ function renderFriends(items) {
       reject.onclick = () => respond(f.id, "reject");
       li.append(accept, reject);
     } else if (f.status === "accepted") {
+      const chat = document.createElement("button");
+      chat.textContent = "Message";
+      chat.className = "secondary";
+      const friendId =
+        f.requester_id === state.user?.id ? f.receiver_id : f.requester_id;
+      chat.onclick = () =>
+        openMessageThread(friendId, friendName(f, state.user?.id));
+      li.appendChild(chat);
       const manage = document.createElement("button");
       manage.textContent = "Sharing";
       manage.className = "secondary";
@@ -560,6 +591,230 @@ function renderSessions(items) {
     ul.appendChild(li);
   }
 }
+
+// ---------------------------------------------------------------------------
+// End-to-end encrypted messages (ECIES; see web/app/message-crypto.js)
+// ---------------------------------------------------------------------------
+
+async function ensureMessageIdentity() {
+  if (!state.user) return null;
+  if (messageIdentity && messageIdentityUserId === state.user.id) {
+    return messageIdentity;
+  }
+  const note = $("messages-crypto-note");
+  if (!cryptoAvailable()) {
+    if (note) {
+      note.textContent =
+        "This browser cannot use encrypted messages. Use a current Chrome/Edge or the Android app.";
+    }
+    return null;
+  }
+  try {
+    messageIdentity = await ensureIdentity(state.user.id);
+    messageIdentityUserId = state.user.id;
+    await api("/api/v1/messages/key", {
+      method: "PUT",
+      body: publicBundle(messageIdentity),
+    });
+    if (note) note.textContent = "";
+    return messageIdentity;
+  } catch (error) {
+    messageIdentity = null;
+    messageIdentityUserId = null;
+    if (note) note.textContent = error?.message || "Encrypted messages are unavailable.";
+    return null;
+  }
+}
+
+async function refreshMessages() {
+  if (!state.user) return;
+  const identity = await ensureMessageIdentity();
+  if (!identity) {
+    renderMessages();
+    return;
+  }
+  try {
+    const [inbox, unread] = await Promise.all([
+      api("/api/v1/messages/conversations"),
+      api("/api/v1/messages/unread"),
+    ]);
+    state.messageConversations = Array.isArray(inbox?.conversations)
+      ? inbox.conversations
+      : [];
+    state.messageUnread = Number(unread?.unread) || 0;
+    renderMessages();
+  } catch (error) {
+    console.info("[pinpoint] message inbox refresh failed", error?.message || error);
+  }
+}
+
+function renderMessages() {
+  const ul = $("conversations-list");
+  if (!ul) return;
+  ul.innerHTML = "";
+  const unread = Number(state.messageUnread) || 0;
+  $("messages-unread").textContent = `${unread} unread`;
+  if (!state.messageConversations.length) {
+    ul.innerHTML =
+      '<li class="muted">No conversations yet. Add a friend and send the first message.</li>';
+    return;
+  }
+  for (const conversation of state.messageConversations) {
+    const li = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    const name = conversation.full_name || `@${conversation.username || "friend"}`;
+    button.textContent =
+      conversation.unread > 0 ? `${name} (${conversation.unread})` : name;
+    button.addEventListener("click", () =>
+      openMessageThread(conversation.user_id, name),
+    );
+    li.appendChild(button);
+    if (conversation.last_message_at) {
+      const meta = document.createElement("span");
+      meta.className = "muted small";
+      meta.textContent = fmtTime(conversation.last_message_at);
+      li.appendChild(meta);
+    }
+    ul.appendChild(li);
+  }
+}
+
+async function openMessageThread(friendId, name) {
+  if (!state.user) return;
+  setDrawer(false);
+  messagePeer = { user_id: friendId, full_name: name || "Chat", key: null };
+  messageThread = [];
+  $("message-peer").textContent = name || "Chat";
+  $("message-safety").textContent = "";
+  $("message-thread").textContent = "Loading…";
+  $("message-status").textContent = "";
+  show($("message-sheet"), true);
+  await loadMessageThread(friendId);
+}
+
+async function loadMessageThread(friendId) {
+  if (messageBusy) return;
+  messageBusy = true;
+  try {
+    const identity = await ensureMessageIdentity();
+    if (!identity) {
+      $("message-thread").textContent =
+        "Encrypted messages are unavailable in this browser.";
+      return;
+    }
+    const thread = await api(`/api/v1/messages/${friendId}?limit=50`);
+    messagePeer = thread.peer;
+    const peerKey = thread.peer?.key || null;
+    const myBundle = publicBundle(identity);
+    const rows = [];
+    for (const message of thread.messages || []) {
+      const mine = message.sender_id === state.user.id;
+      const senderBundle = mine ? myBundle : peerKey;
+      let text = null;
+      if (senderBundle) {
+        text = await open(
+          identity,
+          senderBundle,
+          message.sender_id,
+          message.recipient_id,
+          message,
+          !mine,
+        );
+      }
+      rows.push({ ...message, mine, text });
+    }
+    messageThread = rows;
+    $("message-peer").textContent = thread.peer?.full_name || "Chat";
+    if (peerKey) {
+      const safety = await fingerprint(peerKey);
+      $("message-safety").textContent = safety ? `Safety number: ${safety}` : "";
+    } else {
+      $("message-safety").textContent =
+        "This friend has not enabled encrypted messages yet.";
+    }
+    renderMessageThread();
+    await api("/api/v1/messages/read", {
+      method: "POST",
+      body: { friend_id: friendId },
+    });
+    await refreshMessages();
+  } catch (error) {
+    $("message-thread").textContent =
+      error?.message || "Could not load this conversation.";
+  } finally {
+    messageBusy = false;
+  }
+}
+
+function renderMessageThread() {
+  const container = $("message-thread");
+  container.innerHTML = "";
+  if (!messageThread.length) {
+    container.innerHTML = '<p class="muted">No messages yet. Say hello.</p>';
+    return;
+  }
+  for (const message of messageThread) {
+    const row = document.createElement("div");
+    row.className = `message-row ${message.mine ? "mine" : "theirs"}`;
+    const bubble = document.createElement("div");
+    bubble.className = "message-bubble";
+    bubble.textContent =
+      message.text ?? "Unable to decrypt this message (the key changed).";
+    const meta = document.createElement("span");
+    meta.className = "message-meta";
+    meta.textContent = `${fmtTime(message.created_at)}${
+      message.mine && message.read_at ? " · read" : ""
+    }`;
+    bubble.appendChild(meta);
+    row.appendChild(bubble);
+    container.appendChild(row);
+  }
+  container.scrollTop = container.scrollHeight;
+}
+
+async function sendMessage(event) {
+  event.preventDefault();
+  if (!messagePeer || !state.user) return;
+  const input = $("message-input");
+  const text = input.value.trim();
+  if (!text) return;
+  try {
+    const identity = await ensureMessageIdentity();
+    if (!identity) throw new Error("Encrypted messages are unavailable.");
+    if (!messagePeer.key) {
+      throw new Error("This friend has not enabled encrypted messages yet.");
+    }
+    const sealed = await seal(
+      identity,
+      messagePeer.key,
+      state.user.id,
+      messagePeer.user_id,
+      text,
+    );
+    if (!sealed) throw new Error("Message must be 1-2000 characters.");
+    await api("/api/v1/messages", {
+      method: "POST",
+      body: { recipient_id: messagePeer.user_id, message: sealed },
+    });
+    input.value = "";
+    $("message-status").textContent = "Sent.";
+    await loadMessageThread(messagePeer.user_id);
+  } catch (error) {
+    $("message-status").textContent = error?.message || "Could not send.";
+  }
+}
+
+$("message-close")?.addEventListener("click", () => show($("message-sheet"), false));
+$("message-form")?.addEventListener("submit", sendMessage);
+setInterval(() => {
+  if (!state.user) return;
+  refreshMessages();
+  if (messagePeer && !$("message-sheet").classList.contains("hidden")) {
+    loadMessageThread(messagePeer.user_id);
+  }
+}, 5000);
 
 function showRecoveryCode(code) {
   $("recovery-code").textContent = code;
@@ -1085,11 +1340,12 @@ const drawerHead = drawer.querySelector(".drawer-head");
 const tabs = [...document.querySelectorAll(".tab-bar [data-tab]")];
 const TAB_CARDS = {
   friends: "friends-card",
+  chats: "messages-card",
   sharing: "shares-card",
   today: "today-card",
   account: "account-card",
 };
-const SHEET_IDS = ["place-sheet", "share-sheet", "route-panel"];
+const SHEET_IDS = ["place-sheet", "share-sheet", "route-panel", "message-sheet"];
 let drawerCloseTimer = null;
 
 function setActiveTab(name) {

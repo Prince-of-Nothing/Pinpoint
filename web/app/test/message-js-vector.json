@@ -1,0 +1,19 @@
+{
+  "js_public": {
+    "x25519": "TuHBsp4swwbWN8WGkhL0auS0MPXFgswGJMpCwhukuUw=",
+    "ed25519": "RuUWx3MZPZaegbrcpJyJjHNRI1Cx7iHImC+zaAFzq8A="
+  },
+  "sealed": {
+    "ephemeral_public_key": "sR6axFiimaQZdRNsij9adqKK/kza3+lnyP6ZcWgFNFY=",
+    "salt_to": "q0Efedt54RUF/fz5r02d8g==",
+    "nonce_to": "GeUoyJog0eGTmIZX",
+    "ciphertext_to": "WBSZLdA9znKs1gK4PeUq/q63B61+RBji7OZW",
+    "salt_from": "c+tBKYpjfl0ZJ7VrzkU55Q==",
+    "nonce_from": "Q7SnPqiWjlDKw3TB",
+    "ciphertext_from": "jtyr855Tm0XvnLCprGn8E6qo3sKjoL3dYz+z",
+    "signature": "xqN92LgVtdQK5tu4588DH2TUuIeQZ0N2qw/N+fdP1Z1EuloaKSMwFd6Fxjcw8CVEZKIg+G26DOfy8FzCElRoDg=="
+  },
+  "sender_id": 3,
+  "recipient_id": 2,
+  "expected": "web-to-rust"
+}

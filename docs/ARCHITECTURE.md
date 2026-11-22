@@ -28,13 +28,14 @@ Android / iOS    ─┘        (cookie + CSRF)      │              │
 | `main.rs` | Desktop entry (eframe/egui) |
 | `lib.rs` | Portable core module declarations |
 | `api.rs` | HTTP client: session cookie + `X-CSRF-Token`, transport policy (ADR-0006) |
-| `app.rs`, `ui.rs`, `ui/` | Desktop state/screens (10 per-screen modules) |
-| `models.rs` | Serde domain models + pure math (precision, freshness) |
+| `app.rs`, `ui.rs`, `ui/` | Desktop state/screens (per-screen modules, including `messages.rs`) |
+| `models.rs` | Serde domain models + pure math (precision, freshness, message envelopes) |
 | `server/mod.rs` | Routers, `session_auth` middleware, tile proxy, health |
 | `server/auth_handlers.rs` | Register/login/logout/sessions/anonymous/MFA/password |
-| `server/state/` | Store facade: users, friendships, locations, sessions |
-| `server/migrations.rs` | Postgres migrations 1–14 (`pinpoint_sessions` in 14) |
-| `security/` | One mechanism per file: password (Argon2id), session, CSRF, rate limit, encryption, audit, signing, MFA, OAuth primitives |
+| `server/messages_handlers.rs` | E2E message key registry, send/thread/inbox/read endpoints |
+| `server/state/` | Store facade: users, friendships, locations, sessions, messages |
+| `server/migrations.rs` | Postgres migrations 1-17 (`pinpoint_messages` in 17) |
+| `security/` | One mechanism per file: password (Argon2id), session, CSRF, rate limit, encryption, audit, signing, MFA, OAuth primitives, `message_crypto` |
 | `patterns/` | Repository, Strategy, Command, State, Observer, Factory, Decorator, Proxy |
 | `map.rs`, `tilepacks.rs`, `bookmarks.rs` | Pins, offline tiles, on-device bookmarks |
 | `map_server.rs`, `map_window.rs` | Loopback Range server and the opt-in (`map-webview`) native/web browser map window; egui map remains the fallback |

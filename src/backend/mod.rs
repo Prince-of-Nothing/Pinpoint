@@ -25,9 +25,11 @@ pub mod rest;
 
 use crate::models::{
     AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
-    LocationPoint, LocationShare, PlaceNote, SessionInfo, User,
+    LocationPoint, LocationShare, Message, MessageConversation, MessageThread, PlaceNote,
+    SessionInfo, User,
 };
 use crate::osm::{MapCapabilities, Route, SearchPlace};
+use crate::security::message_crypto::{MessagePublicBundle, SealedMessage};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -102,6 +104,26 @@ pub trait Backend: BackendBounds {
     fn mfa_verify<'a>(&'a self, code: &'a str) -> BackendFuture<'a, ()>;
     fn mfa_status<'a>(&'a self) -> BackendFuture<'a, bool>;
     fn mfa_disable<'a>(&'a self, code: &'a str) -> BackendFuture<'a, ()>;
+
+    fn publish_message_key<'a>(&'a self, bundle: &'a MessagePublicBundle) -> BackendFuture<'a, ()>;
+    fn get_message_key<'a>(
+        &'a self,
+        user_id: i64,
+    ) -> BackendFuture<'a, Option<MessagePublicBundle>>;
+    fn send_message<'a>(
+        &'a self,
+        recipient_id: i64,
+        sealed: &'a SealedMessage,
+    ) -> BackendFuture<'a, Message>;
+    fn message_thread<'a>(
+        &'a self,
+        friend_id: i64,
+        before_id: Option<i64>,
+        limit: usize,
+    ) -> BackendFuture<'a, MessageThread>;
+    fn message_conversations<'a>(&'a self) -> BackendFuture<'a, Vec<MessageConversation>>;
+    fn mark_messages_read<'a>(&'a self, friend_id: i64) -> BackendFuture<'a, i64>;
+    fn unread_messages<'a>(&'a self) -> BackendFuture<'a, i64>;
 
     /// Returns `Ok(true)` when the backend revoked sessions (regular change),
     /// `Ok(false)` when the current session remains valid (forced change).

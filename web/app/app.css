@@ -543,6 +543,42 @@ body:has(#app-panel:not(.hidden)) #session-bar {
 }
 .sheet-close:hover { color: var(--text); border-color: var(--border); }
 
+/* E2E message thread */
+.message-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: min(46vh, 380px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0.35rem 0;
+  margin-bottom: 0.6rem;
+}
+.message-row { display: flex; }
+.message-row.mine { justify-content: flex-end; }
+.message-row.theirs { justify-content: flex-start; }
+.message-bubble {
+  max-width: 82%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.8rem;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+}
+.message-row.mine .message-bubble {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.message-meta {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.65rem;
+  opacity: 0.72;
+}
+
 .route-field {
   display: flex;
   align-items: center;

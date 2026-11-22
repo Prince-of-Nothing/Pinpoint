@@ -98,6 +98,13 @@ sha2 = "0.10"
 typenum = "1.15"
 zeroize = "1.7"
 
+# End-to-end messaging: X25519 key agreement, Ed25519 message signatures and
+# HKDF-SHA256. This is an audited-primitive ECIES construction, not the Signal
+# Protocol; see ADR-0023 for the threat model and limits.
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+hkdf = "0.12"
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # On-device routing engine (`tools/native-router`): A* over a local OSM graph
 # cache with road names and maneuvers. It has no HTTP client and no online

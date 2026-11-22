@@ -14,6 +14,7 @@ use axum::response::{Html, IntoResponse, Response};
 const INDEX: &str = include_str!("../../web/app/index.html");
 const PRIVACY: &str = include_str!("../../web/privacy.html");
 const APP_JS: &str = include_str!("../../web/app/app.js");
+const MESSAGE_CRYPTO_JS: &str = include_str!("../../web/app/message-crypto.js");
 const MAP_JS: &str = include_str!("../../web/app/map.js");
 const NAV_JS: &str = include_str!("../../web/app/nav.js");
 const SHARING_JS: &str = include_str!("../../web/app/sharing.js");
@@ -133,6 +134,16 @@ pub async fn privacy() -> Response {
 
 pub async fn app_js() -> Response {
     let mut resp = APP_JS.into_response();
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/javascript; charset=utf-8"),
+    );
+    secure(resp)
+}
+
+/// ES module imported by `/app.js` (same-origin; CSP allows it).
+pub async fn message_crypto_js() -> Response {
+    let mut resp = MESSAGE_CRYPTO_JS.into_response();
     resp.headers_mut().insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("text/javascript; charset=utf-8"),

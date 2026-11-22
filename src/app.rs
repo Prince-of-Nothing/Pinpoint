@@ -2,6 +2,7 @@ use crate::backend::DynBackend;
 use crate::models::*;
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::patterns::state::StateContext;
+use crate::security::message_crypto::{open, seal, MessageIdentity};
 use crate::security::{AuditLogger, KeyManager, RateLimiter};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -128,6 +129,10 @@ pub struct PinpointApp {
     /// Per-user E2E location encryption key (`e2e$<salt>$<iters>$<key>`),
     /// derived on login/register and persisted in the OS keychain.
     e2e_location_key: Arc<Mutex<Option<String>>>,
+    /// Per-account message identity (X25519 + Ed25519). The keychain entry is
+    /// namespaced by user id so two accounts on one device never share keys.
+    message_identity: Arc<Mutex<Option<(i64, MessageIdentity)>>>,
+    message_key_published: Arc<AtomicBool>,
     /// Set when the UI swaps to a new backend; the polling thread exits.
     auto_refresh_stop: Arc<AtomicBool>,
 }
@@ -139,6 +144,7 @@ pub enum CurrentScreen {
     Register,
     Login,
     Today,
+    Messages,
     Friends,
     Sharing,
     Places,
@@ -219,6 +225,8 @@ impl PinpointApp {
             audit_logger: Arc::new(AuditLogger::with_console()),
             key_manager: Arc::new(key_manager),
             e2e_location_key: Arc::new(Mutex::new(persisted_e2e_key)),
+            message_identity: Arc::new(Mutex::new(None)),
+            message_key_published: Arc::new(AtomicBool::new(false)),
             auto_refresh_stop: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -293,6 +301,22 @@ impl PinpointApp {
         self.clear_persisted_session();
         *self.e2e_location_key.lock().unwrap() = None;
         self.key_manager.delete_secret("e2e_location_key");
+        self.clear_message_session(true);
+    }
+
+    /// Drop the in-memory message identity. `delete_secret` is only for
+    /// account deletion or a backend switch; normal logout keeps the
+    /// per-account key so returning users can read their old messages.
+    fn clear_message_session(&self, delete_secret: bool) {
+        let user_id = self.data.lock().unwrap().user.as_ref().map(|user| user.id);
+        *self.message_identity.lock().unwrap() = None;
+        self.message_key_published.store(false, Ordering::Relaxed);
+        if delete_secret {
+            if let Some(user_id) = user_id {
+                self.key_manager
+                    .delete_secret(&format!("message_identity_{user_id}"));
+            }
+        }
     }
 
     pub fn set_loading(&self, loading: bool) {
@@ -377,6 +401,176 @@ impl PinpointApp {
     pub fn decrypt_location_payload(&self, ciphertext: &str) -> Option<(f64, f64, f64)> {
         let key = self.e2e_location_key()?;
         crate::security::e2e::decrypt_location(&key, ciphertext)
+    }
+
+    /// Load (or generate) the current account's message identity. The keychain
+    /// entry is per user id so two accounts on one device never share keys.
+    fn ensure_message_identity(&self) -> Option<MessageIdentity> {
+        let user_id = self.data.lock().unwrap().user.as_ref()?.id;
+        let mut slot = self.message_identity.lock().unwrap();
+        if let Some((id, identity)) = slot.as_ref() {
+            if *id == user_id {
+                return Some(identity.clone());
+            }
+        }
+        let secret_name = format!("message_identity_{user_id}");
+        let identity = self
+            .key_manager
+            .load_secret(&secret_name)
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+            .and_then(|raw| MessageIdentity::from_secret_bundle(&raw))
+            .unwrap_or_else(MessageIdentity::generate);
+        self.key_manager
+            .persist_secret(&secret_name, identity.secret_bundle().as_bytes());
+        *slot = Some((user_id, identity.clone()));
+        Some(identity)
+    }
+
+    /// Public bundle for diagnostics / the account screen. Never the secret.
+    pub fn message_public_bundle(
+        &self,
+    ) -> Option<crate::security::message_crypto::MessagePublicBundle> {
+        self.ensure_message_identity()
+            .map(|identity| identity.public_bundle())
+    }
+
+    /// Publish the public bundle once per signed-in session. Failure is
+    /// non-fatal: the next refresh retries before friends try to message.
+    pub async fn publish_message_key(&self) -> anyhow::Result<()> {
+        if self.message_key_published.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        let Some(identity) = self.ensure_message_identity() else {
+            return Ok(());
+        };
+        self.backend
+            .publish_message_key(&identity.public_bundle())
+            .await?;
+        self.message_key_published.store(true, Ordering::Relaxed);
+        Ok(())
+    }
+
+    /// Refresh the inbox rows and unread badge. No plaintext leaves the app.
+    pub async fn refresh_messages(&self) -> anyhow::Result<()> {
+        if !self.is_signed_in() || self.is_offline_mode() {
+            return Ok(());
+        }
+        self.publish_message_key().await?;
+        let conversations = self.backend.message_conversations().await?;
+        let unread = self.backend.unread_messages().await?;
+        let mut data = self.data.lock().unwrap();
+        data.message_conversations = conversations;
+        data.unread_messages = unread;
+        Ok(())
+    }
+
+    /// Fetch, verify and decrypt one thread. Incoming messages are marked read
+    /// after a successful load; failures leave `text = None` rather than
+    /// showing ciphertext as if it were a message.
+    pub async fn load_message_thread(&self, friend_id: i64) -> anyhow::Result<()> {
+        self.publish_message_key().await?;
+        let thread = self.backend.message_thread(friend_id, None, 50).await?;
+        let Some(identity) = self.ensure_message_identity() else {
+            return Ok(());
+        };
+        let me = {
+            let data = self.data.lock().unwrap();
+            data.user.as_ref().map(|user| user.id).unwrap_or(0)
+        };
+        let my_public = identity.public_bundle();
+        let peer_key = thread.peer.key.clone();
+        let marked_read = self.backend.mark_messages_read(friend_id).await.is_ok();
+        let read_now = chrono::Utc::now().to_rfc3339();
+        let messages: Vec<DecryptedMessage> = thread
+            .messages
+            .iter()
+            .map(|message| {
+                let mine = message.sender_id == me;
+                let text = if mine {
+                    open(
+                        &identity,
+                        &my_public,
+                        message.sender_id,
+                        message.recipient_id,
+                        &message.sealed(),
+                        false,
+                    )
+                } else {
+                    peer_key.as_ref().and_then(|key| {
+                        open(
+                            &identity,
+                            key,
+                            message.sender_id,
+                            message.recipient_id,
+                            &message.sealed(),
+                            true,
+                        )
+                    })
+                };
+                DecryptedMessage {
+                    id: message.id,
+                    sender_id: message.sender_id,
+                    mine,
+                    text,
+                    created_at: message.created_at.clone(),
+                    read_at: if mine {
+                        message.read_at.clone()
+                    } else if marked_read {
+                        Some(read_now.clone())
+                    } else {
+                        message.read_at.clone()
+                    },
+                }
+            })
+            .collect();
+        {
+            let mut data = self.data.lock().unwrap();
+            data.message_peer = Some(thread.peer);
+            data.message_messages = messages;
+            data.unread_messages = data
+                .message_conversations
+                .iter()
+                .filter(|conversation| conversation.user_id != friend_id)
+                .map(|conversation| conversation.unread)
+                .sum();
+        }
+        self.refresh_messages().await?;
+        Ok(())
+    }
+
+    /// Seal and send one text message. The server receives ciphertext only.
+    pub async fn send_message(&self, friend_id: i64, text: String) -> anyhow::Result<()> {
+        self.publish_message_key().await?;
+        let Some(identity) = self.ensure_message_identity() else {
+            return Err(anyhow::anyhow!("Sign in required."));
+        };
+        let me = {
+            let data = self.data.lock().unwrap();
+            data.user
+                .as_ref()
+                .map(|user| user.id)
+                .ok_or_else(|| anyhow::anyhow!("Sign in required."))?
+        };
+        let cached = {
+            let data = self.data.lock().unwrap();
+            data.message_peer
+                .as_ref()
+                .filter(|peer| peer.user_id == friend_id)
+                .and_then(|peer| peer.key.clone())
+        };
+        // Fetch fresh so a key rotation on the friend's new device is picked
+        // up; fall back to the cached bundle if the endpoint is unavailable.
+        let peer_key = match self.backend.get_message_key(friend_id).await? {
+            Some(key) => key,
+            None => cached.ok_or_else(|| {
+                anyhow::anyhow!("This friend has not enabled encrypted messages yet.")
+            })?,
+        };
+        let sealed = seal(&identity, &peer_key, me, friend_id, &text)
+            .ok_or_else(|| anyhow::anyhow!("Message must be between 1 and 2000 characters."))?;
+        self.backend.send_message(friend_id, &sealed).await?;
+        self.load_message_thread(friend_id).await?;
+        Ok(())
     }
 
     pub fn is_signed_in(&self) -> bool {
@@ -574,6 +768,7 @@ impl PinpointApp {
                 screen,
                 CurrentScreen::Friends
                     | CurrentScreen::Sharing
+                    | CurrentScreen::Messages
                     | CurrentScreen::Admin
                     | CurrentScreen::ChangePassword
             ))
@@ -605,6 +800,7 @@ impl PinpointApp {
     /// initial screen (forced password change first when the server
     /// demands it) and refreshes the visible data.
     fn apply_signed_in(&self, user: User) {
+        self.clear_message_session(false);
         let forced_change = user.must_change_password;
         {
             let mut data = self.data.lock().unwrap();
@@ -615,6 +811,10 @@ impl PinpointApp {
             };
             data.must_change_password = forced_change;
             data.user = Some(user);
+            data.message_conversations.clear();
+            data.message_peer = None;
+            data.message_messages.clear();
+            data.unread_messages = 0;
         }
         self.persist_session();
         if forced_change {
@@ -734,6 +934,7 @@ impl PinpointApp {
                     .log_event("auth", "logout", None, "success");
                 *self.e2e_location_key.lock().unwrap() = None;
                 self.key_manager.delete_secret("e2e_location_key");
+                self.clear_message_session(false);
                 self.clear_persisted_session();
                 let fresh = Self::fresh_data();
                 *self.data.lock().unwrap() = fresh;
@@ -871,6 +1072,7 @@ impl PinpointApp {
         let result = self.backend.logout_all().await;
         *self.e2e_location_key.lock().unwrap() = None;
         self.key_manager.delete_secret("e2e_location_key");
+        self.clear_message_session(false);
         self.clear_persisted_session();
         let fresh = Self::fresh_data();
         *self.data.lock().unwrap() = fresh;
@@ -903,6 +1105,7 @@ impl PinpointApp {
             .await?;
         *self.e2e_location_key.lock().unwrap() = None;
         self.key_manager.delete_secret("e2e_location_key");
+        self.clear_message_session(true);
         self.clear_persisted_session();
         {
             let mut data = self.data.lock().unwrap();
@@ -1001,6 +1204,7 @@ impl PinpointApp {
             self.refresh_shares().await,
             self.refresh_friend_locations().await,
             self.refresh_today().await,
+            self.refresh_messages().await,
         ] {
             if first_error.is_none() {
                 first_error = result.err();

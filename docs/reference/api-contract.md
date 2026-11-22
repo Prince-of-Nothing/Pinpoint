@@ -88,7 +88,24 @@ nothing; an active, unexpired, unpaused `SharePermission` with the caller as
 recipient is required, and precision (`exact` / `approximate` / `city_only`)
 is applied before serialization.
 
-## Map proxy — `/map/*`
+## Messages - `/api/v1/messages/*`
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| PUT | `/messages/key` | cookie + CSRF | publish/rotate this device's public X25519 + Ed25519 bundle |
+| GET | `/messages/key/:user_id` | cookie | own or accepted friend's public bundle; `404` otherwise |
+| POST | `/messages` | cookie + CSRF | `{recipient_id, message}` - store one signed opaque envelope for an accepted friend |
+| GET | `/messages/:friend_id` | cookie | thread (`before_id`, `limit`) + the peer's public bundle |
+| GET | `/messages/conversations` | cookie | accepted friends with unread counts and last activity; no plaintext |
+| GET | `/messages/unread` | cookie | total unread count for the badge |
+| POST | `/messages/read` | cookie + CSRF | `{friend_id}` - mark that friend's messages read |
+
+The server stores ciphertext only: X25519 + HKDF-SHA256 + AES-256-GCM with an
+Ed25519 signature over the envelope. This is an ECIES construction, **not** the
+Signal Protocol; limits and the threat model are in
+[ADR-0023](../adr/0023-e2e-messages-ecies.md).
+
+## Map proxy - `/map/*`
 
 | Method | Path | Notes |
 |---|---|---|

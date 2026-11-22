@@ -12,10 +12,12 @@
 use crate::backend::{Backend, BackendFuture, DynBackend};
 use crate::models::{
     AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
-    LocationPoint, LocationShare, PlaceNote, SessionInfo, User,
+    LocationPoint, LocationShare, Message, MessageConversation, MessageThread, PlaceNote,
+    SessionInfo, User,
 };
 use crate::osm::{MapCapabilities, Route, SearchPlace};
 use crate::security::circuit_breaker::CircuitBreaker;
+use crate::security::message_crypto::{MessagePublicBundle, SealedMessage};
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
@@ -338,6 +340,88 @@ impl Backend for FailoverBackend {
             self.try_all("mfa_disable", |b| {
                 let b = b.clone();
                 async move { b.mfa_disable(code).await }
+            })
+            .await
+        })
+    }
+
+    fn publish_message_key<'a>(&'a self, bundle: &'a MessagePublicBundle) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("publish_message_key", |b| {
+                let b = b.clone();
+                async move { b.publish_message_key(bundle).await }
+            })
+            .await
+        })
+    }
+
+    fn get_message_key<'a>(
+        &'a self,
+        user_id: i64,
+    ) -> BackendFuture<'a, Option<MessagePublicBundle>> {
+        Box::pin(async move {
+            self.try_all("get_message_key", |b| {
+                let b = b.clone();
+                async move { b.get_message_key(user_id).await }
+            })
+            .await
+        })
+    }
+
+    fn send_message<'a>(
+        &'a self,
+        recipient_id: i64,
+        sealed: &'a SealedMessage,
+    ) -> BackendFuture<'a, Message> {
+        Box::pin(async move {
+            self.try_all("send_message", |b| {
+                let b = b.clone();
+                async move { b.send_message(recipient_id, sealed).await }
+            })
+            .await
+        })
+    }
+
+    fn message_thread<'a>(
+        &'a self,
+        friend_id: i64,
+        before_id: Option<i64>,
+        limit: usize,
+    ) -> BackendFuture<'a, MessageThread> {
+        Box::pin(async move {
+            self.try_all("message_thread", |b| {
+                let b = b.clone();
+                async move { b.message_thread(friend_id, before_id, limit).await }
+            })
+            .await
+        })
+    }
+
+    fn message_conversations<'a>(&'a self) -> BackendFuture<'a, Vec<MessageConversation>> {
+        Box::pin(async move {
+            self.try_all("message_conversations", |b| {
+                let b = b.clone();
+                async move { b.message_conversations().await }
+            })
+            .await
+        })
+    }
+
+    fn mark_messages_read<'a>(&'a self, friend_id: i64) -> BackendFuture<'a, i64> {
+        Box::pin(async move {
+            self.try_all("mark_messages_read", |b| {
+                let b = b.clone();
+                async move { b.mark_messages_read(friend_id).await }
+            })
+            .await
+        })
+    }
+
+    fn unread_messages<'a>(&'a self) -> BackendFuture<'a, i64> {
+        Box::pin(async move {
+            self.try_all("unread_messages", |b| {
+                let b = b.clone();
+                async move { b.unread_messages().await }
             })
             .await
         })

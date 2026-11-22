@@ -13,9 +13,11 @@
 
 use crate::models::{
     AdminAuditEntry, CheckIn, DiagnosticReport, EmergencyAlert, FriendLocation, Friendship,
-    LocationPoint, LocationShare, LoginResponse, PlaceNote, SessionInfo, User,
+    LocationPoint, LocationShare, LoginResponse, Message, MessageConversation, MessageThread,
+    PlaceNote, SessionInfo, User,
 };
 use crate::osm::{MapCapabilities, Route, SearchPlace};
+use crate::security::message_crypto::{MessagePublicBundle, SealedMessage};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -485,6 +487,109 @@ impl ApiClient {
             .await?;
         Self::check(response, "MFA disable failed").await?;
         Ok(())
+    }
+
+    /// Publish or rotate this device's public X25519/Ed25519 bundle.
+    pub async fn publish_message_key(&self, bundle: &MessagePublicBundle) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::PUT,
+                "/api/v1/messages/key",
+                Some(serde_json::to_value(bundle)?),
+            )
+            .await?;
+        Self::check(response, "Message key publish failed").await?;
+        Ok(())
+    }
+
+    /// Fetch a friend's public bundle. `404` means the friend has not opened
+    /// the messaging build yet; that is not an error.
+    pub async fn get_message_key(
+        &self,
+        user_id: i64,
+    ) -> anyhow::Result<Option<MessagePublicBundle>> {
+        let response = self
+            .request(
+                reqwest::Method::GET,
+                &format!("/api/v1/messages/key/{user_id}"),
+                None,
+            )
+            .await?;
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            return Ok(None);
+        }
+        let response = Self::check(response, "Message key fetch failed").await?;
+        let body: serde_json::Value = response.json().await?;
+        Ok(serde_json::from_value(body["key"].clone()).ok())
+    }
+
+    pub async fn send_message(
+        &self,
+        recipient_id: i64,
+        sealed: &SealedMessage,
+    ) -> anyhow::Result<Message> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/messages",
+                Some(serde_json::json!({
+                    "recipient_id": recipient_id,
+                    "message": sealed,
+                })),
+            )
+            .await?;
+        let response = Self::check(response, "Message send failed").await?;
+        let body: serde_json::Value = response.json().await?;
+        serde_json::from_value(body["message"].clone())
+            .map_err(|_| anyhow::anyhow!("The server returned an invalid message."))
+    }
+
+    pub async fn message_thread(
+        &self,
+        friend_id: i64,
+        before_id: Option<i64>,
+        limit: usize,
+    ) -> anyhow::Result<MessageThread> {
+        let mut uri = format!("/api/v1/messages/{friend_id}?limit={limit}");
+        if let Some(before) = before_id {
+            uri.push_str(&format!("&before_id={before}"));
+        }
+        let response = self.request(reqwest::Method::GET, &uri, None).await?;
+        let response = Self::check(response, "Message thread failed").await?;
+        let body: serde_json::Value = response.json().await?;
+        serde_json::from_value(body)
+            .map_err(|_| anyhow::anyhow!("The server returned an invalid message thread."))
+    }
+
+    pub async fn message_conversations(&self) -> anyhow::Result<Vec<MessageConversation>> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/messages/conversations", None)
+            .await?;
+        let response = Self::check(response, "Message inbox failed").await?;
+        let body: serde_json::Value = response.json().await?;
+        Ok(serde_json::from_value(body["conversations"].clone()).unwrap_or_default())
+    }
+
+    pub async fn mark_messages_read(&self, friend_id: i64) -> anyhow::Result<i64> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/messages/read",
+                Some(serde_json::json!({ "friend_id": friend_id })),
+            )
+            .await?;
+        let response = Self::check(response, "Mark messages read failed").await?;
+        let body: serde_json::Value = response.json().await?;
+        Ok(body["updated"].as_i64().unwrap_or(0))
+    }
+
+    pub async fn unread_messages(&self) -> anyhow::Result<i64> {
+        let response = self
+            .request(reqwest::Method::GET, "/api/v1/messages/unread", None)
+            .await?;
+        let response = Self::check(response, "Unread messages failed").await?;
+        let body: serde_json::Value = response.json().await?;
+        Ok(body["unread"].as_i64().unwrap_or(0))
     }
 
     /// `POST /api/v1/auth/password/change` (revokes all sessions server-side,
@@ -1286,6 +1391,44 @@ impl crate::backend::Backend for ApiClient {
     }
     fn mfa_disable<'a>(&'a self, code: &'a str) -> crate::backend::BackendFuture<'a, ()> {
         Box::pin(async move { ApiClient::mfa_disable(self, code).await })
+    }
+    fn publish_message_key<'a>(
+        &'a self,
+        bundle: &'a MessagePublicBundle,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move { ApiClient::publish_message_key(self, bundle).await })
+    }
+    fn get_message_key<'a>(
+        &'a self,
+        user_id: i64,
+    ) -> crate::backend::BackendFuture<'a, Option<MessagePublicBundle>> {
+        Box::pin(async move { ApiClient::get_message_key(self, user_id).await })
+    }
+    fn send_message<'a>(
+        &'a self,
+        recipient_id: i64,
+        sealed: &'a SealedMessage,
+    ) -> crate::backend::BackendFuture<'a, Message> {
+        Box::pin(async move { ApiClient::send_message(self, recipient_id, sealed).await })
+    }
+    fn message_thread<'a>(
+        &'a self,
+        friend_id: i64,
+        before_id: Option<i64>,
+        limit: usize,
+    ) -> crate::backend::BackendFuture<'a, MessageThread> {
+        Box::pin(async move { ApiClient::message_thread(self, friend_id, before_id, limit).await })
+    }
+    fn message_conversations<'a>(
+        &'a self,
+    ) -> crate::backend::BackendFuture<'a, Vec<MessageConversation>> {
+        Box::pin(async move { ApiClient::message_conversations(self).await })
+    }
+    fn mark_messages_read<'a>(&'a self, friend_id: i64) -> crate::backend::BackendFuture<'a, i64> {
+        Box::pin(async move { ApiClient::mark_messages_read(self, friend_id).await })
+    }
+    fn unread_messages<'a>(&'a self) -> crate::backend::BackendFuture<'a, i64> {
+        Box::pin(async move { ApiClient::unread_messages(self).await })
     }
     fn change_password<'a>(
         &'a self,

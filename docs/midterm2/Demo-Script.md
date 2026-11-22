@@ -201,7 +201,7 @@ different. The **Friend locations** row is the proof of the share.
   windows and wait 8-20 s; the lists fill asynchronously. A fixed 1-2 s wait
   will read empty lists.
 - **Old cached UI:** Ctrl+Shift+R once; the service worker cache version is
-  `pinpoint-offline-v6`.
+  `pinpoint-offline-v7`.
 - **Route fails or says "Routing is busy, try again.":** click **Directions**
   again. The server allows two concurrent routes and caches identical
   endpoints for 5 minutes; a repeated request returned in 2.6 s. The route

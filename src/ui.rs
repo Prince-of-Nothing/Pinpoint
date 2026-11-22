@@ -17,6 +17,7 @@ pub(crate) mod emergency;
 pub(crate) mod friends;
 pub(crate) mod kiosk;
 pub(crate) mod map;
+pub(crate) mod messages;
 pub(crate) mod places;
 pub(crate) mod profile;
 pub(crate) mod qr;
@@ -154,6 +155,14 @@ enum PendingAction {
     },
     PublishGpsLocation,
     Locate,
+    RefreshMessages,
+    LoadMessageThread {
+        friend_id: i64,
+    },
+    SendMessage {
+        friend_id: i64,
+        text: String,
+    },
     ExportGpx {
         name: String,
     },
@@ -321,6 +330,11 @@ pub struct PinpointAppUI {
     mobile_nav_open: bool,
     mobile_publish_open: bool,
     mobile_selected_place: Option<crate::osm::SearchPlace>,
+    // E2E messages
+    message_selected: Option<i64>,
+    message_draft: String,
+    message_loaded: bool,
+    message_poll_at: Option<std::time::Instant>,
     /// First map view asked for location; a grant retries the fix once.
     location_prompted: bool,
     location_pending: bool,
@@ -442,6 +456,10 @@ impl PinpointAppUI {
             mobile_nav_open: false,
             mobile_publish_open: false,
             mobile_selected_place: None,
+            message_selected: None,
+            message_draft: String::new(),
+            message_loaded: false,
+            message_poll_at: None,
             location_prompted: false,
             location_pending: false,
             webview_map_click: None,
@@ -798,6 +816,7 @@ impl PinpointAppUI {
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
         let app = Arc::clone(&self.app);
         let note_saved = Arc::clone(&self.note_saved);
+        let repaint = ctx.clone();
         self.rt.spawn(async move {
             match action {
                 PendingAction::Login {
@@ -1110,6 +1129,15 @@ impl PinpointAppUI {
                         )),
                     }
                 }
+                PendingAction::RefreshMessages => {
+                    let _ = app.refresh_messages().await;
+                }
+                PendingAction::LoadMessageThread { friend_id } => {
+                    let _ = app.load_message_thread(friend_id).await;
+                }
+                PendingAction::SendMessage { friend_id, text } => {
+                    let _ = app.send_message(friend_id, text).await;
+                }
                 PendingAction::ExportGpx { name } => {
                     let route = app.data().lock().unwrap().last_route.clone();
                     match route {
@@ -1263,6 +1291,7 @@ impl PinpointAppUI {
                     let _ = app.admin_update_report(id, status).await;
                 }
             }
+            repaint.request_repaint();
         });
         ctx.request_repaint();
     }
@@ -1435,6 +1464,7 @@ impl PinpointAppUI {
         let screens = [
             (CurrentScreen::Map, key::MAP),
             (CurrentScreen::Today, "Today"),
+            (CurrentScreen::Messages, "Messages"),
             (CurrentScreen::Friends, key::FRIENDS),
             (CurrentScreen::Sharing, key::SHARING),
             (CurrentScreen::Places, key::PLACES),
@@ -1921,6 +1951,7 @@ impl eframe::App for PinpointAppUI {
                         });
                         ui.add_space(8.0);
                         let mut tools: Vec<(CurrentScreen, &str, &str)> = vec![
+                            (CurrentScreen::Messages, "Messages", "M"),
                             (CurrentScreen::Places, "Places", "P"),
                             (CurrentScreen::Bookmarks, "Saved", "B"),
                             (CurrentScreen::Trips, "Trips", "T"),
@@ -2102,6 +2133,13 @@ impl eframe::App for PinpointAppUI {
                         self.draw_today_screen(ui, ctx);
                     } else {
                         self.draw_sign_in_required(ui, ctx, "Today");
+                    }
+                }
+                CurrentScreen::Messages => {
+                    if self.app.is_signed_in() {
+                        self.draw_messages_screen(ui, ctx);
+                    } else {
+                        self.draw_sign_in_required(ui, ctx, "Messages");
                     }
                 }
                 CurrentScreen::Login => self.draw_login_form(ui, ctx),

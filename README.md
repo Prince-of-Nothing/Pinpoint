@@ -17,6 +17,10 @@ production-hardened. See the functional-state matrix and per-item
 - **Accounts & sessions** — email/password (Argon2id) and anonymous
   device-bound accounts, opaque `HttpOnly` session cookies + CSRF, session
   list/revoke, logout-all, lockout, TOTP MFA.
+- **E2E messages** — 1:1 text between accepted friends; X25519 + Ed25519 +
+  AES-256-GCM with a ciphertext-only server, safety number and read receipts on
+  web and native. ECIES, not the Signal Protocol; see
+  [`docs/messaging.md`](docs/messaging.md).
 - **Web UI at `/`** — map-first MapLibre GL JS + PMTiles UI (locally
   vendored), place search,
   A→B routing with alternatives/steps (drive; walk/bike when self-hosted),
@@ -46,7 +50,7 @@ production-hardened. See the functional-state matrix and per-item
   geolocation; local-only web assets (no Google Fonts/CDNs); ODbL attribution
   everywhere. The only automatic non-Pinpoint request is a once-a-day,
   opt-out GitHub release check (ADR-0015).
-- **Postgres persistence** — migrations 1–15, verified against live Postgres 16:
+- **Postgres persistence** - migrations 1-17, verified against live Postgres 16:
   a registered user and published location survived a server restart, and the
   split diagnostics/admin ports shared sessions, reports and audit rows.
 - **OSM self-hosting** — `PINPOINT_TILE_URL`, `PINPOINT_NOMINATIM_URL`,
@@ -165,8 +169,9 @@ entry in `src/main.rs`, Axum API in `src/server/` (auth/users/locations/map
 routers behind a gateway), OSM clients in `src/osm.rs`, platform code in
 `src/platform.rs`. Desktop, Android, iOS and a WASM stub share the core.
 
-- [`docs/ARCHITECTURE.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/ARCHITECTURE.md) — current module map
-- [`docs/adr/`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/adr/README.md) — decisions (ADR-0007…0012)
+- [`docs/ARCHITECTURE.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/ARCHITECTURE.md) - current module map
+- [`docs/messaging.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/messaging.md) - E2E message protocol, limits and tests
+- [`docs/adr/`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/adr/README.md) - decisions (ADR-0007…0012)
 - [`docs/SECURITY.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/SECURITY.md) — security model and gaps
 - [`docs/PRIVACY.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/PRIVACY.md) — GDPR posture
 - [`docs/reference/api-contract.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/docs/reference/api-contract.md) — live API

@@ -76,8 +76,9 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
   throttles on login (30/5 min), registration (10/h) and anonymous/recovery
   (20/10 min), keyed by a short-lived HMAC of the client address (never raw IP).
   The header trust model assumes a proxy that overwrites `X-Forwarded-For`; other
-  write endpoints still rely on authorization and the client-side OSM throttles
-  (threat model T-D1).
+  write endpoints rely on authorization plus a 120/min per-account cap
+  (`src/server/state/rate_limit.rs`). A general per-IP write limiter and
+  proxy-level DDoS controls remain the gap (threat model T-D1).
 - Minimal error bodies: internal errors surface as generic messages; details go to server logs only.
 - Input validation at the boundary (types, ranges, coordinate bounds, string lengths).
 

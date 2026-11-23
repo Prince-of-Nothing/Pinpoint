@@ -130,6 +130,16 @@ pub async fn session_auth(
                         .into_response();
                 }
             }
+            if unsafe_method
+                && req.uri().path().starts_with("/api/")
+                && !state.auth_rate.allow_write(session.user_id)
+            {
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error": {"code": "RATE_LIMITED", "message": "Too many writes. Try again later."}})),
+                )
+                    .into_response();
+            }
             // A temporary admin-issued password must be rotated before the
             // account can use anything else. Enforced here so every service
             // and every client gets the same rule.

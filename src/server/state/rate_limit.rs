@@ -36,6 +36,12 @@ const ANONYMOUS_LIMIT: AuthLimit = AuthLimit {
     max: 20,
     window_secs: 600,
 };
+/// Authenticated writes: high enough for normal use, low enough to blunt a
+/// scripted spam loop. Per account, not per IP.
+const WRITE_LIMIT: AuthLimit = AuthLimit {
+    max: 120,
+    window_secs: 60,
+};
 
 /// Longest bucket, used to bound the cleanup window.
 const MAX_WINDOW_SECS: u64 = 3600;
@@ -109,6 +115,12 @@ impl AuthRateLimiter {
         true
     }
 
+    /// Cap authenticated unsafe requests per account. The HMAC key is
+    /// unnecessary for an opaque account id, but it keeps one keying path.
+    pub fn allow_write(&self, user_id: i64) -> bool {
+        self.allow("write", &format!("user:{user_id}"), WRITE_LIMIT)
+    }
+
     fn digest(&self, bucket: &str, client: &str) -> String {
         type HmacSha256 = Hmac<Sha256>;
         let mut mac = HmacSha256::new_from_slice(&self.key).expect("HMAC accepts any key length");
@@ -139,6 +151,16 @@ mod tests {
         assert!(!limiter.allow("/login", "203.0.113.7", limit));
         assert!(limiter.allow("/register", "203.0.113.7", limit));
         assert!(limiter.allow("/login", "203.0.113.8", limit));
+    }
+
+    #[test]
+    fn write_cap_is_per_user() {
+        let limiter = AuthRateLimiter::new();
+        for _ in 0..120 {
+            assert!(limiter.allow_write(7));
+        }
+        assert!(!limiter.allow_write(7));
+        assert!(limiter.allow_write(8));
     }
 
     #[test]

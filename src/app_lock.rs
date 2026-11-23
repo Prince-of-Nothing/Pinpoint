@@ -224,8 +224,18 @@ mod tests {
         assert!(store.verify("4821"));
         assert!(!store.verify("0000"));
         let raw = std::fs::read_to_string(dir.join("lock.json")).unwrap();
-        assert!(!raw.contains("4821"));
-        assert!(raw.contains("$argon2id$"));
+        // The Argon2id PHC string is base64 and its random salt can contain
+        // the PIN digits, so check the record shape instead of grepping the
+        // whole file for "4821" (that assertion was flaky).
+        let record: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert!(record.get("pin").is_none(), "the PIN must not be stored");
+        assert_ne!(record["pin_hash"].as_str(), Some("4821"));
+        assert!(
+            record["pin_hash"]
+                .as_str()
+                .is_some_and(|hash| hash.starts_with("$argon2id$")),
+            "the PIN must be stored as an Argon2id PHC hash"
+        );
         store.remove().unwrap();
         assert!(!store.is_configured());
         std::fs::remove_dir_all(dir).ok();

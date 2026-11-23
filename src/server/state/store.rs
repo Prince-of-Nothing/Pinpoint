@@ -110,7 +110,10 @@ impl Store {
     }
 
     pub fn find_user_by_email(&self, email: &str) -> Option<&User> {
-        self.users.iter().find(|u| u.email == email)
+        let email = email.trim();
+        self.users
+            .iter()
+            .find(|u| u.email.trim().eq_ignore_ascii_case(email))
     }
 
     pub fn find_user_by_id(&self, id: i64) -> Option<&User> {

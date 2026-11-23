@@ -15,6 +15,8 @@ pub struct ShareSheet {
     pub share_id: Option<i64>,
     pub enabled: bool,
     pub precision: String,
+    /// Optional owner-visible name; empty means no label.
+    pub label: String,
     /// `None` means "keep the existing expiry"; `Some(0)` means no expiry.
     pub duration_hours: Option<i64>,
     /// True when an existing share has a future expiry, so the sheet can
@@ -74,6 +76,9 @@ impl ShareSheet {
             precision: outgoing
                 .map(|share| share.precision_level.clone())
                 .unwrap_or_else(|| "exact".to_string()),
+            label: outgoing
+                .and_then(|share| share.label.clone())
+                .unwrap_or_default(),
             duration_hours,
             keep_current,
             incoming: incoming_text,
@@ -157,6 +162,14 @@ impl super::PinpointAppUI {
                             }
                         });
                         ui.add_space(4.0);
+                        ui.label(RichText::new("Label (optional)").strong());
+                        ui.add(
+                            egui::TextEdit::singleline(&mut sheet.label)
+                                .hint_text("e.g. Work trip")
+                                .char_limit(120)
+                                .desired_width(260.0),
+                        );
+                        ui.add_space(4.0);
                         ui.label(RichText::new("For how long").strong());
                         ui.horizontal_wrapped(|ui| {
                             if sheet.keep_current
@@ -230,6 +243,7 @@ impl super::PinpointAppUI {
                     enabled: sheet.enabled,
                     precision: sheet.precision.clone(),
                     duration_hours: sheet.duration_hours,
+                    label: sheet.label.clone(),
                 },
                 ctx,
             );
@@ -245,6 +259,7 @@ impl super::PinpointAppUI {
                         enabled: false,
                         precision: sheet.precision.clone(),
                         duration_hours: sheet.duration_hours,
+                        label: sheet.label.clone(),
                     },
                     ctx,
                 );
@@ -325,6 +340,14 @@ mod tests {
         let sheet = ShareSheet::for_friendship(&friendship(7), Some(1), &[existing]);
         assert_eq!(sheet.duration_hours, Some(24));
         assert!(!sheet.keep_current);
+    }
+
+    #[test]
+    fn existing_share_loads_its_label() {
+        let mut existing = share(9, 7, "to_friend", true);
+        existing.label = Some("Work trip".into());
+        let sheet = ShareSheet::for_friendship(&friendship(7), Some(1), &[existing]);
+        assert_eq!(sheet.label, "Work trip");
     }
 
     #[test]

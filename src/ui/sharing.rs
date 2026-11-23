@@ -153,10 +153,17 @@ impl PinpointAppUI {
                     let is_active = share.is_active;
                     let share_id = share.id;
                     ui.horizontal_wrapped(|ui| {
+                        let label_text = share
+                            .label
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|label| !label.is_empty())
+                            .map(|label| format!("{label} · "))
+                            .unwrap_or_default();
                         ui.colored_label(
                             precision_color,
                             format!(
-                                "{} sharing {} (expires: {})",
+                                "{label_text}{} sharing {} (expires: {})",
                                 share.direction,
                                 share.precision_level,
                                 share.expires_at.clone().unwrap_or("never".to_string())

@@ -708,8 +708,14 @@ impl ApiClient {
         is_active: Option<bool>,
         precision: Option<String>,
         duration_hours: Option<i64>,
+        label: Option<String>,
     ) -> anyhow::Result<()> {
-        let body = update_share_body(is_active, precision.as_deref(), duration_hours);
+        let body = update_share_body(
+            is_active,
+            precision.as_deref(),
+            duration_hours,
+            label.as_deref(),
+        );
         let response = self
             .request(
                 reqwest::Method::PATCH,
@@ -1190,6 +1196,7 @@ fn update_share_body(
     is_active: Option<bool>,
     precision: Option<&str>,
     duration_hours: Option<i64>,
+    label: Option<&str>,
 ) -> serde_json::Value {
     let mut body = serde_json::json!({});
     if let Some(active) = is_active {
@@ -1200,6 +1207,9 @@ fn update_share_body(
     }
     if let Some(hours) = duration_hours {
         body["duration_hours"] = serde_json::Value::Number(hours.into());
+    }
+    if let Some(label) = label {
+        body["label"] = serde_json::Value::String(label.to_string());
     }
     body
 }
@@ -1518,10 +1528,18 @@ impl crate::backend::Backend for ApiClient {
         is_active: Option<bool>,
         precision: Option<String>,
         duration_hours: Option<i64>,
+        label: Option<String>,
     ) -> crate::backend::BackendFuture<'a, ()> {
         Box::pin(async move {
-            ApiClient::update_location_share(self, share_id, is_active, precision, duration_hours)
-                .await
+            ApiClient::update_location_share(
+                self,
+                share_id,
+                is_active,
+                precision,
+                duration_hours,
+                label,
+            )
+            .await
         })
     }
     fn delete_share<'a>(&'a self, share_id: i64) -> crate::backend::BackendFuture<'a, ()> {
@@ -1833,11 +1851,12 @@ mod tests {
 
     #[test]
     fn update_share_body_includes_duration_and_precision() {
-        let body = update_share_body(Some(false), Some("city_only"), Some(24));
+        let body = update_share_body(Some(false), Some("city_only"), Some(24), Some("Work trip"));
         assert_eq!(body["is_active"], false);
         assert_eq!(body["precision_level"], "city_only");
         assert_eq!(body["duration_hours"], 24);
-        let unchanged = update_share_body(None, None, None);
+        assert_eq!(body["label"], "Work trip");
+        let unchanged = update_share_body(None, None, None, None);
         assert!(unchanged.as_object().unwrap().is_empty());
     }
 

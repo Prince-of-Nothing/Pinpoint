@@ -2,7 +2,7 @@
 --   docker exec -i pinpoint-db psql -U pinpoint -d pinpoint < db/02-grants.sql
 -- or via the bootstrap target). Owner-mapping mirrors ServiceKind in
 -- src/server/state.rs: each binary writes only its own tables. Re-run
--- db/03-fks.sql in the same pass so the foreign keys are applied after the
+-- db/init/03-fks.sql in the same pass so the foreign keys are applied after the
 -- tables exist.
 --
 -- auth service (pinpoint-auth): credentials + MFA fields.

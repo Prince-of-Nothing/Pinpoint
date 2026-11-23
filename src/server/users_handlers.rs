@@ -7,7 +7,7 @@ use axum::{
 use serde_json::{json, Value};
 
 use super::admin_handlers::{record_admin_action, require_admin};
-use super::auth_handlers::clear_cookie;
+use super::auth_handlers::append_clear_cookies;
 use super::handlers::{not_found, require_current_user, user_json};
 use super::state::AppState;
 use super::usernames::{find_user_by_username, public_json, username_for};
@@ -427,8 +427,7 @@ pub async fn delete_me(
         return error_envelope("USER_NOT_FOUND", "User not found.");
     }
     let mut resp = (StatusCode::OK, Json(json!({"message": "Account deleted."}))).into_response();
-    resp.headers_mut()
-        .insert("Set-Cookie", clear_cookie().parse().unwrap());
+    append_clear_cookies(&mut resp);
     resp
 }
 

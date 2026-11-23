@@ -1751,3 +1751,44 @@ async fn admin_can_force_a_password_rotation_with_patch() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn registration_validates_the_email_address() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    let app = router(AppState::new());
+    for invalid in [
+        r#"{"email":"not-an-email","password":"StrongPass!2026","full_name":"No Email"}"#,
+        r#"{"email":"bidi\u202euser@example.com","password":"StrongPass!2026","full_name":"Bidi"}"#,
+        r#"{"email":"user@domain","password":"StrongPass!2026","full_name":"No Dot"}"#,
+    ] {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/register")
+                    .header("content-type", "application/json")
+                    .body(Body::from(invalid))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "body: {invalid}");
+    }
+
+    let valid =
+        r#"{"email":"caf\u00e9@example.com","password":"StrongPass!2026","full_name":"Cafe"}"#;
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(valid))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+}

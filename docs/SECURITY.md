@@ -95,24 +95,26 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
 
 ## Known limitations / honest gaps (thesis scope)
 - Session/auth core is **implemented** (opaque sessions, CSRF, Argon2id,
-  logout/logout-all/session revoke, anonymous create/recover). Remaining:
-  anonymous device challenge-response and rate limiting on anonymous
-  creation/recovery (`docs/security/session-management.md` §10).
+  logout/logout-all/session revoke, anonymous create/recover, per-client
+  throttles). Remaining: anonymous device challenge-response
+  (`docs/security/session-management.md` §10).
 - No OIDC/PKCE **login wiring** yet (the `security/oauth.rs` primitives exist);
   passkeys and magic links are pending.
 - E2E location encryption and OS-keychain key storage are implemented
   (`src/security/e2e.rs`, `src/security/keychain.rs`); bookmark encryption
   wiring is the remaining piece.
-- Users created through the API are kept in the in-memory store on the demo
-  path; the Postgres schema and helpers exist but the write-through repository
-  is the next persistence task.
-- Audit log exists as structured stdout logs, not a queryable table yet.
+- Users, friendships, locations, messages, sessions, diagnostics and the admin
+  audit log persist through PostgreSQL when `DATABASE_URL` is set; without it
+  the combined server keeps the in-memory demo store.
+- Admin actions are stored in the queryable `pinpoint_admin_audit` table and
+  exposed at `GET /api/v1/admin/audit`; structured logs remain for
+  request-level diagnostics.
 
 ## Hardening checklist before any public deployment
-- [ ] No demo accounts are seeded; register real accounts and promote an admin deliberately
-- [ ] HTTPS-only cookies; real domain for the CORS allowlist
+- [x] No demo accounts are seeded; register real accounts and promote an admin deliberately
+- [x] HTTPS-only cookies (HSTS, `Secure`, `__Host-` prefix); the app is same-origin, so no CORS allowlist is exposed
 - [ ] Set `PINPOINT_SESSION_IDLE_MINUTES` (30) in the deployment profile; the absolute lifetime is enforced (`PINPOINT_SESSION_MAX_DAYS`, 30 days)
 - [x] Per-client keyed-HMAC throttles on login, registration, `/auth/anonymous` and recovery
-- [ ] Move the in-memory store to PostgreSQL; enable persistent audit logging
+- [x] PostgreSQL persistence for users, friendships, locations, messages, sessions, diagnostics and the admin audit log
 - [ ] Add WAF/CDN, backups, and monitoring/alerting
 - [ ] Re-run the security test suite + manual pen-test of new infra

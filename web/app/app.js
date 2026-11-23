@@ -322,6 +322,9 @@ async function refresh() {
     show($("login-panel"), true);
     return;
   }
+  // A temporary password blocks every other API route; the Account panel
+  // handles the rotation, so do not fire requests that will 403.
+  if (state.user?.must_change_password) return;
   const [friendships, shares, locations, sessions, history, notes] = await Promise.all([
     api("/api/v1/friendships/").catch(() => []),
     api("/api/v1/locations/shares").catch(() => []),
@@ -1006,10 +1009,14 @@ $("message-verify")?.addEventListener("click", () => {
   renderMessageSafety();
   $("message-status").textContent = "Safety number verified on this device.";
 });
-let messagePollBusy = false;
-
 async function pollMessages() {
-  if (!state.user || document.hidden || messagePollBusy) return;
+  if (
+    !state.user ||
+    state.user.must_change_password ||
+    document.hidden ||
+    messagePollBusy
+  )
+    return;
   messagePollBusy = true;
   try {
     await refreshMessages();

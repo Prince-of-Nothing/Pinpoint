@@ -1529,12 +1529,25 @@ function setDrawer(open, animate = true) {
     drawer.classList.remove("open");
     drawer.classList.add("closed");
   }
+  // Keep the closed drawer out of the accessibility tree, and never leave
+  // focus on a control that is about to become hidden.
+  if (!open && drawer.contains(document.activeElement)) drawerToggle.focus();
+  drawer.setAttribute("aria-hidden", String(!open));
   drawerToggle.setAttribute("aria-expanded", String(open));
   if (!open) setActiveTab("map");
 }
 setDrawer(false);
 drawerToggle.addEventListener("click", () => {
   setDrawer(drawerToggle.getAttribute("aria-expanded") !== "true");
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  // The admin overlay owns Escape while it is open.
+  if (!$("admin-panel").classList.contains("hidden")) return;
+  if (drawerToggle.getAttribute("aria-expanded") === "true") {
+    setDrawer(false);
+    drawerToggle.focus();
+  }
 });
 
 for (const button of tabs) {

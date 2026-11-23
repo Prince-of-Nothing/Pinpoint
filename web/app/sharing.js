@@ -149,7 +149,7 @@ export function initSharing({ api, setStatus, getUser, onChanged }) {
       select.insertBefore(keep, select.firstChild);
       select.value = "keep";
     } else {
-      select.value = shareStatus(current) === "expired" ? "24" : "0";
+      select.value = !current || shareStatus(current) === "expired" ? "24" : "0";
     }
   }
 

@@ -11,6 +11,25 @@ use super::state::{AppState, Store};
 use super::{error_envelope, CurrentUser, IntoResponse};
 use crate::models::{LocationPoint, LocationShare, PlaceNote};
 
+/// Longest share the native and web UIs offer: seven days.
+const MAX_SHARE_HOURS: i64 = 168;
+
+/// A share expiry must be in the future and within the UI's maximum. A
+/// malformed or already-expired value must never create an invisible share.
+fn validate_share_expiry(raw: &str) -> Result<(), &'static str> {
+    let expiry = chrono::DateTime::parse_from_rfc3339(raw)
+        .map_err(|_| "expires_at must be RFC 3339")?
+        .with_timezone(&chrono::Utc);
+    let now = chrono::Utc::now();
+    if expiry <= now {
+        return Err("expires_at must be in the future");
+    }
+    if expiry > now + chrono::Duration::hours(MAX_SHARE_HOURS) {
+        return Err("expires_at must be within 7 days");
+    }
+    Ok(())
+}
+
 /// The active share that lets `viewer` see `owner`'s latest location.
 ///
 /// Consent is fail-closed: an accepted friendship alone grants nothing. The
@@ -87,21 +106,30 @@ pub async fn create_share(
         );
     }
     // Optional expiry: duration_hours (int) or explicit expires_at ISO-8601.
-    // 0 means "no expiry".
+    // 0 means "no expiry"; positive values are bounded to the UI maximum.
     let expires_at: Option<String> =
         if let Some(h) = body.get("duration_hours").and_then(Value::as_i64) {
             if h < 0 {
                 return error_envelope("VALIDATION_FAILED", "duration_hours must be >= 0");
+            }
+            if h > MAX_SHARE_HOURS {
+                return error_envelope("VALIDATION_FAILED", "duration_hours must be at most 168");
             }
             if h == 0 {
                 None
             } else {
                 Some((chrono::Utc::now() + chrono::Duration::hours(h)).to_rfc3339())
             }
+        } else if body.get("expires_at").is_some() {
+            let Some(raw) = body.get("expires_at").and_then(Value::as_str) else {
+                return error_envelope("VALIDATION_FAILED", "expires_at must be a string");
+            };
+            if let Err(message) = validate_share_expiry(raw) {
+                return error_envelope("VALIDATION_FAILED", message);
+            }
+            Some(raw.to_string())
         } else {
-            body.get("expires_at")
-                .and_then(Value::as_str)
-                .map(str::to_string)
+            None
         };
     let label = body
         .get("label")
@@ -231,13 +259,16 @@ pub async fn update_share(
             let Some(raw) = body.get("expires_at").and_then(Value::as_str) else {
                 return error_envelope("VALIDATION_FAILED", "expires_at must be a string");
             };
-            if chrono::DateTime::parse_from_rfc3339(raw).is_err() {
-                return error_envelope("VALIDATION_FAILED", "expires_at must be RFC 3339");
+            if let Err(message) = validate_share_expiry(raw) {
+                return error_envelope("VALIDATION_FAILED", message);
             }
             Some(Some(raw.to_string()))
         } else if let Some(h) = body.get("duration_hours").and_then(Value::as_i64) {
             if h < 0 {
                 return error_envelope("VALIDATION_FAILED", "duration_hours must be >= 0");
+            }
+            if h > MAX_SHARE_HOURS {
+                return error_envelope("VALIDATION_FAILED", "duration_hours must be at most 168");
             }
             Some(if h == 0 {
                 None

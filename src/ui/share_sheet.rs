@@ -59,13 +59,11 @@ impl ShareSheet {
             precision: outgoing
                 .map(|share| share.precision_level.clone())
                 .unwrap_or_else(|| "exact".to_string()),
-            duration_hours: if outgoing
-                .and_then(|share| share.expires_at.as_ref())
-                .is_some()
-            {
-                24
-            } else {
-                0
+            // Privacy default: a new share expires in 24 hours. An existing
+            // share with no expiry keeps "until off"; both stay explicit.
+            duration_hours: match outgoing {
+                Some(share) if share.expires_at.is_none() => 0,
+                _ => 24,
             },
             incoming: incoming_text,
             open: true,
@@ -280,12 +278,12 @@ mod tests {
     }
 
     #[test]
-    fn no_share_defaults_to_off_and_exact() {
+    fn no_share_defaults_to_off_exact_and_a_day() {
         let sheet = ShareSheet::for_friendship(&friendship(7), Some(1), &[]);
         assert_eq!(sheet.share_id, None);
         assert!(!sheet.enabled);
         assert_eq!(sheet.precision, "exact");
-        assert_eq!(sheet.duration_hours, 0);
+        assert_eq!(sheet.duration_hours, 24);
     }
 
     #[test]

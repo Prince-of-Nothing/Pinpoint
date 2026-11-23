@@ -408,7 +408,7 @@ async fn create_share_rejects_unknown_precision_and_direction() {
 #[tokio::test]
 async fn expired_share_is_not_revived_by_is_active_patch() {
     let state = pinpoint_desktop::server::AppState::new();
-    let app = pinpoint_desktop::server::router(state);
+    let app = pinpoint_desktop::server::router(state.clone());
     let (alice_cookie, alice_csrf, _, _) =
         register(&app, "expired-alice@example.invalid", "Alice").await;
     let (bob_cookie, bob_csrf, _, bob_username) =
@@ -431,12 +431,23 @@ async fn expired_share_is_not_revived_by_is_active_patch() {
             "/api/v1/locations/shares",
             &bob_cookie,
             &bob_csrf,
-            &format!(r#"{{"friendship_id":{friendship_id},"expires_at":"2000-01-01T00:00:00Z"}}"#),
+            &format!(r#"{{"friendship_id":{friendship_id},"duration_hours":1}}"#),
         ))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
     let share_id = body_json(resp).await["id"].as_i64().expect("share id");
+    // The API rejects past expiries now; age this share directly to prove the
+    // read path still fails closed.
+    {
+        let mut store = state.store.lock().unwrap();
+        let share = store
+            .shares
+            .iter_mut()
+            .find(|s| s.id == share_id)
+            .expect("created share");
+        share.expires_at = Some("2000-01-01T00:00:00Z".to_string());
+    }
 
     let visible = get_json(&app, "/api/v1/locations/friends", &alice_cookie).await;
     assert_eq!(visible, json!([]), "expired share is never visible");
@@ -467,6 +478,57 @@ async fn expired_share_is_not_revived_by_is_active_patch() {
 }
 
 #[tokio::test]
+async fn share_expiry_is_bounded_and_must_be_in_the_future() {
+    let state = pinpoint_desktop::server::AppState::new();
+    let app = pinpoint_desktop::server::router(state);
+    let (alice_cookie, alice_csrf, _, _) =
+        register(&app, "bounded-alice@example.invalid", "Alice").await;
+    let (bob_cookie, bob_csrf, _, bob_username) =
+        register(&app, "bounded-bob@example.invalid", "Bob").await;
+    let friendship_id = accepted_friendship(
+        &app,
+        &alice_cookie,
+        &alice_csrf,
+        &bob_cookie,
+        &bob_csrf,
+        &bob_username,
+    )
+    .await;
+
+    let too_long = (chrono::Utc::now() + chrono::Duration::days(8)).to_rfc3339();
+    for body in [
+        format!(r#"{{"friendship_id":{friendship_id},"duration_hours":169}}"#),
+        format!(r#"{{"friendship_id":{friendship_id},"expires_at":"{too_long}"}}"#),
+        format!(r#"{{"friendship_id":{friendship_id},"expires_at":"2000-01-01T00:00:00Z"}}"#),
+    ] {
+        let resp = app
+            .clone()
+            .oneshot(authed_req(
+                "POST",
+                "/api/v1/locations/shares",
+                &bob_cookie,
+                &bob_csrf,
+                &body,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "body: {body}");
+    }
+
+    let resp = app
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/shares",
+            &bob_cookie,
+            &bob_csrf,
+            &format!(r#"{{"friendship_id":{friendship_id},"duration_hours":168}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+}
+
+#[tokio::test]
 async fn patch_preserves_expiry_and_is_owner_only() {
     let state = pinpoint_desktop::server::AppState::new();
     let app = pinpoint_desktop::server::router(state);
@@ -483,7 +545,7 @@ async fn patch_preserves_expiry_and_is_owner_only() {
         &bob_username,
     )
     .await;
-    let expires = "2099-01-01T00:00:00Z";
+    let expires = (chrono::Utc::now() + chrono::Duration::days(1)).to_rfc3339();
 
     let resp = app
         .clone()

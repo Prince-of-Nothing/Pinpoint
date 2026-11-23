@@ -8,7 +8,8 @@
 | Email + Argon2id hash        | Account identification/authentication | Until account deletion     |
 | Display name (pseudonymous) | Shown to consenting recipients        | Until changed/deleted      |
 | Role/flags (admin, locked…) | Access control                        | Until changed/deleted      |
-| **Current location publish**| Only to serve explicitly granted shares | Overwritten by next publish; **no history kept in MVP** |
+| **Current location publish**| Only to serve explicitly granted shares | Overwritten by next publish; deleted with the account |
+| **Private trail (owner-only)** | Your Today list and map line | 7 days retained, last 24 hours returned; deleted with the account |
 | Share permissions           | The consent records themselves        | Until revoked/expired      |
 | Friendship relations        | Precondition for any share            | Until removed              |
 

@@ -69,12 +69,15 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
   requests; map tiles go through `/map/tiles`. `tests/assets.rs` enforces this.
 
 ### Abuse resistance
-- Per-IP + per-user **rate limiting** on auth and write endpoints (login throttling included).
+- Per-account login lockout (five failed attempts, 15 minutes) and client-side
+  throttles for Nominatim/OSRM/Overpass. A server-wide per-IP limiter is still a
+  known gap (threat model T-D1).
 - Minimal error bodies: internal errors surface as generic messages; details go to server logs only.
 - Input validation at the boundary (types, ranges, coordinate bounds, string lengths).
 
 ### Data protection
-- Location data retained only as "current publish" per user; no historical trails in MVP.
+- The latest publish is replaced per user; the owner-only trail keeps points for
+  7 days on the server, returns the last 24 hours, and is deleted with the account.
 - Secrets via environment variables (`.env.example` documents all of them); nothing committed.
 - Demo seeds contain fictional data only.
 

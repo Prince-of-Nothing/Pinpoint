@@ -743,12 +743,21 @@ pub async fn anonymous(
         .filter(|s| !s.is_empty())
         .unwrap_or("Anonymous device")
         .to_string();
+    let name_check = crate::security::validation::validate_name(&device_name);
+    if !name_check.is_valid() {
+        return error_envelope("VALIDATION_FAILED", &name_check.errors.join("; "));
+    }
     let public_key = body
         .get("public_key")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(str::to_string);
+    if public_key.as_deref().is_some_and(|key| {
+        key.chars().count() > 512 || crate::security::validation::contains_display_control(key)
+    }) {
+        return error_envelope("VALIDATION_FAILED", "public_key is invalid");
+    }
     let recovery_code = generate_recovery_code();
     let recovery_hash = recovery_code_hash(&recovery_code);
 

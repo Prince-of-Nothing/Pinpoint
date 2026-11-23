@@ -47,6 +47,21 @@ const DIAGNOSTIC_LIMIT: AuthLimit = AuthLimit {
     max: 10,
     window_secs: 3600,
 };
+/// Map tiles: 20/s per client. Cached tiles are cheap, but an upstream miss
+/// must not become a free scraping proxy.
+const TILE_LIMIT: AuthLimit = AuthLimit {
+    max: 1200,
+    window_secs: 60,
+};
+/// Search/reverse mirror Nominatim's 1/s courtesy limit; route mirrors OSRM's 2/s.
+const MAP_SEARCH_LIMIT: AuthLimit = AuthLimit {
+    max: 60,
+    window_secs: 60,
+};
+const MAP_ROUTE_LIMIT: AuthLimit = AuthLimit {
+    max: 120,
+    window_secs: 60,
+};
 
 /// Longest bucket, used to bound the cleanup window.
 const MAX_WINDOW_SECS: u64 = 3600;
@@ -59,6 +74,20 @@ pub fn auth_limit(path: &str) -> Option<AuthLimit> {
         "/api/v1/auth/anonymous" | "/api/v1/auth/anonymous/recover" => Some(ANONYMOUS_LIMIT),
         "/api/v1/diagnostics/report" => Some(DIAGNOSTIC_LIMIT),
         _ => None,
+    }
+}
+
+/// Map proxy paths with a per-client throttle. The bucket is stable, so every
+/// tile path shares one counter instead of one bucket per tile.
+pub fn map_limit(path: &str) -> Option<(&'static str, AuthLimit)> {
+    if path.starts_with("/map/tiles/") {
+        Some(("tiles", TILE_LIMIT))
+    } else if matches!(path, "/map/search" | "/map/reverse") {
+        Some(("map-search", MAP_SEARCH_LIMIT))
+    } else if path == "/map/route" {
+        Some(("map-route", MAP_ROUTE_LIMIT))
+    } else {
+        None
     }
 }
 
@@ -173,6 +202,14 @@ mod tests {
     fn diagnostics_reports_have_a_client_limit() {
         assert!(auth_limit("/api/v1/diagnostics/report").is_some());
         assert!(auth_limit("/api/v1/locations/me").is_none());
+    }
+
+    #[test]
+    fn map_limits_cover_proxy_paths() {
+        assert!(map_limit("/map/tiles/10/1/2").is_some());
+        assert!(map_limit("/map/search").is_some());
+        assert!(map_limit("/map/route").is_some());
+        assert!(map_limit("/map/capabilities").is_none());
     }
 
     #[test]

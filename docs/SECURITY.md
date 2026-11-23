@@ -80,6 +80,9 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
   write endpoints rely on authorization plus a 120/min per-account cap
   (`src/server/state/rate_limit.rs`). A general per-IP write limiter and
   proxy-level DDoS controls remain the gap (threat model T-D1).
+- The public map proxy is capped per client (tiles 1200/min, search/reverse
+  60/min, route 120/min) so one script cannot exhaust the upstream OSM
+  providers.
 - Minimal error bodies: internal errors surface as generic messages; details go to server logs only.
 - Input validation at the boundary (types, ranges, coordinate bounds, string lengths).
 

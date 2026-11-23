@@ -18,7 +18,7 @@ mod sessions;
 mod store;
 mod users;
 
-pub use rate_limit::{auth_limit, client_ip, AuthRateLimiter};
+pub use rate_limit::{auth_limit, client_ip, map_limit, AuthRateLimiter};
 pub use sessions::session_idle_seconds;
 pub use sessions::StoredSession;
 pub use store::Store;

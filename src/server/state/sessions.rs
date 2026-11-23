@@ -46,6 +46,17 @@ fn session_ttl() -> ChronoDuration {
     ChronoDuration::minutes(minutes)
 }
 
+/// Absolute ceiling for a session, independent of activity.
+/// `PINPOINT_SESSION_MAX_DAYS` overrides it; defaults to 30 days.
+fn session_max_lifetime() -> ChronoDuration {
+    let days = std::env::var("PINPOINT_SESSION_MAX_DAYS")
+        .ok()
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .filter(|d| *d > 0)
+        .unwrap_or(30);
+    ChronoDuration::days(days)
+}
+
 /// Idle timeout in seconds, for the auth response's `expires_in` hint.
 pub fn session_idle_seconds() -> i64 {
     session_ttl().num_seconds()
@@ -59,7 +70,8 @@ fn parse_ts(value: &str) -> DateTime<Utc> {
 
 impl StoredSession {
     fn is_expired(&self) -> bool {
-        Utc::now() - self.last_activity > session_ttl()
+        let now = Utc::now();
+        now - self.last_activity > session_ttl() || now - self.created_at > session_max_lifetime()
     }
 }
 
@@ -278,6 +290,26 @@ mod tests {
             })
             .await
             .unwrap();
+        });
+    }
+
+    #[test]
+    fn session_absolute_lifetime_expires_even_when_active() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let state = AppState::new();
+            let (sid, _) = state.create_session(1, "email", false).await;
+            {
+                let mut sessions = state.sessions.lock().unwrap();
+                let session = sessions.get_mut(&hash_session_id(&sid)).unwrap();
+                session.created_at =
+                    Utc::now() - session_max_lifetime() - ChronoDuration::minutes(1);
+                session.last_activity = Utc::now();
+            }
+            assert!(
+                state.get_session(&sid).await.is_none(),
+                "the absolute ceiling must win over fresh activity"
+            );
         });
     }
 

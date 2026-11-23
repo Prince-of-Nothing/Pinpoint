@@ -98,7 +98,9 @@ each request:
 ```
 
 Timeouts: **idle 12 h demo / 30 min prod** (configurable), **absolute 30 days**
-(created_at floor). Every authenticated request slides `last_activity`.
+(created_at floor). Every authenticated request slides `last_activity`. Expired
+rows are pruned when a new session is created; the absolute ceiling is set by
+`PINPOINT_SESSION_MAX_DAYS`.
 
 ## 6. Endpoints
 
@@ -197,8 +199,8 @@ only consulted on a miss (other replica, restart).
    retention; see `docs/security/threat-model.md`).
 3. Persist users created via the API in Postgres (`sql_insert_user` is
    available; the demo path is in-memory).
-4. Tighten the idle timeout to 30 min in the deployment profile and add an
-   absolute 30-day ceiling test.
+4. The absolute 30-day ceiling and its test are in place
+   (`PINPOINT_SESSION_MAX_DAYS`); set the deployment idle timeout to 30 min.
 5. Add a session screen to the Rust desktop client (the HTTP endpoints are
    already there).
 6. Document the split-service limitation (no Postgres ⇒ single-process auth).

@@ -707,6 +707,15 @@ pub mod map_handlers {
             )
                 .into_response();
         }
+        // Reject impossible coordinates before paying for an upstream request.
+        let side = 1u32 << z;
+        if x >= side || y >= side {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": {"code": "INVALID_TILE", "message": "Tile coordinates are outside this zoom level"}})),
+            )
+                .into_response();
+        }
         let key = (z, x, y);
         if let Some(cached) = tile_cache().lock().unwrap().get(&key) {
             if cached.inserted.elapsed() < TILE_TTL {

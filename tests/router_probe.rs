@@ -300,6 +300,26 @@ async fn anonymous_account_creation_and_recovery() {
     use pinpoint_desktop::server::{router, AppState};
 
     let app = router(AppState::new());
+    // The device name becomes the public display name: it follows the same
+    // character and display-control rules as an email account's name.
+    for invalid in [
+        serde_json::json!({"device_name": "é".repeat(101)}).to_string(),
+        serde_json::json!({"device_name": "Alice\u{202E}Smith"}).to_string(),
+    ] {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/anonymous")
+                    .header("content-type", "application/json")
+                    .body(Body::from(invalid))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
     let body = r#"{"device_name":"Test device"}"#;
 
     let resp = app

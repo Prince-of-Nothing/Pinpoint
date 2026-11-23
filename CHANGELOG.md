@@ -79,6 +79,7 @@ The per-item flagged list for this release is in
 - [FIX] Native Today: action errors are surfaced, the note draft clears only after a successful POST and only if unchanged, refresh sections load independently, and a 401 clears private lists without letting an in-flight refresh cross accounts.
 - [FIX] Location permission: Android now requests fine and coarse location in one dialog (Android 12+ ignores a fine-only request), asks on the first map view, retries the fix after a grant, and receives one-shot GPS updates through a broadcast receiver. The web client asks once after sign-in and reports the real geolocation error. Native map controls use a solid fill so their glyphs stay readable over the light basemap.
 ### Security
+- [SECURITY] Anonymous sign-up validates the device name against the display-name rules and bounds the optional public key, so an anonymous account cannot store an oversized or spoofing name.
 - [SECURITY] Diagnostic reports reject Unicode bidi controls as well as C0/C1, so a report cannot reorder the text an administrator reads in the diagnostics console.
 - [SECURITY] Private-note labels reject control characters and messages reject Unicode bidi controls, so a crafted note cannot spoof the owner's note list or map labels; newlines remain allowed in messages.
 - [SECURITY] Check-in notes are trimmed, capped at 2000 characters and reject control/bidi characters, so one request cannot store an arbitrarily large or spoofed note.

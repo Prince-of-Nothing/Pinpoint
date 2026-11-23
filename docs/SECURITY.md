@@ -63,8 +63,9 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
   `Permissions-Policy` (geolocation for this origin only), `Cross-Origin-Opener-Policy: same-origin`,
   `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none`,
   and a same-origin CSP on the web client.
-- Cookies: `HttpOnly`, `SameSite=Lax`, `Secure` when served over HTTPS
-  (loopback HTTP in local dev only).
+- Cookies: `HttpOnly`, `SameSite=Lax`, `Path=/`; HTTPS sessions use the
+  `__Host-pinpoint_session` name with `Secure`, so a sibling subdomain cannot
+  overwrite them. Loopback HTTP keeps the plain `session_id` name for local dev.
 - **Local-only assets:** no Google Fonts/CDNs. The UI uses `system-ui`, serves
   `/app.js`, `/app.css` and `/favicon.svg` itself, and the CSP pins
   `default-src`, `script-src`, `style-src`, `font-src`, `connect-src` and

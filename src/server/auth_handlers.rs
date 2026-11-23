@@ -32,10 +32,19 @@ fn user_json(u: &crate::models::User) -> Value {
     })
 }
 
+/// Session cookie on HTTPS. The `__Host-` prefix makes the browser reject a
+/// copy scoped to a parent domain or a subdomain path, so a sibling host
+/// cannot overwrite the session.
+const HOST_SESSION_COOKIE: &str = "__Host-pinpoint_session";
+/// Loopback HTTP dev keeps the plain name: `__Host-` requires `Secure`.
+const SESSION_COOKIE: &str = "session_id";
+
 fn session_cookie(session_id: &str, secure: bool) -> String {
-    // `Secure` only over HTTPS: local dev on loopback HTTP must still store it.
-    let secure = if secure { "; Secure" } else { "" };
-    format!("session_id={session_id}; Path=/; HttpOnly; SameSite=Lax{secure}")
+    if secure {
+        format!("{HOST_SESSION_COOKIE}={session_id}; Path=/; HttpOnly; SameSite=Lax; Secure")
+    } else {
+        format!("{SESSION_COOKIE}={session_id}; Path=/; HttpOnly; SameSite=Lax")
+    }
 }
 
 /// HTTPS detection: TLS proxies (Render) forward the original scheme in
@@ -49,8 +58,21 @@ fn request_is_secure(headers: &HeaderMap, uri: &axum::http::Uri) -> bool {
             .unwrap_or(false)
 }
 
-pub(crate) fn clear_cookie() -> String {
-    "session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0".to_string()
+/// Both names are cleared: a client may still hold the legacy HTTP cookie
+/// after an HTTPS login, and the `__Host-` variant needs `Secure` even to be
+/// expired.
+pub(crate) fn clear_cookies() -> [&'static str; 2] {
+    [
+        "session_id=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0",
+        "__Host-pinpoint_session=; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=0",
+    ]
+}
+
+pub(crate) fn append_clear_cookies(resp: &mut axum::response::Response) {
+    for cookie in clear_cookies() {
+        resp.headers_mut()
+            .append("Set-Cookie", cookie.parse().unwrap());
+    }
 }
 
 fn session_response(
@@ -310,8 +332,7 @@ pub async fn logout(
         Json(json!({"message": "Successfully logged out"})),
     )
         .into_response();
-    resp.headers_mut()
-        .insert("Set-Cookie", clear_cookie().parse().unwrap());
+    append_clear_cookies(&mut resp);
     if let Some(Extension(cu)) = cu {
         state.delete_session(&cu.session_id).await;
     }
@@ -534,8 +555,7 @@ pub async fn change_password(
         Json(json!({"message": "Password changed."})),
     )
         .into_response();
-    resp.headers_mut()
-        .insert("Set-Cookie", clear_cookie().parse().unwrap());
+    append_clear_cookies(&mut resp);
     resp
 }
 
@@ -606,8 +626,7 @@ pub async fn revoke_session(
     )
         .into_response();
     if revoking_current {
-        resp.headers_mut()
-            .insert("Set-Cookie", clear_cookie().parse().unwrap());
+        append_clear_cookies(&mut resp);
     }
     resp
 }
@@ -626,8 +645,7 @@ pub async fn logout_all(
         Json(json!({"message": "All sessions revoked."})),
     )
         .into_response();
-    resp.headers_mut()
-        .insert("Set-Cookie", clear_cookie().parse().unwrap());
+    append_clear_cookies(&mut resp);
     resp
 }
 
@@ -821,11 +839,22 @@ mod registration_tests {
     use tower::ServiceExt;
 
     #[test]
-    fn session_cookie_sets_secure_only_on_https() {
-        assert!(session_cookie("abc", true).contains("; Secure"));
-        assert!(!session_cookie("abc", false)
-            .to_ascii_lowercase()
-            .contains("secure"));
+    fn session_cookie_uses_the_host_prefix_only_on_https() {
+        let secure = session_cookie("abc", true);
+        assert!(secure.starts_with("__Host-pinpoint_session=abc;"));
+        assert!(secure.contains("; Secure"));
+        let plain = session_cookie("abc", false);
+        assert!(plain.starts_with("session_id=abc;"));
+        assert!(!plain.to_ascii_lowercase().contains("secure"));
+    }
+
+    #[test]
+    fn clearing_removes_both_cookie_names() {
+        let cookies = clear_cookies();
+        assert!(cookies.iter().any(|c| c.starts_with("session_id=;")));
+        assert!(cookies
+            .iter()
+            .any(|c| c.starts_with("__Host-pinpoint_session=;") && c.contains("Secure")));
     }
 
     #[test]
@@ -839,6 +868,34 @@ mod registration_tests {
             &HeaderMap::new(),
             &axum::http::Uri::from_static("https://pinpoint.example/api/v1/auth/login")
         ));
+    }
+
+    #[tokio::test]
+    async fn secure_registration_sets_a_host_prefixed_cookie() {
+        let app = crate::server::router(AppState::new());
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/register")
+                    .header("x-forwarded-proto", "https")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        r#"{"email":"host-cookie@example.com","password":"StrongPass!2026","full_name":"Host Cookie"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let cookie = response
+            .headers()
+            .get("set-cookie")
+            .expect("registration must set the session cookie")
+            .to_str()
+            .unwrap();
+        assert!(cookie.starts_with("__Host-pinpoint_session="));
+        assert!(cookie.contains("; Secure"));
     }
 
     #[tokio::test]

@@ -110,7 +110,9 @@ pub async fn session_auth(
             }
         }
     }
-    if let Some(session_id) = cookie_value(req.headers(), "session_id") {
+    if let Some(session_id) = cookie_value(req.headers(), "__Host-pinpoint_session")
+        .or_else(|| cookie_value(req.headers(), "session_id"))
+    {
         if let Some(session) = state.get_session(&session_id).await {
             let unsafe_method = !matches!(
                 *req.method(),

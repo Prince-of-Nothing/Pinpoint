@@ -87,14 +87,14 @@ api::tests::rejects_unsupported_schemes_and_garbage ... ok
 1. Client validates input (email, password, name) via `security::validation`.
 2. Client rate-limits login attempts (`api_login`: 5/min).
 3. `POST /api/v1/auth/login` with JSON `{email, password}`.
-4. Server responds with `{access_token, csrf_token, user}` + `Set-Cookie: session_id=...`.
-5. Client stores `session_id` cookie and CSRF token; sets `PinpointApp::set_offline_mode(false)`.
+4. Server responds with `{access_token, csrf_token, user}` + `Set-Cookie: __Host-pinpoint_session=...` (loopback HTTP uses `session_id`).
+5. Client stores the session cookie and CSRF token; sets `PinpointApp::set_offline_mode(false)`.
 6. Client audits `auth/login success` (or `failure`).
 
 ### 4.2 Session Cookie
 
-- **Name:** `session_id` (server default).
-- **Flags:** HttpOnly, SameSite=Lax, Secure in production, Path=/.
+- **Name:** `__Host-pinpoint_session` over HTTPS; `session_id` on loopback HTTP where `Secure` is unavailable.
+- **Flags:** HttpOnly, SameSite=Lax, Secure in production, Path=/, no Domain. The `__Host-` prefix prevents a sibling subdomain from overwriting the cookie.
 - **Storage:** `ApiClient` keeps `cookies: Vec<String>` in memory (`Arc<Mutex<Option<Session>>>`); the cookie value is never logged.
 - **Rotation:** Server re-issues cookies on every authenticated response; client updates from `Set-Cookie` headers.
 

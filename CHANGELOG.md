@@ -33,6 +33,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Web: any authenticated 401 now returns to the login form immediately instead of leaving a signed-in shell full of failed actions.
 - [FIX] Native account deletion now warns that the private trail, notes and messages are erased too.
 - [FIX] Web: a temporary-password account skips the authenticated refresh and message polling, so the Account panel is not flooded with 403 responses while the password is rotated.
 - [FIX] Web: message polling pauses while the tab is hidden, resumes on visibility, and never overlaps itself, so a background tab stops making requests every five seconds.

@@ -110,6 +110,7 @@ impl PinpointAppUI {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.kiosk_note_input)
                             .hint_text("Optional check-in note (e.g. Arrived at station)")
+                            .char_limit(2000)
                             .desired_width(320.0),
                     );
                     ui.add_space(8.0);

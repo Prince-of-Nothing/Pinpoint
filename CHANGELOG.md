@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [DOCS] README now points at the 2.6.1 release and the actual Windows CI artifact instead of the old 1.2.1 bundle name.
 - [DOCS] The security architecture page now describes the Rust server, the per-client throttles, the PostgreSQL session authority and the owner-only trail instead of the archived Go backend and its env vars.
 - [DOCS] The security status and checklist now reflect PostgreSQL persistence, the queryable admin audit table, the implemented auth throttles and the `__Host-` cookie.
 - [DOCS] The reference share-expiry snippet now enforces the seven-day cap instead of 24 hours.

@@ -6,7 +6,7 @@ Friendship does not grant access to anyone's location: each person explicitly
 chooses who can see them, at what precision, and for how long. Every share can
 be revoked, and recipients can see whether a location is fresh or stale.
 
-**Current release: [1.2.1](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/RELEASE_NOTES.md)** — thesis demo, not
+**Current release: [2.6.1](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/RELEASE_NOTES.md)** — thesis demo, not
 production-hardened. See the functional-state matrix and per-item
 `[FEATURE]` / `[FIX]` flags in the release notes.
 
@@ -162,8 +162,9 @@ to the host until the disk is compacted.
 
 ### Release artifact
 
-Unzip `dist/pinpoint-1.2.1-windows-x64.zip`, run `pinpoint-server.exe`, open
-`http://127.0.0.1:8080/`.
+Unzip `pinpoint-desktop-windows.zip` and run `pinpoint-desktop.exe`. For the
+web client, run `cargo run --bin pinpoint-server` (or the compose stack) and
+open `http://127.0.0.1:8080/`.
 
 ---
 

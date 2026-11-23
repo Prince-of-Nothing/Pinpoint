@@ -43,6 +43,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Native admin: the temporary password is cleared from the reset field after a reset request, so it does not linger on screen.
 - [FIX] The app-lock test no longer fails when the random Argon2id hash happens to contain the PIN digits; it parses the record and checks the PIN is only stored as a hash.
 - [FIX] Auth: registration and login trim and case-fold email addresses, so a differently capitalized or padded address no longer creates a duplicate account or blocks sign-in.
 - [FIX] Web sharing: clearing the label field now removes the stored label instead of silently keeping it.

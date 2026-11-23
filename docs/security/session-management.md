@@ -195,8 +195,8 @@ only consulted on a miss (other replica, restart).
 1. Anonymous device challenge-response: store an Ed25519 public key and issue
    a one-time challenge (`/auth/anonymous/verify`).
 2. Per-client keyed-HMAC throttles are in place for login, registration and
-   anonymous/recovery; add a general write-endpoint limiter and proxy-level
-   DDoS controls.
+   anonymous/recovery, and authenticated unsafe requests are capped at 120/min
+   per account; add a general per-IP write limiter and proxy-level DDoS controls.
 3. Persist users created via the API in Postgres (`sql_insert_user` is
    available; the demo path is in-memory).
 4. The absolute 30-day ceiling and its test are in place

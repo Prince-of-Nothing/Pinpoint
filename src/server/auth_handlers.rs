@@ -250,6 +250,10 @@ pub async fn register(
     if email.is_empty() {
         return error_envelope("VALIDATION_FAILED", "email is required");
     }
+    let email_check = crate::security::validation::validate_email(&email);
+    if !email_check.is_valid() {
+        return error_envelope("VALIDATION_FAILED", &email_check.errors.join("; "));
+    }
     if !crate::security::validation::validate_password(password).is_valid() {
         return error_envelope(
             "VALIDATION_FAILED",

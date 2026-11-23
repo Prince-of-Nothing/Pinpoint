@@ -1623,9 +1623,10 @@ impl PinpointAppUI {
                     && !self.login_password.is_empty()
                 {
                     let email = self.login_email.clone();
-                    let password = self.login_password.clone();
+                    let password = std::mem::take(&mut self.login_password);
                     let totp = {
-                        let code = self.login_totp.trim();
+                        let code = std::mem::take(&mut self.login_totp);
+                        let code = code.trim();
                         if code.is_empty() {
                             None
                         } else {

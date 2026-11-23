@@ -173,6 +173,14 @@ async function enterApp() {
   show($("app-panel"), true);
   renderIdentity();
   updateAdminTab();
+  // A temporary password blocks the API until it is rotated. Take the user
+  // straight to the Account panel instead of letting every tab fail.
+  if (state.user?.must_change_password) {
+    setDrawer(true, false);
+    setActiveTab("account");
+    $("account-card")?.scrollIntoView({ block: "start" });
+    setStatus("Change the temporary password before using the app.", true);
+  }
   ensureMap()
     .then((map) => map.map.invalidateSize())
     .catch(() => {});

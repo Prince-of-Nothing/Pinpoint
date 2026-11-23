@@ -114,7 +114,8 @@ enum PendingAction {
         share_id: Option<i64>,
         enabled: bool,
         precision: String,
-        duration_hours: i64,
+        /// `None` keeps the existing expiry (existing shares only).
+        duration_hours: Option<i64>,
     },
     DeleteFriendship {
         id: i64,
@@ -978,15 +979,11 @@ impl PinpointAppUI {
                                 share_id,
                                 Some(enabled),
                                 Some(precision),
-                                Some(duration_hours),
+                                duration_hours,
                             )
                             .await;
                     } else if enabled {
-                        let expiry = if duration_hours > 0 {
-                            Some(duration_hours)
-                        } else {
-                            None
-                        };
+                        let expiry = duration_hours.filter(|hours| *hours > 0);
                         let _ = app
                             .create_share_with_expiry(
                                 friendship_id,

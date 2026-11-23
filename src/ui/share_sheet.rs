@@ -15,7 +15,11 @@ pub struct ShareSheet {
     pub share_id: Option<i64>,
     pub enabled: bool,
     pub precision: String,
-    pub duration_hours: i64,
+    /// `None` means "keep the existing expiry"; `Some(0)` means no expiry.
+    pub duration_hours: Option<i64>,
+    /// True when an existing share has a future expiry, so the sheet can
+    /// offer "Keep current" instead of silently resetting the clock.
+    pub keep_current: bool,
     pub incoming: String,
     pub open: bool,
 }
@@ -51,6 +55,17 @@ impl ShareSheet {
             ),
             None => "This friend does not currently share a location with you.".to_string(),
         };
+        // Only a future expiry can be kept; a legacy expired share needs a new
+        // duration. A share with no expiry keeps "until off" explicitly.
+        let keep_current = outgoing
+            .and_then(|share| share.expires_at.as_deref())
+            .and_then(|raw| chrono::DateTime::parse_from_rfc3339(raw).ok())
+            .is_some_and(|expiry| expiry.with_timezone(&chrono::Utc) > chrono::Utc::now());
+        let duration_hours = match outgoing {
+            Some(share) if share.expires_at.is_none() => Some(0),
+            Some(_) if keep_current => None,
+            _ => Some(24),
+        };
         Self {
             friendship_id: friendship.id,
             friend_name,
@@ -59,12 +74,8 @@ impl ShareSheet {
             precision: outgoing
                 .map(|share| share.precision_level.clone())
                 .unwrap_or_else(|| "exact".to_string()),
-            // Privacy default: a new share expires in 24 hours. An existing
-            // share with no expiry keeps "until off"; both stay explicit.
-            duration_hours: match outgoing {
-                Some(share) if share.expires_at.is_none() => 0,
-                _ => 24,
-            },
+            duration_hours,
+            keep_current,
             incoming: incoming_text,
             open: true,
         }
@@ -148,6 +159,16 @@ impl super::PinpointAppUI {
                         ui.add_space(4.0);
                         ui.label(RichText::new("For how long").strong());
                         ui.horizontal_wrapped(|ui| {
+                            if sheet.keep_current
+                                && ui
+                                    .add(egui::Button::selectable(
+                                        sheet.duration_hours.is_none(),
+                                        "Keep current",
+                                    ))
+                                    .clicked()
+                            {
+                                sheet.duration_hours = None;
+                            }
                             for (hours, label) in [
                                 (0, "Until off"),
                                 (1, "1 h"),
@@ -157,12 +178,12 @@ impl super::PinpointAppUI {
                             ] {
                                 if ui
                                     .add(egui::Button::selectable(
-                                        sheet.duration_hours == hours,
+                                        sheet.duration_hours == Some(hours),
                                         label,
                                     ))
                                     .clicked()
                                 {
-                                    sheet.duration_hours = hours;
+                                    sheet.duration_hours = Some(hours);
                                 }
                             }
                         });
@@ -261,19 +282,20 @@ mod tests {
             precision_level: "approximate".into(),
             is_active: active,
             last_location_update_at: None,
-            expires_at: Some("2026-11-15T00:00:00Z".into()),
+            expires_at: Some("2099-01-01T00:00:00Z".into()),
             label: None,
         }
     }
 
     #[test]
-    fn existing_outgoing_share_loads_id_precision_and_duration() {
+    fn existing_outgoing_share_keeps_its_expiry_by_default() {
         let shares = vec![share(9, 7, "to_friend", true)];
         let sheet = ShareSheet::for_friendship(&friendship(7), Some(1), &shares);
         assert_eq!(sheet.share_id, Some(9));
         assert!(sheet.enabled);
         assert_eq!(sheet.precision, "approximate");
-        assert_eq!(sheet.duration_hours, 24);
+        assert_eq!(sheet.duration_hours, None, "saving must not extend sharing");
+        assert!(sheet.keep_current);
         assert!(sheet.incoming.contains("does not currently share"));
     }
 
@@ -283,7 +305,26 @@ mod tests {
         assert_eq!(sheet.share_id, None);
         assert!(!sheet.enabled);
         assert_eq!(sheet.precision, "exact");
-        assert_eq!(sheet.duration_hours, 24);
+        assert_eq!(sheet.duration_hours, Some(24));
+        assert!(!sheet.keep_current);
+    }
+
+    #[test]
+    fn existing_share_without_expiry_stays_until_off() {
+        let mut existing = share(9, 7, "to_friend", true);
+        existing.expires_at = None;
+        let sheet = ShareSheet::for_friendship(&friendship(7), Some(1), &[existing]);
+        assert_eq!(sheet.duration_hours, Some(0));
+        assert!(!sheet.keep_current);
+    }
+
+    #[test]
+    fn expired_share_defaults_to_a_fresh_day() {
+        let mut existing = share(9, 7, "to_friend", true);
+        existing.expires_at = Some("2000-01-01T00:00:00Z".into());
+        let sheet = ShareSheet::for_friendship(&friendship(7), Some(1), &[existing]);
+        assert_eq!(sheet.duration_hours, Some(24));
+        assert!(!sheet.keep_current);
     }
 
     #[test]

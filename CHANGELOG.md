@@ -48,6 +48,7 @@ The per-item flagged list for this release is in
 - [FIX] Native Today: action errors are surfaced, the note draft clears only after a successful POST and only if unchanged, refresh sections load independently, and a 401 clears private lists without letting an in-flight refresh cross accounts.
 - [FIX] Location permission: Android now requests fine and coarse location in one dialog (Android 12+ ignores a fine-only request), asks on the first map view, retries the fix after a grant, and receives one-shot GPS updates through a broadcast receiver. The web client asks once after sign-in and reports the real geolocation error. Native map controls use a solid fill so their glyphs stay readable over the light basemap.
 ### Security
+- [SECURITY] Display names are capped at 100 characters on registration, admin creation and profile updates, and share labels at 120, instead of accepting a body-sized string.
 - [SECURITY] Admin user creation is recorded in the append-only admin audit log with the actor and created handle.
 - [SECURITY] Deactivating an account revokes its sessions immediately, and the session middleware rejects a session whose account is inactive or missing, so a disabled user cannot keep using an old cookie.
 - [SECURITY] HTTPS sessions use the `__Host-pinpoint_session` cookie (`Secure`, `Path=/`, no `Domain`), so a sibling subdomain cannot overwrite the session; loopback HTTP keeps `session_id` and logout clears both names.

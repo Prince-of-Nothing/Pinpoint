@@ -1284,3 +1284,26 @@ async fn deactivating_an_account_revokes_its_sessions() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK, "the admin session survives");
 }
+
+#[tokio::test]
+async fn registration_rejects_an_overlong_name() {
+    let app = pinpoint_desktop::server::router(pinpoint_desktop::server::AppState::new());
+    let body = serde_json::json!({
+        "email": "long-name@example.invalid",
+        "password": "StrongPass!2026",
+        "full_name": "x".repeat(101)
+    })
+    .to_string();
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}

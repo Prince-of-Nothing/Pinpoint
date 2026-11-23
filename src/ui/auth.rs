@@ -116,11 +116,12 @@ impl PinpointAppUI {
                         if theme::primary_button(ui, "Recover").clicked()
                             && !self.recover_code_input.trim().is_empty()
                         {
-                            let code = self.recover_code_input.clone();
+                            let code = std::mem::take(&mut self.recover_code_input);
                             self.spawn_action(PendingAction::RecoverAnonymous { code }, ctx);
                         }
                         if ui.button("Cancel").clicked() {
                             self.show_recover_form = false;
+                            self.recover_code_input.clear();
                         }
                     });
                 });

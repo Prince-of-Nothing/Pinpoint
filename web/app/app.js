@@ -1092,6 +1092,7 @@ async function recoverAccount(code) {
     setStatus(err.message, true);
   } finally {
     authBusy = false;
+    $("recover-code").value = "";
   }
 }
 
@@ -1495,6 +1496,7 @@ $("recover-toggle").addEventListener("click", () => {
 $("recover-cancel").addEventListener("click", () => {
   show($("recover-form"), false);
   show($("login-form"), true);
+  $("recover-code").value = "";
 });
 $("recover-form").addEventListener("submit", async (e) => {
   e.preventDefault();

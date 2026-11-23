@@ -43,6 +43,7 @@ The per-item flagged list for this release is in
 - [FIX] Location permission: Android now requests fine and coarse location in one dialog (Android 12+ ignores a fine-only request), asks on the first map view, retries the fix after a grant, and receives one-shot GPS updates through a broadcast receiver. The web client asks once after sign-in and reports the real geolocation error. Native map controls use a solid fill so their glyphs stay readable over the light basemap.
 ### Security
 - [SECURITY] The public map proxy is capped per client (tiles 1200/min, search/reverse 60/min, route 120/min), protecting the upstream OSM providers from proxy abuse.
+- [SECURITY] The bundled nginx gateway overwrites X-Forwarded-For with the direct client address, so a spoofed header cannot rotate per-client rate-limit keys.
 - [SECURITY] Public diagnostic reports are capped at 10 per hour per client, closing the last unauthenticated public write endpoint.
 - [SECURITY] Authenticated unsafe API requests are capped at 120 per minute per account (per replica), on top of the per-client auth throttles.
 - [SECURITY] Login (30/5 min), registration (10/h) and anonymous/recovery (20/10 min) are throttled per client IP with a keyed HMAC; raw addresses are never stored, the deployment proxy must overwrite `X-Forwarded-For`, and the limiter is per replica.

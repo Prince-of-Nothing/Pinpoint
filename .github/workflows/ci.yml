@@ -59,6 +59,23 @@ jobs:
           # transitive crates with no fixed upgrade in the current tree.
           ignore: RUSTSEC-2026-0543,RUSTSEC-2024-0436,RUSTSEC-2024-0370,RUSTSEC-2026-0249,RUSTSEC-2026-0192,RUSTSEC-2026-0371,RUSTSEC-2026-0370,RUSTSEC-2026-0372,RUSTSEC-2024-0429
 
+  web-tests:
+    # Pure Node checks for the web client: sharing consent helpers and the
+    # admin users form wiring. No browser or network required.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Sharing UI checks
+        run: node web/app/test/sharing-ui.mjs
+      - name: Admin UI checks
+        run: node web/app/test/admin-ui.mjs
+
   wasm:
     # Compile-check web clients for wasm32 (Trunk entry bins + wasm cfg paths).
     runs-on: ubuntu-latest

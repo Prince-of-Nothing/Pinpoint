@@ -10,6 +10,7 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
     let addr = std::env::var("BIND_ADDR").unwrap_or_else(|_| "0.0.0.0:8003".to_string());
     let state = AppState::from_env_for(ServiceKind::Locations).await;
+    state.spawn_location_pruner();
     let persist_state = state.clone();
     tokio::spawn(async move {
         loop {

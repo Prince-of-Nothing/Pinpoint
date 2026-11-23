@@ -56,7 +56,7 @@ pub fn validate_email(email: &str) -> ValidationResult {
         return ValidationResult::invalid("Email is required".to_string());
     }
 
-    if email.len() > limits::MAX_EMAIL_LENGTH {
+    if email.chars().count() > limits::MAX_EMAIL_LENGTH {
         return ValidationResult::invalid("Email is too long (max 254 characters)".to_string());
     }
 
@@ -81,7 +81,7 @@ pub fn validate_email(email: &str) -> ValidationResult {
     }
 
     // Check for suspicious characters
-    if email.contains('\0') || email.contains('\n') || email.contains('\r') {
+    if contains_display_control(email) {
         return ValidationResult::invalid("Email contains invalid characters".to_string());
     }
 
@@ -263,6 +263,7 @@ mod tests {
     fn valid_email() {
         assert!(validate_email("alice@example.com").is_valid());
         assert!(validate_email("user+tag@domain.co.uk").is_valid());
+        assert!(validate_email("café@example.com").is_valid());
     }
 
     #[test]
@@ -273,6 +274,8 @@ mod tests {
         assert!(!validate_email("user@").is_valid());
         assert!(!validate_email("user@domain").is_valid());
         assert!(!validate_email("a@b@c.com").is_valid());
+        assert!(!validate_email("a\u{202e}@example.com").is_valid());
+        assert!(!validate_email("a\tb@example.com").is_valid());
     }
 
     #[test]

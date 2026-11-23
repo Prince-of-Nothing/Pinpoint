@@ -47,6 +47,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Native admin: the reset-password button counts characters, not UTF-8 bytes, so a multibyte temporary password that meets the server's 8-character minimum is accepted.
 - [FIX] Native: when a password change revokes every session, the client returns to the login screen instead of an empty map with a revoked session.
 - [FIX] Admin: setting `must_change_password` through the user PATCH now persists to PostgreSQL, so the forced rotation survives a store refresh instead of reverting.
 - [FIX] Native: the trip check-in and kiosk note fields stop at the 2000-character server limit.

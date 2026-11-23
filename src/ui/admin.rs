@@ -307,7 +307,7 @@ impl PinpointAppUI {
                         if !is_self && ui.button("Delete").clicked() {
                             self.spawn_action(PendingAction::AdminDeleteUser { id }, ctx);
                         }
-                        let reset_ready = self.admin_reset_password.trim().len() >= 8;
+                        let reset_ready = self.admin_reset_password.trim().chars().count() >= 8;
                         if !is_self
                             && ui
                                 .add_enabled(reset_ready, egui::Button::new("Reset password"))

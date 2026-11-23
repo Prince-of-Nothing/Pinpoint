@@ -27,6 +27,7 @@ const ADMIN_AUDIT_JS: &str = include_str!("../../web/app/admin/audit.js");
 const APP_CSS: &str = include_str!("../../web/app/app.css");
 pub(crate) const STATUS_CSS: &str = include_str!("../../web/status.css");
 const FAVICON: &str = include_str!("../../web/app/favicon.svg");
+const MANIFEST: &str = include_str!("../../web/app/manifest.webmanifest");
 
 // Shared map foundation (web/map) and vendored browser libraries (web/vendor).
 // Everything is compiled into the binary: no runtime file lookup, no CDN.
@@ -228,6 +229,19 @@ pub async fn favicon() -> Response {
         header::CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=86400"),
     );
+    resp
+}
+
+/// Same-origin app manifest for home-screen installs.
+pub async fn manifest() -> Response {
+    let mut resp = MANIFEST.into_response();
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/manifest+json"),
+    );
+    let mut resp = secure(resp);
+    resp.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
     resp
 }
 

@@ -257,6 +257,7 @@ pub fn router(state: AppState) -> Router {
         .route("/app.css", get(web_handlers::app_css))
         .route("/favicon.svg", get(web_handlers::favicon))
         .route("/favicon.ico", get(web_handlers::favicon))
+        .route("/manifest.webmanifest", get(web_handlers::manifest))
         .route("/vendor/maplibre-gl.js", get(web_handlers::maplibre_js))
         .route(
             "/vendor/maplibre-gl-worker.mjs",

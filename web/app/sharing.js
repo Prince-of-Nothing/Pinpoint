@@ -85,6 +85,7 @@ export function shareRequestBody(current, form) {
   };
   const label = String(form.label ?? "").trim();
   if (label) body.label = label;
+  else if (current?.label) body.label = "";
   if (form.duration === "keep") {
     if (current?.expires_at) body.expires_at = current.expires_at;
     else body.duration_hours = 0;

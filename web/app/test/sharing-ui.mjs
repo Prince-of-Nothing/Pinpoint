@@ -367,4 +367,14 @@ await check("a share label is sent, shown in the row and editable", () => {
   assert.match(appSource, /model\.label/);
 });
 
+await check("clearing a label removes it only for an existing labeled share", () => {
+  const cleared = shareRequestBody(
+    share({ label: "Work trip", expires_at: future }),
+    form({ label: "   " }),
+  );
+  assert.equal(cleared.label, "");
+  assert.ok(!("label" in shareRequestBody(null, form({ label: "" }))));
+  assert.ok(!("label" in shareRequestBody(share({ expires_at: future }), form({ label: "" }))));
+});
+
 console.log(`sharing UI checks passed: ${passed}`);

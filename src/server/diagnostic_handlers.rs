@@ -91,6 +91,9 @@ pub async fn submit_report(
     {
         return error_envelope("VALIDATION_FAILED", "message contains control characters");
     }
+    if crate::security::validation::contains_bidi_control(message) {
+        return error_envelope("VALIDATION_FAILED", "message contains invalid characters");
+    }
     let platform = body
         .get("platform")
         .and_then(Value::as_str)

@@ -642,6 +642,27 @@ async fn diagnostics_reports_and_audit_are_role_gated() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
 
+    // Display controls are rejected: reports are rendered in the admin console.
+    let body = serde_json::json!({
+        "category": "other",
+        "message": "line\u{202E}break",
+        "platform": "web"
+    })
+    .to_string();
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/diagnostics/report")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
     // Reports are not visible to non-admins.
     let resp = app
         .clone()

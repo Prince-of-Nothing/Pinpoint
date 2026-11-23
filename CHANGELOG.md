@@ -36,6 +36,7 @@ The per-item flagged list for this release is in
 - [FIX] Native Today: action errors are surfaced, the note draft clears only after a successful POST and only if unchanged, refresh sections load independently, and a 401 clears private lists without letting an in-flight refresh cross accounts.
 - [FIX] Location permission: Android now requests fine and coarse location in one dialog (Android 12+ ignores a fine-only request), asks on the first map view, retries the fix after a grant, and receives one-shot GPS updates through a broadcast receiver. The web client asks once after sign-in and reports the real geolocation error. Native map controls use a solid fill so their glyphs stay readable over the light basemap.
 ### Security
+- [SECURITY] Login (30/5 min), registration (10/h) and anonymous/recovery (20/10 min) are throttled per client IP with a keyed HMAC; raw addresses are never stored, the deployment proxy must overwrite `X-Forwarded-For`, and the limiter is per replica.
 - [SECURITY] Sessions also have an absolute 30-day ceiling (`PINPOINT_SESSION_MAX_DAYS`) on top of the sliding idle timeout, so a stolen cookie cannot live forever even if it is used regularly.
 - [SECURITY] Expired session rows are pruned from PostgreSQL when a new session is created, so "until expiry" is a real deletion rather than only a rejected lookup.
 - [SECURITY] Admin user creation now fails closed when PostgreSQL cannot persist the row and only accepts resident/admin/administrator roles, instead of returning an account that exists only in memory.

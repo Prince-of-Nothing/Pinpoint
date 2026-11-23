@@ -13,10 +13,12 @@ mod diagnostics;
 mod friendships;
 mod locations;
 pub(crate) mod messages;
+mod rate_limit;
 mod sessions;
 mod store;
 mod users;
 
+pub use rate_limit::{auth_limit, client_ip, AuthRateLimiter};
 pub use sessions::session_idle_seconds;
 pub use sessions::StoredSession;
 pub use store::Store;
@@ -76,6 +78,8 @@ pub struct AppState {
     /// Accounts erased through the self/admin delete path. Stale snapshots
     /// must never upsert these ids back after the SQL delete.
     pub deleted_users: Arc<Mutex<HashSet<i64>>>,
+    /// Per-client auth throttle (keyed HMAC of the address, never raw IP).
+    pub auth_rate: Arc<AuthRateLimiter>,
 }
 
 /// Which deployable this `AppState` backs (controls persistence ownership).
@@ -168,6 +172,7 @@ impl AppState {
             last_persist_at: Arc::new(Mutex::new(None)),
             sessions: Arc::new(Mutex::new(HashMap::new())),
             deleted_users: Arc::new(Mutex::new(HashSet::new())),
+            auth_rate: Arc::new(AuthRateLimiter::new()),
         }
     }
 
@@ -189,6 +194,7 @@ impl AppState {
                     last_persist_at: Arc::new(Mutex::new(None)),
                     sessions: Arc::new(Mutex::new(HashMap::new())),
                     deleted_users: Arc::new(Mutex::new(HashSet::new())),
+                    auth_rate: Arc::new(AuthRateLimiter::new()),
                 };
                 app.init_postgres().await;
                 app

@@ -96,6 +96,20 @@ pub async fn session_auth(
     mut req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> axum::response::Response {
+    // Auth endpoints are unauthenticated, so throttle them per client before
+    // any password or token work. The key is an HMAC of the address; the raw
+    // address is never stored.
+    if let Some(limit) = state::auth_limit(req.uri().path()) {
+        if let Some(ip) = state::client_ip(req.headers()) {
+            if !state.auth_rate.allow(req.uri().path(), &ip, limit) {
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error": {"code": "RATE_LIMITED", "message": "Too many attempts. Try again later."}})),
+                )
+                    .into_response();
+            }
+        }
+    }
     if let Some(session_id) = cookie_value(req.headers(), "session_id") {
         if let Some(session) = state.get_session(&session_id).await {
             let unsafe_method = !matches!(

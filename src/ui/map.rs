@@ -307,6 +307,7 @@ impl PinpointAppUI {
             ui.add(
                 egui::TextEdit::singleline(&mut self.search_query)
                     .hint_text(i18n::t(lang, key::SEARCH_PLACES))
+                    .char_limit(120)
                     .desired_width((ui.available_width() - 16.0).max(120.0)),
             );
             ui.add_space(4.0);
@@ -581,6 +582,7 @@ impl PinpointAppUI {
                                 egui::TextEdit::singleline(&mut self.search_query)
                                     .hint_text("Search places…")
                                     .frame(false)
+                                    .char_limit(120)
                                     .desired_width((ui.available_width() - 78.0).max(120.0)),
                             );
                             submit = ui.button("Search").clicked()

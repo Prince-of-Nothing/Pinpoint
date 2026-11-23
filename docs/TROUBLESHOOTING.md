@@ -241,16 +241,18 @@ versa), or the share is paused.
 
 ### Symptom: I want to delete my data
 
-**Cause:** Pinpoint stores minimal data — latest location only, no history.
+**Cause:** Pinpoint stores the latest publish plus a private, owner-only trail retained for 7 days and pruned hourly.
 
 **Fix:**
-1. Location data: Published locations are overwritten on each publish
-   (latest-only storage). There is no history to delete.
+1. Location data: each publish overwrites the latest location; the private
+   trail is retained for 7 days, pruned hourly, and is visible only to you.
 2. Bookmarks: Stored on-device only (localStorage/DataStore). Clear them
    from the app or delete the app data directory:
    - Desktop: `~/.pinpoint/bookmarks.json`
    - Mobile: App DataStore (cleared on app uninstall)
-3. Account: Contact the server administrator to delete your account.
+3. Account: delete it yourself in Profile & settings → Danger zone (native)
+   or Account → Delete account (web); this erases the profile, shares, trail,
+   notes, messages and sessions.
 
 ---
 

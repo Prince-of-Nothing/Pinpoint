@@ -21,7 +21,7 @@
 
 | Signal | Immediate actions | Follow-up |
 |---|---|---|
-| Session token leak | Password change (revokes all sessions); rotate `SECRET_KEY`; force re-login | Review auth code; add rotation test |
+| Session token leak | Password change or an admin reset revokes all sessions; deactivation also revokes; force re-login | Review auth code; add rotation test |
 | DB breach (`pinpoint_state`) | Halt gateway; snapshot logs; assume latest locations exposed; notify affected users | Normalise tables; least-privilege DB user; E2E design note |
 | Location over-sharing complaint | Pause/delete share on request; audit the grant; check expiry logic | UX copy fix; expiry default review |
 | Device lost (bookmarks) | Bookmarks are on-device AES-GCM (if key protected); remote account deactivation | OS-keychain migration |

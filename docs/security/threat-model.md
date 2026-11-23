@@ -54,7 +54,7 @@ DREAD 1–3 each (Damage, Reproducibility, Exploitability, Affected users, Disco
 
 | ID | STRIDE | Threat (attacker goal → step) | Asset / component | Vuln if defence missing | DREAD | Countermeasure (implemented) | Evidence |
 |---|---|---|---|---|---|---|---|
-| T-S1 | Spoofing | Credential stuffing on `/auth/login` | Accounts / auth svc | No throttling | 2.8 H | Generic errors; client `api_login` 5/min; server rate limit + lockout; Argon2id | `security/validation.rs`, `rate_limit.rs`, `tests/contract.rs::rejected_login_*` |
+| T-S1 | Spoofing | Credential stuffing on `/auth/login` | Accounts / auth svc | No throttling | 2.8 H | Generic errors; login lockout (5 failures/15 min); per-client HMAC throttle 30/5 min; Argon2id | `security/validation.rs`, `server/state/rate_limit.rs`, `tests/contract.rs::rejected_login_*` |
 | T-S2 | Spoofing | Session steal (XSS/mitm) → impersonate | Session / gateway | Plain HTTP, JS-readable cookie | 2.6 H | HttpOnly+SameSite=Lax+Secure cookies; HTTPS-only off-loopback (ADR-0006 `validate_backend_url`); rotation; logout confirmed | `api.rs`, `security-architecture §3–4` |
 | T-T1 | Tampering | Forge publish/share via CSRF | Locations/shares | No CSRF token | 2.7 H | Double-submit `X-CSRF-Token` on every unsafe method; GETs never send CSRF | `api.rs::request`, `unsafe_requests_send_csrf_*` |
 | T-T2 | Tampering | IDOR: `GET /users/{id}`, `PATCH shares/{id}` for other user | Locations / users svc | Missing ownership check | 3.0 H | Server-side consent check (friendship + active unexpired share + recipient); generic 403/404; validation at boundary | `server/handlers.rs`, `contract.rs` |
@@ -62,9 +62,9 @@ DREAD 1–3 each (Damage, Reproducibility, Exploitability, Affected users, Disco
 | T-R1 | Repudiation | User denies share/emergency action; no audit | Accountability | No logging | 2.0 M | `AuditLogger` (auth/friends/publish + share/emergency); never logs secrets/coords; append-only file sink | `security/audit.rs`, `app.rs` |
 | T-I1 | Info disclosure | Stalking via forgotten/over-broad grants | Sharer location | Blanket visibility | 2.9 H | Directional shares + precision (exact/approx/city_only) applied server-side; pause/resume/delete; expiry (`duration_hours`/`expires_at`); latest-only storage | `models.rs::LocationShare`, `handlers::list_friend_locations` |
 | T-I2 | Info disclosure | Friend coords leak to Nominatim/OSRM/Overpass | Sharer location / OSM | Auto-sending coords for search/route | 2.4 M | OSM privacy envelope: only user-typed queries + user-chosen endpoints; POI centre = map centre; never friend coords | `osm.rs` header + `security-architecture §11` |
-| T-I3 | Info disclosure | DB dump exposes history | Locations / Postgres | History retained | 2.2 M | Latest-only per user; bookmarks on-device only, AES-256-GCM at rest (opt key, zeroized) | `store-latest-location-only` ADR, `bookmarks.rs`, `encryption.rs` |
+| T-I3 | Info disclosure | DB dump exposes history | Locations / Postgres | History retained | 2.2 M | Latest publish plus an owner-only 7-day trail (24 h returned), erased with the account; bookmarks on-device only, AES-256-GCM at rest (opt key, zeroized) | `src/server/state/locations.rs`, `bookmarks.rs`, `encryption.rs` |
 | T-I4 | Info disclosure | Error bodies leak internals | Server | Verbose errors | 1.8 L | `{error:{code,message}}` envelope; generic messages; details in server logs only | `api.rs::format_api_error`, `mod.rs::error_envelope` |
-| T-D1 | DoS / DDoS | Flood login/publish/search → service down | Availability / gateway | No rate limits | 2.3 M | Per-endpoint client limits (`nominatim` 1/1s, `api_login` 5/60s); server limits; healthchecks; modular scaling (`--scale`) | `rate_limit.rs`, `docker-compose.yml` |
+| T-D1 | DoS / DDoS | Flood login/publish/search → service down | Availability / gateway | No rate limits | 2.3 M | Per-client HMAC auth throttles (login 30/5 min, register 10/h, anonymous/recovery 20/10 min) and 120/min per-account writes; healthchecks; modular scaling (`--scale`); general per-IP write limiter and proxy DDoS controls remain | `server/state/rate_limit.rs`, `server/mod.rs`, `docker-compose.yml` |
 | T-D2 | DoS | Nominatim abuse → OSMF ban | OSM budget / map | Unthrottled scraping | 1.9 L | 1 req/s throttle in `osm.rs::throttle`; user-initiated only; no bulk | `osm.rs`, QA grep for `tile.openstreetmap.org` |
 | T-E1 | Elevation of privilege | Non-admin calls admin `POST /users/`, `DELETE /users/{id}` | Admin / users svc | Missing role check | 2.7 H | `administrator` role gate; `must_change_password` forces rotation (403 otherwise); audit | `handlers::create_user/delete_user`, `SECURITY.md` |
 | T-E2 | Elevation of privilege | Expand share precision without consent | Sharer location | Client-side rounding only | 2.5 H | Precision downgrade **server-side** before serialization; PATCH validates enum values | `handlers::update_share`, `list_friend_locations` |
@@ -88,7 +88,7 @@ GOAL: learn Alice's exact location [T-I1, DREAD 2.9]
 ├─ OR 4. Side channel via OSM (T-I2)
 │     └─ Force routing/search with victim coords ── envelope: only user-typed data sent
 └─ OR 5. DB / device theft (T-I3)
-      ├─ Postgres dump ── latest-only, no history
+      ├─ Postgres dump ── latest publish + owner-only 7-day trail; erased with account
       └─ Stolen phone ── AES-GCM bookmarks at rest, zeroized keys
 ```
 
@@ -102,7 +102,7 @@ tests; leaf 1 is a **user-consent risk**, mitigated by UX (expiry, precision, on
 | 1 | Server-side authorisation (consent check + IDOR fail-closed) | T-T2/T-E2/T-I1 | ✅ Implemented | contract/IDOR tests |
 | 2 | Secure auth/session + CSRF double-submit + HTTPS-off-loopback | T-S1/T-S2/T-T1 | ✅ Implemented | `api.rs` 4 tests + validation |
 | 3 | Input validation + output encoding (boundary) | T-T3/T-I4 | ✅ Implemented | `validation.rs` 11 tests |
-| 4 | Rate limiting (client + server) + generic errors | T-D1/T-S1 | ✅ Implemented | `rate_limit.rs` 5 tests |
+| 4 | Rate limiting (server auth + write throttles + client OSM limits) + generic errors | T-D1/T-S1 | ✅ Implemented | `server/state/rate_limit.rs` tests |
 | 5 | Password hashing (Argon2id) + `must_change_password` + lockout | T-S1/T-E1 | ✅ Argon2id + lockout | shipped |
 | 6 | Encryption in transit (TLS) + at rest (AES-GCM bookmarks) | T-I3/T-S2 | ✅ Partial | `encryption.rs` 5 tests |
 | 7 | Secret management (env-only, no repo secrets) | T-I3 | ✅ Implemented | `.env.example`, gitignore |
@@ -126,5 +126,5 @@ References: OWASP ASVS/Top 10, Threat Modeling Manifesto, OSMF policies, ADR-000
 ## Rejected patterns (GDPR / ethics)
 
 - **Covert IP / WebRTC geolocation.** Pinpoint never derives location from IP addresses, WebRTC candidates, call metadata or any similar side channel. Location comes only from explicit GPS permission, manual entry, or a disclosed opt-in network-location action.
-- **Raw IP logging.** The app does not store IP addresses for tracking. If a short-lived security hash is ever needed for rate limiting, use HMAC-SHA-256 with a secret pepper and delete it after the rate-limit window (pseudonymous, security-only, never geolocation).
+- **Raw IP logging.** The app does not store IP addresses for tracking. Rate limiting uses a per-process HMAC-SHA-256 of the client address; raw IPs are never stored and the counters expire with the window (pseudonymous, security-only, never geolocation). A general per-IP write limiter and proxy-level DDoS controls remain the gap.
 - **Online status via IP.** Login state is the session ID, not the IP; binding sessions to IPs causes false logouts on NAT/CGNAT/mobile networks and adds little security.

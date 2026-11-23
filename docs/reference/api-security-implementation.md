@@ -365,10 +365,10 @@ def create_location_share(owner_id, recipient_id, precision, purpose, expires_at
     if purpose not in valid_purposes:
         raise BadRequestException("Invalid purpose")
     
-    # Step 4: Validate expiry (max 24 hours for MVP)
-    max_expiry = now() + timedelta(hours=24)
+    # Step 4: Validate expiry (max 7 days)
+    max_expiry = now() + timedelta(days=7)
     if expires_at > max_expiry:
-        raise BadRequestException("Maximum sharing duration is 24 hours")
+        raise BadRequestException("Maximum sharing duration is 7 days")
     
     if expires_at <= now():
         raise BadRequestException("Expiry must be in the future")

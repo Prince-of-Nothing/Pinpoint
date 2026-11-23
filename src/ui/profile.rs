@@ -512,7 +512,8 @@ impl PinpointAppUI {
             );
             ui.label(
                 "Deleting your account removes your profile, friendships, shares, current \
-                 location, check-ins, emergencies and sessions. This cannot be undone.",
+                 location, private trail, notes, messages, check-ins, emergencies and sessions. \
+                 This cannot be undone.",
             );
             ui.add(
                 egui::TextEdit::singleline(&mut self.delete_confirm)

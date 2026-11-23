@@ -638,7 +638,13 @@ pub async fn respond_friendship(
     let updated = {
         let mut store = state.store.lock().unwrap();
         let friendship = match store.friendships.iter_mut().find(|f| f.id == id) {
-            Some(f) if f.receiver_id == cu.user_id => f,
+            Some(f) if f.receiver_id == cu.user_id && f.status == "pending" => f,
+            Some(f) if f.receiver_id == cu.user_id => {
+                return error_envelope(
+                    "FRIENDSHIP_NOT_PENDING",
+                    "This request is no longer pending.",
+                )
+            }
             Some(_) => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
             None => return error_envelope("FRIENDSHIP_NOT_FOUND", "Friendship not found."),
         };

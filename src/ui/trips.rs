@@ -29,6 +29,7 @@ impl PinpointAppUI {
             ui.add(
                 egui::TextEdit::singleline(&mut self.checkin_note)
                     .hint_text("Note")
+                    .char_limit(2000)
                     .desired_width(220.0),
             );
             for k in ["manual", "scheduled", "trip"] {

@@ -98,7 +98,8 @@ wiring, passkeys, magic links and email self-service reset remain future work.
 ## 6. Recovery codes (anonymous accounts)
 
 - At anonymous sign-up, the server generates a random recovery code, shows
-  it **once**, and stores only its PBKDF2 hash (`recovery_code_hash`).
+  it **once**, and stores only its SHA-256 hash (`recovery_code_hash`). The
+  code is uniformly random, so a plain hash has no dictionary to attack.
 - `POST /auth/anonymous/recover {recovery_code}` → new session + new device
   key registration.
 - Without the code (and without the device key), the account is
@@ -154,7 +155,8 @@ wiring, passkeys, magic links and email self-service reset remain future work.
   with timestamp + nonce; client-side primitive; server-side verification is
   a follow-up.
 - **Log hygiene:** no tokens, passwords, coordinates, or recovery codes in
-  logs; security events go to structured stdout (queryable table pending).
+  logs; security events go to structured stdout, while admin actions also
+  land in the queryable `pinpoint_admin_audit` table.
 
 ## 11. Session / device management — implemented
 
@@ -198,8 +200,9 @@ wiring, passkeys, magic links and email self-service reset remain future work.
   flows are affordable.
 - **OAuth primitives deferred wiring:** avoids shipping a half-tested
   callback; the primitives are tested and ready.
-- **No password reset yet:** accepted MVP gap; anonymous accounts use a
-  recovery code, identity accounts use admin reset until the email flow lands.
+- **No email self-service password reset:** anonymous accounts use a recovery
+  code; identity accounts use an admin-issued temporary password until the
+  email flow lands.
 - **No recovery codes for TOTP yet:** accepted gap; document it in the UI so
   users enable MFA only after saving backup access.
 

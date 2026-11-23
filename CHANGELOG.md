@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [DOCS] The authentication page now says the recovery code is stored as a SHA-256 hash, clarifies the admin audit table, and describes the admin-issued temporary password instead of "no password reset".
 - [DOCS] Troubleshooting, threat-model, incident-response, domain-model and control-register pages now describe the owner-only 7-day trail and session revocation instead of "no history" and `SECRET_KEY` rotation.
 - [DOCS] Authentication docs now record the shipped anonymous/recovery, admin password reset, session management and per-client rate limits instead of marking them pending.
 - [DOCS] The deployment guide now describes the Rust stack (single binary, PostgreSQL, Compose, production checklist, desktop/Android/iOS) instead of the archived Python/Go/Kotlin steps; the Docker instructions use `db/init/03-fks.sql`.

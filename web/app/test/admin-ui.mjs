@@ -43,6 +43,13 @@ check("the reset target excludes the signed-in administrator", () => {
   assert.match(source, /users\.filter\(\(u\) => u\.id !== me\)/);
 });
 
+check("admin inputs stop at the server limits", () => {
+  assert.match(source, /id="admin-create-email"[^>]*maxlength="254"/);
+  assert.match(source, /id="admin-create-name"[^>]*maxlength="100"/);
+  assert.match(source, /id="admin-create-password"[^>]*maxlength="128"/);
+  assert.match(source, /id="admin-reset-password"[^>]*maxlength="128"/);
+});
+
 check("the reset form is styled like the create form", () => {
   assert.match(css, /\.admin-create, \.admin-reset/);
   assert.match(css, /\.admin-reset label\.admin-reset-mfa/);

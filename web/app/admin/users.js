@@ -11,10 +11,10 @@ export const usersModule = {
         <summary>Create user</summary>
         <form id="admin-create-user">
           <label>Email
-            <input id="admin-create-email" type="email" autocomplete="off" required />
+            <input id="admin-create-email" type="email" autocomplete="off" maxlength="254" required />
           </label>
           <label>Full name
-            <input id="admin-create-name" type="text" autocomplete="off" required />
+            <input id="admin-create-name" type="text" autocomplete="off" maxlength="100" required />
           </label>
           <label>Role
             <select id="admin-create-role">
@@ -24,7 +24,7 @@ export const usersModule = {
             </select>
           </label>
           <label>Temporary password
-            <input id="admin-create-password" type="password" minlength="8" autocomplete="new-password" required />
+            <input id="admin-create-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
           </label>
           <p class="muted">The user must change this temporary password at first sign-in.</p>
           <button type="submit">Create user</button>
@@ -37,7 +37,7 @@ export const usersModule = {
             <select id="admin-reset-target" required></select>
           </label>
           <label>Temporary password
-            <input id="admin-reset-password" type="password" minlength="8" autocomplete="new-password" required />
+            <input id="admin-reset-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
           </label>
           <label class="admin-reset-mfa">
             <input id="admin-reset-mfa" type="checkbox" />

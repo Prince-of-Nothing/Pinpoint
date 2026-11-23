@@ -1526,3 +1526,114 @@ async fn email_registration_and_login_ignore_case_and_padding() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn admin_can_force_a_password_rotation_with_patch() {
+    use pinpoint_desktop::security::password::{hash_password, DEFAULT_ITERS};
+    use pinpoint_desktop::server::{router, AppState};
+
+    let state = AppState::new();
+    let hash = hash_password("OldPass!2026", DEFAULT_ITERS);
+    {
+        let mut store = state.store.lock().unwrap();
+        let mk = |id: i64, email: &str, role: &str, hash: Option<String>| User {
+            id,
+            username: String::new(),
+            email: email.to_string(),
+            full_name: format!("User {id}"),
+            role: role.to_string(),
+            is_active: true,
+            must_change_password: false,
+            password_hash: hash,
+            totp_secret: None,
+            mfa_enabled: false,
+            mfa_last_step: 0,
+            failed_login_attempts: 0,
+            locked_until: None,
+            auth_method: "email".to_string(),
+            public_key: None,
+            recovery_code_hash: None,
+            identity_subject: None,
+        };
+        store.users = vec![
+            mk(1, "patch-admin@example.com", "administrator", None),
+            mk(2, "patch-target@example.com", "resident", Some(hash)),
+        ];
+        store.next_user_id = 3;
+    }
+    let (admin_sid, admin_csrf) = state.create_session(1, "email", false).await;
+    let (target_sid, target_csrf) = state.create_session(2, "email", false).await;
+    let app = router(state.clone());
+
+    let request = |sid: &str, method: &str, uri: &str, csrf: &str, body: Option<&'static str>| {
+        let mut builder = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("cookie", format!("session_id={sid}"))
+            .header("x-csrf-token", csrf);
+        if body.is_some() {
+            builder = builder.header("content-type", "application/json");
+        }
+        builder.body(Body::from(body.unwrap_or_default())).unwrap()
+    };
+
+    let resp = app
+        .clone()
+        .oneshot(request(
+            &admin_sid,
+            "PATCH",
+            "/api/v1/users/2",
+            &admin_csrf,
+            Some(r#"{"must_change_password":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    {
+        let store = state.store.lock().unwrap();
+        assert!(store.find_user_by_id(2).unwrap().must_change_password);
+    }
+    let resp = app
+        .clone()
+        .oneshot(request(
+            &target_sid,
+            "GET",
+            "/api/v1/locations/shares",
+            &target_csrf,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    // `/auth/me` stays readable so the client can render the rotation screen.
+    let resp = app
+        .clone()
+        .oneshot(request(&target_sid, "GET", "/api/v1/auth/me", &target_csrf, None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    let resp = app
+        .clone()
+        .oneshot(request(
+            &admin_sid,
+            "PATCH",
+            "/api/v1/users/2",
+            &admin_csrf,
+            Some(r#"{"must_change_password":false}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let resp = app
+        .oneshot(request(
+            &target_sid,
+            "GET",
+            "/api/v1/locations/shares",
+            &target_csrf,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}

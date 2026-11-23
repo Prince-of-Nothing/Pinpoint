@@ -315,7 +315,13 @@ pub async fn update_user(
         old
     };
     state
-        .sql_update_user(id, full_name.as_deref(), role.as_deref(), is_active)
+        .sql_update_user(
+            id,
+            full_name.as_deref(),
+            role.as_deref(),
+            is_active,
+            must_change,
+        )
         .await;
     if is_active == Some(false) && old_active {
         // A disabled account must lose every live session, not just fail the

@@ -131,14 +131,16 @@ impl AppState {
         full_name: &str,
         role: &str,
         password_hash: Option<&str>,
+        must_change_password: bool,
     ) -> i64 {
         if let Some(pool) = &self.pg {
             let row: Option<(i64,)> = sqlx::query_as(
-                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, auth_method, public_key, recovery_code_hash, identity_subject) VALUES (NEXTVAL('pinpoint_user_id_seq'), $1, $2, $3, true, false, $4, 'email', NULL, NULL, NULL) RETURNING id",
+                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, auth_method, public_key, recovery_code_hash, identity_subject) VALUES (NEXTVAL('pinpoint_user_id_seq'), $1, $2, $3, true, $4, $5, 'email', NULL, NULL, NULL) RETURNING id",
             )
             .bind(email)
             .bind(full_name)
             .bind(role)
+            .bind(must_change_password)
             .bind(password_hash)
             .fetch_optional(pool)
             .await
@@ -151,11 +153,12 @@ impl AppState {
             // exist, leaving no sequence. Persist the row anyway with the next
             // free id so registration never lives only in memory.
             let row: Option<(i64,)> = sqlx::query_as(
-                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, auth_method, public_key, recovery_code_hash, identity_subject) VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM pinpoint_users), $1, $2, $3, true, false, $4, 'email', NULL, NULL, NULL) RETURNING id",
+                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, auth_method, public_key, recovery_code_hash, identity_subject) VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM pinpoint_users), $1, $2, $3, true, $4, $5, 'email', NULL, NULL, NULL) RETURNING id",
             )
             .bind(email)
             .bind(full_name)
             .bind(role)
+            .bind(must_change_password)
             .bind(password_hash)
             .fetch_optional(pool)
             .await

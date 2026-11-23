@@ -100,9 +100,11 @@ pub async fn create_user(
         password,
         crate::security::password::DEFAULT_ITERS,
     );
-    // Direct SQL insert (Auth owns wipe-rewrites of this table).
+    // Direct SQL insert (Auth owns wipe-rewrites of this table). The forced
+    // change flag is written with the row, not only into the in-memory copy,
+    // so a restart or another replica keeps the temporary-password rule.
     let id = state
-        .sql_insert_user(&email, &full_name, &role, Some(&hash))
+        .sql_insert_user(&email, &full_name, &role, Some(&hash), true)
         .await;
     let user = crate::models::User {
         id,

@@ -443,7 +443,8 @@ function renderShares(items, friendships = []) {
     const badge =
       model.status === "active" ? "accepted" : model.status === "expired" ? "rejected" : "pending";
     const li = document.createElement("li");
-    li.innerHTML = `<span>${escapeHtml(friendName(friendship, state.user?.id))} · ${escapeHtml(
+    const label = model.label ? `${escapeHtml(model.label)} · ` : "";
+    li.innerHTML = `<span>${label}${escapeHtml(friendName(friendship, state.user?.id))} · ${escapeHtml(
       model.precision,
     )} · ${escapeHtml(model.expiry)}</span>
       <span class="badge ${badge}">${model.status}</span>`;

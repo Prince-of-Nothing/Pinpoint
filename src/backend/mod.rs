@@ -160,6 +160,7 @@ pub trait Backend: BackendBounds {
         is_active: Option<bool>,
         precision: Option<String>,
         duration_hours: Option<i64>,
+        label: Option<String>,
     ) -> BackendFuture<'a, ()>;
     fn delete_share<'a>(&'a self, share_id: i64) -> BackendFuture<'a, ()>;
 

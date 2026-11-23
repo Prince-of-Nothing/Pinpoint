@@ -22,6 +22,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [FEATURE] Native sharing: name a share with an optional label and see it in the active-shares list; editing an existing share keeps the label.
 - [FEATURE] Web sharing: an optional label names a share (for example "Work trip") and appears in the shares list; the server already stored the field.
 - [FEATURE] Native admin: issue a temporary password for another account (optionally clearing MFA); the reset revokes the account's sessions and forces a rotation at next sign-in.
 - [FEATURE] Friends: the web list can cancel an outgoing request or remove an accepted friend, and native sent requests have a Cancel button; the server already allowed either participant to end the friendship.

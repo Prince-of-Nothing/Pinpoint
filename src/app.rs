@@ -26,6 +26,7 @@ pub enum PendingMutation {
         is_active: Option<bool>,
         precision: Option<String>,
         duration_hours: Option<i64>,
+        label: Option<String>,
     },
     DeleteShare {
         share_id: i64,
@@ -782,6 +783,7 @@ impl PinpointApp {
                 is_active,
                 precision,
                 duration_hours,
+                label,
             } => {
                 self.backend
                     .update_location_share(
@@ -789,6 +791,7 @@ impl PinpointApp {
                         *is_active,
                         precision.clone(),
                         *duration_hours,
+                        label.clone(),
                     )
                     .await?;
                 self.refresh_shares().await?;
@@ -1541,11 +1544,18 @@ impl PinpointApp {
         is_active: Option<bool>,
         precision: Option<String>,
         duration_hours: Option<i64>,
+        label: Option<String>,
     ) -> anyhow::Result<()> {
         self.set_loading(true);
         let result = self
             .backend
-            .update_location_share(share_id, is_active, precision.clone(), duration_hours)
+            .update_location_share(
+                share_id,
+                is_active,
+                precision.clone(),
+                duration_hours,
+                label.clone(),
+            )
             .await;
         self.set_loading(false);
         match &result {
@@ -1560,6 +1570,7 @@ impl PinpointApp {
                     is_active,
                     precision,
                     duration_hours,
+                    label,
                 });
                 self.set_error(Some(format!(
                     "All backends unavailable — queued for sync ({} pending)",

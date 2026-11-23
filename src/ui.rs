@@ -116,6 +116,8 @@ enum PendingAction {
         precision: String,
         /// `None` keeps the existing expiry (existing shares only).
         duration_hours: Option<i64>,
+        /// Optional owner-visible name; an empty string clears it.
+        label: String,
     },
     DeleteFriendship {
         id: i64,
@@ -884,7 +886,7 @@ impl PinpointAppUI {
                     is_active,
                 } => {
                     let _ = app
-                        .update_share(share_id, Some(is_active), None, None)
+                        .update_share(share_id, Some(is_active), None, None, None)
                         .await;
                 }
                 PendingAction::ChangePassword {
@@ -981,6 +983,7 @@ impl PinpointAppUI {
                     enabled,
                     precision,
                     duration_hours,
+                    label,
                 } => {
                     if let Some(share_id) = share_id {
                         let _ = app
@@ -989,17 +992,23 @@ impl PinpointAppUI {
                                 Some(enabled),
                                 Some(precision),
                                 duration_hours,
+                                Some(label),
                             )
                             .await;
                     } else if enabled {
                         let expiry = duration_hours.filter(|hours| *hours > 0);
+                        let label = if label.trim().is_empty() {
+                            None
+                        } else {
+                            Some(label)
+                        };
                         let _ = app
                             .create_share_with_expiry(
                                 friendship_id,
                                 "to_friend".to_string(),
                                 precision,
                                 expiry,
-                                None,
+                                label,
                             )
                             .await;
                     }

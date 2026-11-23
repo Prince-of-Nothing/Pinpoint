@@ -30,12 +30,33 @@ export const usersModule = {
           <button type="submit">Create user</button>
         </form>
       </details>
+      <details class="admin-reset">
+        <summary>Reset password</summary>
+        <form id="admin-reset-user">
+          <label>User
+            <select id="admin-reset-target" required></select>
+          </label>
+          <label>Temporary password
+            <input id="admin-reset-password" type="password" minlength="8" autocomplete="new-password" required />
+          </label>
+          <label class="admin-reset-mfa">
+            <input id="admin-reset-mfa" type="checkbox" />
+            Clear MFA
+          </label>
+          <p class="muted">The reset revokes the account's sessions and forces a password change at next sign-in.</p>
+          <button type="submit">Reset password</button>
+        </form>
+      </details>
       <div class="admin-toolbar">
         <input id="admin-user-search" type="search" placeholder="Filter by email or name…" aria-label="Filter users" />
         <button type="button" id="admin-users-refresh" class="secondary">Refresh</button>
       </div>
       <div id="admin-users-table"></div>`;
     const createForm = el.querySelector("#admin-create-user");
+    const resetForm = el.querySelector("#admin-reset-user");
+    const resetTarget = el.querySelector("#admin-reset-target");
+    const resetPassword = el.querySelector("#admin-reset-password");
+    const resetMfa = el.querySelector("#admin-reset-mfa");
     const search = el.querySelector("#admin-user-search");
     const table = el.querySelector("#admin-users-table");
     let users = [];
@@ -47,6 +68,20 @@ export const usersModule = {
     }
 
     function render() {
+      const me = ctx.getUser?.()?.id;
+      const previousTarget = resetTarget.value;
+      const targets = users.filter((u) => u.id !== me);
+      resetTarget.innerHTML = targets.length
+        ? targets
+            .map(
+              (u) =>
+                `<option value="${u.id}">${escapeHtml(u.full_name)} (${escapeHtml(u.email)})</option>`,
+            )
+            .join("")
+        : '<option value="">No other users</option>';
+      if (targets.some((u) => String(u.id) === previousTarget)) {
+        resetTarget.value = previousTarget;
+      }
       const needle = search.value.trim().toLowerCase();
       const rows = users.filter((u) => {
         if (!needle) return true;
@@ -56,7 +91,6 @@ export const usersModule = {
         table.innerHTML = '<p class="muted">No matching users.</p>';
         return;
       }
-      const me = ctx.getUser?.()?.id;
       table.innerHTML = `
         <table class="admin-table">
           <thead>
@@ -128,25 +162,10 @@ export const usersModule = {
       const user = users.find((u) => u.id === id);
       if (!user) return;
       if (target.dataset.action === "reset") {
-        const password = window.prompt(
-          `New temporary password for ${user.email} (at least 8 characters):`,
-        );
-        if (!password) return;
-        const resetMfa = user.mfa_enabled
-          ? window.confirm(
-              "This account has MFA. Clear MFA as well?\n\nCancel keeps MFA.",
-            )
-          : false;
-        try {
-          await ctx.api(`/api/v1/admin/users/${id}/password`, {
-            method: "POST",
-            body: { password, reset_mfa: resetMfa },
-          });
-          ctx.setStatus("Temporary password issued. Share it securely.");
-          await load();
-        } catch (err) {
-          ctx.setStatus(err.message, true);
-        }
+        const details = el.querySelector(".admin-reset");
+        details.open = true;
+        resetTarget.value = String(id);
+        resetPassword.focus();
         return;
       }
       if (target.dataset.action !== "delete") return;
@@ -178,6 +197,26 @@ export const usersModule = {
         });
         ctx.setStatus("User created. Share the temporary password securely.");
         createForm.reset();
+        await load();
+      } catch (err) {
+        ctx.setStatus(err.message, true);
+      }
+    });
+    resetForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const id = Number(resetTarget.value);
+      const password = resetPassword.value;
+      if (!id) {
+        ctx.setStatus("Choose a user to reset.", true);
+        return;
+      }
+      try {
+        await ctx.api(`/api/v1/admin/users/${id}/password`, {
+          method: "POST",
+          body: { password, reset_mfa: resetMfa.checked },
+        });
+        ctx.setStatus("Temporary password issued. Share it securely.");
+        resetForm.reset();
         await load();
       } catch (err) {
         ctx.setStatus(err.message, true);

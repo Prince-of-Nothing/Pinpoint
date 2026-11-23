@@ -26,6 +26,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [FEATURE] Web admin: resetting a password now opens a masked form with a user picker and a clear-MFA checkbox instead of a browser prompt.
 - [FEATURE] Native admin: the users list flags accounts that still need to change a temporary password and accounts with MFA enabled.
 - [FEATURE] Native admin: create a user with an email, display name, role and temporary password; the account must change the password at first sign-in.
 - [FEATURE] Native sharing: name a share with an optional label and see it in the active-shares list; editing an existing share keeps the label.

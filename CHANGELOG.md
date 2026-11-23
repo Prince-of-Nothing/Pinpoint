@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [DOCS] The threat-model attack tree now says a stolen phone exposes owner-only bookmark JSON, matching the code, instead of claiming AES-GCM bookmarks at rest.
 - [INFRA] CI now runs the pure Node web UI checks (sharing consent and admin form wiring), so client regressions are gated like the Rust suite.
 - [DOCS] The as-built API contract now matches the shipped routes: admin-only user endpoints, `receiver_username`, share labels/expiry/precision, history/notes/check-in fields, the FOSSGIS-only tile fallback and the real session lifetime.
 - [DOCS] The authentication page now says the recovery code is stored as a SHA-256 hash, clarifies the admin audit table, and describes the admin-issued temporary password instead of "no password reset".

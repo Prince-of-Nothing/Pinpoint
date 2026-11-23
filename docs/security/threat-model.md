@@ -89,7 +89,7 @@ GOAL: learn Alice's exact location [T-I1, DREAD 2.9]
 │     └─ Force routing/search with victim coords ── envelope: only user-typed data sent
 └─ OR 5. DB / device theft (T-I3)
       ├─ Postgres dump ── latest publish + owner-only 7-day trail; erased with account
-      └─ Stolen phone ── AES-GCM bookmarks at rest, zeroized keys
+      └─ Stolen phone ── owner-only bookmark JSON on Unix; AES-GCM primitives not wired
 ```
 
 Mitigation coverage: every leaf has ≥1 implemented control; leaves 2–5 are high-confidence from

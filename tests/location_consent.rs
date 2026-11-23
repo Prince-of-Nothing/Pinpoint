@@ -1029,3 +1029,80 @@ async fn place_notes_reject_bidi_display_controls() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
 }
+
+#[tokio::test]
+async fn rejected_friend_request_cannot_be_accepted_later() {
+    let state = pinpoint_desktop::server::AppState::new();
+    let app = pinpoint_desktop::server::router(state);
+    let (alice_cookie, alice_csrf, _, _) =
+        register(&app, "reject-alice@example.invalid", "Alice").await;
+    let (bob_cookie, bob_csrf, _, bob_username) =
+        register(&app, "reject-bob@example.invalid", "Bob").await;
+
+    // Alice sends a request; Bob rejects it.
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/friendships/",
+            &alice_cookie,
+            &alice_csrf,
+            &format!(r#"{{"receiver_username":"{bob_username}"}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let id = body_json(resp).await["id"].as_i64().expect("friendship id");
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            &format!("/api/v1/friendships/{id}/respond"),
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"action":"reject"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // The rejected row cannot be flipped to accepted without a new request.
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            &format!("/api/v1/friendships/{id}/respond"),
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"action":"accept"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    // A fresh request is the correct path, and it can be accepted.
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/friendships/",
+            &alice_cookie,
+            &alice_csrf,
+            &format!(r#"{{"receiver_username":"{bob_username}"}}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let id = body_json(resp).await["id"].as_i64().expect("friendship id");
+    let resp = app
+        .oneshot(authed_req(
+            "POST",
+            &format!("/api/v1/friendships/{id}/respond"),
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"action":"accept"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}

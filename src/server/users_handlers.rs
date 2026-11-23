@@ -349,6 +349,16 @@ pub async fn update_user(
             )
             .await;
         }
+        if let Some(flag) = must_change {
+            record_admin_action(
+                &state,
+                cu.user_id,
+                "user.must_change_password",
+                &format!("user:{id}"),
+                Some(if flag { "required" } else { "cleared" }),
+            )
+            .await;
+        }
     }
     let store = state.store.lock().unwrap();
     let view = user_json(store.find_user_by_id(id).unwrap());

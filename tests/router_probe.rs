@@ -1592,6 +1592,12 @@ async fn admin_can_force_a_password_rotation_with_patch() {
     {
         let store = state.store.lock().unwrap();
         assert!(store.find_user_by_id(2).unwrap().must_change_password);
+        assert!(
+            store.admin_audit.iter().any(
+                |entry| entry.action == "user.must_change_password" && entry.target == "user:2"
+            ),
+            "forcing a rotation must be audited"
+        );
     }
     let resp = app
         .clone()
@@ -1608,7 +1614,13 @@ async fn admin_can_force_a_password_rotation_with_patch() {
     // `/auth/me` stays readable so the client can render the rotation screen.
     let resp = app
         .clone()
-        .oneshot(request(&target_sid, "GET", "/api/v1/auth/me", &target_csrf, None))
+        .oneshot(request(
+            &target_sid,
+            "GET",
+            "/api/v1/auth/me",
+            &target_csrf,
+            None,
+        ))
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);

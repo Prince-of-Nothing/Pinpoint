@@ -1063,12 +1063,14 @@ body:has(#app-panel:not(.hidden)) #status { bottom: calc(4.8rem + var(--safe-bot
 .admin-toolbar { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; align-items: center; }
 .admin-toolbar input { margin: 0; max-width: 360px; }
 .admin-toolbar select { margin: 0; max-width: 180px; }
-.admin-create { margin-bottom: 0.9rem; }
-.admin-create summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; padding: 0.3rem 0; }
-.admin-create form { display: grid; gap: 0.55rem; max-width: 420px; padding: 0.6rem 0; }
-.admin-create label { display: grid; gap: 0.25rem; font-size: 0.8rem; color: var(--muted); }
-.admin-create input, .admin-create select { margin: 0; }
-.admin-create button { justify-self: start; }
+.admin-create, .admin-reset { margin-bottom: 0.9rem; }
+.admin-create summary, .admin-reset summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; padding: 0.3rem 0; }
+.admin-create form, .admin-reset form { display: grid; gap: 0.55rem; max-width: 420px; padding: 0.6rem 0; }
+.admin-create label, .admin-reset label { display: grid; gap: 0.25rem; font-size: 0.8rem; color: var(--muted); }
+.admin-create input, .admin-create select, .admin-reset input, .admin-reset select { margin: 0; }
+.admin-create button, .admin-reset button { justify-self: start; }
+.admin-reset label.admin-reset-mfa { display: flex; align-items: center; gap: 0.45rem; }
+.admin-reset label.admin-reset-mfa input { width: auto; }
 .admin-report {
   border: 1px solid var(--border);
   border-radius: 0.6rem;

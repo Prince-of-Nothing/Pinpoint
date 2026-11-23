@@ -238,6 +238,10 @@ pub async fn register(
         .and_then(Value::as_str)
         .unwrap_or("New User")
         .to_string();
+    let name_check = crate::security::validation::validate_name(&full_name);
+    if !name_check.is_valid() {
+        return error_envelope("VALIDATION_FAILED", &name_check.errors.join("; "));
+    }
     if email.is_empty() {
         return error_envelope("VALIDATION_FAILED", "email is required");
     }

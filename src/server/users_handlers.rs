@@ -76,6 +76,10 @@ pub async fn create_user(
         .and_then(Value::as_str)
         .unwrap_or("New User")
         .to_string();
+    let name_check = crate::security::validation::validate_name(&full_name);
+    if !name_check.is_valid() {
+        return error_envelope("VALIDATION_FAILED", &name_check.errors.join("; "));
+    }
     let email_check = crate::security::validation::validate_email(&email);
     if !email_check.is_valid() {
         return error_envelope("VALIDATION_FAILED", &email_check.errors.join("; "));
@@ -258,8 +262,9 @@ pub async fn update_user(
         .and_then(Value::as_str)
         .map(str::to_string);
     if let Some(name) = &full_name {
-        if name.trim().is_empty() {
-            return error_envelope("VALIDATION_FAILED", "full_name cannot be empty");
+        let name_check = crate::security::validation::validate_name(name);
+        if !name_check.is_valid() {
+            return error_envelope("VALIDATION_FAILED", &name_check.errors.join("; "));
         }
     }
     let role = body.get("role").and_then(Value::as_str).map(str::to_string);

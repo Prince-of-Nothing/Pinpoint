@@ -30,6 +30,12 @@ fn validate_share_expiry(raw: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Optional label shown to the owner; bound it like a note label so one
+/// request cannot store an arbitrarily large string.
+fn valid_share_label(label: &str) -> bool {
+    label.chars().count() <= 120
+}
+
 /// The active share that lets `viewer` see `owner`'s latest location.
 ///
 /// Consent is fail-closed: an accepted friendship alone grants nothing. The
@@ -135,6 +141,12 @@ pub async fn create_share(
         .get("label")
         .and_then(Value::as_str)
         .map(str::to_string);
+    if label
+        .as_deref()
+        .is_some_and(|label| !valid_share_label(label))
+    {
+        return error_envelope("VALIDATION_FAILED", "label must be at most 120 characters");
+    }
     if friendship_id <= 0 {
         return error_envelope("VALIDATION_FAILED", "friendship_id is required");
     }
@@ -255,6 +267,12 @@ pub async fn update_share(
             .get("label")
             .and_then(Value::as_str)
             .map(str::to_string);
+        if next_label
+            .as_deref()
+            .is_some_and(|label| !valid_share_label(label))
+        {
+            return error_envelope("VALIDATION_FAILED", "label must be at most 120 characters");
+        }
         let next_expiry = if body.get("expires_at").is_some() {
             let Some(raw) = body.get("expires_at").and_then(Value::as_str) else {
                 return error_envelope("VALIDATION_FAILED", "expires_at must be a string");

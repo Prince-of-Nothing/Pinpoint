@@ -478,7 +478,7 @@ async fn expired_share_is_not_revived_by_is_active_patch() {
 }
 
 #[tokio::test]
-async fn share_expiry_is_bounded_and_must_be_in_the_future() {
+async fn share_input_is_bounded() {
     let state = pinpoint_desktop::server::AppState::new();
     let app = pinpoint_desktop::server::router(state);
     let (alice_cookie, alice_csrf, _, _) =
@@ -500,6 +500,10 @@ async fn share_expiry_is_bounded_and_must_be_in_the_future() {
         format!(r#"{{"friendship_id":{friendship_id},"duration_hours":169}}"#),
         format!(r#"{{"friendship_id":{friendship_id},"expires_at":"{too_long}"}}"#),
         format!(r#"{{"friendship_id":{friendship_id},"expires_at":"2000-01-01T00:00:00Z"}}"#),
+        format!(
+            r#"{{"friendship_id":{friendship_id},"label":"{}"}}"#,
+            "x".repeat(121)
+        ),
     ] {
         let resp = app
             .clone()

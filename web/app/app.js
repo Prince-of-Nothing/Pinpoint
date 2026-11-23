@@ -383,8 +383,40 @@ function renderFriends(items) {
       manage.className = "secondary";
       manage.onclick = () => sharing?.open(f);
       li.appendChild(manage);
+      const remove = document.createElement("button");
+      remove.textContent = "Remove";
+      remove.className = "secondary";
+      remove.onclick = () =>
+        removeFriendship(
+          f.id,
+          "Remove this friend? Any location shares with them stop too.",
+          "Friend removed.",
+        );
+      li.appendChild(remove);
+    } else if (f.requester_id === state.user?.id) {
+      const cancel = document.createElement("button");
+      cancel.textContent = "Cancel request";
+      cancel.className = "secondary";
+      cancel.onclick = () =>
+        removeFriendship(
+          f.id,
+          "Cancel this friend request?",
+          "Friend request cancelled.",
+        );
+      li.appendChild(cancel);
     }
     ul.appendChild(li);
+  }
+}
+
+async function removeFriendship(id, confirmation, message) {
+  if (!window.confirm(confirmation)) return;
+  try {
+    await api(`/api/v1/friendships/${id}`, { method: "DELETE" });
+    setStatus(message);
+    await refresh();
+  } catch (error) {
+    setStatus(error.message, true);
   }
 }
 

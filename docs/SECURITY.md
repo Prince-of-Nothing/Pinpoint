@@ -72,9 +72,12 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
   requests; map tiles go through `/map/tiles`. `tests/assets.rs` enforces this.
 
 ### Abuse resistance
-- Per-account login lockout (five failed attempts, 15 minutes) and client-side
-  throttles for Nominatim/OSRM/Overpass. A server-wide per-IP limiter is still a
-  known gap (threat model T-D1).
+- Per-account login lockout (five failed attempts, 15 minutes) and per-client
+  throttles on login (30/5 min), registration (10/h) and anonymous/recovery
+  (20/10 min), keyed by a short-lived HMAC of the client address (never raw IP).
+  The header trust model assumes a proxy that overwrites `X-Forwarded-For`; other
+  write endpoints still rely on authorization and the client-side OSM throttles
+  (threat model T-D1).
 - Minimal error bodies: internal errors surface as generic messages; details go to server logs only.
 - Input validation at the boundary (types, ranges, coordinate bounds, string lengths).
 
@@ -103,7 +106,7 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
 - [ ] No demo accounts are seeded; register real accounts and promote an admin deliberately
 - [ ] HTTPS-only cookies; real domain for the CORS allowlist
 - [ ] Set `PINPOINT_SESSION_IDLE_MINUTES` (30) in the deployment profile; the absolute lifetime is enforced (`PINPOINT_SESSION_MAX_DAYS`, 30 days)
-- [ ] Add rate limiting on login, `/auth/anonymous` and recovery
+- [x] Per-client keyed-HMAC throttles on login, registration, `/auth/anonymous` and recovery
 - [ ] Move the in-memory store to PostgreSQL; enable persistent audit logging
 - [ ] Add WAF/CDN, backups, and monitoring/alerting
 - [ ] Re-run the security test suite + manual pen-test of new infra

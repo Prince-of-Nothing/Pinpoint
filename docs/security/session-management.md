@@ -188,15 +188,15 @@ only consulted on a miss (other replica, restart).
 | Refresh-token table (migration 15) | ❌ superseded by ADR-0012 — not needed |
 | Tests (session lifecycle, CSRF, revocation, anonymous, router probes) | ✅ 158 unit + 10 contract + 7 router |
 | Anonymous device challenge-response (`/anonymous/verify`) | ⬜ follow-up (`public_key` column ready) |
-| Rate limiting on `/auth/anonymous` and recovery | ⬜ follow-up before public deployment |
+| Rate limiting on `/auth/anonymous` and recovery | implemented (per-client keyed-HMAC throttle) |
 
 ## 11. Follow-ups
 
 1. Anonymous device challenge-response: store an Ed25519 public key and issue
    a one-time challenge (`/auth/anonymous/verify`).
-2. Add rate limiting to `/auth/anonymous`, `/auth/anonymous/recover` and
-   login by a keyed HMAC of the client address (never raw IP, short
-   retention; see `docs/security/threat-model.md`).
+2. Per-client keyed-HMAC throttles are in place for login, registration and
+   anonymous/recovery; add a general write-endpoint limiter and proxy-level
+   DDoS controls.
 3. Persist users created via the API in Postgres (`sql_insert_user` is
    available; the demo path is in-memory).
 4. The absolute 30-day ceiling and its test are in place

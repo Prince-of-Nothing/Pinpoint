@@ -705,7 +705,14 @@ pub async fn create_check_in(
         .get("note")
         .and_then(Value::as_str)
         .unwrap_or("")
-        .to_string();
+        .trim();
+    if note.chars().count() > 2000 {
+        return error_envelope("VALIDATION_FAILED", "note must be 2000 characters or fewer");
+    }
+    if crate::security::validation::contains_display_control(note) {
+        return error_envelope("VALIDATION_FAILED", "note contains invalid characters");
+    }
+    let note = note.to_string();
     let kind = body
         .get("kind")
         .and_then(Value::as_str)

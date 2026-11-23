@@ -775,6 +775,35 @@ async fn check_ins_and_emergencies_require_auth_and_are_owner_scoped() {
     assert_eq!(resp.status(), StatusCode::CREATED);
     let check_in_id = body_json(resp).await["id"].as_i64().expect("check-in id");
 
+    let too_long = "x".repeat(2001);
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/check-ins",
+            &bob_cookie,
+            &bob_csrf,
+            &format!(
+                r#"{{"latitude":47.01,"longitude":28.86,"note":"{too_long}","kind":"manual"}}"#
+            ),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    let resp = app
+        .clone()
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/check-ins",
+            &bob_cookie,
+            &bob_csrf,
+            r#"{"latitude":47.01,"longitude":28.86,"note":"work\u202etrip","kind":"manual"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
     assert_eq!(
         get_json(&app, "/api/v1/locations/check-ins", &alice_cookie).await,
         json!([]),

@@ -94,14 +94,14 @@ pub fn validate_password(password: &str) -> ValidationResult {
         return ValidationResult::invalid("Password is required".to_string());
     }
 
-    if password.len() < limits::MIN_PASSWORD_LENGTH {
+    if password.chars().count() < limits::MIN_PASSWORD_LENGTH {
         return ValidationResult::invalid(format!(
             "Password must be at least {} characters",
             limits::MIN_PASSWORD_LENGTH
         ));
     }
 
-    if password.len() > limits::MAX_PASSWORD_LENGTH {
+    if password.chars().count() > limits::MAX_PASSWORD_LENGTH {
         return ValidationResult::invalid("Password is too long (max 128 characters)".to_string());
     }
 
@@ -179,7 +179,7 @@ pub fn validate_search_query(query: &str) -> ValidationResult {
         return ValidationResult::invalid("Search query is required".to_string());
     }
 
-    if query.len() > limits::MAX_SEARCH_QUERY_LENGTH {
+    if query.chars().count() > limits::MAX_SEARCH_QUERY_LENGTH {
         return ValidationResult::invalid(format!(
             "Search query is too long (max {} characters)",
             limits::MAX_SEARCH_QUERY_LENGTH
@@ -234,7 +234,7 @@ pub fn validate_name(name: &str) -> ValidationResult {
         return ValidationResult::invalid("Name is required".to_string());
     }
 
-    if name.len() > limits::MAX_NAME_LENGTH {
+    if name.chars().count() > limits::MAX_NAME_LENGTH {
         return ValidationResult::invalid(format!(
             "Name is too long (max {} characters)",
             limits::MAX_NAME_LENGTH
@@ -272,12 +272,14 @@ mod tests {
     fn valid_password() {
         assert!(validate_password("password123").is_valid());
         assert!(validate_password("Str0ng!Pass").is_valid());
+        assert!(validate_password("éééééééé").is_valid());
     }
 
     #[test]
     fn invalid_password() {
         assert!(!validate_password("").is_valid());
         assert!(!validate_password("short").is_valid());
+        assert!(!validate_password("ééééééé").is_valid());
         assert!(!validate_password(&"a".repeat(129)).is_valid());
     }
 
@@ -323,14 +325,17 @@ mod tests {
     fn search_query_validation() {
         assert!(validate_search_query("café").is_valid());
         assert!(!validate_search_query("").is_valid());
-        assert!(!validate_search_query(&"a".repeat(201)).is_valid());
+        assert!(validate_search_query(&"é".repeat(200)).is_valid());
+        assert!(!validate_search_query(&"é".repeat(201)).is_valid());
     }
 
     #[test]
     fn name_validation() {
         assert!(validate_name("Alice").is_valid());
         assert!(!validate_name("").is_valid());
+        assert!(validate_name(&"é".repeat(60)).is_valid());
         assert!(!validate_name(&"a".repeat(101)).is_valid());
+        assert!(!validate_name(&"é".repeat(101)).is_valid());
         assert!(!validate_name("Alice\u{202E}").is_valid());
         assert!(!validate_name("Ali\tce").is_valid());
     }

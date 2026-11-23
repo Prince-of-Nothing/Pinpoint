@@ -276,6 +276,38 @@ impl AppState {
         .await;
     }
 
+    /// Delete trail points older than the documented seven days. Called on a
+    /// fixed schedule so a user who stops publishing does not keep stale rows
+    /// in Postgres (or in the in-memory demo store) indefinitely.
+    pub async fn prune_location_history(&self) {
+        let cutoff = (chrono::Utc::now() - chrono::Duration::days(7)).to_rfc3339();
+        if let Some(pool) = &self.pg {
+            let _ = sqlx::query("DELETE FROM pinpoint_location_history WHERE recorded_at < $1")
+                .bind(&cutoff)
+                .execute(pool)
+                .await;
+        }
+        let mut store = self.store.lock().unwrap();
+        store.location_history.retain(|point| {
+            chrono::DateTime::parse_from_rfc3339(&point.recorded_at)
+                .map(|at| at.with_timezone(&chrono::Utc).to_rfc3339() >= cutoff)
+                .unwrap_or(false)
+        });
+    }
+
+    /// Hourly retention task. Only services that own locations should call
+    /// this; the delete is global and idempotent across replicas.
+    pub fn spawn_location_pruner(&self) {
+        let state = self.clone();
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(std::time::Duration::from_secs(3600));
+            loop {
+                ticker.tick().await;
+                state.prune_location_history().await;
+            }
+        });
+    }
+
     /// Insert a private note and return the durable id (the in-memory id when
     /// no database is configured).
     pub async fn sql_insert_note(&self, note: &PlaceNote) -> Option<i64> {
@@ -306,5 +338,31 @@ impl AppState {
             .bind(user_id)
             .execute(pool)
             .await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prune_removes_points_older_than_seven_days() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let state = AppState::new();
+            let point = |id: i64, days_ago: i64| LocationPoint {
+                id,
+                user_id: 1,
+                latitude: 47.0,
+                longitude: 28.0,
+                accuracy: None,
+                recorded_at: (chrono::Utc::now() - chrono::Duration::days(days_ago)).to_rfc3339(),
+            };
+            state.store.lock().unwrap().location_history = vec![point(1, 8), point(2, 1)];
+            state.prune_location_history().await;
+            let store = state.store.lock().unwrap();
+            assert_eq!(store.location_history.len(), 1);
+            assert_eq!(store.location_history[0].id, 2);
+        });
     }
 }

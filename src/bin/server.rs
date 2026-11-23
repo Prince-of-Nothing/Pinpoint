@@ -18,6 +18,7 @@ async fn main() -> anyhow::Result<()> {
     } else {
         println!("Running in-memory mode (no DATABASE_URL; data is not persisted)");
     }
+    state.spawn_location_pruner();
 
     // Background snapshot-persist so in-memory mutations survive restarts
     // via Postgres without modifying every handler.

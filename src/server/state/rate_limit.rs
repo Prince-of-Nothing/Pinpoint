@@ -1,4 +1,5 @@
-//! Per-client throttling for the unauthenticated auth endpoints.
+//! Per-client throttling for the unauthenticated public endpoints (auth and
+//! diagnostic reports).
 //!
 //! The key is an HMAC of the client address with a per-process random key; the
 //! raw address is never stored. `X-Forwarded-For` (first hop) or `X-Real-IP`
@@ -42,16 +43,21 @@ const WRITE_LIMIT: AuthLimit = AuthLimit {
     max: 120,
     window_secs: 60,
 };
+const DIAGNOSTIC_LIMIT: AuthLimit = AuthLimit {
+    max: 10,
+    window_secs: 3600,
+};
 
 /// Longest bucket, used to bound the cleanup window.
 const MAX_WINDOW_SECS: u64 = 3600;
 
-/// The auth endpoints that get a per-client throttle.
+/// Public endpoints that get a per-client throttle.
 pub fn auth_limit(path: &str) -> Option<AuthLimit> {
     match path {
         "/api/v1/auth/login" => Some(LOGIN_LIMIT),
         "/api/v1/auth/register" => Some(REGISTER_LIMIT),
         "/api/v1/auth/anonymous" | "/api/v1/auth/anonymous/recover" => Some(ANONYMOUS_LIMIT),
+        "/api/v1/diagnostics/report" => Some(DIAGNOSTIC_LIMIT),
         _ => None,
     }
 }
@@ -161,6 +167,12 @@ mod tests {
         }
         assert!(!limiter.allow_write(7));
         assert!(limiter.allow_write(8));
+    }
+
+    #[test]
+    fn diagnostics_reports_have_a_client_limit() {
+        assert!(auth_limit("/api/v1/diagnostics/report").is_some());
+        assert!(auth_limit("/api/v1/locations/me").is_none());
     }
 
     #[test]

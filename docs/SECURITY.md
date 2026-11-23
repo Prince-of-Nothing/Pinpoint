@@ -58,8 +58,11 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
 - **CSRF**: double-submit token — every unsafe request must echo
   `X-CSRF-Token` (there is no JWT/bearer exemption).
 - Security headers set by the Rust server and/or reverse proxy:
-  `X-Content-Type-Options`, `X-Frame-Options: DENY`, restrictive
-  `Referrer-Policy`, CSP on the web client.
+  `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  `Permissions-Policy` (geolocation for this origin only), `Cross-Origin-Opener-Policy: same-origin`,
+  `Cross-Origin-Resource-Policy: same-origin`, `X-Permitted-Cross-Domain-Policies: none`,
+  and a same-origin CSP on the web client.
 - Cookies: `HttpOnly`, `SameSite=Lax`, `Secure` when served over HTTPS
   (loopback HTTP in local dev only).
 - **Local-only assets:** no Google Fonts/CDNs. The UI uses `system-ui`, serves

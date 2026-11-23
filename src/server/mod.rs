@@ -114,6 +114,18 @@ pub async fn session_auth(
         .or_else(|| cookie_value(req.headers(), "session_id"))
     {
         if let Some(session) = state.get_session(&session_id).await {
+            // A deactivated or deleted account must not keep using an old
+            // session. Admin deactivation also revokes sessions; this check
+            // covers stale caches and other replicas.
+            let active = {
+                let store = state.store.lock().unwrap();
+                store
+                    .find_user_by_id(session.user_id)
+                    .is_some_and(|u| u.is_active)
+            };
+            if !active {
+                return next.run(req).await;
+            }
             let unsafe_method = !matches!(
                 *req.method(),
                 axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS

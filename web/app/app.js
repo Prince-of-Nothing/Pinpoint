@@ -1448,6 +1448,7 @@ $("admin-close").addEventListener("click", () => adminConsole?.close());
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && !$("admin-panel").classList.contains("hidden")) {
     adminConsole?.close();
+    e.preventDefault();
   }
 });
 
@@ -1555,7 +1556,22 @@ document.addEventListener("keydown", (event) => {
   if (drawerToggle.getAttribute("aria-expanded") === "true") {
     setDrawer(false);
     drawerToggle.focus();
+    event.preventDefault();
   }
+});
+// A map sheet is the next surface under the drawer and admin overlay.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || event.defaultPrevented) return;
+  if (!$("admin-panel").classList.contains("hidden")) return;
+  if (drawerToggle.getAttribute("aria-expanded") === "true") return;
+  const sheet = SHEET_IDS.map((id) => $(id)).find(
+    (el) => el && !el.classList.contains("hidden"),
+  );
+  if (!sheet) return;
+  const close = sheet.querySelector(".sheet-close");
+  if (close) close.click();
+  else sheet.classList.add("hidden");
+  event.preventDefault();
 });
 
 for (const button of tabs) {

@@ -171,6 +171,27 @@ pub async fn session_auth(
     next.run(req).await
 }
 
+/// Throttle the public map proxy per client so one script cannot exhaust the
+/// upstream tile, search or route providers.
+pub async fn map_rate_limit(
+    State(state): State<AppState>,
+    req: axum::http::Request<axum::body::Body>,
+    next: Next,
+) -> axum::response::Response {
+    if let Some((bucket, limit)) = state::map_limit(req.uri().path()) {
+        if let Some(ip) = state::client_ip(req.headers()) {
+            if !state.auth_rate.allow(bucket, &ip, limit) {
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error": {"code": "RATE_LIMITED", "message": "Too many map requests. Try again later."}})),
+                )
+                    .into_response();
+            }
+        }
+    }
+    next.run(req).await
+}
+
 /// Privacy: logs never include query strings (search terms, coordinates).
 fn loggable_uri(uri: &axum::http::Uri) -> &str {
     uri.path()
@@ -252,6 +273,7 @@ async fn security_headers(
 /// Build the full Axum router with all `/api/v1` routes + health.
 pub fn router(state: AppState) -> Router {
     let app_state = state.clone();
+    let map_state = state.clone();
     let session_state = state.clone();
     auth_router()
         .merge(users_router())
@@ -349,6 +371,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/sync-status", get(handlers::sync_status))
         .with_state(state)
         .layer(axum::middleware::from_fn_with_state(app_state, converge))
+        .layer(axum::middleware::from_fn_with_state(
+            map_state,
+            map_rate_limit,
+        ))
         .layer(axum::middleware::from_fn_with_state(
             session_state,
             session_auth,

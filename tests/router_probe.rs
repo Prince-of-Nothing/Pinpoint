@@ -1468,3 +1468,61 @@ async fn admin_can_issue_a_temporary_password() {
     };
     assert!(audited, "password reset must be audited");
 }
+
+#[tokio::test]
+async fn email_registration_and_login_ignore_case_and_padding() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    let app = router(AppState::new());
+    let body = r#"{"email":"  CaseUser@Example.com  ","password":"StrongPass!2026","full_name":"Case User"}"#;
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["user"]["email"], "caseuser@example.com");
+
+    // A different case is the same account, not a duplicate.
+    let duplicate =
+        r#"{"email":"CASEUSER@EXAMPLE.COM","password":"StrongPass!2026","full_name":"Case User"}"#;
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/register")
+                .header("content-type", "application/json")
+                .body(Body::from(duplicate))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    // Login accepts the same address in any case, with padding.
+    let login = r#"{"email":"  CASEUSER@example.com  ","password":"StrongPass!2026"}"#;
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(login))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}

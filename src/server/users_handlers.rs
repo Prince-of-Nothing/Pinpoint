@@ -70,7 +70,8 @@ pub async fn create_user(
         .get("email")
         .and_then(Value::as_str)
         .unwrap_or("")
-        .to_string();
+        .trim()
+        .to_ascii_lowercase();
     let full_name = body
         .get("full_name")
         .and_then(Value::as_str)
@@ -502,7 +503,8 @@ pub async fn create_friendship(
     let receiver_email = body
         .get("receiver_email")
         .and_then(Value::as_str)
-        .unwrap_or("");
+        .unwrap_or("")
+        .trim();
     let friendship = {
         let mut store = state.store.lock().unwrap();
         let receiver = if !receiver_username.is_empty() {

@@ -118,7 +118,11 @@ pub async fn login(
     OriginalUri(uri): OriginalUri,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
-    let email = body.get("email").and_then(Value::as_str).unwrap_or("");
+    let email = body
+        .get("email")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim();
     let password = body.get("password").and_then(Value::as_str).unwrap_or("");
 
     let invalid = || {
@@ -231,7 +235,8 @@ pub async fn register(
         .get("email")
         .and_then(Value::as_str)
         .unwrap_or("")
-        .to_string();
+        .trim()
+        .to_ascii_lowercase();
     let password = body.get("password").and_then(Value::as_str).unwrap_or("");
     let full_name = body
         .get("full_name")

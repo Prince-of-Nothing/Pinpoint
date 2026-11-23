@@ -211,8 +211,8 @@ in [Security Test Report](../evidence/security-test-report.md).
 - **Problem:** a database or backup compromise exposes location data.
 - **Relevance:** precise current location is highly sensitive.
 - **Implementation:**
-  - Only the **latest** location per user is stored (no history), and
-    users can erase it.
+  - Each user has one latest location plus an owner-only trail retained for
+    7 days and pruned hourly; deleting the account erases both.
   - Approximate shares never return the exact point: coordinates snap to a
     fixed grid of about 1.1 km.
   - The API uses a **least-privilege PostgreSQL role** (row DML only).

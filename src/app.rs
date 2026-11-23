@@ -1276,7 +1276,9 @@ impl PinpointApp {
                     self.clear_persisted_session();
                     let fresh = Self::fresh_data();
                     *self.data.lock().unwrap() = fresh;
-                    self.set_screen(CurrentScreen::Map);
+                    // The server revoked every session, including this one;
+                    // return to the login screen instead of an empty map.
+                    self.set_screen(CurrentScreen::Login);
                     self.set_offline_mode(true);
                     self.set_notice(Some(
                         "Password changed. Your other sessions were signed out; please sign in again."

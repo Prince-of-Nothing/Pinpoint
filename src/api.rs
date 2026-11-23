@@ -967,6 +967,25 @@ impl ApiClient {
         Ok(())
     }
 
+    /// Admin-issued temporary password. The server forces a rotation at the
+    /// next sign-in and revokes the target's sessions.
+    pub async fn admin_reset_password(
+        &self,
+        id: i64,
+        password: &str,
+        reset_mfa: bool,
+    ) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                &format!("/api/v1/admin/users/{id}/password"),
+                Some(serde_json::json!({ "password": password, "reset_mfa": reset_mfa })),
+            )
+            .await?;
+        Self::check(response, "Failed to reset the password").await?;
+        Ok(())
+    }
+
     pub async fn admin_diagnostics(
         &self,
         status: Option<&str>,
@@ -1624,6 +1643,16 @@ impl crate::backend::Backend for ApiClient {
     }
     fn admin_delete_user<'a>(&'a self, id: i64) -> crate::backend::BackendFuture<'a, ()> {
         Box::pin(async move { ApiClient::admin_delete_user(self, id).await })
+    }
+    fn admin_reset_password<'a>(
+        &'a self,
+        id: i64,
+        password: &'a str,
+        reset_mfa: bool,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(
+            async move { ApiClient::admin_reset_password(self, id, password, reset_mfa).await },
+        )
     }
     fn admin_diagnostics<'a>(
         &'a self,

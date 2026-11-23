@@ -204,6 +204,11 @@ enum PendingAction {
     AdminDeleteUser {
         id: i64,
     },
+    AdminResetPassword {
+        id: i64,
+        password: String,
+        reset_mfa: bool,
+    },
     AdminUpdateReport {
         id: i64,
         status: String,
@@ -306,6 +311,8 @@ pub struct PinpointAppUI {
     admin_tab: String,
     admin_loaded: bool,
     admin_diag_filter: String,
+    admin_reset_password: String,
+    admin_reset_mfa: bool,
     // Kiosk screen state
     pub(crate) kiosk_token_input: String,
     pub(crate) kiosk_note_input: String,
@@ -440,6 +447,8 @@ impl PinpointAppUI {
             admin_tab: "overview".to_string(),
             admin_loaded: false,
             admin_diag_filter: String::new(),
+            admin_reset_password: String::new(),
+            admin_reset_mfa: false,
             kiosk_token_input: String::new(),
             kiosk_note_input: String::new(),
             kiosk_consent_accepted: false,
@@ -1294,6 +1303,16 @@ impl PinpointAppUI {
                 PendingAction::AdminDeleteUser { id } => {
                     let _ = app.admin_delete_user(id).await;
                 }
+                PendingAction::AdminResetPassword {
+                    id,
+                    password,
+                    reset_mfa,
+                } => match app.admin_reset_password(id, password, reset_mfa).await {
+                    Ok(()) => app.set_notice(Some(
+                        "Temporary password issued. Share it securely.".to_string(),
+                    )),
+                    Err(error) => app.set_error(Some(error.to_string())),
+                },
                 PendingAction::AdminUpdateReport { id, status } => {
                     let _ = app.admin_update_report(id, status).await;
                 }

@@ -1688,6 +1688,20 @@ impl PinpointApp {
         self.admin_load_users().await
     }
 
+    /// Issue a temporary password, revoke the target's sessions and force a
+    /// rotation at the next sign-in (server-side).
+    pub async fn admin_reset_password(
+        &self,
+        id: i64,
+        password: String,
+        reset_mfa: bool,
+    ) -> anyhow::Result<()> {
+        self.backend
+            .admin_reset_password(id, &password, reset_mfa)
+            .await?;
+        self.admin_load_users().await
+    }
+
     pub async fn admin_load_diagnostics(&self, status: Option<String>) -> anyhow::Result<()> {
         let (reports, total, open) = self.backend.admin_diagnostics(status.as_deref()).await?;
         let data = self.data();

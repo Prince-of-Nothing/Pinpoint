@@ -140,6 +140,22 @@ impl PinpointAppUI {
                 self.spawn_action(PendingAction::AdminLoadUsers, ctx);
             }
         });
+        ui.horizontal_wrapped(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut self.admin_reset_password)
+                    .hint_text("Temporary password for resets")
+                    .password(true)
+                    .desired_width(220.0),
+            );
+            ui.checkbox(&mut self.admin_reset_mfa, "Also clear MFA");
+        });
+        ui.label(
+            RichText::new(
+                "A reset revokes the account's sessions and forces a password change at next sign-in.",
+            )
+            .size(11.0)
+            .color(theme::MUTED),
+        );
         ui.add_space(4.0);
         let needle = self.admin_search_query.trim().to_lowercase();
         let rows: Vec<&Value> = users
@@ -212,6 +228,23 @@ impl PinpointAppUI {
                         }
                         if !is_self && ui.button("Delete").clicked() {
                             self.spawn_action(PendingAction::AdminDeleteUser { id }, ctx);
+                        }
+                        let reset_ready = self.admin_reset_password.trim().len() >= 8;
+                        let temporary = self.admin_reset_password.clone();
+                        let reset_mfa = self.admin_reset_mfa;
+                        if !is_self
+                            && ui
+                                .add_enabled(reset_ready, egui::Button::new("Reset password"))
+                                .clicked()
+                        {
+                            self.spawn_action(
+                                PendingAction::AdminResetPassword {
+                                    id,
+                                    password: temporary,
+                                    reset_mfa,
+                                },
+                                ctx,
+                            );
                         }
                     });
                     ui.separator();

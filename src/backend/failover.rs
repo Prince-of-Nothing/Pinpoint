@@ -806,6 +806,21 @@ impl Backend for FailoverBackend {
         })
     }
 
+    fn admin_reset_password<'a>(
+        &'a self,
+        id: i64,
+        password: &'a str,
+        reset_mfa: bool,
+    ) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("admin_reset_password", |b| {
+                let b = b.clone();
+                async move { b.admin_reset_password(id, password, reset_mfa).await }
+            })
+            .await
+        })
+    }
+
     fn admin_diagnostics<'a>(
         &'a self,
         status: Option<&'a str>,

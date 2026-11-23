@@ -83,6 +83,8 @@ export function shareRequestBody(current, form) {
     precision_level: form.precision,
     is_active: true,
   };
+  const label = String(form.label ?? "").trim();
+  if (label) body.label = label;
   if (form.duration === "keep") {
     if (current?.expires_at) body.expires_at = current.expires_at;
     else body.duration_hours = 0;
@@ -98,6 +100,7 @@ export function shareRowModel(share, now = Date.now()) {
     isGrant: Boolean(share) && share.direction !== "from_friend",
     status,
     precision: precisionLabel(share?.precision_level),
+    label: String(share?.label ?? "").trim(),
     expiry: expiryText(share, now),
     canPauseResume: status !== "expired",
     canShareAgain: status === "expired",
@@ -119,7 +122,9 @@ export function initSharing({ api, setStatus, getUser, onChanged }) {
   function summary() {
     if (!friendship) return "";
     const until = selectedExpiry();
-    return `${precisionLabel($("share-precision").value)} location · ${friendName(
+    const label = $("share-label").value.trim();
+    const prefix = label ? `${label} · ` : "";
+    return `${prefix}${precisionLabel($("share-precision").value)} location · ${friendName(
       friendship,
       getUser?.()?.id,
     )} · ${until ? `until ${until.toLocaleString()}` : "no expiry"}`;
@@ -178,6 +183,7 @@ export function initSharing({ api, setStatus, getUser, onChanged }) {
         ) || null;
       $("share-enabled").checked = shareStatus(current) === "active";
       $("share-precision").value = current?.precision_level || "exact";
+      $("share-label").value = current?.label || "";
       syncDuration();
       $("share-revoke").classList.toggle("hidden", !current);
       sheet.classList.remove("hidden");
@@ -195,6 +201,7 @@ export function initSharing({ api, setStatus, getUser, onChanged }) {
       friendshipId: friendship.id,
       enabled: $("share-enabled").checked,
       precision: $("share-precision").value,
+      label: $("share-label").value,
       duration: $("share-duration").value,
     };
     const body = shareRequestBody(current, form);
@@ -250,6 +257,7 @@ export function initSharing({ api, setStatus, getUser, onChanged }) {
   for (const id of ["share-enabled", "share-precision", "share-duration"]) {
     $(id).addEventListener("change", refreshSummary);
   }
+  $("share-label").addEventListener("input", refreshSummary);
 
   return { open, close };
 }

@@ -1137,7 +1137,7 @@ body:has(#app-panel:not(.hidden)) #status { bottom: calc(4.8rem + var(--safe-bot
   color: var(--text);
 }
 .share-toggle input { width: auto; margin: 0; }
-#share-sheet select { margin-top: 0.25rem; }
+#share-sheet select, #share-sheet #share-label { margin-top: 0.25rem; }
 #share-incoming { margin: 0.5rem 0 0.75rem; }
 
 .route-stop {
@@ -1763,7 +1763,8 @@ input[type="file"]::file-selector-button {
 @media (max-width: 520px) {
   /* Share sheet: stack the two selects, full-width 44 px controls. */
   #share-sheet label:not(.share-toggle) { display: block; }
-  #share-sheet label:not(.share-toggle) select {
+  #share-sheet label:not(.share-toggle) select,
+  #share-sheet label:not(.share-toggle) input[type="text"] {
     display: block;
     width: 100%;
     min-height: 44px;

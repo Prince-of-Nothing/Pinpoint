@@ -256,6 +256,7 @@ await check("a canceled confirm sends no request", async () => {
     "share-incoming",
     "share-enabled",
     "share-precision",
+    "share-label",
     "share-duration",
     "share-revoke",
     "share-save",
@@ -351,6 +352,19 @@ await check("share rows skip from_friend grants and only pause live rows", () =>
   assert.match(appSource, /model\.canShareAgain/);
   assert.match(appSource, /revokeShare\(s\.id\)/);
   assert.match(appSource, /method: "DELETE"/);
+});
+
+await check("a share label is sent, shown in the row and editable", () => {
+  const body = shareRequestBody(
+    share({ expires_at: future }),
+    form({ label: "  Work trip  " }),
+  );
+  assert.equal(body.label, "Work trip");
+  assert.ok(!("label" in shareRequestBody(share(), form({ label: "   " }))));
+  assert.equal(shareRowModel(share({ label: "Work trip" }), now).label, "Work trip");
+  assert.match(pageSource, /id="share-label"/);
+  assert.match(sharingSource, /share-label"\)\.value = current\?\.label/);
+  assert.match(appSource, /model\.label/);
 });
 
 console.log(`sharing UI checks passed: ${passed}`);

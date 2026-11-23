@@ -875,6 +875,13 @@ async fn api_json_carries_baseline_security_headers() {
     assert_eq!(headers["x-content-type-options"], "nosniff");
     assert_eq!(headers["x-frame-options"], "DENY");
     assert_eq!(headers["referrer-policy"], "no-referrer");
+    assert_eq!(
+        headers["permissions-policy"],
+        "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
+    );
+    assert_eq!(headers["cross-origin-opener-policy"], "same-origin");
+    assert_eq!(headers["cross-origin-resource-policy"], "same-origin");
+    assert_eq!(headers["x-permitted-cross-domain-policies"], "none");
 }
 
 #[tokio::test]
@@ -898,6 +905,13 @@ async fn health_carries_baseline_security_headers() {
     assert_eq!(headers["x-content-type-options"], "nosniff");
     assert_eq!(headers["x-frame-options"], "DENY");
     assert_eq!(headers["referrer-policy"], "no-referrer");
+    assert_eq!(
+        headers["permissions-policy"],
+        "geolocation=(self), camera=(), microphone=(), payment=(), usb=()"
+    );
+    assert_eq!(headers["cross-origin-opener-policy"], "same-origin");
+    assert_eq!(headers["cross-origin-resource-policy"], "same-origin");
+    assert_eq!(headers["x-permitted-cross-domain-policies"], "none");
 }
 
 #[tokio::test]

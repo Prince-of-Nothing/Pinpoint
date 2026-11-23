@@ -201,6 +201,27 @@ async fn security_headers(
         header::REFERRER_POLICY,
         HeaderValue::from_static("no-referrer"),
     );
+    // The app needs geolocation only for its own origin; no camera, microphone,
+    // payment or USB surfaces exist. CORP keeps other sites from embedding this
+    // origin's responses, and COOP severs `window.opener` for external links.
+    headers.insert(
+        "permissions-policy",
+        HeaderValue::from_static(
+            "geolocation=(self), camera=(), microphone=(), payment=(), usb=()",
+        ),
+    );
+    headers.insert(
+        "cross-origin-opener-policy",
+        HeaderValue::from_static("same-origin"),
+    );
+    headers.insert(
+        "cross-origin-resource-policy",
+        HeaderValue::from_static("same-origin"),
+    );
+    headers.insert(
+        "x-permitted-cross-domain-policies",
+        HeaderValue::from_static("none"),
+    );
     res
 }
 

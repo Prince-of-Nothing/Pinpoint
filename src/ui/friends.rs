@@ -90,7 +90,12 @@ impl PinpointAppUI {
                 ui.label("No sent requests");
             } else {
                 for req in &sent {
-                    ui.label(format!("{} (awaiting response)", req.receiver_name));
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(format!("{} (awaiting response)", req.receiver_name));
+                        if ui.button("Cancel").clicked() {
+                            self.spawn_action(PendingAction::DeleteFriendship { id: req.id }, ctx);
+                        }
+                    });
                 }
             }
         });

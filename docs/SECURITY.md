@@ -99,7 +99,7 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
 ## Hardening checklist before any public deployment
 - [ ] No demo accounts are seeded; register real accounts and promote an admin deliberately
 - [ ] HTTPS-only cookies; real domain for the CORS allowlist
-- [ ] Tighten `PINPOINT_SESSION_IDLE_MINUTES` (30) and add an absolute lifetime
+- [ ] Set `PINPOINT_SESSION_IDLE_MINUTES` (30) in the deployment profile; the absolute lifetime is enforced (`PINPOINT_SESSION_MAX_DAYS`, 30 days)
 - [ ] Add rate limiting on login, `/auth/anonymous` and recovery
 - [ ] Move the in-memory store to PostgreSQL; enable persistent audit logging
 - [ ] Add WAF/CDN, backups, and monitoring/alerting

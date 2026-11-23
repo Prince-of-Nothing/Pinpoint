@@ -149,7 +149,7 @@ security::session::tests::remaining_idle_time ... ok
 security::session::tests::custom_config ... ok
 ```
 
-Server-side timeouts (Go) are authoritative; client timeout is UX hardening.
+Server-side timeouts (Rust `src/server/state/sessions.rs`) are authoritative; client timeout is UX hardening.
 
 ---
 

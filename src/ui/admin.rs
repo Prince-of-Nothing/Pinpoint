@@ -130,6 +130,69 @@ impl PinpointAppUI {
             let data = data.lock().unwrap();
             data.admin_users.clone()
         };
+        egui::CollapsingHeader::new("Create user")
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Email");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.admin_new_email)
+                            .hint_text("name@example.com")
+                            .desired_width(200.0),
+                    );
+                    ui.label("Full name");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.admin_new_name).desired_width(180.0),
+                    );
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Role");
+                    egui::ComboBox::from_id_salt("admin_new_role")
+                        .selected_text(&self.admin_new_role)
+                        .show_ui(ui, |ui| {
+                            for candidate in ["resident", "admin", "administrator"] {
+                                ui.selectable_value(
+                                    &mut self.admin_new_role,
+                                    candidate.to_string(),
+                                    candidate,
+                                );
+                            }
+                        });
+                    ui.label("Temporary password");
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.admin_new_password)
+                            .password(true)
+                            .desired_width(180.0),
+                    );
+                });
+                let can_create = self.admin_new_email.contains('@')
+                    && !self.admin_new_name.trim().is_empty()
+                    && self.admin_new_password.chars().count() >= 8;
+                if ui
+                    .add_enabled(can_create, egui::Button::new("Create user"))
+                    .clicked()
+                {
+                    let email = self.admin_new_email.trim().to_string();
+                    let full_name = self.admin_new_name.trim().to_string();
+                    let role = self.admin_new_role.clone();
+                    let password = std::mem::take(&mut self.admin_new_password);
+                    self.spawn_action(
+                        PendingAction::AdminCreateUser {
+                            email,
+                            full_name,
+                            role,
+                            password,
+                        },
+                        ctx,
+                    );
+                }
+                ui.label(
+                    RichText::new("The user must change this temporary password at first sign-in.")
+                        .size(11.0)
+                        .color(theme::MUTED),
+                );
+            });
+        ui.add_space(4.0);
         ui.horizontal(|ui| {
             ui.add(
                 egui::TextEdit::singleline(&mut self.admin_search_query)

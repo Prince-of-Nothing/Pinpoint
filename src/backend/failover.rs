@@ -787,6 +787,22 @@ impl Backend for FailoverBackend {
         })
     }
 
+    fn admin_create_user<'a>(
+        &'a self,
+        email: &'a str,
+        full_name: &'a str,
+        role: &'a str,
+        password: &'a str,
+    ) -> BackendFuture<'a, ()> {
+        Box::pin(async move {
+            self.try_all("admin_create_user", |b| {
+                let b = b.clone();
+                async move { b.admin_create_user(email, full_name, role, password).await }
+            })
+            .await
+        })
+    }
+
     fn admin_update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()> {
         Box::pin(async move {
             self.try_all("admin_update_user", |b| {

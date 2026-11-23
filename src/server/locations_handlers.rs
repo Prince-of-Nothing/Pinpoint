@@ -33,7 +33,7 @@ fn validate_share_expiry(raw: &str) -> Result<(), &'static str> {
 /// Optional label shown to the owner; bound it like a note label so one
 /// request cannot store an arbitrarily large string.
 fn valid_share_label(label: &str) -> bool {
-    label.chars().count() <= 120
+    label.chars().count() <= 120 && !label.chars().any(char::is_control)
 }
 
 /// The active share that lets `viewer` see `owner`'s latest location.

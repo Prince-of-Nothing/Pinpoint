@@ -31,6 +31,7 @@ const state = {
 let accountNameDirty = false;
 let authBusy = false;
 let notePhotoData = null;
+let pendingNotePoint = null;
 let messageIdentity = null;
 let messageIdentityUserId = null;
 let messagePeer = null;
@@ -118,6 +119,7 @@ function resetToLogin() {
   state.locations = [];
   state.history = [];
   state.notes = [];
+  pendingNotePoint = null;
   state.trailVisible = false;
   state.messageConversations = [];
   state.messageUnread = 0;
@@ -1191,6 +1193,19 @@ async function promptLocationOnce(map) {
   }
 }
 
+function pinNoteAt(point) {
+  const lat = Number(point?.lat);
+  const lon = Number(point?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+  pendingNotePoint = { lat, lon };
+  mapApi?.setSelectedPlace({ latitude: lat, longitude: lon, label: "New note" });
+  setDrawer(true, false);
+  setActiveTab("today");
+  $("today-card")?.scrollIntoView({ block: "start" });
+  setStatus(`Note pinned at ${lat.toFixed(5)}, ${lon.toFixed(5)}. Write the note below.`);
+  $("note-message")?.focus();
+}
+
 async function createAppMap() {
   const pmtilesUrl = await installedPmtilesUrl();
   mapApi = createMap({
@@ -1198,6 +1213,7 @@ async function createAppMap() {
     center: [state.map.lat, state.map.lon],
     zoom: state.map.zoom,
     onClick: (point) => nav?.onMapClick(point),
+    onLongPress: (point) => pinNoteAt(point),
     onLoad: (api) => {
       api.setNoteMarkers(state.notes, (note) => showNote(note));
       if (state.trailVisible) api.drawTrail(state.history);
@@ -1705,11 +1721,13 @@ $("note-form")?.addEventListener("submit", async (event) => {
   try {
     const map = await ensureMap();
     const center = map.map.getCenter();
+    const latitude = pendingNotePoint?.lat ?? center.lat;
+    const longitude = pendingNotePoint?.lon ?? center.lng;
     const note = await api("/api/v1/locations/notes", {
       method: "POST",
       body: {
-        latitude: center.lat,
-        longitude: center.lng,
+        latitude,
+        longitude,
         label: $("note-label").value.trim(),
         message,
         ...(notePhotoData ? { photo: notePhotoData } : {}),
@@ -1717,6 +1735,7 @@ $("note-form")?.addEventListener("submit", async (event) => {
     });
     $("note-form").reset();
     notePhotoData = null;
+    pendingNotePoint = null;
     show($("note-preview"), false);
     $("note-preview").removeAttribute("src");
     setStatus("Private note saved.");

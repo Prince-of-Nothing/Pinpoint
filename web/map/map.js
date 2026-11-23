@@ -305,6 +305,9 @@ function buildPopupContent(properties) {
  *   root-relative or page-relative). The module derives the `pmtiles://` URL.
  * @param {[number, number]} [options.center] `[longitude, latitude]`.
  * @param {number} [options.zoom]
+ * @param {(point: {lat: number, lon: number}) => void} [options.onLongPress]
+ *   Called after a 550 ms press that did not move; the following click is
+ *   suppressed.
  * @param {(handle: PinpointMap) => void} [options.onLoad] Called after the
  *   MapLibre `load` event and the first render.
  * @param {(error: Error) => void} [options.onError] Called for style/tile
@@ -317,6 +320,7 @@ export function createMap({
   pmtilesUrl,
   center = [0, 0],
   zoom = 2,
+  onLongPress,
   onLoad,
   onError,
 } = {}) {
@@ -340,6 +344,9 @@ export function createMap({
   let pendingRoute = null;
   let popup = null;
   let locationHandlersInstalled = false;
+  let pressTimer = null;
+  let pressStart = null;
+  let longPressFired = false;
 
   const handle = {
     setLocations,
@@ -361,6 +368,54 @@ export function createMap({
     else console.error("[pinpoint-map]", error);
   }
 
+  function clearPress() {
+    if (pressTimer !== null) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
+    pressStart = null;
+  }
+
+  function startPress(event) {
+    if (destroyed || typeof onLongPress !== "function") return;
+    const button = event.originalEvent?.button;
+    if (button !== undefined && button !== 0) return;
+    clearPress();
+    longPressFired = false;
+    const point = event.point ?? { x: 0, y: 0 };
+    pressStart = { x: point.x, y: point.y, lngLat: event.lngLat };
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      if (destroyed || !pressStart) return;
+      longPressFired = true;
+      onLongPress({ lat: pressStart.lngLat.lat, lon: pressStart.lngLat.lng });
+    }, 550);
+  }
+
+  function movePress(event) {
+    if (!pressStart || pressTimer === null) return;
+    const point = event.point ?? { x: 0, y: 0 };
+    if (Math.hypot(point.x - pressStart.x, point.y - pressStart.y) > 8) {
+      clearPress();
+    }
+  }
+
+  function endPress() {
+    const fired = longPressFired;
+    clearPress();
+    if (fired) {
+      // The click event follows the pointer up; keep both click handlers
+      // quiet for that one event, then clear the flag even if none arrives.
+      setTimeout(() => {
+        longPressFired = false;
+      }, 400);
+    }
+  }
+
+  function preventContextMenu(event) {
+    event.preventDefault();
+  }
+
   function applyTheme() {
     if (!map || !map.isStyleLoaded()) return;
     for (const [layerId, [property, value]] of Object.entries(THEME_PAINT[theme])) {
@@ -374,6 +429,7 @@ export function createMap({
     locationHandlersInstalled = true;
 
     map.on("click", LOCATION_LAYER, (event) => {
+      if (longPressFired) return;
       const feature = event.features?.[0];
       if (!feature) return;
 
@@ -624,6 +680,8 @@ export function createMap({
     if (destroyed) return;
     destroyed = true;
     clickListeners.clear();
+    clearPress();
+    map?.getCanvas()?.removeEventListener("contextmenu", preventContextMenu);
     pendingRoute = null;
     popup?.remove();
     popup = null;
@@ -653,6 +711,15 @@ export function createMap({
         attributionControl: false,
       });
 
+      map.on("mousedown", startPress);
+      map.on("touchstart", startPress);
+      map.on("mousemove", movePress);
+      map.on("touchmove", movePress);
+      map.on("mouseup", endPress);
+      map.on("touchend", endPress);
+      map.on("dragstart", endPress);
+      map.getCanvas().addEventListener("contextmenu", preventContextMenu);
+
       map.on("load", () => {
         if (destroyed || !map) return;
         loaded = true;
@@ -675,6 +742,7 @@ export function createMap({
 
       map.on("click", (event) => {
         if (destroyed) return;
+        if (longPressFired) return;
         const position = { lat: event.lngLat.lat, lon: event.lngLat.lng };
         for (const callback of clickListeners) callback(position);
       });

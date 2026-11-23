@@ -42,6 +42,7 @@ const EMPTY_FEATURES = { type: "FeatureCollection", features: [] };
  * @param {[number, number]} [options.center] `[latitude, longitude]`.
  * @param {number} [options.zoom]
  * @param {(point: {lat: number, lon: number}) => void} [options.onClick]
+ * @param {(point: {lat: number, lon: number}) => void} [options.onLongPress]
  * @param {"light"|"dark"} [options.theme] Defaults to dark, matching the shell.
  * @param {string} [options.pmtilesUrl]
  * @param {string} [options.styleUrl]
@@ -53,6 +54,7 @@ export function createMap({
   center = [0, 0],
   zoom = 2,
   onClick,
+  onLongPress,
   theme = "dark",
   pmtilesUrl,
   styleUrl,
@@ -113,6 +115,7 @@ export function createMap({
     pmtilesUrl: localPmtilesUrl,
     center: [initialCenter[1], initialCenter[0]],
     zoom: initialZoom,
+    onLongPress,
     onLoad() {
       if (destroyed) return;
       mapReady = true;

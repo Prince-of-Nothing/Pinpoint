@@ -15,10 +15,11 @@ the historical/target design and are **not** the current contract.
 ## Conventions
 
 - JSON request and response bodies; unknown JSON fields are ignored.
-- **Authentication (ADR-0012):** an opaque `session_id` cookie
-  (`HttpOnly; SameSite=Lax`, `Secure` over HTTPS) plus an `X-CSRF-Token`
-  header on every unsafe method (`POST`/`PUT`/`PATCH`/`DELETE`). There is no
-  `Authorization: Bearer` path and no refresh endpoint.
+- **Authentication (ADR-0012):** an opaque session cookie — `__Host-pinpoint_session`
+  over HTTPS, `session_id` on loopback — with `HttpOnly; SameSite=Lax`
+  (`Secure` on HTTPS) plus an `X-CSRF-Token` header on every unsafe method
+  (`POST`/`PUT`/`PATCH`/`DELETE`). There is no `Authorization: Bearer` path
+  and no refresh endpoint.
 - Errors use a stable envelope:
   ```json
   { "error": { "code": "VALIDATION_FAILED", "message": "email is required" } }
@@ -55,33 +56,37 @@ header. The cookie value is stored server-side only as a SHA-256 hash.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/users/` | cookie | list users (scoped by role) |
-| POST | `/users/` | cookie | create a user (admin flows) |
-| GET | `/users/:id` | cookie | user by id |
-| PATCH | `/users/:id` | cookie + CSRF | update own profile / admin update |
-| DELETE | `/users/:id` | cookie + CSRF | delete (admin) |
-| DELETE | `/users/me` | cookie + CSRF | `{confirm:"DELETE", current_password?}` — delete own account and data (cascade) |
-| GET | `/users/search?q=` | cookie | search by email/name |
+| GET | `/users/` | cookie + admin | private account listing (email, role, flags) |
+| POST | `/users/` | cookie + admin + CSRF | `{email, full_name, role, password}` — the temporary password is required and the account must rotate it |
+| GET | `/users/:id` | cookie | self or admin get the full record; an accepted friend gets a friend card; a pending request gets the public card; otherwise `404` |
+| PATCH | `/users/:id` | cookie + CSRF | `full_name` (self); `role`, `is_active`, `must_change_password` (admin only, never on self) |
+| DELETE | `/users/:id` | cookie + admin + CSRF | remove an account and its rows |
+| DELETE | `/users/me` | cookie + CSRF | `{confirm:"DELETE", current_password}` — erase own account and data |
+| GET | `/users/lookup?username=` | cookie | exact, case-insensitive handle lookup; public card only |
+| GET | `/users/search?q=` | cookie + admin | substring search by email/name/handle |
 | GET | `/friendships/` | cookie | list friendships involving the caller |
-| POST | `/friendships/` | cookie + CSRF | `{receiver_email}` → pending request |
+| POST | `/friendships/` | cookie + CSRF | `{receiver_username}` → pending request (`receiver_email` is a legacy exact-match fallback) |
 | POST | `/friendships/:id/respond` | cookie + CSRF | `{action:"accept"\|"reject"}` (receiver only) |
-| DELETE | `/friendships/:id` | cookie + CSRF | remove a friendship |
+| DELETE | `/friendships/:id` | cookie + CSRF | remove a friendship and its shares |
 
 ## Locations & shares — `/api/v1/locations/*`
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| GET | `/locations/shares` | cookie | shares created by the caller |
-| POST | `/locations/shares` | cookie + CSRF | `{friend_id, precision_level, purpose?, expires_at?}` |
-| PATCH | `/locations/shares/:id` | cookie + CSRF | `{is_active}` — pause/resume (owner only) |
+| GET | `/locations/shares` | cookie | outgoing shares created by the caller |
+| POST | `/locations/shares` | cookie + CSRF | `{friendship_id, direction?, precision_level?, duration_hours? \| expires_at?, label?}` — 24 h default in the UI, `duration_hours` capped at 168; label ≤120 chars |
+| PATCH | `/locations/shares/:id` | cookie + CSRF | owner only; any of `is_active`, `precision_level`, `direction`, `label`, `duration_hours`/`expires_at` |
 | DELETE | `/locations/shares/:id` | cookie + CSRF | revoke (owner only) |
 | POST | `/locations/me` | cookie + CSRF | `{latitude, longitude, accuracy?}` — publish latest location |
 | GET | `/locations/me` | cookie | own latest location |
 | GET | `/locations/friends` | cookie | friend locations visible under an active share, precision-downgraded |
-| GET/POST | `/locations/check-ins` | cookie (+CSRF) | list / create a check-in |
+| GET | `/locations/history` | cookie | owner-only trail, 24-hour window (the database retains 7 days and prunes hourly) |
+| GET/POST | `/locations/notes` | cookie (+CSRF) | list / create own private notes: `{latitude, longitude, label?, message, photo?}`; message 1–2000 chars; photo is a JPEG/PNG data URL under 675 KB |
+| DELETE | `/locations/notes/:id` | cookie + CSRF | delete own note |
+| GET/POST | `/locations/check-ins` | cookie (+CSRF) | list / create own check-ins: `{latitude, longitude, note?, kind}`; `kind` is `manual`, `scheduled` or `trip`; note ≤2000 chars |
 | DELETE | `/locations/check-ins/:id` | cookie + CSRF | delete own check-in |
-| GET/POST | `/locations/emergency` | cookie (+CSRF) | list / trigger an emergency share |
-| PATCH | `/locations/emergency/:id` | cookie + CSRF | resolve |
+| GET/POST | `/locations/emergency` | cookie (+CSRF) | list / trigger own emergency share: `{latitude, longitude}` |
+| PATCH | `/locations/emergency/:id` | cookie + CSRF | resolve / re-open own alert: `{resolved}` |
 
 Authorization is server-side on every request: friendship alone grants
 nothing; an active, unexpired, unpaused `SharePermission` with the caller as
@@ -109,7 +114,11 @@ Signal Protocol; limits and the threat model are in
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/map/tiles/:z/:x/:y` | ODbL raster proxy. Order: `PINPOINT_TILE_URL` (self-hosted, ADR-0011) → `tile.openstreetmap.de` → Wikimedia → CARTO. Never `tile.openstreetmap.org`. Cached 1 h, returns `X-Tile-Source` and `X-Data-Attribution`. |
+| GET | `/map/tiles/:z/:x/:y` | ODbL raster proxy. Source order: `PINPOINT_TILE_URL` (self-hosted, ADR-0011), then `tile.openstreetmap.de` (FOSSGIS, demo fallback). Never `tile.openstreetmap.org`. Cached 1 h, returns `X-Tile-Source` and `X-Data-Attribution`. |
+| GET | `/map/search?q=&lat=&lon=&limit=` | `q` is 3–120 characters; `lat`/`lon` are an optional pair used for distance bias; `limit` is 1–10 (default 8). |
+| GET | `/map/reverse?lat=&lon=` | reverse geocode; coordinates must be valid. |
+| GET | `/map/route?from_lat=&from_lon=&to_lat=&to_lon=&mode=&via=&avoid=&alternatives=` | OSRM route; `mode` is a configured profile. |
+| GET | `/map/capabilities` | configured routing profiles and whether self-hosted search autocomplete is on. |
 | GET | `/map/attribution` | source list + license |
 | GET | `/map/health` | tile-cache health |
 
@@ -144,7 +153,7 @@ HTTP/1.1 200 OK
 Set-Cookie: session_id=…; Path=/; HttpOnly; SameSite=Lax
 X-CSRF-Token: 3f2c…
 
-{ "token_type": "session", "expires_in": 900,
+{ "token_type": "session", "expires_in": 43200,
   "csrf_token": "3f2c…", "user": { "id": 1, "email": "alice@example.com", … } }
 ```
 
@@ -160,6 +169,8 @@ Content-Type: application/json
 ## Not in the contract
 
 - `/auth/refresh` and bearer JWTs — removed by ADR-0012.
-- OAuth/OIDC login wiring, passkeys, magic links and password reset — pending
-  (`docs/security/dual-auth-model.md`).
+- OAuth/OIDC login wiring, passkeys, magic links and email self-service
+  password reset — pending (`docs/security/dual-auth-model.md`). An
+  administrator can issue a temporary password today; the user must rotate it
+  at the next sign-in.
 - WebSocket `/ws` — planned, the demo polls.

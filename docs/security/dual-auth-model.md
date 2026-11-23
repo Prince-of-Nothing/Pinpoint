@@ -1,7 +1,8 @@
 # Dual Authentication Model — Design Note (anonymous vs identity-linked)
 
 Companion to [ADR-0009](../adr/0009-dual-auth-anonymous-and-identity.md).
-Status: **Proposed** (not implemented).
+Status: **Implemented** for anonymous device-bound accounts and email/password;
+magic-link, OAuth and passkey login remain future work.
 See also [`session-management.md`](session-management.md) and
 [`auth-mechanisms.md`](auth-mechanisms.md).
 
@@ -9,10 +10,10 @@ See also [`session-management.md`](session-management.md) and
 
 | | **Model A — Anonymous** | **Model B — Identity-linked** |
 |---|---|---|
-| Sign-up | One tap, automatic | Email+password / magic link / OAuth / passkey |
+| Sign-up | One tap, automatic | Email+password (temporary password when admin-provisioned); magic link/OAuth/passkey future |
 | PII stored | **None** (random ID + public key) | Email or IdP subject |
 | Credential | Device key pair (Ed25519) in OS keychain | Password hash / IdP / passkey |
-| Recovery | Optional recovery code / backup (user-held) | Via IdP / email reset |
+| Recovery | Optional recovery code / backup (user-held) | Admin-issued temporary password; no email self-service yet |
 | Cross-device | Export/import key or recovery code | Seamless (sign in again) |
 | Abuse risk | High (Sybil) → needs controls | Lower |
 | Privacy | **Maximum** | Trade-off (IdP linkage) |
@@ -185,9 +186,11 @@ Rules enforced server-side:
 
 Anonymous accounts are cheap to create. Mitigations (choose per deployment):
 
-1. **Rate limiting:** per IP + per device, tuned for the demo.
+1. **Rate limiting (implemented):** anonymous creation and recovery share the
+   per-client HMAC throttle (20 requests per 10 minutes); per-IP and
+   per-device controls beyond that remain deployment tuning.
 2. **Device attestation:** Apple App Attest / Android Play Integrity to prove
-   a genuine app install.
+   a genuine app install (future work).
 3. **Invite codes:** optional, for closed beta.
 4. **Proof of work:** lightweight client puzzle (optional).
 5. **Behavioural limits:** anonymous accounts start with tighter share/quota
@@ -225,14 +228,15 @@ OAuth/passkeys stay out of the MVP demo (Phase 4).
 
 **Implementation status:** Phases 1–2 **landed** — real sessions, anonymous
 creation, one-time recovery code with rotation, session list/revoke and the web
-UI. Device challenge-response (`/auth/anonymous/verify`) and rate limiting on
-anonymous creation remain follow-ups; see `session-management.md` §10 for the
-checklist.
+UI. Anonymous creation/recovery is rate-limited per client; device
+challenge-response (`/auth/anonymous/verify`) remains a follow-up. See
+`session-management.md` §10 for the checklist.
 
 ## 9. Risks
 
 - **Account loss** for anonymous users without a backup — must be explicit.
-- **Abuse** if anonymous creation is unrate-limited.
+- **Abuse:** anonymous creation is rate-limited per client, but device
+  attestation remains future work.
 - **Scope creep** — keep OAuth/passkeys out of the MVP demo.
 - **Key management** — the OS keychain is the trust root; losing it loses the
   account (same as Model B losing the password, minus the reset path).

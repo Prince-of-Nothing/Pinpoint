@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [INFRA] The convergence middleware only reloads the store for `/api/` requests, so loading a page no longer runs a full database refresh for every static asset.
 - [DOCS] Threat model now records the per-client auth/write throttles and the owner-only 7-day trail instead of "no rate limits" and "latest-only".
 - [DOCS] The security header list in `docs/SECURITY.md` now matches the server: HSTS, nosniff, XFO, Referrer-Policy, Permissions-Policy, COOP, CORP, X-Permitted-Cross-Domain-Policies and the web CSP.
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".

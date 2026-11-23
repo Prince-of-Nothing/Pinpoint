@@ -207,6 +207,12 @@ fn loggable_uri(uri: &axum::http::Uri) -> &str {
 /// calls early-return), so the suite stays green.
 /// State is read from request extensions (not a `State` extractor) so this
 /// layer composes on `Router<AppState>` before `with_state`.
+/// Only API handlers read the shared store. A page load pulls ~20 static
+/// assets; refreshing every table for each one is pure overhead.
+fn needs_store_refresh(path: &str) -> bool {
+    path.starts_with("/api/")
+}
+
 pub async fn converge(
     State(state): State<AppState>,
     req: axum::http::Request<axum::body::Body>,
@@ -214,7 +220,9 @@ pub async fn converge(
 ) -> axum::response::Response {
     let method = req.method().clone();
     eprintln!("CONVERGE run {} {}", method, loggable_uri(req.uri()));
-    state.refresh_from_db().await;
+    if needs_store_refresh(req.uri().path()) {
+        state.refresh_from_db().await;
+    }
     let res = next.run(req).await;
     if method != axum::http::Method::GET {
         state.persist().await;
@@ -1340,6 +1348,17 @@ pub use axum::response::IntoResponse;
 mod offline_router_tests {
     use super::*;
     use tower::ServiceExt;
+
+    #[test]
+    fn only_api_paths_refresh_the_store() {
+        assert!(needs_store_refresh("/api/v1/locations/friends"));
+        assert!(needs_store_refresh("/api/v1/auth/me"));
+        assert!(!needs_store_refresh("/"));
+        assert!(!needs_store_refresh("/app.js"));
+        assert!(!needs_store_refresh("/map/tiles/10/1/2"));
+        assert!(!needs_store_refresh("/health"));
+        assert!(!needs_store_refresh("/offline-packs/demo/manifest.json"));
+    }
 
     #[tokio::test]
     async fn offline_router_serves_the_map_catalog_as_json() {

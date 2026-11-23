@@ -936,6 +936,30 @@ async fn privacy_route_matches() {
 }
 
 #[tokio::test]
+async fn manifest_is_same_origin_and_installable() {
+    let app = pinpoint_desktop::server::router(pinpoint_desktop::server::AppState::new());
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/manifest.webmanifest")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(resp.headers()["content-type"], "application/manifest+json");
+    let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["start_url"], "/");
+    assert_eq!(json["scope"], "/");
+    assert_eq!(json["display"], "standalone");
+    assert_eq!(json["icons"][0]["src"], "/favicon.svg");
+}
+
+#[tokio::test]
 async fn admin_created_user_requires_a_password_and_forces_a_change() {
     use pinpoint_desktop::server::{router, AppState};
 

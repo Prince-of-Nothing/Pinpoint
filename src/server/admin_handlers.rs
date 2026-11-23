@@ -188,6 +188,11 @@ pub async fn update_user(
     };
     state.persist().await;
     let (role_changed, old_role, new_role, active_changed, old_active, new_active) = changes;
+    if active_changed && !new_active {
+        // A disabled account must lose every live session, not just fail the
+        // next login.
+        state.delete_user_sessions(id).await;
+    }
     if role_changed {
         record_admin_action(
             &state,

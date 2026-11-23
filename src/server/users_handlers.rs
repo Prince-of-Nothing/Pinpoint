@@ -299,6 +299,11 @@ pub async fn update_user(
     state
         .sql_update_user(id, full_name.as_deref(), role.as_deref(), is_active)
         .await;
+    if is_active == Some(false) && old_active {
+        // A disabled account must lose every live session, not just fail the
+        // next login.
+        state.delete_user_sessions(id).await;
+    }
     if privileged {
         if let Some(r) = role.as_deref() {
             record_admin_action(

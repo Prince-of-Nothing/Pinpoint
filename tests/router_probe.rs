@@ -200,6 +200,30 @@ async fn session_list_and_revoke_flow() {
     use pinpoint_desktop::server::{router, AppState};
 
     let state = AppState::new();
+    // A session always belongs to a real, active account; the middleware
+    // fails closed otherwise.
+    {
+        let mut store = state.store.lock().unwrap();
+        store.users.push(User {
+            id: 42,
+            username: String::new(),
+            email: "session-user@example.com".into(),
+            full_name: "Session User".into(),
+            role: "resident".into(),
+            is_active: true,
+            must_change_password: false,
+            password_hash: None,
+            totp_secret: None,
+            mfa_enabled: false,
+            mfa_last_step: 0,
+            failed_login_attempts: 0,
+            locked_until: None,
+            auth_method: "email".into(),
+            public_key: None,
+            recovery_code_hash: None,
+            identity_subject: None,
+        });
+    }
     let (sid, csrf) = state.create_session(42, "email", false).await;
     let app = router(state.clone());
     let cookie = format!("session_id={sid}");
@@ -1148,4 +1172,107 @@ async fn admin_created_user_requires_a_password_and_forces_a_change() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn deactivating_an_account_revokes_its_sessions() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    let state = AppState::new();
+    {
+        let mut store = state.store.lock().unwrap();
+        let mk = |id: i64, email: &str, role: &str| User {
+            id,
+            username: String::new(),
+            email: email.to_string(),
+            full_name: format!("User {id}"),
+            role: role.to_string(),
+            is_active: true,
+            must_change_password: false,
+            password_hash: None,
+            totp_secret: None,
+            mfa_enabled: false,
+            mfa_last_step: 0,
+            failed_login_attempts: 0,
+            locked_until: None,
+            auth_method: "email".to_string(),
+            public_key: None,
+            recovery_code_hash: None,
+            identity_subject: None,
+        };
+        store.users = vec![
+            mk(1, "deactivate-admin@example.com", "administrator"),
+            mk(2, "deactivate-target@example.com", "resident"),
+        ];
+        store.next_user_id = 3;
+    }
+    let (admin_sid, admin_csrf) = state.create_session(1, "email", false).await;
+    let (target_sid, _) = state.create_session(2, "email", false).await;
+    let app = router(state.clone());
+
+    let request =
+        |sid: &str, method: &str, uri: &str, csrf: Option<&str>, body: Option<&'static str>| {
+            let mut builder = Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("cookie", format!("session_id={sid}"));
+            if let Some(csrf) = csrf {
+                builder = builder.header("x-csrf-token", csrf);
+            }
+            if body.is_some() {
+                builder = builder.header("content-type", "application/json");
+            }
+            builder.body(Body::from(body.unwrap_or_default())).unwrap()
+        };
+
+    let resp = app
+        .clone()
+        .oneshot(request(&target_sid, "GET", "/api/v1/auth/me", None, None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "target starts signed in");
+
+    let resp = app
+        .clone()
+        .oneshot(request(
+            &admin_sid,
+            "PATCH",
+            "/api/v1/admin/users/2",
+            Some(&admin_csrf),
+            Some(r#"{"is_active":false}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    assert!(
+        state.get_session(&target_sid).await.is_none(),
+        "deactivation must revoke the account's sessions"
+    );
+    let resp = app
+        .clone()
+        .oneshot(request(&target_sid, "GET", "/api/v1/auth/me", None, None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+    // Defense in depth: even a session row recreated by a stale replica must
+    // not authenticate an inactive account.
+    let (zombie_sid, _) = state.create_session(2, "email", false).await;
+    let resp = app
+        .clone()
+        .oneshot(request(&zombie_sid, "GET", "/api/v1/auth/me", None, None))
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::UNAUTHORIZED,
+        "the middleware must fail closed for an inactive account"
+    );
+
+    let resp = app
+        .oneshot(request(&admin_sid, "GET", "/api/v1/auth/me", None, None))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK, "the admin session survives");
 }

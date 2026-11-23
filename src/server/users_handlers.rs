@@ -315,7 +315,13 @@ pub async fn update_user(
         old
     };
     state
-        .sql_update_user(id, full_name.as_deref(), role.as_deref(), is_active)
+        .sql_update_user(
+            id,
+            full_name.as_deref(),
+            role.as_deref(),
+            is_active,
+            must_change,
+        )
         .await;
     if is_active == Some(false) && old_active {
         // A disabled account must lose every live session, not just fail the
@@ -340,6 +346,16 @@ pub async fn update_user(
                 "user.active_change",
                 &format!("user:{id}"),
                 Some(&format!("{old_active} -> {a}")),
+            )
+            .await;
+        }
+        if let Some(flag) = must_change {
+            record_admin_action(
+                &state,
+                cu.user_id,
+                "user.must_change_password",
+                &format!("user:{id}"),
+                Some(if flag { "required" } else { "cleared" }),
             )
             .await;
         }

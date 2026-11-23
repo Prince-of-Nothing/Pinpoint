@@ -197,6 +197,7 @@ impl AppState {
         full_name: Option<&str>,
         role: Option<&str>,
         is_active: Option<bool>,
+        must_change_password: Option<bool>,
     ) {
         let Some(pool) = &self.pg else { return };
         if let Some(n) = full_name {
@@ -216,6 +217,13 @@ impl AppState {
         if let Some(a) = is_active {
             let _ = sqlx::query("UPDATE pinpoint_users SET is_active=$1 WHERE id=$2")
                 .bind(a)
+                .bind(id)
+                .execute(pool)
+                .await;
+        }
+        if let Some(flag) = must_change_password {
+            let _ = sqlx::query("UPDATE pinpoint_users SET must_change_password=$1 WHERE id=$2")
+                .bind(flag)
                 .bind(id)
                 .execute(pool)
                 .await;

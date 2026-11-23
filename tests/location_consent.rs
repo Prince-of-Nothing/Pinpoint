@@ -505,6 +505,7 @@ async fn share_input_is_bounded() {
             "x".repeat(121)
         ),
         format!(r#"{{"friendship_id":{friendship_id},"label":"line\nbreak"}}"#),
+        format!(r#"{{"friendship_id":{friendship_id},"label":"Work\u202etrip"}}"#),
     ] {
         let resp = app
             .clone()

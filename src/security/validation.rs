@@ -213,6 +213,21 @@ impl ValidationResult {
     }
 }
 
+/// Format controls that can reorder or hide displayed text. `char::is_control`
+/// only covers C0/C1; the bidi overrides and isolates are `Cf`.
+const BIDI_CONTROLS: &[char] = &[
+    '\u{200E}', '\u{200F}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}', '\u{2066}',
+    '\u{2067}', '\u{2068}', '\u{2069}',
+];
+
+/// True when `value` contains a character that can distort how a name, label
+/// or note is displayed (C0/C1 controls or Unicode bidi format controls).
+pub fn contains_display_control(value: &str) -> bool {
+    value
+        .chars()
+        .any(|c| c.is_control() || BIDI_CONTROLS.contains(&c))
+}
+
 /// Validate a username/display name.
 pub fn validate_name(name: &str) -> ValidationResult {
     if name.is_empty() {
@@ -226,7 +241,7 @@ pub fn validate_name(name: &str) -> ValidationResult {
         ));
     }
 
-    if name.contains('\0') || name.contains('\n') || name.contains('\r') {
+    if contains_display_control(name) {
         return ValidationResult::invalid("Name contains invalid characters".to_string());
     }
 
@@ -316,5 +331,7 @@ mod tests {
         assert!(validate_name("Alice").is_valid());
         assert!(!validate_name("").is_valid());
         assert!(!validate_name(&"a".repeat(101)).is_valid());
+        assert!(!validate_name("Alice\u{202E}").is_valid());
+        assert!(!validate_name("Ali\tce").is_valid());
     }
 }

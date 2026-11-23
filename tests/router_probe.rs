@@ -1307,3 +1307,16 @@ async fn registration_rejects_an_overlong_name() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn map_tiles_reject_out_of_range_coordinates() {
+    let app = pinpoint_desktop::server::router(pinpoint_desktop::server::AppState::new());
+    for uri in ["/map/tiles/2/4/0", "/map/tiles/2/0/4", "/map/tiles/0/1/0"] {
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{uri}");
+    }
+}

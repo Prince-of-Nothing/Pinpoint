@@ -271,7 +271,8 @@ impl PinpointAppUI {
             let input = ui.add_sized(
                 [input_width, 44.0],
                 egui::TextEdit::singleline(&mut self.message_draft)
-                    .hint_text("Message (1-2000 characters)"),
+                    .hint_text("Message (1-2000 characters)")
+                    .char_limit(2000),
             );
             let enter = input.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
             if theme::primary_button(ui, "Send").clicked() || enter {

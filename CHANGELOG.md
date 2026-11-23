@@ -46,6 +46,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Native: the message composer and both place-search fields stop at the documented limits (2000 and 120 characters).
 - [FIX] Web admin: the create and reset password fields now stop at the server email, name and password limits.
 - [FIX] Search: the shared query limit is 120 characters, matching the map proxy, so client validation and the server agree.
 - [FIX] Clients stop accepting email, name, password, search and username input at the server limits, so oversized text is caught while typing instead of failing the request.

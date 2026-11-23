@@ -38,6 +38,7 @@ let messagePeer = null;
 let messageSafety = null;
 let messageThread = [];
 let messageBusy = false;
+let messagePollBusy = false;
 
 const $ = (id) => document.getElementById(id);
 
@@ -1005,13 +1006,27 @@ $("message-verify")?.addEventListener("click", () => {
   renderMessageSafety();
   $("message-status").textContent = "Safety number verified on this device.";
 });
-setInterval(() => {
-  if (!state.user) return;
-  refreshMessages();
-  if (messagePeer && !$("message-sheet").classList.contains("hidden")) {
-    loadMessageThread(messagePeer.user_id);
+let messagePollBusy = false;
+
+async function pollMessages() {
+  if (!state.user || document.hidden || messagePollBusy) return;
+  messagePollBusy = true;
+  try {
+    await refreshMessages();
+    if (messagePeer && !$("message-sheet").classList.contains("hidden")) {
+      await loadMessageThread(messagePeer.user_id);
+    }
+  } catch (_) {
+    // A transient failure must not break the next tick.
+  } finally {
+    messagePollBusy = false;
   }
-}, 5000);
+}
+
+setInterval(pollMessages, 5000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) pollMessages();
+});
 
 function showRecoveryCode(code) {
   $("recovery-code").textContent = code;

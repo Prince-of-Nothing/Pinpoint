@@ -258,6 +258,16 @@ impl PinpointAppUI {
                         ui.label(
                             RichText::new(format!("{email} · @{username} · {auth}")).size(11.0),
                         );
+                        if user["must_change_password"].as_bool().unwrap_or(false) {
+                            ui.label(
+                                RichText::new("must change password")
+                                    .size(10.0)
+                                    .color(theme::ACCENT),
+                            );
+                        }
+                        if user["mfa_enabled"].as_bool().unwrap_or(false) {
+                            ui.label(RichText::new("MFA").size(10.0).color(theme::SUCCESS));
+                        }
                         egui::ComboBox::from_id_salt(("admin_role", id))
                             .selected_text(&role)
                             .show_ui(ui, |ui| {

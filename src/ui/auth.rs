@@ -34,6 +34,7 @@ impl PinpointAppUI {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.login_email)
                         .hint_text("Email")
+                        .char_limit(254)
                         .desired_width(field_width),
                 );
                 ui.add_space(8.0);
@@ -41,12 +42,14 @@ impl PinpointAppUI {
                     egui::TextEdit::singleline(&mut self.login_password)
                         .password(true)
                         .hint_text("Password")
+                        .char_limit(128)
                         .desired_width(field_width),
                 );
                 ui.add_space(8.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.login_totp)
                         .hint_text("Authenticator code (if MFA is on)")
+                        .char_limit(6)
                         .desired_width(field_width),
                 );
                 ui.add_space(16.0);
@@ -106,6 +109,7 @@ impl PinpointAppUI {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.recover_code_input)
                             .hint_text("Recovery code")
+                            .char_limit(64)
                             .desired_width(field_width),
                     );
                     ui.horizontal(|ui| {
@@ -203,6 +207,7 @@ impl PinpointAppUI {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.register_email)
                         .hint_text("Email")
+                        .char_limit(254)
                         .desired_width(field_width),
                 );
                 ui.add_space(5.0);
@@ -210,12 +215,14 @@ impl PinpointAppUI {
                     egui::TextEdit::singleline(&mut self.register_password)
                         .password(true)
                         .hint_text("Password")
+                        .char_limit(128)
                         .desired_width(field_width),
                 );
                 ui.add_space(5.0);
                 ui.add(
                     egui::TextEdit::singleline(&mut self.register_full_name)
                         .hint_text("Full Name")
+                        .char_limit(100)
                         .desired_width(field_width),
                 );
                 ui.add_space(10.0);

@@ -138,11 +138,14 @@ impl PinpointAppUI {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.admin_new_email)
                             .hint_text("name@example.com")
+                            .char_limit(254)
                             .desired_width(200.0),
                     );
                     ui.label("Full name");
                     ui.add(
-                        egui::TextEdit::singleline(&mut self.admin_new_name).desired_width(180.0),
+                        egui::TextEdit::singleline(&mut self.admin_new_name)
+                            .char_limit(100)
+                            .desired_width(180.0),
                     );
                 });
                 ui.horizontal_wrapped(|ui| {
@@ -162,6 +165,7 @@ impl PinpointAppUI {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.admin_new_password)
                             .password(true)
+                            .char_limit(128)
                             .desired_width(180.0),
                     );
                 });
@@ -208,6 +212,7 @@ impl PinpointAppUI {
                 egui::TextEdit::singleline(&mut self.admin_reset_password)
                     .hint_text("Temporary password for resets")
                     .password(true)
+                    .char_limit(128)
                     .desired_width(220.0),
             );
             ui.checkbox(&mut self.admin_reset_mfa, "Also clear MFA");
@@ -477,6 +482,7 @@ impl PinpointAppUI {
                     egui::TextEdit::singleline(&mut self.change_password_current)
                         .password(true)
                         .hint_text("Current Password")
+                        .char_limit(128)
                         .desired_width(250.0),
                 );
                 ui.add_space(8.0);
@@ -487,6 +493,7 @@ impl PinpointAppUI {
                 egui::TextEdit::singleline(&mut self.change_password_new)
                     .password(true)
                     .hint_text("New Password")
+                    .char_limit(128)
                     .desired_width(250.0),
             );
             ui.add_space(8.0);
@@ -494,6 +501,7 @@ impl PinpointAppUI {
                 egui::TextEdit::singleline(&mut self.change_password_confirm)
                     .password(true)
                     .hint_text("Confirm New Password")
+                    .char_limit(128)
                     .desired_width(250.0),
             );
             ui.add_space(16.0);

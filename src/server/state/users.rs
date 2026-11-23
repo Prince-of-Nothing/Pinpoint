@@ -222,6 +222,24 @@ impl AppState {
         }
     }
 
+    /// Admin-issued temporary password: replace the hash, force a rotation at
+    /// next sign-in, clear lockout, and optionally clear MFA. Returns false
+    /// when a configured database cannot write the row.
+    pub async fn sql_reset_user_auth(&self, id: i64, password_hash: &str, reset_mfa: bool) -> bool {
+        let Some(pool) = &self.pg else {
+            return true;
+        };
+        sqlx::query(
+            "UPDATE pinpoint_users SET password_hash=$2, must_change_password=true, failed_login_attempts=0, locked_until=NULL, totp_secret=CASE WHEN $3 THEN NULL ELSE totp_secret END, mfa_enabled=CASE WHEN $3 THEN false ELSE mfa_enabled END, mfa_last_step=CASE WHEN $3 THEN 0 ELSE mfa_last_step END WHERE id=$1",
+        )
+        .bind(id)
+        .bind(password_hash)
+        .bind(reset_mfa)
+        .execute(pool)
+        .await
+        .is_ok()
+    }
+
     /// Direct user delete; no-op in in-memory mode (store handles it).
     ///
     /// Delete the account row and every row that references it. Statements run

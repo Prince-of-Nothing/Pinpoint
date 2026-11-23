@@ -987,6 +987,17 @@ async fn admin_created_user_requires_a_password_and_forces_a_change() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
+    // Roles are a closed set; a typo must not create an account with an
+    // unrecognised privilege string.
+    let resp = app
+        .clone()
+        .oneshot(request(
+            r#"{"email":"bad-role@example.com","full_name":"Bad Role","password":"TemporaryPass!2026","role":"superuser"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
     let resp = app
         .clone()
         .oneshot(request(

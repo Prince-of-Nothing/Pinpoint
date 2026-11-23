@@ -71,6 +71,7 @@ export const usersModule = {
                   <strong>${escapeHtml(u.full_name)}</strong>
                   <span class="muted">${escapeHtml(u.email)}</span>
                   <span class="badge ${u.auth_method === "anonymous" ? "pending" : "accepted"}">${escapeHtml(u.auth_method)}</span>
+                  ${u.must_change_password ? '<span class="badge pending">must change password</span>' : ""}
                 </td>
                 <td>
                   <select data-action="role" ${u.id === me ? "disabled" : ""}>

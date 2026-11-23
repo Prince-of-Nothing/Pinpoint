@@ -16,6 +16,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [FEATURE] Admin console: the users table flags accounts that still need to change a temporary password.
 - [FEATURE] Web: a same-origin app manifest (name, standalone display, theme colour, SVG icon) so the client can be installed to a home screen; no new third-party assets.
 - [FEATURE] Admin console: create a user with an email, display name, role and temporary password; the account is forced to change that password at first sign-in.
 - [FEATURE] Messages: keep up to eight previous peer public bundles locally (native keychain, web localStorage) and try them newest-first when verifying, so history stays readable after a friend changes device/key; the safety number still flags the change.

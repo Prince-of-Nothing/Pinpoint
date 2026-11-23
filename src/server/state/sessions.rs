@@ -94,6 +94,14 @@ impl AppState {
             .bind(session.mfa_pending)
             .execute(pool)
             .await;
+            // Expired rows are dead credentials. Delete them here so "until
+            // expiry" is a real deletion and not only a rejected lookup.
+            let cutoff = (Utc::now() - session_ttl()).to_rfc3339();
+            let _ =
+                sqlx::query("DELETE FROM pinpoint_sessions WHERE last_activity < $1::timestamptz")
+                    .bind(cutoff)
+                    .execute(pool)
+                    .await;
         }
         // Opportunistic cleanup so revoked/abandoned sessions don't pile up.
         self.sessions.lock().unwrap().retain(|_, s| !s.is_expired());
@@ -270,6 +278,24 @@ mod tests {
             })
             .await
             .unwrap();
+        });
+    }
+
+    #[test]
+    fn create_session_prunes_expired_rows() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let state = AppState::new();
+            let (stale, _) = state.create_session(1, "email", false).await;
+            {
+                let mut sessions = state.sessions.lock().unwrap();
+                let session = sessions.get_mut(&hash_session_id(&stale)).unwrap();
+                session.last_activity = Utc::now() - session_ttl() - ChronoDuration::minutes(1);
+            }
+            let _ = state.create_session(2, "email", false).await;
+            let sessions = state.sessions.lock().unwrap();
+            assert_eq!(sessions.len(), 1, "expired session rows must be pruned");
+            assert!(!sessions.contains_key(&hash_session_id(&stale)));
         });
     }
 

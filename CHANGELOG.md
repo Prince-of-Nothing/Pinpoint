@@ -37,6 +37,7 @@ The per-item flagged list for this release is in
 ### Security
 - [SECURITY] Admin user creation now fails closed when PostgreSQL cannot persist the row and only accepts resident/admin/administrator roles, instead of returning an account that exists only in memory.
 - [SECURITY] New location shares default to a 24-hour expiry on native and web (an existing "until off" share keeps its choice); the server rejects expiries in the past or beyond 7 days.
+- [SECURITY] Expired session rows are pruned from PostgreSQL when a new session is created, so "until expiry" is a real deletion rather than only a rejected lookup.
 - [SECURITY] Admin-created accounts now write the forced password change to PostgreSQL with the row, so a restart or another replica cannot drop the flag and serve the temporary password as a normal account.
 - [SECURITY] Every response now also carries `Permissions-Policy` (geolocation for this origin only; camera, microphone, payment and USB denied), `Cross-Origin-Opener-Policy` and `Cross-Origin-Resource-Policy` both `same-origin`, and `X-Permitted-Cross-Domain-Policies: none`.
 - [SECURITY] Login performs the same Argon2 verification for unknown or inactive emails, so response timing no longer reveals whether an account exists.

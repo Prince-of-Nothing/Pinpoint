@@ -1067,6 +1067,14 @@ async fn admin_created_user_requires_a_password_and_forces_a_change() {
             .unwrap_or(false)
     };
     assert!(must_change, "temporary password must be rotated");
+    let audited = {
+        let store = state.store.lock().unwrap();
+        store
+            .admin_audit
+            .iter()
+            .any(|entry| entry.action == "user.create" && entry.target == "user:2")
+    };
+    assert!(audited, "admin user creation must be audited");
 
     // The temporary password only unlocks the password-change flow.
     let resp = app

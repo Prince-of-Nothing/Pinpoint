@@ -134,8 +134,11 @@ gateway (`docker-compose.yml`). Sessions must therefore be **shared**:
   sessions live in an `Arc<Mutex<HashMap<…>>>` on `AppState`; split services
   without Postgres are **not supported** for auth (documented limitation).
 
-The in-process map already acts as the validated-session cache; Postgres is
-only consulted on a miss (other replica, restart).
+The in-process map caches the session, but PostgreSQL remains the authority:
+every authenticated `/api/` request confirms the row still exists, so a
+logout-all, password change, admin reset or deactivation on another replica
+takes effect on the next request. Static assets and the map proxy skip the
+session lookup entirely.
 
 ## 8. Security properties
 

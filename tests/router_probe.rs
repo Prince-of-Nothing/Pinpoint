@@ -1679,6 +1679,67 @@ async fn admin_can_force_a_password_rotation_with_patch() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let resp = app
+        .clone()
+        .oneshot(request(
+            &target_sid,
+            "GET",
+            "/api/v1/locations/shares",
+            &target_csrf,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // The admin console route accepts the same flag and audits the change.
+    let resp = app
+        .clone()
+        .oneshot(request(
+            &admin_sid,
+            "PATCH",
+            "/api/v1/admin/users/2",
+            &admin_csrf,
+            Some(r#"{"must_change_password":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    {
+        let store = state.store.lock().unwrap();
+        assert!(store.find_user_by_id(2).unwrap().must_change_password);
+        assert!(
+            store.admin_audit.iter().any(
+                |entry| entry.action == "user.must_change_password" && entry.target == "user:2"
+            ),
+            "the admin route must audit the rotation flag"
+        );
+    }
+    let resp = app
+        .clone()
+        .oneshot(request(
+            &target_sid,
+            "GET",
+            "/api/v1/locations/shares",
+            &target_csrf,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+    let resp = app
+        .clone()
+        .oneshot(request(
+            &admin_sid,
+            "PATCH",
+            "/api/v1/admin/users/2",
+            &admin_csrf,
+            Some(r#"{"must_change_password":false}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let resp = app
         .oneshot(request(
             &target_sid,
             "GET",

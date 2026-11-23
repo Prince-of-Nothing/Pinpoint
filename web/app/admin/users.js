@@ -119,6 +119,7 @@ export const usersModule = {
                   <input type="checkbox" data-action="active" ${u.is_active ? "checked" : ""} ${u.id === me ? "disabled" : ""} aria-label="Active" />
                 </td>
                 <td class="admin-actions">
+                  <button type="button" class="secondary" data-action="rotation" ${u.id === me ? "disabled" : ""}>${u.must_change_password ? "Clear rotation" : "Require rotation"}</button>
                   <button type="button" class="secondary" data-action="reset" ${u.id === me ? "disabled" : ""}>Reset password</button>
                   <button type="button" class="secondary" data-action="delete" ${u.id === me ? "disabled" : ""}>Delete</button>
                 </td>
@@ -161,6 +162,22 @@ export const usersModule = {
       const id = Number(row.dataset.id);
       const user = users.find((u) => u.id === id);
       if (!user) return;
+      if (target.dataset.action === "rotation") {
+        try {
+          await ctx.api(`/api/v1/admin/users/${id}`, {
+            method: "PATCH",
+            body: { must_change_password: !user.must_change_password },
+          });
+          ctx.setStatus(
+            user.must_change_password ? "Rotation cleared." : "Password rotation required.",
+          );
+          await load();
+        } catch (err) {
+          ctx.setStatus(err.message, true);
+          await load();
+        }
+        return;
+      }
       if (target.dataset.action === "reset") {
         const details = el.querySelector(".admin-reset");
         details.open = true;

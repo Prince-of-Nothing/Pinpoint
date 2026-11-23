@@ -64,6 +64,9 @@ header. The cookie value is stored server-side only as a SHA-256 hash.
 | DELETE | `/users/me` | cookie + CSRF | `{confirm:"DELETE", current_password}` — erase own account and data |
 | GET | `/users/lookup?username=` | cookie | exact, case-insensitive handle lookup; public card only |
 | GET | `/users/search?q=` | cookie + admin | substring search by email/name/handle |
+| PATCH | `/admin/users/:id` | cookie + admin + CSRF | admin console alias: `{role?, is_active?, must_change_password?}` |
+| POST | `/admin/users/:id/password` | cookie + admin + CSRF | `{password, reset_mfa?}` — temporary password; revokes sessions |
+| DELETE | `/admin/users/:id` | cookie + admin + CSRF | purge an account (admin console) |
 | GET | `/friendships/` | cookie | list friendships involving the caller |
 | POST | `/friendships/` | cookie + CSRF | `{receiver_username}` → pending request (`receiver_email` is a legacy exact-match fallback) |
 | POST | `/friendships/:id/respond` | cookie + CSRF | `{action:"accept"\|"reject"}` (receiver only) |

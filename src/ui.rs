@@ -202,6 +202,7 @@ enum PendingAction {
         id: i64,
         role: Option<String>,
         is_active: Option<bool>,
+        must_change_password: Option<bool>,
     },
     AdminDeleteUser {
         id: i64,
@@ -1313,6 +1314,7 @@ impl PinpointAppUI {
                     id,
                     role,
                     is_active,
+                    must_change_password,
                 } => {
                     let mut body = serde_json::json!({});
                     if let Some(role) = role {
@@ -1320,6 +1322,9 @@ impl PinpointAppUI {
                     }
                     if let Some(active) = is_active {
                         body["is_active"] = serde_json::Value::Bool(active);
+                    }
+                    if let Some(flag) = must_change_password {
+                        body["must_change_password"] = serde_json::Value::Bool(flag);
                     }
                     let _ = app.admin_update_user(id, body).await;
                 }

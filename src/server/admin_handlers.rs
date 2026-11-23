@@ -165,6 +165,7 @@ pub async fn update_user(
         }
     }
     let is_active = body.get("is_active").and_then(Value::as_bool);
+    let must_change = body.get("must_change_password").and_then(Value::as_bool);
     let changes = {
         let mut store = state.store.lock().unwrap();
         let Some(user) = store.users.iter_mut().find(|u| u.id == id) else {
@@ -172,11 +173,15 @@ pub async fn update_user(
         };
         let old_role = user.role.clone();
         let old_active = user.is_active;
+        let old_must_change = user.must_change_password;
         if let Some(role) = role.as_ref() {
             user.role = role.clone();
         }
         if let Some(active) = is_active {
             user.is_active = active;
+        }
+        if let Some(flag) = must_change {
+            user.must_change_password = flag;
         }
         (
             old_role != user.role,
@@ -185,10 +190,21 @@ pub async fn update_user(
             old_active != user.is_active,
             old_active,
             user.is_active,
+            old_must_change != user.must_change_password,
+            user.must_change_password,
         )
     };
     state.persist().await;
-    let (role_changed, old_role, new_role, active_changed, old_active, new_active) = changes;
+    let (
+        role_changed,
+        old_role,
+        new_role,
+        active_changed,
+        old_active,
+        new_active,
+        must_change_changed,
+        new_must_change,
+    ) = changes;
     if active_changed && !new_active {
         // A disabled account must lose every live session, not just fail the
         // next login.
@@ -211,6 +227,20 @@ pub async fn update_user(
             "user.active_change",
             &format!("user:{id}"),
             Some(&format!("{old_active} -> {new_active}")),
+        )
+        .await;
+    }
+    if must_change_changed {
+        record_admin_action(
+            &state,
+            admin.user_id,
+            "user.must_change_password",
+            &format!("user:{id}"),
+            Some(if new_must_change {
+                "required"
+            } else {
+                "cleared"
+            }),
         )
         .await;
     }

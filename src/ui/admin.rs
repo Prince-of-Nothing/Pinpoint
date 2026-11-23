@@ -290,6 +290,7 @@ impl PinpointAppUI {
                                     id,
                                     role: Some(role.clone()),
                                     is_active: None,
+                                    must_change_password: None,
                                 },
                                 ctx,
                             );
@@ -300,9 +301,29 @@ impl PinpointAppUI {
                                     id,
                                     role: None,
                                     is_active: Some(active),
+                                    must_change_password: None,
                                 },
                                 ctx,
                             );
+                        }
+                        if !is_self {
+                            let flagged = user["must_change_password"].as_bool().unwrap_or(false);
+                            let label = if flagged {
+                                "Clear rotation"
+                            } else {
+                                "Require rotation"
+                            };
+                            if ui.button(label).clicked() {
+                                self.spawn_action(
+                                    PendingAction::AdminUpdateUser {
+                                        id,
+                                        role: None,
+                                        is_active: None,
+                                        must_change_password: Some(!flagged),
+                                    },
+                                    ctx,
+                                );
+                            }
                         }
                         if !is_self && ui.button("Delete").clicked() {
                             self.spawn_action(PendingAction::AdminDeleteUser { id }, ctx);

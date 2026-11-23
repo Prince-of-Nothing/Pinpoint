@@ -43,6 +43,11 @@ check("the reset target excludes the signed-in administrator", () => {
   assert.match(source, /users\.filter\(\(u\) => u\.id !== me\)/);
 });
 
+check("the rotation action patches must_change_password", () => {
+  assert.match(source, /data-action="rotation"/);
+  assert.match(source, /must_change_password: !user\.must_change_password/);
+});
+
 check("admin inputs stop at the server limits", () => {
   assert.match(source, /id="admin-create-email"[^>]*maxlength="254"/);
   assert.match(source, /id="admin-create-name"[^>]*maxlength="100"/);

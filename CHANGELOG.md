@@ -82,6 +82,7 @@ The per-item flagged list for this release is in
 - [FIX] Native Today: action errors are surfaced, the note draft clears only after a successful POST and only if unchanged, refresh sections load independently, and a 401 clears private lists without letting an in-flight refresh cross accounts.
 - [FIX] Location permission: Android now requests fine and coarse location in one dialog (Android 12+ ignores a fine-only request), asks on the first map view, retries the fix after a grant, and receives one-shot GPS updates through a broadcast receiver. The web client asks once after sign-in and reports the real geolocation error. Native map controls use a solid fill so their glyphs stay readable over the light basemap.
 ### Security
+- [SECURITY] Email validation counts characters and rejects Unicode bidi/control characters, so a crafted address cannot spoof the admin user list and multibyte addresses at the 254-character limit are accepted.
 - [SECURITY] Recovery-code inputs are cleared on submit and cancel, so the one-time code does not linger in the web or native UI after a failed recovery.
 - [SECURITY] Bookmark files are created owner-only (`0600`) on Unix and the app-data directory `0700`; the security docs now state the AES-GCM bookmark primitives are not wired by default instead of implying encryption at rest.
 - [SECURITY] Anonymous sign-up validates the device name against the display-name rules and bounds the optional public key, so an anonymous account cannot store an oversized or spoofing name.

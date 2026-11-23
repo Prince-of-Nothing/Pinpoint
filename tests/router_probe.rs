@@ -974,6 +974,7 @@ async fn admin_created_user_requires_a_password_and_forces_a_change() {
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 
     let resp = app
+        .clone()
         .oneshot(request(
             r#"{"email":"new-user@example.com","full_name":"New User","password":"TemporaryPass!2026"}"#,
         ))
@@ -985,11 +986,117 @@ async fn admin_created_user_requires_a_password_and_forces_a_change() {
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(json["id"], 2);
-    let store = state.store.lock().unwrap();
-    let created = store.find_user_by_id(2).expect("created user");
-    assert!(
-        created.must_change_password,
-        "temporary password must be rotated"
+    let must_change = {
+        let store = state.store.lock().unwrap();
+        store
+            .find_user_by_id(2)
+            .map(|u| u.must_change_password)
+            .unwrap_or(false)
+    };
+    assert!(must_change, "temporary password must be rotated");
+
+    // The temporary password only unlocks the password-change flow.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"email":"new-user@example.com","password":"TemporaryPass!2026"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let cookie = resp
+        .headers()
+        .get("set-cookie")
+        .expect("session cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let csrf = json["csrf_token"].as_str().unwrap().to_string();
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/friendships/")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::FORBIDDEN,
+        "an unrotated temporary password must not reach the API"
     );
-    drop(store);
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/password/force-change")
+                .header("cookie", &cookie)
+                .header("x-csrf-token", &csrf)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"new_password":"RotatedPass!2026","confirm_password":"RotatedPass!2026"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // A fresh login with the rotated password can use the API.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"email":"new-user@example.com","password":"RotatedPass!2026"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let cookie = resp
+        .headers()
+        .get("set-cookie")
+        .expect("rotated session cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/friendships/")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
 }

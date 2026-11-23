@@ -74,6 +74,20 @@ fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
         })
 }
 
+/// Routes a flagged account may still call so it can rotate its temporary
+/// password. Everything else under `/api/` is blocked until the change.
+fn password_change_path(path: &str) -> bool {
+    matches!(
+        path,
+        "/api/v1/auth/me"
+            | "/api/v1/auth/logout"
+            | "/api/v1/auth/logout-all"
+            | "/api/v1/auth/sessions"
+            | "/api/v1/auth/password/change"
+            | "/api/v1/auth/password/force-change"
+    ) || path.starts_with("/api/v1/auth/sessions/")
+}
+
 /// Validate the session cookie (and CSRF on unsafe methods) and inject
 /// [`CurrentUser`] into request extensions. Unauthenticated requests pass
 /// through without the extension; handlers that require auth fail closed.
@@ -101,6 +115,25 @@ pub async fn session_auth(
                     )
                         .into_response();
                 }
+            }
+            // A temporary admin-issued password must be rotated before the
+            // account can use anything else. Enforced here so every service
+            // and every client gets the same rule.
+            let must_change = {
+                let store = state.store.lock().unwrap();
+                store
+                    .find_user_by_id(session.user_id)
+                    .is_some_and(|u| u.must_change_password)
+            };
+            if must_change
+                && req.uri().path().starts_with("/api/")
+                && !password_change_path(req.uri().path())
+            {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(json!({"error": {"code": "PASSWORD_CHANGE_REQUIRED", "message": "Change the temporary password before continuing."}})),
+                )
+                    .into_response();
             }
             req.extensions_mut().insert(CurrentUser {
                 user_id: session.user_id,

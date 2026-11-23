@@ -34,7 +34,7 @@ The per-item flagged list for this release is in
 ### Security
 - [SECURITY] Android release builds disable app backups and cleartext HTTP; only the on-device loopback map host is exempt, and the emulator host `10.0.2.2` is allowed in debug builds only.
 - [SECURITY] Login performs the same Argon2 verification for unknown or inactive emails, so response timing no longer reveals whether an account exists.
-- [SECURITY] Admin user creation no longer falls back to a shared default password: a password is required and the account is flagged `must_change_password` so the temporary credential must be rotated at first sign-in.
+- [SECURITY] Admin user creation no longer falls back to a shared default password: a password is required and the account is flagged `must_change_password` so the temporary credential must be rotated at first sign-in. Until it is rotated, the shared session middleware allows only password-change, logout, session and `/auth/me` routes.
 - [SECURITY] Disabling MFA now requires a valid unused TOTP code through `POST /api/v1/auth/mfa/disable`; the cookie-only `DELETE /auth/mfa` route is removed, so a stolen session cannot remove the second factor.
 - [FIX] `POST /api/v1/auth/anonymous` returns `409 ALREADY_SIGNED_IN` while a session is active, so repeated taps cannot create duplicate anonymous accounts or sessions.
 - [SECURITY] Emergency alerts publish the latest point without reactivating paused shares; the point is written directly to PostgreSQL.

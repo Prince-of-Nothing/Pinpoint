@@ -69,6 +69,9 @@ async function api(path, { method = "GET", body } = {}) {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     const msg = err?.error?.message || `HTTP ${res.status}`;
+    // An expired or revoked session must not leave a signed-in shell full of
+    // failed actions; return to the login form on the first 401.
+    if (res.status === 401) resetToLogin();
     throw new Error(msg);
   }
   if (res.status === 204) return null;

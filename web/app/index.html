@@ -41,8 +41,8 @@
         <div class="auth-form">
         <h2>Sign in</h2>
         <form id="login-form">
-          <label>Email <input id="login-email" type="email" autocomplete="username" required /></label>
-          <label>Password <input id="login-password" type="password" autocomplete="current-password" required /></label>
+          <label>Email <input id="login-email" type="email" autocomplete="username" maxlength="254" required /></label>
+          <label>Password <input id="login-password" type="password" autocomplete="current-password" maxlength="128" required /></label>
           <label>Authenticator code (if MFA is on)
             <input id="login-totp" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" />
           </label>
@@ -52,16 +52,16 @@
           </div>
         </form>
         <form id="register-form" class="hidden">
-          <label>Email <input id="register-email" type="email" autocomplete="username" required /></label>
-          <label>Full name <input id="register-name" type="text" autocomplete="name" required /></label>
-          <label>Password <input id="register-password" type="password" autocomplete="new-password" required /></label>
+          <label>Email <input id="register-email" type="email" autocomplete="username" maxlength="254" required /></label>
+          <label>Full name <input id="register-name" type="text" autocomplete="name" maxlength="100" required /></label>
+          <label>Password <input id="register-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
           <div class="row">
             <button type="submit">Create account</button>
             <button type="button" id="login-toggle" class="secondary">Back to sign in</button>
           </div>
         </form>
         <form id="recover-form" class="hidden">
-          <label>Recovery code <input id="recover-code" type="text" autocomplete="one-time-code" required /></label>
+          <label>Recovery code <input id="recover-code" type="text" autocomplete="one-time-code" maxlength="64" required /></label>
           <div class="row">
             <button type="submit">Recover account</button>
             <button type="button" id="recover-cancel" class="secondary">Cancel</button>
@@ -136,6 +136,7 @@
               type="search"
               placeholder="Search places…"
               autocomplete="off"
+              maxlength="120"
               aria-label="Search places"
             />
             <button type="submit" class="icon-btn" aria-label="Search">
@@ -370,7 +371,7 @@
             <h2>Friends</h2>
             <ul id="friends-list" class="list"></ul>
             <form id="friend-form">
-              <label>Friend username <input id="friend-username" type="text" placeholder="calm-otter-42" autocomplete="off" required /></label>
+              <label>Friend username <input id="friend-username" type="text" placeholder="calm-otter-42" autocomplete="off" maxlength="64" required /></label>
               <p class="muted">Exact username only — names and emails are not searchable.</p>
               <button type="submit">Send request</button>
             </form>
@@ -465,13 +466,13 @@
             <form id="password-form">
               <h3>Change password</h3>
               <label>Current password
-                <input id="password-current" type="password" autocomplete="current-password" />
+                <input id="password-current" type="password" autocomplete="current-password" maxlength="128" />
               </label>
               <label>New password
-                <input id="password-new" type="password" autocomplete="new-password" />
+                <input id="password-new" type="password" autocomplete="new-password" minlength="8" maxlength="128" />
               </label>
               <label>Confirm new password
-                <input id="password-confirm" type="password" autocomplete="new-password" />
+                <input id="password-confirm" type="password" autocomplete="new-password" maxlength="128" />
               </label>
               <button type="submit">Change password</button>
             </form>
@@ -485,7 +486,7 @@
                 <input id="delete-confirm" type="text" autocomplete="off" />
               </label>
               <label id="delete-password-label">Current password
-                <input id="delete-password" type="password" autocomplete="current-password" />
+                <input id="delete-password" type="password" autocomplete="current-password" maxlength="128" />
               </label>
               <button type="button" id="delete-account" class="danger">Delete my account</button>
             </details>

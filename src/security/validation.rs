@@ -47,7 +47,7 @@ pub mod limits {
     pub const MAX_LONGITUDE: f64 = 180.0;
     pub const MIN_LONGITUDE: f64 = -180.0;
     pub const MAX_ACCURACY_METERS: f64 = 10_000_000.0;
-    pub const MAX_SEARCH_QUERY_LENGTH: usize = 200;
+    pub const MAX_SEARCH_QUERY_LENGTH: usize = 120;
 }
 
 /// Email validation.
@@ -325,8 +325,8 @@ mod tests {
     fn search_query_validation() {
         assert!(validate_search_query("café").is_valid());
         assert!(!validate_search_query("").is_valid());
-        assert!(validate_search_query(&"é".repeat(200)).is_valid());
-        assert!(!validate_search_query(&"é".repeat(201)).is_valid());
+        assert!(validate_search_query(&"é".repeat(120)).is_valid());
+        assert!(!validate_search_query(&"é".repeat(121)).is_valid());
     }
 
     #[test]

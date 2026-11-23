@@ -11,6 +11,7 @@ impl PinpointAppUI {
         ui.add(
             egui::TextEdit::singleline(&mut self.server_url_input)
                 .hint_text("https://pinpoint-uj4y.onrender.com")
+                .char_limit(2048)
                 .desired_width(300.0),
         );
         ui.horizontal_wrapped(|ui| {
@@ -81,6 +82,7 @@ impl PinpointAppUI {
             ui.add(
                 egui::TextEdit::singleline(&mut self.profile_name)
                     .hint_text(&name)
+                    .char_limit(100)
                     .desired_width(220.0),
             );
             if theme::primary_button(ui, "Save name").clicked()
@@ -365,6 +367,7 @@ impl PinpointAppUI {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.mfa_code)
                         .hint_text("6-digit code")
+                        .char_limit(6)
                         .desired_width(140.0),
                 );
                 if ui.button("Disable MFA").clicked() && self.mfa_code.trim().len() == 6 {
@@ -383,6 +386,7 @@ impl PinpointAppUI {
                 ui.add(
                     egui::TextEdit::singleline(&mut self.mfa_code)
                         .hint_text("6-digit code")
+                        .char_limit(6)
                         .desired_width(140.0),
                 );
                 if theme::primary_button(ui, "Verify & enable").clicked()
@@ -534,6 +538,7 @@ impl PinpointAppUI {
                     egui::TextEdit::singleline(&mut self.delete_password)
                         .password(true)
                         .hint_text("Current password")
+                        .char_limit(128)
                         .desired_width(220.0),
                 );
             }

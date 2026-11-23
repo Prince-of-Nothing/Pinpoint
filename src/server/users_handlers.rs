@@ -59,6 +59,10 @@ pub async fn create_user(
     cu: Option<Extension<CurrentUser>>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
+    let admin_id = cu
+        .as_ref()
+        .map(|Extension(user)| user.user_id)
+        .unwrap_or_default();
     if let Err(resp) = require_admin(&state, cu) {
         return resp;
     }
@@ -145,6 +149,14 @@ pub async fn create_user(
         let mut store = state.store.lock().unwrap();
         store.users.push(user.clone());
     }
+    record_admin_action(
+        &state,
+        admin_id,
+        "user.create",
+        &format!("user:{id}"),
+        Some(&format!("@{} created", username_for(id))),
+    )
+    .await;
     (
         StatusCode::CREATED,
         Json(json!({

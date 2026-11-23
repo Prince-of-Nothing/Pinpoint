@@ -96,16 +96,32 @@ pub async fn create_user(
         .and_then(Value::as_str)
         .unwrap_or("resident")
         .to_string();
+    if !["resident", "admin", "administrator"].contains(&role.as_str()) {
+        return error_envelope(
+            "VALIDATION_FAILED",
+            "role must be resident, admin, or administrator",
+        );
+    }
     let hash = crate::security::password::hash_password(
         password,
         crate::security::password::DEFAULT_ITERS,
     );
-    // Direct SQL insert (Auth owns wipe-rewrites of this table). The forced
-    // change flag is written with the row, not only into the in-memory copy,
-    // so a restart or another replica keeps the temporary-password rule.
-    let id = state
+    // Direct SQL insert (Auth owns wipe-rewrites of this table). Fails closed:
+    // a configured database that cannot persist the row must not produce a
+    // 201 for an account that only exists in this process's memory.
+    let id = match state
         .sql_insert_user(&email, &full_name, &role, Some(&hash), true)
-        .await;
+        .await
+    {
+        Ok(id) => id,
+        Err(error) => {
+            tracing::error!(%error, "admin user insert failed");
+            return error_envelope(
+                "STORAGE_UNAVAILABLE",
+                "Account could not be created. Try again.",
+            );
+        }
+    };
     let user = crate::models::User {
         id,
         username: String::new(),

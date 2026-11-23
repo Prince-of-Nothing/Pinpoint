@@ -980,3 +980,52 @@ async fn emergency_does_not_reactivate_paused_shares() {
     assert_eq!(visible.as_array().expect("array").len(), 1);
     assert_eq!(visible[0]["latitude"].as_f64().unwrap(), 47.2);
 }
+
+#[tokio::test]
+async fn place_notes_reject_bidi_display_controls() {
+    let state = pinpoint_desktop::server::AppState::new();
+    let app = pinpoint_desktop::server::router(state);
+    let (cookie, csrf, _, _) = register(&app, "note-bidi@example.invalid", "Note User").await;
+
+    for (label, message) in [("work\u{202E}trip", "ok"), ("Cafe", "line\u{202E}break")] {
+        let body = json!({
+            "latitude": 47.01,
+            "longitude": 28.86,
+            "label": label,
+            "message": message,
+        })
+        .to_string();
+        let resp = app
+            .clone()
+            .oneshot(authed_req(
+                "POST",
+                "/api/v1/locations/notes",
+                &cookie,
+                &csrf,
+                &body,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "body: {body}");
+    }
+
+    // Newlines are allowed in a multi-line note message.
+    let body = json!({
+        "latitude": 47.01,
+        "longitude": 28.86,
+        "label": "Cafe",
+        "message": "line one\nline two",
+    })
+    .to_string();
+    let resp = app
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/notes",
+            &cookie,
+            &csrf,
+            &body,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+}

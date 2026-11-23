@@ -493,6 +493,9 @@ pub async fn create_note(
     if label.chars().count() > 120 {
         return error_envelope("VALIDATION_FAILED", "label must be at most 120 characters");
     }
+    if crate::security::validation::contains_display_control(&label) {
+        return error_envelope("VALIDATION_FAILED", "label contains invalid characters");
+    }
     let message = body
         .get("message")
         .and_then(Value::as_str)
@@ -501,6 +504,9 @@ pub async fn create_note(
         .to_string();
     if message.is_empty() || message.chars().count() > 2000 {
         return error_envelope("VALIDATION_FAILED", "message must be 1..2000 characters");
+    }
+    if crate::security::validation::contains_bidi_control(&message) {
+        return error_envelope("VALIDATION_FAILED", "message contains invalid characters");
     }
     let photo = body
         .get("photo")

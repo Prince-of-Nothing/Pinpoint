@@ -1,27 +1,28 @@
 # Authentication Mechanisms — TOTP, OAuth, Passkeys, Recovery & Abuse Controls
 
 Companion to [`session-management.md`](session-management.md) and
-[`dual-auth-model.md`](dual-auth-model.md). Status: **partially implemented**
-(see the status table in §12).
+[`dual-auth-model.md`](dual-auth-model.md). Status: **implemented** for email/password,
+TOTP, anonymous accounts, recovery, sessions and abuse controls; OAuth login
+wiring, passkeys, magic links and email self-service reset remain future work.
 
 ## 1. Overview
 
 | Mechanism | Purpose | Status |
 |---|---|---|
 | Email + password | identity sign-in (Argon2id) | ✅ implemented |
-| Anonymous device key | no-PII sign-in | 🟡 schema landed, endpoints pending |
+| Anonymous device key | no-PII sign-in | ✅ implemented (device-bound account + recovery code) |
 | **TOTP (MFA)** | second factor for identity accounts | ✅ implemented |
 | OAuth2/OIDC + PKCE | "Sign in with Google/GitHub" | 🟡 primitives implemented, login wiring pending |
 | Passkeys (WebAuthn) | phishing-resistant passwordless | ⬜ planned |
 | Magic links | passwordless email | ⬜ planned |
-| Recovery code | restore an anonymous account | 🟡 design (ADR-0009) |
-| Password reset | restore an identity account | ⬜ not implemented (documented gap) |
-| Lockout + rate limiting | brute-force resistance | 🟡 lockout implemented; server-side rate limit pending |
+| Recovery code | restore an anonymous account | ✅ implemented (single-use, rotates on use) |
+| Password reset | restore an identity account | ✅ admin-issued temporary password; no email self-service |
+| Lockout + rate limiting | brute-force resistance | ✅ lockout + per-client HMAC throttles + per-account write cap |
 | CSRF | cross-site request forgery | ✅ double-submit |
 | Audit logging | accountability | ✅ structured logs |
 | Scraping detection | abuse detection | ✅ primitives |
 | Request signing | tamper-evident requests | ✅ primitives (client-side) |
-| Session/device management | list/revoke sessions | ⬜ planned (session store pending) |
+| Session/device management | list/revoke sessions | ✅ implemented (list/revoke/logout-all) |
 
 ## 2. TOTP (MFA) — implemented
 
@@ -102,15 +103,21 @@ Companion to [`session-management.md`](session-management.md) and
   key registration.
 - Without the code (and without the device key), the account is
   unrecoverable **by design** — the UI must state this explicitly.
-- Status: schema landed (`recovery_code_hash`); endpoint pending.
+- Status: implemented; `auth_handlers::anonymous_recover` rotates the code on
+  every use.
 
-## 7. Password reset — not implemented
+## 7. Password reset — admin-issued temporary password
 
-- Current gap: an identity user who forgets the password cannot recover the
-  account (no reset endpoint). Workaround: admin unlock/reset.
-- Design when added: email token (single-use, 15 min), rate-limited, always
-  return the same response (no account enumeration), revoke all sessions on
-  reset.
+- No email self-service reset: an identity user who forgets the password asks
+  an administrator.
+- `POST /api/v1/admin/users/:id/password` hashes a temporary password, sets
+  `must_change_password`, clears the lockout counters and optionally MFA,
+  revokes every session for the target and records `user.password_reset` in
+  the admin audit log.
+- The user signs in with the temporary password and must rotate it at the
+  first request (`/auth/password/force-change`).
+- Self-service change from the Account panel requires the current password and
+  revokes all sessions.
 
 ## 8. Lockout & rate limiting
 
@@ -119,11 +126,14 @@ Companion to [`session-management.md`](session-management.md) and
   available via the admin role.
 - **Client-side rate limiter (implemented):** `src/security/rate_limit.rs`
   (`api_login`, `api_general`, `nominatim` buckets) used by the UI/app.
-- **Server-side rate limiting (pending):** per-IP + per-account limits belong
-  at the gateway/service layer. The archived Go backend had this; the Rust
-  backend must add it before public traffic.
-- **Anonymous abuse:** `/auth/anonymous` must be rate-limited per IP/device,
-  optionally with device attestation (App Attest / Play Integrity).
+- **Server-side rate limiting (implemented, per replica):** per-client HMAC
+  keys for login (30 per 5 min), register (10/h), anonymous/recovery
+  (20 per 10 min) and diagnostics (10/h); authenticated unsafe writes are
+  capped at 120/min per account; the map proxy adds tile/search/route caps.
+  The raw client address is never stored.
+- **Anonymous abuse:** `/auth/anonymous` and `/auth/anonymous/recover` share
+  the anonymous/recovery throttle. Device attestation (App Attest / Play
+  Integrity) remains future work.
 
 ## 9. CSRF
 
@@ -146,13 +156,17 @@ Companion to [`session-management.md`](session-management.md) and
 - **Log hygiene:** no tokens, passwords, coordinates, or recovery codes in
   logs; security events go to structured stdout (queryable table pending).
 
-## 11. Session / device management — planned
+## 11. Session / device management — implemented
 
-Once the session store lands:
-- `GET /auth/sessions` → list (device, auth_method, created, last_activity).
+- `GET /auth/sessions` → list (device, auth_method, created, last_activity;
+  the full session id is a bearer secret, so only an 8-character prefix is
+  exposed).
 - `DELETE /auth/sessions/:id` → revoke one.
 - `POST /auth/logout-all` → revoke all.
-- Display in Profile → Security.
+- Displayed in Profile → Security and the web Account panel.
+- PostgreSQL is the cross-replica authority: an authenticated API request
+  confirms the session row still exists, so a revocation on another replica
+  takes effect on the next request.
 
 ## 12. Implementation status (honest)
 
@@ -160,21 +174,21 @@ Once the session store lands:
 |---|---|---|
 | TOTP generation/verification | ✅ | `mfa::tests` (RFC vectors, drift, replay, leading-zero) |
 | TOTP enrolment/verify/status/disable endpoints | ✅ | `src/server/auth_handlers.rs`; e2e MFA checks |
-| TOTP session gate (`mfa_pending`) | ⬜ | pending session store |
+| TOTP session gate (`mfa_pending`) | ✅ | `session_auth` + auth handlers |
 | OAuth PKCE/state/redirect primitives | ✅ | `oauth::tests` |
 | OAuth callback/token exchange/linking | ⬜ | pending |
 | Passkeys | ⬜ | planned |
 | Magic links | ⬜ | planned |
-| Anonymous recovery code | 🟡 | schema landed; endpoint pending |
-| Password reset | ⬜ | documented gap |
+| Anonymous recovery code | ✅ | `auth_handlers::anonymous_recover` |
+| Password reset | ✅ | `admin_handlers::reset_password` |
 | Lockout | ✅ | `auth_handlers::login` |
 | Client-side rate limiter | ✅ | `rate_limit` tests |
-| Server-side rate limiting | ⬜ | pending |
+| Server-side rate limiting | ✅ | `server/state/rate_limit.rs`, `router_probe` |
 | CSRF double-submit | ✅ | `tests/contract.rs` |
 | Audit logging | ✅ | `src/security/audit.rs` |
 | Scraping detection | ✅ | `src/security/scrape.rs` |
 | Request signing (client) | ✅ | `src/security/signing.rs` |
-| Session/device management | ⬜ | pending session store |
+| Session/device management | ✅ | `auth_handlers::list_sessions/revoke_session/logout_all` |
 
 ## 13. Trade-offs & decisions
 

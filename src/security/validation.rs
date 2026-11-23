@@ -228,6 +228,13 @@ pub fn contains_display_control(value: &str) -> bool {
         .any(|c| c.is_control() || BIDI_CONTROLS.contains(&c))
 }
 
+/// True when `value` contains a Unicode bidi format control. Unlike
+/// [`contains_display_control`], ordinary newlines and tabs are allowed so a
+/// multi-line note message can still contain paragraphs.
+pub fn contains_bidi_control(value: &str) -> bool {
+    value.chars().any(|c| BIDI_CONTROLS.contains(&c))
+}
+
 /// Validate a username/display name.
 pub fn validate_name(name: &str) -> ValidationResult {
     if name.is_empty() {

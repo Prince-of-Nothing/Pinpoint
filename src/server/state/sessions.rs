@@ -126,6 +126,56 @@ impl AppState {
 
     pub async fn get_session(&self, raw_session_id: &str) -> Option<StoredSession> {
         let session_id = hash_session_id(raw_session_id);
+        if let Some(pool) = &self.pg {
+            // PostgreSQL is the authority across replicas: this read confirms
+            // the row still exists after a remote revocation and refreshes the
+            // activity/created timestamps used for expiry.
+            match sqlx::query_as::<_, (String, i64, String, String, bool, String, String)>(
+                "SELECT session_id, user_id, csrf_token, auth_method, mfa_pending, created_at::text, last_activity::text FROM pinpoint_sessions WHERE session_id=$1",
+            )
+            .bind(&session_id)
+            .fetch_optional(pool)
+            .await
+            {
+                Ok(Some((
+                    session_id,
+                    user_id,
+                    csrf_token,
+                    auth_method,
+                    mfa_pending,
+                    created,
+                    last,
+                ))) => {
+                    let s = StoredSession {
+                        session_id,
+                        user_id,
+                        csrf_token,
+                        auth_method,
+                        mfa_pending,
+                        created_at: parse_ts(&created),
+                        last_activity: parse_ts(&last),
+                    };
+                    if s.is_expired() {
+                        self.delete_session(&s.session_id).await;
+                        return None;
+                    }
+                    self.sessions
+                        .lock()
+                        .unwrap()
+                        .insert(s.session_id.clone(), s.clone());
+                    return Some(s);
+                }
+                Ok(None) => {
+                    // Revoked or pruned: drop the local copy as well.
+                    self.sessions.lock().unwrap().remove(&session_id);
+                    return None;
+                }
+                Err(_) => {
+                    // Database blip: fall back to the last validated copy
+                    // rather than signing every user out.
+                }
+            }
+        }
         let cached = self.sessions.lock().unwrap().get(&session_id).cloned();
         if let Some(s) = cached {
             if s.is_expired() {
@@ -134,35 +184,7 @@ impl AppState {
             }
             return Some(s);
         }
-        let pool = self.pg.as_ref()?;
-        // `::text` keeps the query independent of sqlx chrono features.
-        let row: Option<(String, i64, String, String, bool, String, String)> = sqlx::query_as(
-            "SELECT session_id, user_id, csrf_token, auth_method, mfa_pending, created_at::text, last_activity::text FROM pinpoint_sessions WHERE session_id=$1",
-        )
-        .bind(&session_id)
-        .fetch_optional(pool)
-        .await
-        .ok()
-        .flatten();
-        let (session_id, user_id, csrf_token, auth_method, mfa_pending, created, last) = row?;
-        let s = StoredSession {
-            session_id,
-            user_id,
-            csrf_token,
-            auth_method,
-            mfa_pending,
-            created_at: parse_ts(&created),
-            last_activity: parse_ts(&last),
-        };
-        if s.is_expired() {
-            self.delete_session(&s.session_id).await;
-            return None;
-        }
-        self.sessions
-            .lock()
-            .unwrap()
-            .insert(s.session_id.clone(), s.clone());
-        Some(s)
+        None
     }
 
     /// Active (non-expired) sessions for one user, newest activity first.

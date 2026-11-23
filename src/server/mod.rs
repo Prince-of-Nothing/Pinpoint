@@ -96,6 +96,12 @@ pub async fn session_auth(
     mut req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> axum::response::Response {
+    // Only `/api/` handlers authenticate. Static assets, the map proxy,
+    // privacy/status pages and health checks skip the session lookup (and its
+    // cross-replica row check) entirely.
+    if !req.uri().path().starts_with("/api/") {
+        return next.run(req).await;
+    }
     // Auth endpoints are unauthenticated, so throttle them per client before
     // any password or token work. The key is an HMAC of the address; the raw
     // address is never stored.

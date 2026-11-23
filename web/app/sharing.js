@@ -142,14 +142,18 @@ export function initSharing({ api, setStatus, getUser, onChanged }) {
     const select = $("share-duration");
     select.querySelector('option[value="keep"]')?.remove();
     const expiry = expiryDate(current);
-    if (expiry && shareStatus(current) !== "expired") {
+    const status = shareStatus(current);
+    // The server rejects an expiry beyond seven days; a legacy share with a
+    // longer one must not offer "Keep current" and fail on save.
+    const withinMax = expiry && expiry.getTime() <= Date.now() + 7 * 86_400_000;
+    if (withinMax && status !== "expired") {
       const keep = document.createElement("option");
       keep.value = "keep";
       keep.textContent = `Keep current (until ${expiry.toLocaleString()})`;
       select.insertBefore(keep, select.firstChild);
       select.value = "keep";
     } else {
-      select.value = !current || shareStatus(current) === "expired" ? "24" : "0";
+      select.value = !current || expiry || status === "expired" ? "24" : "0";
     }
   }
 

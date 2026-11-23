@@ -14,7 +14,7 @@
  * name is versioned, and activation removes older Pinpoint caches.
  */
 
-const VERSION = "pinpoint-offline-v8";
+const VERSION = "pinpoint-offline-v9";
 const CACHE_PREFIX = "pinpoint-offline-";
 const SHELL_CACHE = `${CACHE_PREFIX}${VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_PREFIX}${VERSION}-runtime`;
@@ -218,27 +218,17 @@ async function serveShell(request) {
   const url = new URL(request.url);
   const shell = await caches.open(SHELL_CACHE);
   const runtime = await caches.open(RUNTIME_CACHE);
+  const cached = (await shell.match(request)) || (await runtime.match(request));
 
-  // `offline.js` asks for manifests with `cache: "no-store"` so an update
-  // check sees the published manifest while online. Honour that by going to
-  // the network first and refreshing the cached copy; fall back to the cache
-  // when offline.
-  const bypassCache = request.cache === "no-store" || request.cache === "reload";
-
-  if (!bypassCache) {
-    const cached = await shell.match(request);
-    if (cached) {
-      stats.shellCacheHits += 1;
-      return cached;
-    }
-
-    const runtimeCached = await runtime.match(request);
-    if (runtimeCached) {
-      stats.shellCacheHits += 1;
-      return runtimeCached;
-    }
+  // Offline: never wait for a doomed network attempt.
+  if (cached && self.navigator.onLine === false) {
+    stats.shellCacheHits += 1;
+    return cached;
   }
 
+  // Network-first: a deployment must reach an installed client on the next
+  // load. The cache is the offline fallback, not the primary shell copy, so a
+  // changed app.js or index.html is not pinned behind an unchanged sw.js.
   try {
     const response = await fetch(request);
     stats.networkFetches += 1;
@@ -260,7 +250,6 @@ async function serveShell(request) {
 
     return response;
   } catch (error) {
-    const cached = (await shell.match(request)) || (await runtime.match(request));
     if (cached) {
       stats.offlineFallbacks += 1;
       return cached;
@@ -312,6 +301,9 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
+
+  // API responses never pass through Cache Storage.
+  if (url.pathname.startsWith("/api/")) return;
 
   if (isPackPath(url.pathname)) {
     event.respondWith(servePack(request, url.pathname));

@@ -31,6 +31,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Web: the service worker is network-first for the app shell, so a deployment reaches installed clients on the next load instead of being pinned behind an unchanged worker; the cache is bumped to v9 and API calls bypass it entirely.
 - [FIX] Native sharing: editing an existing share keeps its current expiry by default instead of extending a short share to 24 hours; an expired share still defaults to a fresh day.
 - [FIX] Web: a legacy share whose expiry is beyond seven days no longer offers "Keep current" (the server cap rejects it); the form defaults to 24 hours.
 - [FIX] Web: Escape closes the topmost place, sharing, route or chat sheet; the admin overlay and the sharing drawer keep priority.

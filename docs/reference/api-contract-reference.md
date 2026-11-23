@@ -273,7 +273,7 @@ Create a directional location share.
 **Validation Rules:**
 - `precision`: Must be `exact` or `approximate`
 - `purpose`: Must be one of `safety`, `meetup`, `navigation`, `check-in`
-- `expires_at`: Maximum 24 hours from creation
+- `expires_at`: Must be in the future and within 7 days of creation
 
 **Errors:**
 - `400 Bad Request` — Invalid precision, purpose, or expiry

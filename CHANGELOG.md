@@ -32,6 +32,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Web: a temporary-password account skips the authenticated refresh and message polling, so the Account panel is not flooded with 403 responses while the password is rotated.
 - [FIX] Web: message polling pauses while the tab is hidden, resumes on visibility, and never overlaps itself, so a background tab stops making requests every five seconds.
 - [FIX] Web: the service worker is network-first for the app shell, so a deployment reaches installed clients on the next load instead of being pinned behind an unchanged worker; the cache is bumped to v9 and API calls bypass it entirely.
 - [FIX] Native sharing: editing an existing share keeps its current expiry by default instead of extending a short share to 24 hours; an expired share still defaults to a fresh day.

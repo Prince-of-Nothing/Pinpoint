@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [DOCS] The public privacy policy now states the 7-day trail is pruned hourly, lists encrypted messages, explains the keyed-HMAC abuse limits, and drops the stale 1.5.0 build label.
 - [INFRA] The convergence middleware only reloads the store for `/api/` requests, so loading a page no longer runs a full database refresh for every static asset.
 - [DOCS] Threat model now records the per-client auth/write throttles and the owner-only 7-day trail instead of "no rate limits" and "latest-only".
 - [DOCS] The security header list in `docs/SECURITY.md` now matches the server: HSTS, nosniff, XFO, Referrer-Policy, Permissions-Policy, COOP, CORP, X-Permitted-Cross-Domain-Policies and the web CSP.

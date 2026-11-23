@@ -9,7 +9,7 @@
 <body>
 <main>
   <h1>Privacy policy</h1>
-  <p class="muted">Effective 16 November 2026 · Version 1.5.0 · Academic project, not a commercial service.</p>
+  <p class="muted">Effective 23 November 2026 · Version 2.6.1 · Academic project, not a commercial service.</p>
 
   <p>
     Pinpoint is a privacy-first location-sharing project. This page explains what
@@ -25,19 +25,20 @@
     <tr><td>Email and Argon2id password hash</td><td>Sign-in and account identification</td><td>Until account deletion</td></tr>
     <tr><td>Display name and public username</td><td>Shown to people you share with; the username is how friends find you</td><td>Until changed or deleted</td></tr>
     <tr><td>Role and account flags</td><td>Access control and lockout</td><td>Until changed or deleted</td></tr>
-    <tr><td>Current location publish</td><td>Served only to recipients of an active, explicit share</td><td>Latest overwritten by the next publish; a private 24-hour trail is visible only to you and is pruned to 7 days on the next publish</td></tr>
+    <tr><td>Current location publish</td><td>Served only to recipients of an active, explicit share</td><td>Latest overwritten by the next publish; a private trail is retained for 7 days, pruned hourly, and the app returns the last 24 hours. Only you can read it</td></tr>
     <tr><td>Background sharing (Android, opt-in)</td><td>Publishes the latest location on the interval you choose while the app is in the background</td><td>Off by default; a persistent notification stays visible and you can stop it at any time</td></tr>
     <tr><td>Share permissions</td><td>The consent records themselves</td><td>Until revoked or expired</td></tr>
     <tr><td>Friend relations</td><td>Precondition for sharing</td><td>Until removed</td></tr>
     <tr><td>Session metadata</td><td>Keep you signed in and let you revoke devices</td><td>Until sign-out, revoke, expiry or account deletion</td></tr>
+    <tr><td>Encrypted messages</td><td>1:1 text with accepted friends; the server stores ciphertext, public keys and read state</td><td>Until account deletion; the server cannot read the message body</td></tr>
     <tr><td>Diagnostic or crash report</td><td>Debugging, only when you press Send report</td><td>Until reviewed and removed</td></tr>
   </table>
 
   <h2>What we do not do</h2>
   <ul>
     <li>No advertising, profiling, third-party analytics or data sales.</li>
-    <li>No friend-visible location history: the server stores the latest publish plus a private 24-hour trail that only you can read. The trail is pruned to 7 days on the next publish.</li>
-    <li>No IP-based geolocation, WebRTC location, or tracking IP addresses for analytics.</li>
+    <li>No friend-visible location history: the server stores the latest publish plus a private trail that only you can read. The trail is pruned hourly after 7 days.</li>
+    <li>No IP-based geolocation, WebRTC location, or tracking IP addresses for analytics. Abuse limits use a short-lived keyed hash of the client address; raw IP addresses are not stored.</li>
     <li>No friend list, account data or trail sent to OpenStreetMap. Your searches, map tiles and the route endpoints you choose reach the OSM services.</li>
     <li>No hidden requests. The only automatic external request is at most one GitHub releases check a day for the same app version, plus one after installing a new version. It sends only <code>Pinpoint/&lt;version&gt;</code> as the User-Agent. GitHub sees the request IP, as with any HTTPS request. You can turn it off in Profile &amp; settings.</li>
   </ul>
@@ -54,14 +55,15 @@
   <p>
     Location updates travel over HTTPS. The backend stores the latest location
     record per user so it can deliver an active share, plus a private trail that
-    only the owner can read; there is no friend-visible location history. In the current 1.5.0 hosted build the backend can read the
-    latest coordinates to enforce precision and consent — do not treat this build
-    as end-to-end encrypted for server-delivered locations. The app also derives
-    a per-user E2E key from your password and keeps it in the device keychain;
-    ciphertext-only delivery is future work, not a 1.5.0 guarantee. The app lock
-    PIN is stored only as an Argon2id hash on the device; biometrics never leave
-    the device. Signing out or deleting the account removes the local session
-    and the local key.
+    only the owner can read; there is no friend-visible location history. In the
+    current hosted build the backend can read the latest coordinates to enforce
+    precision and consent — server-delivered locations are not end-to-end
+    encrypted. Messages between friends are different: the client encrypts them
+    with X25519, HKDF-SHA256 and AES-256-GCM, and the server stores only
+    ciphertext, public keys and read state. The app keeps its local encryption
+    keys in the device keychain. The app lock PIN is stored only as an Argon2id
+    hash on the device; biometrics never leave the device. Signing out or
+    deleting the account removes the local session and the local keys.
   </p>
 
   <h2>Diagnostics and crash reports</h2>
@@ -77,7 +79,7 @@
   <ul>
     <li><strong>Access / export:</strong> your profile and current sharing state are visible in the app; open a GitHub issue for a machine-readable export.</li>
     <li><strong>Rectification:</strong> edit your display name in Profile &amp; settings or the web Account panel.</li>
-    <li><strong>Erasure:</strong> delete your account in Profile &amp; settings → Danger zone, or the web Account → Delete account. This immediately removes your profile, friendships, shares, current location, private trail, notes, check-ins, emergencies and sessions.</li>
+    <li><strong>Erasure:</strong> delete your account in Profile &amp; settings → Danger zone, or the web Account → Delete account. This immediately removes your profile, friendships, shares, current location, private trail, notes, check-ins, emergencies, encrypted messages, message keys and sessions.</li>
     <li><strong>Objection / withdrawal:</strong> revoke a share or turn off the update check at any time.</li>
   </ul>
 

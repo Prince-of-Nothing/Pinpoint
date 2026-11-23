@@ -491,6 +491,10 @@ pub fn admin_router() -> Router<AppState> {
             patch(admin_handlers::update_user).delete(admin_handlers::delete_user),
         )
         .route(
+            "/api/v1/admin/users/:id/password",
+            post(admin_handlers::reset_password),
+        )
+        .route(
             "/api/v1/admin/diagnostics",
             get(diagnostic_handlers::list_reports),
         )

@@ -60,6 +60,7 @@ fn admin_user_json(u: &crate::models::User) -> Value {
         "is_active": u.is_active,
         "must_change_password": u.must_change_password,
         "auth_method": u.auth_method,
+        "mfa_enabled": u.mfa_enabled,
     })
 }
 
@@ -216,7 +217,86 @@ pub async fn update_user(
     (StatusCode::OK, Json(json!({"message": "User updated."}))).into_response()
 }
 
-/// `DELETE /api/v1/admin/users/:id` — purge the account and everything tied
+/// `POST /api/v1/admin/users/:id/password` - issue a temporary password.
+///
+/// A reset revokes every session and forces a rotation at next sign-in. MFA is
+/// cleared only when the admin explicitly asks, so a stolen admin session
+/// cannot silently strip a second factor.
+pub async fn reset_password(
+    State(state): State<AppState>,
+    cu: Option<Extension<CurrentUser>>,
+    Path(id): Path<i64>,
+    Json(body): Json<Value>,
+) -> impl IntoResponse {
+    let admin = match require_admin(&state, cu) {
+        Ok(cu) => cu,
+        Err(resp) => return resp,
+    };
+    if admin.user_id == id {
+        return error_envelope(
+            "VALIDATION_FAILED",
+            "Use profile settings to change your own password.",
+        );
+    }
+    let Some(password) = body.get("password").and_then(Value::as_str) else {
+        return error_envelope("VALIDATION_FAILED", "password is required");
+    };
+    let check = crate::security::validation::validate_password(password);
+    if !check.is_valid() {
+        return error_envelope("VALIDATION_FAILED", &check.errors.join("; "));
+    }
+    let reset_mfa = body
+        .get("reset_mfa")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let hash = crate::security::password::hash_password(
+        password,
+        crate::security::password::DEFAULT_ITERS,
+    );
+    let handle = {
+        let mut store = state.store.lock().unwrap();
+        let Some(user) = store.users.iter_mut().find(|u| u.id == id) else {
+            return error_envelope("USER_NOT_FOUND", "User not found.");
+        };
+        user.password_hash = Some(hash.clone());
+        user.must_change_password = true;
+        user.failed_login_attempts = 0;
+        user.locked_until = None;
+        if reset_mfa {
+            user.totp_secret = None;
+            user.mfa_enabled = false;
+            user.mfa_last_step = 0;
+        }
+        super::usernames::username_for(user.id)
+    };
+    if !state.sql_reset_user_auth(id, &hash, reset_mfa).await {
+        return error_envelope(
+            "STORAGE_UNAVAILABLE",
+            "Password could not be reset. Try again.",
+        );
+    }
+    state.delete_user_sessions(id).await;
+    let detail = if reset_mfa {
+        format!("@{handle} temporary password issued, MFA cleared")
+    } else {
+        format!("@{handle} temporary password issued")
+    };
+    record_admin_action(
+        &state,
+        admin.user_id,
+        "user.password_reset",
+        &format!("user:{id}"),
+        Some(&detail),
+    )
+    .await;
+    (
+        StatusCode::OK,
+        Json(json!({"message": "Temporary password issued."})),
+    )
+        .into_response()
+}
+
+/// `DELETE /api/v1/admin/users/:id` - purge the account and everything tied
 /// to it, then revoke every session. Refuses self-deletion.
 pub async fn delete_user(
     State(state): State<AppState>,

@@ -72,6 +72,7 @@ export const usersModule = {
                   <span class="muted">${escapeHtml(u.email)}</span>
                   <span class="badge ${u.auth_method === "anonymous" ? "pending" : "accepted"}">${escapeHtml(u.auth_method)}</span>
                   ${u.must_change_password ? '<span class="badge pending">must change password</span>' : ""}
+                  ${u.mfa_enabled ? '<span class="badge accepted">MFA</span>' : ""}
                 </td>
                 <td>
                   <select data-action="role" ${u.id === me ? "disabled" : ""}>
@@ -84,6 +85,7 @@ export const usersModule = {
                   <input type="checkbox" data-action="active" ${u.is_active ? "checked" : ""} ${u.id === me ? "disabled" : ""} aria-label="Active" />
                 </td>
                 <td class="admin-actions">
+                  <button type="button" class="secondary" data-action="reset" ${u.id === me ? "disabled" : ""}>Reset password</button>
                   <button type="button" class="secondary" data-action="delete" ${u.id === me ? "disabled" : ""}>Delete</button>
                 </td>
               </tr>`,
@@ -120,12 +122,34 @@ export const usersModule = {
 
     table.addEventListener("click", async (event) => {
       const target = event.target;
-      if (target.dataset.action !== "delete") return;
       const row = target.closest("tr[data-id]");
       if (!row) return;
       const id = Number(row.dataset.id);
       const user = users.find((u) => u.id === id);
       if (!user) return;
+      if (target.dataset.action === "reset") {
+        const password = window.prompt(
+          `New temporary password for ${user.email} (at least 8 characters):`,
+        );
+        if (!password) return;
+        const resetMfa = user.mfa_enabled
+          ? window.confirm(
+              "This account has MFA. Clear MFA as well?\n\nCancel keeps MFA.",
+            )
+          : false;
+        try {
+          await ctx.api(`/api/v1/admin/users/${id}/password`, {
+            method: "POST",
+            body: { password, reset_mfa: resetMfa },
+          });
+          ctx.setStatus("Temporary password issued. Share it securely.");
+          await load();
+        } catch (err) {
+          ctx.setStatus(err.message, true);
+        }
+        return;
+      }
+      if (target.dataset.action !== "delete") return;
       const ok = window.confirm(
         `Delete ${user.email}?\n\nThis removes the account, sessions, friendships, shares, locations, check-ins and emergencies. This cannot be undone.`,
       );

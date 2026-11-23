@@ -1320,3 +1320,151 @@ async fn map_tiles_reject_out_of_range_coordinates() {
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{uri}");
     }
 }
+
+#[tokio::test]
+async fn admin_can_issue_a_temporary_password() {
+    use pinpoint_desktop::security::password::{hash_password, verify_password, DEFAULT_ITERS};
+    use pinpoint_desktop::server::{router, AppState};
+
+    let state = AppState::new();
+    let old_hash = hash_password("OldPass!2026", DEFAULT_ITERS);
+    {
+        let mut store = state.store.lock().unwrap();
+        let mk = |id: i64, email: &str, role: &str, hash: Option<String>| User {
+            id,
+            username: String::new(),
+            email: email.to_string(),
+            full_name: format!("User {id}"),
+            role: role.to_string(),
+            is_active: true,
+            must_change_password: false,
+            password_hash: hash,
+            totp_secret: None,
+            mfa_enabled: false,
+            mfa_last_step: 0,
+            failed_login_attempts: 0,
+            locked_until: None,
+            auth_method: "email".to_string(),
+            public_key: None,
+            recovery_code_hash: None,
+            identity_subject: None,
+        };
+        store.users = vec![
+            mk(1, "reset-admin@example.com", "administrator", None),
+            mk(2, "reset-target@example.com", "resident", Some(old_hash)),
+        ];
+        store.users[1].totp_secret = Some("JBSWY3DPEHPK3PXP".into());
+        store.users[1].mfa_enabled = true;
+        store.next_user_id = 3;
+    }
+    let (admin_sid, admin_csrf) = state.create_session(1, "email", false).await;
+    let (target_sid, _) = state.create_session(2, "email", false).await;
+    let app = router(state.clone());
+
+    let request =
+        |sid: &str, method: &str, uri: &str, csrf: Option<&str>, body: Option<&'static str>| {
+            let mut builder = Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("cookie", format!("session_id={sid}"));
+            if let Some(csrf) = csrf {
+                builder = builder.header("x-csrf-token", csrf);
+            }
+            if body.is_some() {
+                builder = builder.header("content-type", "application/json");
+            }
+            builder.body(Body::from(body.unwrap_or_default())).unwrap()
+        };
+
+    // Self-reset is refused; the Account panel is the self-service path.
+    let resp = app
+        .clone()
+        .oneshot(request(
+            &admin_sid,
+            "POST",
+            "/api/v1/admin/users/1/password",
+            Some(&admin_csrf),
+            Some(r#"{"password":"TempPass!2026"}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    let resp = app
+        .clone()
+        .oneshot(request(
+            &admin_sid,
+            "POST",
+            "/api/v1/admin/users/2/password",
+            Some(&admin_csrf),
+            Some(r#"{"password":"TempPass!2026","reset_mfa":true}"#),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(
+        state.get_session(&target_sid).await.is_none(),
+        "reset must revoke sessions"
+    );
+
+    let (hash, must_change, mfa_enabled, totp_secret) = {
+        let store = state.store.lock().unwrap();
+        let user = store.find_user_by_id(2).unwrap();
+        (
+            user.password_hash.clone().unwrap(),
+            user.must_change_password,
+            user.mfa_enabled,
+            user.totp_secret.clone(),
+        )
+    };
+    assert!(verify_password("TempPass!2026", &hash));
+    assert!(must_change);
+    assert!(!mfa_enabled);
+    assert!(totp_secret.is_none());
+
+    // Old password fails; the temporary one works and is flagged for rotation.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"email":"reset-target@example.com","password":"OldPass!2026"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"email":"reset-target@example.com","password":"TempPass!2026"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["user"]["must_change_password"], true);
+
+    let audited = {
+        let store = state.store.lock().unwrap();
+        store
+            .admin_audit
+            .iter()
+            .any(|entry| entry.action == "user.password_reset" && entry.target == "user:2")
+    };
+    assert!(audited, "password reset must be audited");
+}

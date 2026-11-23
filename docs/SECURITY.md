@@ -73,8 +73,9 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
 
 ### Abuse resistance
 - Per-account login lockout (five failed attempts, 15 minutes) and per-client
-  throttles on login (30/5 min), registration (10/h) and anonymous/recovery
-  (20/10 min), keyed by a short-lived HMAC of the client address (never raw IP).
+  throttles on login (30/5 min), registration (10/h), anonymous/recovery
+  (20/10 min) and diagnostic reports (10/h), keyed by a short-lived HMAC of the
+  client address (never raw IP).
   The header trust model assumes a proxy that overwrites `X-Forwarded-For`; other
   write endpoints rely on authorization plus a 120/min per-account cap
   (`src/server/state/rate_limit.rs`). A general per-IP write limiter and

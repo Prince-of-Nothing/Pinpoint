@@ -72,18 +72,24 @@ pub async fn create_user(
         .and_then(Value::as_str)
         .unwrap_or("New User")
         .to_string();
-    if email.is_empty() {
-        return error_envelope("VALIDATION_FAILED", "email is required");
+    let email_check = crate::security::validation::validate_email(&email);
+    if !email_check.is_valid() {
+        return error_envelope("VALIDATION_FAILED", &email_check.errors.join("; "));
     }
-    let password = body
-        .get("password")
-        .and_then(Value::as_str)
-        .unwrap_or("ChangeMe123!");
-    if !crate::security::validation::validate_password(password).is_valid() {
-        return error_envelope(
-            "VALIDATION_FAILED",
-            "password must be at least 8 characters",
-        );
+    // No shared default: an admin-created account gets a temporary password
+    // that the user must replace at first sign-in.
+    let Some(password) = body.get("password").and_then(Value::as_str) else {
+        return error_envelope("VALIDATION_FAILED", "password is required");
+    };
+    let password_check = crate::security::validation::validate_password(password);
+    if !password_check.is_valid() {
+        return error_envelope("VALIDATION_FAILED", &password_check.errors.join("; "));
+    }
+    {
+        let store = state.store.lock().unwrap();
+        if store.find_user_by_email(&email).is_some() {
+            return error_envelope("VALIDATION_FAILED", "email already registered");
+        }
     }
     let role: String = body
         .get("role")
@@ -105,7 +111,7 @@ pub async fn create_user(
         full_name: full_name.clone(),
         role: role.clone(),
         is_active: true,
-        must_change_password: false,
+        must_change_password: true,
         password_hash: Some(hash),
         totp_secret: None,
         mfa_enabled: false,

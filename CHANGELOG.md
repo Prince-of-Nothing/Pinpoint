@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [DOCS] The reference share-expiry snippet now enforces the seven-day cap instead of 24 hours.
 - [DOCS] The public privacy policy now states the 7-day trail is pruned hourly, lists encrypted messages, explains the keyed-HMAC abuse limits, and drops the stale 1.5.0 build label.
 - [INFRA] The convergence middleware only reloads the store for `/api/` requests, so loading a page no longer runs a full database refresh for every static asset.
 - [DOCS] Threat model now records the per-client auth/write throttles and the owner-only 7-day trail instead of "no rate limits" and "latest-only".
@@ -32,6 +33,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Native account deletion now warns that the private trail, notes and messages are erased too.
 - [FIX] Web: a temporary-password account skips the authenticated refresh and message polling, so the Account panel is not flooded with 403 responses while the password is rotated.
 - [FIX] Web: message polling pauses while the tab is hidden, resumes on visibility, and never overlaps itself, so a background tab stops making requests every five seconds.
 - [FIX] Web: the service worker is network-first for the app shell, so a deployment reaches installed clients on the next load instead of being pinned behind an unchanged worker; the cache is bumped to v9 and API calls bypass it entirely.

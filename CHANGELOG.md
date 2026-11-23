@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [DOCS] The security status and checklist now reflect PostgreSQL persistence, the queryable admin audit table, the implemented auth throttles and the `__Host-` cookie.
 - [DOCS] The reference share-expiry snippet now enforces the seven-day cap instead of 24 hours.
 - [DOCS] The public privacy policy now states the 7-day trail is pruned hourly, lists encrypted messages, explains the keyed-HMAC abuse limits, and drops the stale 1.5.0 build label.
 - [INFRA] The convergence middleware only reloads the store for `/api/` requests, so loading a page no longer runs a full database refresh for every static asset.

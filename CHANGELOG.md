@@ -29,6 +29,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Web: a legacy share whose expiry is beyond seven days no longer offers "Keep current" (the server cap rejects it); the form defaults to 24 hours.
 - [FIX] Web: Escape closes the topmost place, sharing, route or chat sheet; the admin overlay and the sharing drawer keep priority.
 - [FIX] Web: an account flagged for a temporary-password change now opens the Account panel with a prompt instead of failing every tab; the delete-account note lists the private trail, notes and messages it erases.
 - [FIX] Web map: MapLibre zoom controls are 44x44 px and the search field is 40 px tall, meeting the mobile touch-target minimum.

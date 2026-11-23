@@ -84,6 +84,7 @@ The per-item flagged list for this release is in
 - [FIX] Location permission: Android now requests fine and coarse location in one dialog (Android 12+ ignores a fine-only request), asks on the first map view, retries the fix after a grant, and receives one-shot GPS updates through a broadcast receiver. The web client asks once after sign-in and reports the real geolocation error. Native map controls use a solid fill so their glyphs stay readable over the light basemap.
 ### Security
 - [SECURITY] Registration now validates the email address (format, character count and display controls), matching the admin create path; malformed or bidi addresses are rejected.
+- [SECURITY] Diagnostic app-version strings reject display controls and count characters, so a crafted version cannot reorder the admin diagnostics table; invalid values fall back to the server version.
 - [SECURITY] A rejected friend request can no longer be flipped to accepted by the receiver; a fresh request from the sender is required.
 - [SECURITY] Email validation counts characters and rejects Unicode bidi/control characters, so a crafted address cannot spoof the admin user list and multibyte addresses at the 254-character limit are accepted.
 - [SECURITY] Recovery-code inputs are cleared on submit and cancel, so the one-time code does not linger in the web or native UI after a failed recovery.

@@ -26,6 +26,14 @@ const CATEGORIES: &[&str] = &["crash", "map", "routing", "connectivity", "other"
 const STATUSES: &[&str] = &["open", "triaged", "closed"];
 const MAX_MESSAGE_CHARS: usize = 2000;
 
+/// Version strings are displayed in the admin diagnostics table; keep them
+/// short and free of display controls, falling back to this crate's version.
+fn valid_app_version(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().count() <= 40
+        && !crate::security::validation::contains_display_control(value)
+}
+
 fn report_json(r: &crate::models::DiagnosticReport) -> Value {
     json!({
         "id": r.id,
@@ -111,7 +119,7 @@ pub async fn submit_report(
         .get("app_version")
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|v| !v.is_empty() && v.len() <= 40)
+        .filter(|v| valid_app_version(v))
         .unwrap_or(env!("CARGO_PKG_VERSION"));
 
     let (user_id, username) = match cu {
@@ -294,5 +302,15 @@ mod tests {
         assert!(value.get("email").is_none());
         assert!(value.get("latitude").is_none());
         assert!(value.get("ip").is_none());
+    }
+
+    #[test]
+    fn app_version_rejects_display_controls_and_overlength() {
+        assert!(valid_app_version("2.6.1"));
+        assert!(valid_app_version("Pinpoint Android 2.6.1"));
+        assert!(!valid_app_version(""));
+        assert!(!valid_app_version(&"x".repeat(41)));
+        assert!(!valid_app_version("2.6\u{202e}1"));
+        assert!(!valid_app_version("2.6\t1"));
     }
 }

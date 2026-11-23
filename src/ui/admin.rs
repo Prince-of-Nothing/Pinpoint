@@ -303,13 +303,13 @@ impl PinpointAppUI {
                             self.spawn_action(PendingAction::AdminDeleteUser { id }, ctx);
                         }
                         let reset_ready = self.admin_reset_password.trim().len() >= 8;
-                        let temporary = self.admin_reset_password.clone();
-                        let reset_mfa = self.admin_reset_mfa;
                         if !is_self
                             && ui
                                 .add_enabled(reset_ready, egui::Button::new("Reset password"))
                                 .clicked()
                         {
+                            let reset_mfa = self.admin_reset_mfa;
+                            let temporary = std::mem::take(&mut self.admin_reset_password);
                             self.spawn_action(
                                 PendingAction::AdminResetPassword {
                                     id,

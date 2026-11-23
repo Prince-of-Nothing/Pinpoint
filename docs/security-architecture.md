@@ -19,7 +19,7 @@ reviewing security changes.
 3. **Plain HTTP only for loopback.** ADR-0006: `http://localhost`, `http://127.0.0.1`, `::1`, and Android emulator `10.0.2.2` may use plain HTTP for development. All other URLs require HTTPS.
 4. **No real-data scraping.** Demo data is fictional (Chicago coordinates). Friend data is never sent to Nominatim/OSRM/Overpass.
 5. **No trackers in the client.** No Firebase, FCM, analytics, or crash SDKs. `reqwest` + `serde` only for the portable core.
-6. **Confidentiality at rest where feasible.** Bookmarks can be AES-256-GCM encrypted; session keys are zeroized on drop.
+6. **Confidentiality at rest where feasible.** Bookmarks are owner-only JSON (`0600` on Unix); AES-256-GCM bookmark primitives exist but are not wired by default. Session keys are zeroized on drop.
 7. **Accountability.** Security-relevant actions are audit-logged.
 8. **Abuse resistance.** Client-side rate limiting + server-side rate limits; HMAC signing available for sensitive calls.
 
@@ -36,7 +36,7 @@ reviewing security changes.
 | T-05 | Account enumeration / credential stuffing | Accounts | Generic errors, per-client HMAC throttles, per-account lockout | Credential reuse outside Pinpoint |
 | T-06 | Location over-collection | Sharer privacy | Latest publish plus an owner-only 7-day trail pruned hourly; precision downgrade server-side | Server breach exposes current location and the owner trail |
 | T-07 | OSM abuse (scraping / bulk) | OSMF infrastructure, client IP | Client 1 req/s Nominatim throttle; server proxy caps (tiles 1200/min, search/reverse 60/min, route 120/min) | Public service quota exhaustion |
-| T-08 | Bookmark theft on stolen device | Saved places | AES-256-GCM encryption at rest (optional key) | Key stored on same device → theft of key defeats encryption |
+| T-08 | Bookmark theft on stolen device | Saved places | Owner-only `0600` file on Unix and OS account isolation; AES-256-GCM bookmark primitives exist but are not wired by default | Disk theft or a compromised OS account exposes saved places |
 | T-09 | Request tampering in transit | Location payloads | HTTPS; HMAC signing available for sensitive calls | Client-side signing alone does not authenticate the server (TLS does) |
 | T-10 | Malicious input injection | Server DB, logs | Strict validation (client + server), sqlx parameterized queries, no string-concat SQL | Zero-day in dependencies (mitigated by cargo-audit) |
 
@@ -227,7 +227,7 @@ rate_limited_reports_retry_after
 - **Format:** `ciphertext = nonce (12B) || tag+ciphertext`, base64-encoded for storage.
 - **Key:** 256-bit (`EncryptionKey`), generated via `rand`, held in `KeyManager` (in-memory `Mutex<HashMap<String, EncryptionKey>>` + `current_key`).
 - **Zeroize:** `impl Zeroize for EncryptionKey` + `Drop` calls `zeroize()`.
-- **Bookmark integration:** `EncryptedBookmarkStore::encrypt_bookmarks(String) -> String` / `decrypt_bookmarks(String) -> String`.
+- **Bookmark integration:** `EncryptedBookmarkStore::encrypt_bookmarks(String) -> String` / `decrypt_bookmarks(String) -> String` exists; the UI currently stores owner-only JSON.
 
 ### Limitations (honest)
 
@@ -355,7 +355,7 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 ### Recommended
 
 - [ ] Put the Rust server behind TLS (Caddy/nginx reverse proxy; `gateway/nginx.conf` is bundled).
-- [x] Store the OS keychain for bookmark encryption keys (see `src/security/keychain.rs`).
+- [x] Use the OS keychain for device secrets (session secrets; bookmark encryption keys when wired).
 - [ ] Enable `RequestSigner` for location publishing (server-side verification).
 - [ ] Set `reauth_after_seconds` on sessions for sensitive actions.
 - [ ] Monitor audit logs and `pinpoint_admin_audit` for `login failure` spikes and `CSRF_FAILED` errors.
@@ -379,7 +379,7 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 | `CSRF_FAILED` errors | Check web client CSRF handling; verify token rotation. |
 | Nominatim 429 | Client rate limiting is working; request scans will retry after `Retry-After`. |
 | Session token leak | Revoke via password change (all sessions revoked) or an admin reset; the row delete is authoritative across replicas. |
-| Device lost with bookmarks | Bookmarks encrypted at rest (if key is protected); else data is limited to saved places. |
+| Device lost with bookmarks | Bookmarks are on-device JSON with owner-only permissions on Unix; remote deactivation revokes sessions. Saved places remain until the device is wiped. |
 | Server breach | The server holds the latest publish plus the owner-only 7-day trail; notify affected users, revoke sessions, review the admin audit table and logs. |
 
 ---

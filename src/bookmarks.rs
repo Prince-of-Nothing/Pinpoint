@@ -234,12 +234,38 @@ impl BookmarkStore {
             if std::fs::create_dir_all(parent).is_err() {
                 return false;
             }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+            }
         }
         match serde_json::to_string_pretty(list) {
-            Ok(text) => std::fs::write(path, text).is_ok(),
+            Ok(text) => write_private(path, text.as_bytes()).is_ok(),
             Err(_) => false,
         }
     }
+}
+
+/// Saved places are private, so the file is owner-only on Unix like the
+/// diagnostics logs.
+#[cfg(unix)]
+fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .mode(0o600)
+        .open(path)?;
+    file.write_all(bytes)
+}
+
+#[cfg(not(unix))]
+fn write_private(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
+    std::fs::write(path, bytes)
 }
 
 fn dedupe_key(bookmark: &Bookmark) -> String {
@@ -444,5 +470,32 @@ mod tests {
         assert_eq!(summary.over_limit, 1);
         assert_eq!(store.list().len(), super::MAX_IMPORT);
         std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bookmark_file_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!(
+            "pinpoint-bm-mode-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = BookmarkStore::new(Some(dir.clone()));
+        store.add("Home", 47.01, 28.86);
+        let file_mode = std::fs::metadata(dir.join("bookmarks.json"))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(file_mode, 0o600);
+        let dir_mode = std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(dir_mode, 0o700);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

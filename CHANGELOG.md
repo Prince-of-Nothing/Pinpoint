@@ -22,6 +22,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Web map: MapLibre zoom controls are 44x44 px and the search field is 40 px tall, meeting the mobile touch-target minimum.
 - [FIX] Messages: a native send failure now surfaces the error and restores the composer text instead of silently dropping the message.
 - [FIX] Compose: a fresh Postgres volume no longer dies in `db/init/03-fks.sql` before the services create their tables; the FK script skips with a notice and is re-run with `02-grants.sql` after first boot.
 - [FIX] Messages: native thread and inbox timestamps now render in the device's local time with the date for older messages instead of raw UTC; the web Chats tab shows the unread count.
@@ -31,6 +32,9 @@ The per-item flagged list for this release is in
 - [FIX] Native Today: action errors are surfaced, the note draft clears only after a successful POST and only if unchanged, refresh sections load independently, and a 401 clears private lists without letting an in-flight refresh cross accounts.
 - [FIX] Location permission: Android now requests fine and coarse location in one dialog (Android 12+ ignores a fine-only request), asks on the first map view, retries the fix after a grant, and receives one-shot GPS updates through a broadcast receiver. The web client asks once after sign-in and reports the real geolocation error. Native map controls use a solid fill so their glyphs stay readable over the light basemap.
 ### Security
+- [SECURITY] Android release builds disable app backups and cleartext HTTP; only the on-device loopback map host is exempt, and the emulator host `10.0.2.2` is allowed in debug builds only.
+- [SECURITY] Login performs the same Argon2 verification for unknown or inactive emails, so response timing no longer reveals whether an account exists.
+- [SECURITY] Admin user creation no longer falls back to a shared default password: a password is required and the account is flagged `must_change_password` so the temporary credential must be rotated at first sign-in. Until it is rotated, the shared session middleware allows only password-change, logout, session and `/auth/me` routes.
 - [SECURITY] Disabling MFA now requires a valid unused TOTP code through `POST /api/v1/auth/mfa/disable`; the cookie-only `DELETE /auth/mfa` route is removed, so a stolen session cannot remove the second factor.
 - [FIX] `POST /api/v1/auth/anonymous` returns `409 ALREADY_SIGNED_IN` while a session is active, so repeated taps cannot create duplicate anonymous accounts or sessions.
 - [SECURITY] Emergency alerts publish the latest point without reactivating paused shares; the point is written directly to PostgreSQL.

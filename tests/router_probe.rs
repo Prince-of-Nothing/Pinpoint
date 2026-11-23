@@ -920,3 +920,183 @@ async fn privacy_route_matches() {
     assert!(html.contains("Privacy policy"));
     assert!(html.to_ascii_lowercase().contains("delete your account"));
 }
+
+#[tokio::test]
+async fn admin_created_user_requires_a_password_and_forces_a_change() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    let state = AppState::new();
+    {
+        let mut store = state.store.lock().unwrap();
+        store.users.push(User {
+            id: 1,
+            username: String::new(),
+            email: "admin-create@example.com".into(),
+            full_name: "Administrator".into(),
+            role: "administrator".into(),
+            is_active: true,
+            must_change_password: false,
+            password_hash: None,
+            totp_secret: None,
+            mfa_enabled: false,
+            mfa_last_step: 0,
+            failed_login_attempts: 0,
+            locked_until: None,
+            auth_method: "email".into(),
+            public_key: None,
+            recovery_code_hash: None,
+            identity_subject: None,
+        });
+        store.next_user_id = 2;
+    }
+    let (sid, csrf) = state.create_session(1, "email", false).await;
+    let app = router(state.clone());
+
+    let request = |body: &'static str| {
+        Request::builder()
+            .method("POST")
+            .uri("/api/v1/users/")
+            .header("cookie", format!("session_id={sid}"))
+            .header("x-csrf-token", &csrf)
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap()
+    };
+
+    // No shared default password: the admin must supply one.
+    let resp = app
+        .clone()
+        .oneshot(request(
+            r#"{"email":"new-user@example.com","full_name":"New User"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+    let resp = app
+        .clone()
+        .oneshot(request(
+            r#"{"email":"new-user@example.com","full_name":"New User","password":"TemporaryPass!2026"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::CREATED);
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(json["id"], 2);
+    let must_change = {
+        let store = state.store.lock().unwrap();
+        store
+            .find_user_by_id(2)
+            .map(|u| u.must_change_password)
+            .unwrap_or(false)
+    };
+    assert!(must_change, "temporary password must be rotated");
+
+    // The temporary password only unlocks the password-change flow.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"email":"new-user@example.com","password":"TemporaryPass!2026"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let cookie = resp
+        .headers()
+        .get("set-cookie")
+        .expect("session cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let csrf = json["csrf_token"].as_str().unwrap().to_string();
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/friendships/")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        resp.status(),
+        StatusCode::FORBIDDEN,
+        "an unrotated temporary password must not reach the API"
+    );
+
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/password/force-change")
+                .header("cookie", &cookie)
+                .header("x-csrf-token", &csrf)
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"new_password":"RotatedPass!2026","confirm_password":"RotatedPass!2026"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+
+    // A fresh login with the rotated password can use the API.
+    let resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"email":"new-user@example.com","password":"RotatedPass!2026"}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    let cookie = resp
+        .headers()
+        .get("set-cookie")
+        .expect("rotated session cookie")
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_string();
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/friendships/")
+                .header("cookie", cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}

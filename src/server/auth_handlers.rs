@@ -11,6 +11,13 @@ use sha2::{Digest, Sha256};
 use super::state::AppState;
 use super::{error_envelope, CurrentUser, IntoResponse};
 
+/// One valid Argon2id hash used only to equalize login timing for unknown or
+/// inactive accounts. It is never compared for access.
+fn dummy_password_hash() -> &'static str {
+    static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    HASH.get_or_init(|| crate::security::password::hash_password("pinpoint-login-timing", 0))
+}
+
 fn user_json(u: &crate::models::User) -> Value {
     json!({
         "id": u.id,
@@ -100,33 +107,36 @@ pub async fn login(
             .into_response()
     };
     // Scope the store lock so it is never held across the session await.
-    let (user, ok) = {
+    let user = {
         let store = state.store.lock().unwrap();
-        let user = match store.find_user_by_email(email) {
-            Some(u) => u.clone(),
-            None => return invalid(),
-        };
-        if !user.is_active {
-            return invalid();
-        }
-        // Lockout check.
-        if let Some(until) = &user.locked_until {
-            if until.as_str() > "2026-01-01T00:00:00Z" {
-                let now = chrono::Utc::now().to_rfc3339();
-                if until.as_str() > now.as_str() {
-                    return (
-                        StatusCode::TOO_MANY_REQUESTS,
-                        Json(json!({"error": {"code": "ACCOUNT_LOCKED", "message": "Account temporarily locked. Try again later."}})),
-                    )
-                        .into_response();
-                }
+        store.find_user_by_email(email).cloned()
+    };
+    let Some(user) = user else {
+        // Do the same Argon2 work as a real user so response timing does not
+        // reveal whether an email exists.
+        let _ = crate::security::password::verify_password(password, dummy_password_hash());
+        return invalid();
+    };
+    if !user.is_active {
+        let _ = crate::security::password::verify_password(password, dummy_password_hash());
+        return invalid();
+    }
+    // Lockout check.
+    if let Some(until) = &user.locked_until {
+        if until.as_str() > "2026-01-01T00:00:00Z" {
+            let now = chrono::Utc::now().to_rfc3339();
+            if until.as_str() > now.as_str() {
+                return (
+                    StatusCode::TOO_MANY_REQUESTS,
+                    Json(json!({"error": {"code": "ACCOUNT_LOCKED", "message": "Account temporarily locked. Try again later."}})),
+                )
+                    .into_response();
             }
         }
-        let ok = match &user.password_hash {
-            Some(h) => crate::security::password::verify_password(password, h),
-            None => false,
-        };
-        (user, ok)
+    }
+    let ok = match &user.password_hash {
+        Some(h) => crate::security::password::verify_password(password, h),
+        None => false,
     };
     let user_id = user.id;
     if !ok {
@@ -1124,5 +1134,16 @@ mod registration_tests {
         assert_eq!(two.len(), 1);
         assert!(one.iter().all(|session| session.user_id == 1));
         assert!(two.iter().all(|session| session.user_id == 2));
+    }
+
+    #[test]
+    fn dummy_hash_is_a_valid_argon2id_hash() {
+        let hash = super::dummy_password_hash();
+        assert!(hash.starts_with("$argon2id$"));
+        assert!(crate::security::password::verify_password(
+            "pinpoint-login-timing",
+            hash
+        ));
+        assert!(!crate::security::password::verify_password("wrong", hash));
     }
 }

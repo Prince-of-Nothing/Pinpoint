@@ -414,6 +414,8 @@ body:has(#app-panel:not(.hidden)) #session-bar {
   box-shadow: var(--shadow);
 }
 .maplibregl-ctrl-group button + button { border-top-color: var(--border); }
+/* MapLibre ships 29 px controls; keep the touch target at 44 px. */
+.maplibregl-ctrl-group button { width: 44px; height: 44px; }
 [data-theme="dark"] .maplibregl-ctrl button .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(180deg); }
 .maplibregl-ctrl-scale {
   background: var(--glass);
@@ -448,6 +450,7 @@ body:has(#app-panel:not(.hidden)) #session-bar {
 }
 .search-form input {
   min-width: 0;
+  min-height: 40px;
   margin: 0;
   padding: 0.45rem 0.4rem;
   border: 0;

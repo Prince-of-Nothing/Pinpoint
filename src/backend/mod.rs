@@ -220,6 +220,14 @@ pub trait Backend: BackendBounds {
     fn admin_users(&self) -> BackendFuture<'_, Vec<serde_json::Value>>;
     fn admin_update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()>;
     fn admin_delete_user<'a>(&'a self, id: i64) -> BackendFuture<'a, ()>;
+    /// Admin-issued temporary password; the server forces a rotation and
+    /// revokes the target's sessions.
+    fn admin_reset_password<'a>(
+        &'a self,
+        id: i64,
+        password: &'a str,
+        reset_mfa: bool,
+    ) -> BackendFuture<'a, ()>;
     fn admin_diagnostics<'a>(
         &'a self,
         status: Option<&'a str>,

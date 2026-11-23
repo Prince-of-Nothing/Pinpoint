@@ -23,6 +23,7 @@ The per-item flagged list for this release is in
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
 - [FIX] Web map: MapLibre zoom controls are 44x44 px and the search field is 40 px tall, meeting the mobile touch-target minimum.
+- [FIX] Web: Escape closes the sharing drawer and returns focus to its toggle; the closed drawer stays out of the accessibility tree.
 - [FIX] Messages: a native send failure now surfaces the error and restores the composer text instead of silently dropping the message.
 - [FIX] Compose: a fresh Postgres volume no longer dies in `db/init/03-fks.sql` before the services create their tables; the FK script skips with a notice and is re-run with `02-grants.sql` after first boot.
 - [FIX] Messages: native thread and inbox timestamps now render in the device's local time with the date for older messages instead of raw UTC; the web Chats tab shows the unread count.

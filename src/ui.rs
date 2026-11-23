@@ -211,6 +211,12 @@ enum PendingAction {
         password: String,
         reset_mfa: bool,
     },
+    AdminCreateUser {
+        email: String,
+        full_name: String,
+        role: String,
+        password: String,
+    },
     AdminUpdateReport {
         id: i64,
         status: String,
@@ -315,6 +321,10 @@ pub struct PinpointAppUI {
     admin_diag_filter: String,
     admin_reset_password: String,
     admin_reset_mfa: bool,
+    admin_new_email: String,
+    admin_new_name: String,
+    admin_new_role: String,
+    admin_new_password: String,
     // Kiosk screen state
     pub(crate) kiosk_token_input: String,
     pub(crate) kiosk_note_input: String,
@@ -451,6 +461,10 @@ impl PinpointAppUI {
             admin_diag_filter: String::new(),
             admin_reset_password: String::new(),
             admin_reset_mfa: false,
+            admin_new_email: String::new(),
+            admin_new_name: String::new(),
+            admin_new_role: "resident".to_string(),
+            admin_new_password: String::new(),
             kiosk_token_input: String::new(),
             kiosk_note_input: String::new(),
             kiosk_consent_accepted: false,
@@ -1319,6 +1333,17 @@ impl PinpointAppUI {
                 } => match app.admin_reset_password(id, password, reset_mfa).await {
                     Ok(()) => app.set_notice(Some(
                         "Temporary password issued. Share it securely.".to_string(),
+                    )),
+                    Err(error) => app.set_error(Some(error.to_string())),
+                },
+                PendingAction::AdminCreateUser {
+                    email,
+                    full_name,
+                    role,
+                    password,
+                } => match app.admin_create_user(email, full_name, role, password).await {
+                    Ok(()) => app.set_notice(Some(
+                        "User created. Share the temporary password securely.".to_string(),
                     )),
                     Err(error) => app.set_error(Some(error.to_string())),
                 },

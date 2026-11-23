@@ -219,6 +219,14 @@ pub trait Backend: BackendBounds {
     ) -> BackendFuture<'a, ()>;
     fn admin_overview(&self) -> BackendFuture<'_, serde_json::Value>;
     fn admin_users(&self) -> BackendFuture<'_, Vec<serde_json::Value>>;
+    /// Admin-only account creation with a temporary password.
+    fn admin_create_user<'a>(
+        &'a self,
+        email: &'a str,
+        full_name: &'a str,
+        role: &'a str,
+        password: &'a str,
+    ) -> BackendFuture<'a, ()>;
     fn admin_update_user<'a>(&'a self, id: i64, body: serde_json::Value) -> BackendFuture<'a, ()>;
     fn admin_delete_user<'a>(&'a self, id: i64) -> BackendFuture<'a, ()>;
     /// Admin-issued temporary password; the server forces a rotation and

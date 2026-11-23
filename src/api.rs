@@ -949,6 +949,32 @@ impl ApiClient {
         Ok(body.users)
     }
 
+    /// Admin-only account creation. The server stores the temporary password
+    /// hash, sets `must_change_password`, and forces a rotation at first
+    /// sign-in.
+    pub async fn admin_create_user(
+        &self,
+        email: &str,
+        full_name: &str,
+        role: &str,
+        password: &str,
+    ) -> anyhow::Result<()> {
+        let response = self
+            .request(
+                reqwest::Method::POST,
+                "/api/v1/users/",
+                Some(serde_json::json!({
+                    "email": email,
+                    "full_name": full_name,
+                    "role": role,
+                    "password": password,
+                })),
+            )
+            .await?;
+        Self::check(response, "Failed to create user").await?;
+        Ok(())
+    }
+
     pub async fn admin_update_user(&self, id: i64, body: serde_json::Value) -> anyhow::Result<()> {
         let response = self
             .request(
@@ -1651,6 +1677,17 @@ impl crate::backend::Backend for ApiClient {
     }
     fn admin_users(&self) -> crate::backend::BackendFuture<'_, Vec<serde_json::Value>> {
         Box::pin(async move { ApiClient::admin_users(self).await })
+    }
+    fn admin_create_user<'a>(
+        &'a self,
+        email: &'a str,
+        full_name: &'a str,
+        role: &'a str,
+        password: &'a str,
+    ) -> crate::backend::BackendFuture<'a, ()> {
+        Box::pin(async move {
+            ApiClient::admin_create_user(self, email, full_name, role, password).await
+        })
     }
     fn admin_update_user<'a>(
         &'a self,

@@ -1689,6 +1689,19 @@ impl PinpointApp {
         Ok(())
     }
 
+    pub async fn admin_create_user(
+        &self,
+        email: String,
+        full_name: String,
+        role: String,
+        password: String,
+    ) -> anyhow::Result<()> {
+        self.backend
+            .admin_create_user(&email, &full_name, &role, &password)
+            .await?;
+        self.admin_load_users().await
+    }
+
     pub async fn admin_update_user(&self, id: i64, body: serde_json::Value) -> anyhow::Result<()> {
         self.backend.admin_update_user(id, body).await?;
         self.admin_load_users().await

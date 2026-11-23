@@ -15,6 +15,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [FEATURE] Admin console: create a user with an email, display name, role and temporary password; the account is forced to change that password at first sign-in.
 - [FEATURE] Messages: keep up to eight previous peer public bundles locally (native keychain, web localStorage) and try them newest-first when verifying, so history stays readable after a friend changes device/key; the safety number still flags the change.
 - [FEATURE] Native map: a 1-2-5 metric scale bar in the lower-left corner, derived from the Web Mercator metres-per-pixel at the current centre and zoom.
 - [FEATURE] Messages: a dedicated `pinpoint-messages` service (port 8007) in the compose stack with a gateway route and a least-privilege `pinpoint_messages` database role; the combined `pinpoint-server` still mounts the same router.

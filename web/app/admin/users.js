@@ -7,11 +7,35 @@ export const usersModule = {
   order: 20,
   async mount(el, ctx) {
     el.innerHTML = `
+      <details class="admin-create">
+        <summary>Create user</summary>
+        <form id="admin-create-user">
+          <label>Email
+            <input id="admin-create-email" type="email" autocomplete="off" required />
+          </label>
+          <label>Full name
+            <input id="admin-create-name" type="text" autocomplete="off" required />
+          </label>
+          <label>Role
+            <select id="admin-create-role">
+              <option value="resident" selected>resident</option>
+              <option value="admin">admin</option>
+              <option value="administrator">administrator</option>
+            </select>
+          </label>
+          <label>Temporary password
+            <input id="admin-create-password" type="password" minlength="8" autocomplete="new-password" required />
+          </label>
+          <p class="muted">The user must change this temporary password at first sign-in.</p>
+          <button type="submit">Create user</button>
+        </form>
+      </details>
       <div class="admin-toolbar">
         <input id="admin-user-search" type="search" placeholder="Filter by email or name…" aria-label="Filter users" />
         <button type="button" id="admin-users-refresh" class="secondary">Refresh</button>
       </div>
       <div id="admin-users-table"></div>`;
+    const createForm = el.querySelector("#admin-create-user");
     const search = el.querySelector("#admin-user-search");
     const table = el.querySelector("#admin-users-table");
     let users = [];
@@ -116,6 +140,24 @@ export const usersModule = {
 
     search.addEventListener("input", render);
     el.querySelector("#admin-users-refresh").addEventListener("click", load);
+    createForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const email = el.querySelector("#admin-create-email").value.trim();
+      const fullName = el.querySelector("#admin-create-name").value.trim();
+      const role = el.querySelector("#admin-create-role").value;
+      const password = el.querySelector("#admin-create-password").value;
+      try {
+        await ctx.api("/api/v1/users/", {
+          method: "POST",
+          body: { email, full_name: fullName, role, password },
+        });
+        ctx.setStatus("User created. Share the temporary password securely.");
+        createForm.reset();
+        await load();
+      } catch (err) {
+        ctx.setStatus(err.message, true);
+      }
+    });
     await load();
   },
 };

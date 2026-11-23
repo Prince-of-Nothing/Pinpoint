@@ -1,6 +1,6 @@
 # Pinpoint — Security Architecture
 
-**Status:** Implemented (Rust client, `src/security/` + server-side Go backend)  
+**Status:** Implemented (Rust client, `src/security/` + Rust server in `src/server/`)  
 **Audience:** Developers, reviewers, security auditors  
 **Related:** [wiki SDLC-10 security and privacy](https://github.com/Prince-of-Nothing/Pinpoint/wiki/SDLC-10-Security-And-Privacy), [wiki Design Patterns](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Design-Patterns), ADR-0006
 
@@ -14,7 +14,7 @@ reviewing security changes.
 
 ## 1. Security Goals
 
-1. **Consent is enforced server-side.** The client is untrusted. Every location read is authorized against friendship + share state on the Go backend.
+1. **Consent is enforced server-side.** The client is untrusted. Every location read is authorized against friendship + share state on the Rust server.
 2. **Fail closed.** On auth failure, missing cookie, or transport violation, the client denies and surfaces a clear error. It never claims success falsely (e.g., "logged out" when the server did not confirm).
 3. **Plain HTTP only for loopback.** ADR-0006: `http://localhost`, `http://127.0.0.1`, `::1`, and Android emulator `10.0.2.2` may use plain HTTP for development. All other URLs require HTTPS.
 4. **No real-data scraping.** Demo data is fictional (Chicago coordinates). Friend data is never sent to Nominatim/OSRM/Overpass.
@@ -31,14 +31,14 @@ reviewing security changes.
 |---|---|---|---|---|
 | T-01 | IDOR: read another user's location by ID | Friend locations, shares | Server-side ownership/consent checks; generic 403/404; audit | Client compromise still relies on server |
 | T-02 | Stalking via forgotten grants | Sharer location | Directional shares, precision control, pause/resume, expiry | User error (over-sharing) |
-| T-03 | Session hijack / cookie theft | Session token, CSRF | HttpOnly, SameSite=Lax, Secure (prod), CSRF double-submit, rotation | XSS in non-Rust clients; mitigated by CSP/escaping in web client |
+| T-03 | Session hijack / cookie theft | Session token, CSRF | `__Host-` cookie with HttpOnly, SameSite=Lax, Secure (prod), CSRF double-submit, rotation | XSS in non-Rust clients; mitigated by CSP/escaping in web client |
 | T-04 | CSRF: forged state-changing request | Shares, friendships, password | Double-submit cookie + header on POST/PATCH/DELETE | Token leakage via XSS → same as T-03 |
-| T-05 | Account enumeration / credential stuffing | Accounts | Generic errors, rate limits, lockout (Go backend) | Credential reuse outside Pinpoint |
-| T-06 | Location over-collection | Sharer privacy | Latest-only storage; no history; precision downgrade server-side | Server breach exposes current location |
-| T-07 | OSM abuse (scraping / bulk) | OSMF infrastructure, client IP | Rate limiting (1 req/s Nominatim), user-initiated only, no bulk | Public service quota exhaustion |
+| T-05 | Account enumeration / credential stuffing | Accounts | Generic errors, per-client HMAC throttles, per-account lockout | Credential reuse outside Pinpoint |
+| T-06 | Location over-collection | Sharer privacy | Latest publish plus an owner-only 7-day trail pruned hourly; precision downgrade server-side | Server breach exposes current location and the owner trail |
+| T-07 | OSM abuse (scraping / bulk) | OSMF infrastructure, client IP | Client 1 req/s Nominatim throttle; server proxy caps (tiles 1200/min, search/reverse 60/min, route 120/min) | Public service quota exhaustion |
 | T-08 | Bookmark theft on stolen device | Saved places | AES-256-GCM encryption at rest (optional key) | Key stored on same device → theft of key defeats encryption |
 | T-09 | Request tampering in transit | Location payloads | HTTPS; HMAC signing available for sensitive calls | Client-side signing alone does not authenticate the server (TLS does) |
-| T-10 | Malicious input injection | Server DB, logs | Strict validation (client + server), parameterized queries (Go), no string-concat SQL | Zero-day in dependencies (mitigated by cargo-audit) |
+| T-10 | Malicious input injection | Server DB, logs | Strict validation (client + server), sqlx parameterized queries, no string-concat SQL | Zero-day in dependencies (mitigated by cargo-audit) |
 
 ---
 
@@ -198,7 +198,7 @@ pub struct RateLimiter {
 
 **App wiring:** `PinpointApp::login()` checks `api_login`; `publish_location()` checks `api_general`; UI search checks `nominatim` in `spawn_action(SearchPlaces)`.
 
-**Server-side:** Go backend enforces stricter server rate limits (login 5/min IP, etc.). Client limits are defense-in-depth, not a substitute.
+**Server-side:** the Rust server applies stricter per-client throttles (login 30 per 5 min, register 10/h, anonymous/recovery 20 per 10 min, diagnostics 10/h) and per-account write limits (120/min). Client limits are defense-in-depth, not a substitute.
 
 ### Tests
 
@@ -308,19 +308,20 @@ security::signing::tests::no_key_returns_error ... ok
 
 ---
 
-## 10. Server-Side Security (Go Backend)
+## 10. Server-Side Security (Rust)
 
-The Rust client assumes the Go backend (`backend/`, archived copy in `archive/` is historical) enforces:
+The Rust server in `src/server/` enforces:
 
 - **Argon2id** password hashing (PHC, memory-hard).
-- **Session store** with idle timeout and revocation on password change.
-- **Rate limiting** on login/register (5/min IP, lockout after 5 failures for 15 min).
+- **Session store** in PostgreSQL when `DATABASE_URL` is set: the row is read on every authenticated `/api/` request, so logout-all, password change, admin reset and deactivation take effect across replicas on the next request. Idle and absolute lifetimes are enforced; a transient database error falls back to the last validated copy.
+- **Per-client throttles** keyed by an HMAC of the client address: login 30 per 5 min, register 10/h, anonymous/recovery 20 per 10 min, diagnostics 10/h. Per-account lockout after repeated failures.
+- **Per-account write limit** of 120 unsafe requests per minute, plus public map-proxy caps (tiles 1200/min, search/reverse 60/min, route 120/min).
 - **CSRF double-submit** check on all unsafe methods (`X-CSRF-Token` header).
-- **Authorization** — every handler checks `userFromContext` and share state; IDOR returns 403/404.
-- **Precision downgrade** — Server rounds coordinates before serialization (exact/approximate/city_only). The client cannot bypass this.
-- **Generic errors** — Client sees `{"error": {"code": ..., "message": ...}}`; details stay in server logs.
+- **Authorization** — every protected handler receives the `CurrentUser` extension and checks ownership/share state; IDOR returns 403/404. Admin routes fail closed without the administrator role.
+- **Precision downgrade** — the server rounds coordinates before serialization (exact/approximate/city_only). The client cannot bypass this.
+- **Generic errors** — the client sees `{"error": {"code": ..., "message": ...}}`; details stay in server logs.
 
-The Rust client's `tests/contract.rs` pins the wire contract so client and server evolve together.
+The Rust client's `tests/contract.rs` pins the wire contract and `tests/router_probe.rs` pins the route and authorization behavior, so client and server evolve together.
 
 ---
 
@@ -342,21 +343,22 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 
 ### Required (before sharing with friends)
 
-- [ ] No demo accounts are seeded; register real accounts and promote an admin deliberately.
-- [ ] Set `SECRET_KEY` to a long random value (64+ chars).
-- [ ] Set `COOKIE_INSECURE=false` (Secure flag) and serve over HTTPS.
-- [ ] Set `DB_DRIVER=postgres` with a proper `DATABASE_URL` (or keep `memory` for demos only).
-- [ ] Configure CORS `ALLOWED_ORIGINS` to your domain.
-- [ ] Enable backups and log rotation for audit files.
+- [x] No demo accounts are seeded; register real accounts and promote an admin deliberately.
+- [x] HTTPS-only cookies (`__Host-pinpoint_session`, `Secure`, HSTS) through the bundled gateway.
+- [ ] Set `DATABASE_URL` so users, friendships, locations, messages, sessions, diagnostics and the admin audit log persist.
+- [ ] Set `PINPOINT_SESSION_IDLE_MINUTES` (30 recommended in production; the 12 h demo default is too long for a public host).
+- [x] Enforce the 30-day absolute session ceiling (`PINPOINT_SESSION_MAX_DAYS`, default 30).
+- [ ] Point `PINPOINT_TILE_URL` at a self-hosted ODbL tile source (the public FOSSGIS fallback is demo-only).
+- [ ] Enable backups and log rotation for the database and gateway logs.
 - [ ] Run `cargo-audit` in CI and respond to advisories.
 
 ### Recommended
 
-- [ ] Put the Go backend behind TLS (Caddy/nginx reverse proxy).
+- [ ] Put the Rust server behind TLS (Caddy/nginx reverse proxy; `gateway/nginx.conf` is bundled).
 - [x] Store the OS keychain for bookmark encryption keys (see `src/security/keychain.rs`).
 - [ ] Enable `RequestSigner` for location publishing (server-side verification).
 - [ ] Set `reauth_after_seconds` on sessions for sensitive actions.
-- [ ] Monitor audit logs for `login failure` spikes and `CSRF_FAILED` errors.
+- [ ] Monitor audit logs and `pinpoint_admin_audit` for `login failure` spikes and `CSRF_FAILED` errors.
 
 ### Client Hardening (Already Done)
 
@@ -373,12 +375,12 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 
 | Signal | Response |
 |---|---|
-| `login failure` spike in audit log | Check for brute-force; verify rate limiting; consider locking accounts. |
+| `login failure` spike in audit log | Check for brute-force; the per-client throttle and per-account lockout already cap attempts; verify the limits and consider locking the account. |
 | `CSRF_FAILED` errors | Check web client CSRF handling; verify token rotation. |
 | Nominatim 429 | Client rate limiting is working; request scans will retry after `Retry-After`. |
-| Session token leak | Revoke via password change (all sessions revoked); rotate `SECRET_KEY`. |
+| Session token leak | Revoke via password change (all sessions revoked) or an admin reset; the row delete is authoritative across replicas. |
 | Device lost with bookmarks | Bookmarks encrypted at rest (if key is protected); else data is limited to saved places. |
-| Server breach | Location data is latest-only; notify affected users; rotate sessions; review audit logs. |
+| Server breach | The server holds the latest publish plus the owner-only 7-day trail; notify affected users, revoke sessions, review the admin audit table and logs. |
 
 ---
 
@@ -386,7 +388,7 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 
 | Requirement | Where |
 |---|---|
-| GDPR data export | Server-side account deletion export (Go backend) |
+| GDPR data export | Server-side account deletion export (Rust server) |
 | GDPR right to erasure | Server account deletion; bookmarks deleted locally |
 | OSM ODbL attribution | `src/map.rs` ODbL text; `src/osm.rs` OSM URLs |
 | OSMF Tile Usage Policy | Never `tile.openstreetmap.org` (QA grep in CI map-qa job) |
@@ -401,11 +403,11 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 cargo fmt --all -- --check                    → EXIT:0
 cargo clippy --all-targets -- -D warnings     → EXIT:0
 cargo build --locked                          → EXIT:0
-cargo test --locked                           → 69 lib tests + 10 contract + 1 ignored → EXIT:0
-cargo-audit (CI rust job)                     → rustsec advisory
+cargo test --locked                           → 368 lib tests + integration suites → EXIT:0
+cargo-audit (CI rust job)                     → 9 accepted advisories, no open vulnerability
 ```
 
-New security/pattern tests (57 added):
+Security and pattern test coverage:
 
 ```text
 patterns::command::* (2)  patterns::decorator::* (1)

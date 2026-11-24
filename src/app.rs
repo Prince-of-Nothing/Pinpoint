@@ -1046,27 +1046,35 @@ impl PinpointApp {
         self.set_loading(false);
 
         match result {
-            Ok(()) => {
-                self.audit_logger
-                    .log_event("auth", "logout", None, "success");
-                *self.e2e_location_key.lock().unwrap() = None;
-                self.key_manager.delete_secret("e2e_location_key");
-                self.clear_message_session(false);
-                self.clear_persisted_session();
-                let fresh = Self::fresh_data();
-                *self.data.lock().unwrap() = fresh;
-                self.set_screen(CurrentScreen::Map);
-                self.set_offline_mode(true);
-                self.set_notice(Some("Signed out.".to_string()));
-                Ok(())
-            }
+            Ok(()) => {}
+            // An expired session is a successful sign-out: there is nothing
+            // left on the server to revoke.
+            Err(e) if Self::is_unauthorized(&e) => {}
             Err(e) => {
                 self.audit_logger
                     .log_event("auth", "logout", None, "failure");
                 self.set_error(Some(format!("Logout failed: {e}")));
-                Err(e)
+                return Err(e);
             }
         }
+        self.audit_logger
+            .log_event("auth", "logout", None, "success");
+        self.end_local_session();
+        self.set_screen(CurrentScreen::Map);
+        self.set_offline_mode(true);
+        self.set_notice(Some("Signed out.".to_string()));
+        Ok(())
+    }
+
+    /// Drops private local state without a server round trip; used by sign-out
+    /// and by a session the server has already forgotten.
+    fn end_local_session(&self) {
+        *self.e2e_location_key.lock().unwrap() = None;
+        self.key_manager.delete_secret("e2e_location_key");
+        self.clear_message_session(false);
+        self.clear_persisted_session();
+        let fresh = Self::fresh_data();
+        *self.data.lock().unwrap() = fresh;
     }
 
     pub fn has_persisted_session(&self) -> bool {
@@ -1187,12 +1195,7 @@ impl PinpointApp {
     /// network call fails, matching the web client's fail-safe behavior.
     pub async fn logout_all(&self) -> anyhow::Result<()> {
         let result = self.backend.logout_all().await;
-        *self.e2e_location_key.lock().unwrap() = None;
-        self.key_manager.delete_secret("e2e_location_key");
-        self.clear_message_session(false);
-        self.clear_persisted_session();
-        let fresh = Self::fresh_data();
-        *self.data.lock().unwrap() = fresh;
+        self.end_local_session();
         self.set_screen(CurrentScreen::Map);
         self.set_offline_mode(true);
         match result {
@@ -1330,6 +1333,15 @@ impl PinpointApp {
             }
         }
         if let Some(error) = first_error {
+            if Self::is_unauthorized(&error) {
+                // The sliding session expired while the app was open: return
+                // to sign-in instead of leaving every action failing.
+                self.end_local_session();
+                self.set_error(None);
+                self.set_screen(CurrentScreen::Login);
+                self.set_notice(Some("Session expired. Sign in again.".to_string()));
+                return;
+            }
             self.set_error(Some(error.to_string()));
         }
     }
@@ -2021,5 +2033,28 @@ impl PinpointApp {
                 Err(e)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::*;
+
+    #[test]
+    fn unauthorized_is_detected_from_the_rendered_error() {
+        // `ApiClient` renders the envelope code first, and a non-JSON body as
+        // `{status}: {snippet}`; both forms must count as a lost session.
+        assert!(PinpointApp::is_unauthorized(&anyhow::anyhow!(
+            "UNAUTHENTICATED: Sign in required."
+        )));
+        assert!(PinpointApp::is_unauthorized(&anyhow::anyhow!(
+            "401: Unauthorized"
+        )));
+        assert!(!PinpointApp::is_unauthorized(&anyhow::anyhow!(
+            "FORBIDDEN: Admin only."
+        )));
+        assert!(!PinpointApp::is_unauthorized(&anyhow::anyhow!(
+            "error sending request: connection refused"
+        )));
     }
 }

@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [INFRA] CI now runs CodeQL (Rust) as a SAST gate and Dependabot keeps Cargo and GitHub Actions dependencies current, complementing the existing `cargo audit` allowlist.
 - [DOCS] Security architecture: the threat model is now STRIDE-tagged and scored (impact × likelihood) with a prioritised table, trust boundaries and an attack tree for location disclosure; the weeks 7–15 roadmap page the ADRs link to now exists with the as-built evidence index and open decisions.
 - [INFRA] Native password forms now share pure, testable validators for registration and password change, covering 4-emoji rejection, 8-emoji acceptance, a missing current password, forced rotation and confirmation mismatch; the security-architecture test evidence matches the 373-test suite.
 - [FEATURE] Tooling: `scripts/smoke.ps1` drives real sessions against a running server and checks the auth input rules, friendship rejection, location accuracy, share labels, notes, check-ins and the search bound (29 checks; exit code = failures).

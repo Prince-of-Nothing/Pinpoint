@@ -26,6 +26,7 @@ const state = {
   trailVisible: false,
   messageConversations: [],
   messageUnread: 0,
+  friendshipCount: 0,
 };
 
 let accountNameDirty = false;
@@ -127,6 +128,7 @@ function resetToLogin() {
   state.trailVisible = false;
   state.messageConversations = [];
   state.messageUnread = 0;
+  state.friendshipCount = 0;
   const chatsLabel = $("chats-label");
   if (chatsLabel) chatsLabel.textContent = "Chats";
   messagePeer = null;
@@ -361,6 +363,9 @@ async function refresh() {
 // Rendering
 // ---------------------------------------------------------------------------
 function renderFriends(items) {
+  // Only non-rejected rows can become an accepted friendship, and messages
+  // need one; the poll below is pointless before that.
+  state.friendshipCount = items.filter((f) => f.status !== "rejected").length;
   const ul = $("friends-list");
   ul.innerHTML = "";
   if (!items.length) {
@@ -1022,6 +1027,7 @@ async function pollMessages() {
   if (
     !state.user ||
     state.user.must_change_password ||
+    state.friendshipCount === 0 ||
     document.hidden ||
     messagePollBusy
   )

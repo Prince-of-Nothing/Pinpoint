@@ -60,8 +60,9 @@ jobs:
           ignore: RUSTSEC-2026-0543,RUSTSEC-2024-0436,RUSTSEC-2024-0370,RUSTSEC-2026-0249,RUSTSEC-2026-0192,RUSTSEC-2026-0371,RUSTSEC-2026-0370,RUSTSEC-2026-0372,RUSTSEC-2024-0429
 
   web-tests:
-    # Pure Node checks for the web client: sharing consent helpers and the
-    # admin users form wiring. No browser or network required.
+    # Pure Node checks for the web client: sharing consent helpers, the
+    # admin users form wiring and the message poll guard. No browser or
+    # network required.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -75,6 +76,8 @@ jobs:
         run: node web/app/test/sharing-ui.mjs
       - name: Admin UI checks
         run: node web/app/test/admin-ui.mjs
+      - name: Message poll checks
+        run: node web/app/test/messages-poll.mjs
 
   wasm:
     # Compile-check web clients for wasm32 (Trunk entry bins + wasm cfg paths).

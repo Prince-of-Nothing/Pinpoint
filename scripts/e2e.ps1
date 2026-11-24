@@ -4,6 +4,10 @@
 # Requires: docker compose stack up; node (via docker image) for TOTP codes.
 # Run: powershell -ExecutionPolicy Bypass -File scripts/e2e.ps1
 # Exit code = number of failed checks (0 = all green).
+#
+# NOTE: this script predates the session-cookie auth of the Rust server; its
+# requests carry no cookie or CSRF token, so the authenticated checks return
+# 401. scripts/smoke.ps1 is the cookie-aware suite for the single binary.
 
 param([string]$Base = "http://127.0.0.1:8000")
 

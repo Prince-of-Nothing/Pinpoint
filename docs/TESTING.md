@@ -4,14 +4,18 @@ Goal: every security-relevant behavior has executable evidence (thesis traceabil
 requirement → implementation → test).
 
 ## Layers
-| Layer          | Tooling                         | Where                     | Status |
-|----------------|---------------------------------|---------------------------|--------|
-| Unit           | `go test` stdlib                | `backend/internal/*_test.go` | ✅ passing |
-| Security cases | table-driven tests              | `internal/security`, `internal/handlers` | ✅ (CSRF, rate limit, authz) |
-| Integration    | httptest against full router    | `internal/handlers`       | 🚧 expanding |
-| E2E (web)      | Playwright smoke flows          | planned `e2e/`            | 📋 |
-| Mobile         | JUnit + Espresso (Kotlin)       | planned `mobile/`         | 📋 |
-| Load           | k6 on `/locations` hot path     | planned `perf/`           | 📋 |
+
+| Layer | Tooling | Where | CI job |
+|---|---|---|---|
+| Unit | `cargo test --lib` | `#[cfg(test)]` modules in `src/**` | `rust` |
+| Integration | `cargo test --test <name>` | `tests/*.rs` — contract, router_probe, location_consent, today, auth_password, account_delete, assets, map_* | `rust` |
+| Contract | recorded HTTP/1.1 mock (`tests/common`) | `tests/contract.rs` | `rust` |
+| Web client | pure Node checks | `web/app/test/*.mjs` (sharing, admin, search, offline, map) | `web-tests` |
+| Wasm | wasm32 compile check of the portable core | `src/webapp`, wasm stubs | `wasm` |
+| Desktop build | release build of the native client | `src/`, `Cargo.toml` | `client-macos`, `release-windows` |
+| Map data policy | OSM compliance check | tile/search routes and attribution | Map QA |
+| Dependency audit | `cargo audit` with the accepted-advisory list | `Cargo.lock`, `.github/workflows/ci.yml` | `rust` |
+| End-to-end smoke | `scripts/smoke.ps1` against a running server | `scripts/` | manual |
 
 ## Required test matrix for location access (the heart of the thesis)
 For each case, assert status code AND payload shape (no leakage):
@@ -30,19 +34,50 @@ For each case, assert status code AND payload shape (no leakage):
 13. Rate limit exceeded on login → 429, later attempts recover
 14. Stale-state: old `updated_at` → freshness field reflects stale/dead, never "fresh"
 
+Integration tests drive the real Axum router with `tower::ServiceExt::oneshot`
+and a throwaway `AppState`; the contract tests use the recorded mock server in
+`tests/common` so the exact headers and body fields `ApiClient` sends are pinned.
+
 ## Conventions
-- Table-driven tests, helper `newTestServer(t)` builds router with seeded isolated store.
-- Time-dependent tests inject a clock (no sleeps).
-- Test fixtures use fictional data only; the server does not seed production accounts.
-- Race detector in CI: `go test -race ./...`.
+- Unit tests live beside the code under `#[cfg(test)]`; integration tests go in `tests/<area>.rs`.
+- Time-dependent behavior takes an explicit clock or compares ISO 8601 strings; no sleeps.
+- Fixtures use fictional data only (`@example.invalid`), never real users or secrets.
+- A wire-contract change updates `tests/contract.rs` and `tests/router_probe.rs` in the same PR.
+- A web helper change gets a pure check under `web/app/test/` and a step in the `web-tests` job.
+- New security rules get a focused integration test (see `tests/location_consent.rs`).
 
 ## Running
+
 ```bash
-cd backend
-go test ./...          # unit + security + handler suites
-go test -race ./...    # before merging anything touching store/session maps
+cargo fmt --all -- --check
+cargo clippy --all-targets -- -D warnings
+cargo build --locked && cargo test --locked
+cargo audit
+node web/app/test/sharing-ui.mjs
+node web/app/test/admin-ui.mjs
 ```
 
+End-to-end smoke against a single binary and the in-memory store:
+
+```powershell
+cargo build --locked
+$env:BIND_ADDR = "0.0.0.0:8080"
+Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+.\target\debug\pinpoint-server.exe      # in-memory mode
+
+# second terminal
+powershell -ExecutionPolicy Bypass -File scripts/smoke.ps1
+```
+
+`scripts/smoke.ps1` signs up real sessions and checks the auth input rules, the
+friendship rejection flow, location accuracy, share labels, notes, check-ins
+and the search bound; its exit code is the number of failed checks.
+
+`scripts/e2e.ps1` drives the Docker compose stack and predates the session-cookie
+auth, so most of its checks are unauthenticated today; see the note in its header.
+
 ## Evidence for the thesis
-Each requirement in `thesis_content.md`'s MVP list cites the test function(s) proving it.
-When adding features, extend this mapping (update the table above + CHANGELOG).
+
+Each requirement in the report's MVP list cites the test function(s) proving it.
+When adding a feature, extend this mapping (update the table above and
+`CHANGELOG.md`).

@@ -61,8 +61,8 @@ jobs:
 
   web-tests:
     # Pure Node checks for the web client: sharing consent helpers, the
-    # admin users form wiring and the message poll guard. No browser or
-    # network required.
+    # admin users form wiring, the message poll guard and the password
+    # minimum. No browser or network required.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -78,6 +78,8 @@ jobs:
         run: node web/app/test/admin-ui.mjs
       - name: Message poll checks
         run: node web/app/test/messages-poll.mjs
+      - name: Password length checks
+        run: node web/app/test/password-length.mjs
 
   wasm:
     # Compile-check web clients for wasm32 (Trunk entry bins + wasm cfg paths).

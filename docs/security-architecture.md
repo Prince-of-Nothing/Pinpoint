@@ -403,7 +403,7 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 cargo fmt --all -- --check                    → EXIT:0
 cargo clippy --all-targets -- -D warnings     → EXIT:0
 cargo build --locked                          → EXIT:0
-cargo test --locked                           → 368 lib tests + integration suites → EXIT:0
+cargo test --locked                           → 373 lib tests + integration suites → EXIT:0
 cargo-audit (CI rust job)                     → 9 accepted advisories, no open vulnerability
 ```
 

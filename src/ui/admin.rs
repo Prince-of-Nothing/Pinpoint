@@ -531,21 +531,17 @@ impl PinpointAppUI {
                 let new_password = self.change_password_new.clone();
                 let confirm = self.change_password_confirm.clone();
 
-                // Same rule as the server: count characters, not UTF-8 bytes,
+                // Same rules as the server: count characters, not UTF-8 bytes,
                 // so an emoji password is not rejected after a round trip.
-                let password_check = crate::security::validation::validate_password(&new_password);
-                let error = if !forced && current.is_empty() {
-                    Some("Enter your current password".to_string())
-                } else if !password_check.is_valid() {
-                    Some(password_check.errors.join("; "))
-                } else if new_password != confirm {
-                    Some("New passwords do not match".to_string())
-                } else {
-                    None
-                };
+                let check = crate::security::validation::validate_password_change_form(
+                    &current,
+                    &new_password,
+                    &confirm,
+                    forced,
+                );
 
-                if let Some(msg) = error {
-                    self.app.set_error(Some(msg));
+                if !check.is_valid() {
+                    self.app.set_error(Some(check.errors.join("; ")));
                 } else {
                     self.change_password_current.clear();
                     self.change_password_new.clear();

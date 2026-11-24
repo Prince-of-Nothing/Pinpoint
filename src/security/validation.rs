@@ -255,6 +255,36 @@ pub fn validate_name(name: &str) -> ValidationResult {
     ValidationResult::valid()
 }
 
+/// Registration form: the email must be present and the password must pass
+/// the server's rule before a request is made.
+pub fn validate_registration_form(email: &str, password: &str) -> ValidationResult {
+    if email.trim().is_empty() {
+        return ValidationResult::invalid("Enter your email address.".to_string());
+    }
+    validate_password(password)
+}
+
+/// Change-password form: the current password is required unless the user is
+/// rotating a temporary one that the server already knows.
+pub fn validate_password_change_form(
+    current: &str,
+    new_password: &str,
+    confirm: &str,
+    forced: bool,
+) -> ValidationResult {
+    if !forced && current.trim().is_empty() {
+        return ValidationResult::invalid("Enter your current password".to_string());
+    }
+    let check = validate_password(new_password);
+    if !check.is_valid() {
+        return check;
+    }
+    if new_password != confirm {
+        return ValidationResult::invalid("New passwords do not match".to_string());
+    }
+    ValidationResult::valid()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -295,6 +325,31 @@ mod tests {
         // Four characters but sixteen UTF-8 bytes; must still be too short.
         assert!(!validate_password("😀😀😀😀").is_valid());
         assert!(!validate_password(&"a".repeat(129)).is_valid());
+    }
+
+    #[test]
+    fn registration_form_checks_the_password() {
+        let eight_emoji = "😀😀😀😀😀😀😀😀";
+        assert!(!validate_registration_form("a@example.com", "😀😀😀😀").is_valid());
+        assert!(validate_registration_form("a@example.com", eight_emoji).is_valid());
+        assert!(!validate_registration_form("   ", eight_emoji).is_valid());
+    }
+
+    #[test]
+    fn password_change_form_checks_characters_and_confirmation() {
+        let eight_emoji = "😀😀😀😀😀😀😀😀";
+        let four_emoji = "😀😀😀😀";
+        assert!(!validate_password_change_form("old", four_emoji, four_emoji, false).is_valid());
+        assert!(validate_password_change_form("old", eight_emoji, eight_emoji, false).is_valid());
+        // A forced rotation has no current password to compare.
+        assert!(validate_password_change_form("", eight_emoji, eight_emoji, true).is_valid());
+        let missing_current = validate_password_change_form("  ", eight_emoji, eight_emoji, false);
+        assert!(!missing_current.is_valid());
+        assert_eq!(
+            missing_current.errors,
+            vec!["Enter your current password".to_string()]
+        );
+        assert!(!validate_password_change_form("old", eight_emoji, four_emoji, false).is_valid());
     }
 
     #[test]

@@ -15,7 +15,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::models::User;
-use crate::security::oauth::OAuthClient;
+use crate::security::oauth::{is_secure_provider_url, OAuthClient};
 use crate::server::auth_handlers::{request_is_secure, session_cookie};
 use crate::server::state::AppState;
 
@@ -99,16 +99,27 @@ async fn complete_sign_in(
     verifier: &str,
 ) -> Result<User, &'static str> {
     let http = reqwest::Client::new();
+    let Some(secret) = state.oauth_secret(client.provider.name) else {
+        return Err("provider_unknown");
+    };
+    let Some(endpoints) = state.provider_endpoints(client.provider.name) else {
+        return Err("provider_unknown");
+    };
     let form = [
         ("client_id", client.provider.client_id.as_str()),
-        ("client_secret", client.client_secret.as_str()),
+        ("client_secret", secret.as_str()),
         ("code", code),
         ("grant_type", "authorization_code"),
         ("redirect_uri", client.redirect_uri.as_str()),
         ("code_verifier", verifier),
     ];
+    if !is_secure_provider_url(&client.provider.token_url) {
+        return Err("invalid_provider_url");
+    }
     let token_response = http
         .post(&client.provider.token_url)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header(reqwest::header::USER_AGENT, "pinpoint-oauth/1.0")
         .form(&form)
         .send()
         .await
@@ -123,40 +134,17 @@ async fn complete_sign_in(
         .filter(|token| !token.is_empty())
         .ok_or("exchange_failed")?;
 
-    let info_response = http
-        .get(&client.userinfo_url)
-        .bearer_auth(access_token)
-        .send()
-        .await
-        .map_err(|_| "userinfo_failed")?;
-    if !info_response.status().is_success() {
-        return Err("userinfo_failed");
-    }
-    let info: Value = info_response.json().await.map_err(|_| "userinfo_failed")?;
-    let subject = info
-        .get("sub")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|subject| !subject.is_empty())
-        .ok_or("userinfo_failed")?;
-    let email = info
-        .get("email")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|email| !email.is_empty())
-        .ok_or("email_missing")?
-        .to_ascii_lowercase();
-    if info.get("email_verified").and_then(Value::as_bool) != Some(true) {
-        return Err("email_unverified");
-    }
-    let full_name = info
-        .get("name")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|name| !name.is_empty())
-        .unwrap_or("Pinpoint user")
-        .to_string();
-    let identity = format!("{}:{subject}", client.provider.name);
+    let identity_info = fetch_identity(
+        &http,
+        client.provider.name,
+        &endpoints.userinfo_url,
+        endpoints.email_url.as_deref(),
+        access_token,
+    )
+    .await?;
+    let identity = format!("{}:{}", client.provider.name, identity_info.subject);
+    let email = identity_info.email;
+    let full_name = identity_info.name;
 
     let existing = {
         let store = state.store.lock().unwrap();
@@ -221,6 +209,133 @@ async fn complete_sign_in(
         store.users.push(user.clone());
     }
     Ok(user)
+}
+
+struct IdentityInfo {
+    subject: String,
+    email: String,
+    name: String,
+}
+
+/// Read the provider profile. OIDC providers return `sub`, `email` and
+/// `email_verified` in one call; GitHub needs `/user/emails` for a verified
+/// address.
+async fn fetch_identity(
+    http: &reqwest::Client,
+    provider_name: &str,
+    userinfo_url: &str,
+    email_url: Option<&str>,
+    access_token: &str,
+) -> Result<IdentityInfo, &'static str> {
+    if !is_secure_provider_url(userinfo_url) {
+        return Err("invalid_provider_url");
+    }
+    let response = http
+        .get(userinfo_url)
+        .bearer_auth(access_token)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header(reqwest::header::USER_AGENT, "pinpoint-oauth/1.0")
+        .send()
+        .await
+        .map_err(|_| "userinfo_failed")?;
+    if !response.status().is_success() {
+        return Err("userinfo_failed");
+    }
+    let info: Value = response.json().await.map_err(|_| "userinfo_failed")?;
+    if provider_name == "github" {
+        return github_identity(http, email_url, access_token, &info).await;
+    }
+    let subject = info
+        .get("sub")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|subject| !subject.is_empty())
+        .ok_or("userinfo_failed")?
+        .to_string();
+    let email = info
+        .get("email")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|email| !email.is_empty())
+        .ok_or("email_missing")?
+        .to_ascii_lowercase();
+    if info.get("email_verified").and_then(Value::as_bool) != Some(true) {
+        return Err("email_unverified");
+    }
+    let name = info
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or("Pinpoint user")
+        .to_string();
+    Ok(IdentityInfo {
+        subject,
+        email,
+        name,
+    })
+}
+
+async fn github_identity(
+    http: &reqwest::Client,
+    email_url: Option<&str>,
+    access_token: &str,
+    info: &Value,
+) -> Result<IdentityInfo, &'static str> {
+    let subject = match info.get("id") {
+        Some(Value::Number(id)) => id.to_string(),
+        Some(Value::String(id)) if !id.is_empty() => id.clone(),
+        _ => return Err("userinfo_failed"),
+    };
+    let login = info
+        .get("login")
+        .and_then(Value::as_str)
+        .unwrap_or("Pinpoint user");
+    let name = info
+        .get("name")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .unwrap_or(login)
+        .to_string();
+    let email_url = email_url.ok_or("email_missing")?;
+    if !is_secure_provider_url(email_url) {
+        return Err("invalid_provider_url");
+    }
+    let response = http
+        .get(email_url)
+        .bearer_auth(access_token)
+        .header(reqwest::header::ACCEPT, "application/json")
+        .header(reqwest::header::USER_AGENT, "pinpoint-oauth/1.0")
+        .send()
+        .await
+        .map_err(|_| "userinfo_failed")?;
+    if !response.status().is_success() {
+        return Err("userinfo_failed");
+    }
+    let emails: Value = response.json().await.map_err(|_| "userinfo_failed")?;
+    let list = emails.as_array().ok_or("userinfo_failed")?;
+    // Only the primary address is accepted: falling back to a secondary
+    // verified address would silently change the account's login email.
+    let verified = list
+        .iter()
+        .find(|entry| {
+            entry.get("primary") == Some(&Value::Bool(true))
+                && entry.get("verified") == Some(&Value::Bool(true))
+        })
+        .ok_or("email_unverified")?;
+    let email = verified
+        .get("email")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|email| !email.is_empty())
+        .ok_or("email_missing")?
+        .to_ascii_lowercase();
+    Ok(IdentityInfo {
+        subject,
+        email,
+        name,
+    })
 }
 
 fn signed_in(session_id: &str, secure: bool) -> Response {

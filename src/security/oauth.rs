@@ -1,4 +1,4 @@
-//! OAuth2 (authorization code + PKCE) helpers.
+﻿//! OAuth2 (authorization code + PKCE) helpers.
 //!
 //! Secrets never ship in the binary: client IDs come from env, client
 //! secrets (if any) are exchanged server-side only. PKCE (S256) is
@@ -38,20 +38,38 @@ impl OAuthProvider {
     }
 }
 
-/// A configured client: provider metadata plus the server-side secret, the
-/// userinfo endpoint and the redirect URI registered with the provider.
+/// The remote endpoints for a provider. Kept separately from the client
+/// credentials so a request URL never shares a container with a secret.
+#[derive(Debug, Clone)]
+pub struct OAuthEndpoints {
+    pub userinfo_url: String,
+    pub email_url: Option<String>,
+}
+
+/// A configured client: provider metadata, the userinfo endpoint and the
+/// redirect URI registered with the provider. The client secret is kept in
+/// `AppState` separately so endpoint URLs never travel with it.
 #[derive(Debug, Clone)]
 pub struct OAuthClient {
     pub provider: OAuthProvider,
-    pub client_secret: String,
     pub userinfo_url: String,
+    /// GitHub exposes verified addresses on a second endpoint; `None` for OIDC
+    /// providers that return `email` and `email_verified` in the userinfo.
+    pub email_url: Option<String>,
     pub redirect_uri: String,
 }
 
 impl OAuthClient {
+    pub fn endpoints(&self) -> OAuthEndpoints {
+        OAuthEndpoints {
+            userinfo_url: self.userinfo_url.clone(),
+            email_url: self.email_url.clone(),
+        }
+    }
+
     /// Google OIDC client from env. Returns `None` when the client ID or the
     /// secret is missing, so the routes stay disabled on a stock deployment.
-    pub fn google_from_env() -> Option<Self> {
+    pub fn google_from_env() -> Option<(Self, String)> {
         let client_id = std::env::var("PINPOINT_OAUTH_GOOGLE_CLIENT_ID")
             .ok()?
             .trim()
@@ -66,21 +84,85 @@ impl OAuthClient {
         let public = std::env::var("PINPOINT_PUBLIC_URL")
             .unwrap_or_else(|_| "http://localhost:8080".to_string());
         let public = public.trim_end_matches('/');
-        let mut provider = OAuthProvider::google(client_id);
-        if let Ok(url) = std::env::var("PINPOINT_OAUTH_GOOGLE_AUTHORIZE_URL") {
-            provider.authorize_url = url;
-        }
-        if let Ok(url) = std::env::var("PINPOINT_OAUTH_GOOGLE_TOKEN_URL") {
-            provider.token_url = url;
-        }
-        let userinfo_url = std::env::var("PINPOINT_OAUTH_GOOGLE_USERINFO_URL")
-            .unwrap_or_else(|_| "https://openidconnect.googleapis.com/v1/userinfo".to_string());
-        Some(Self {
+        let provider = OAuthProvider::google(client_id);
+        let userinfo_url = "https://openidconnect.googleapis.com/v1/userinfo".to_string();
+        let client = Self {
             provider,
-            client_secret,
             userinfo_url,
+            email_url: None,
             redirect_uri: format!("{public}/api/v1/auth/oauth/google/callback"),
-        })
+        };
+        assert_secure_endpoints(&client);
+        Some((client, client_secret))
+    }
+
+    /// GitHub OAuth client from env. GitHub does not put a verified email in
+    /// `/user`, so the callback reads `/user/emails` and takes the primary
+    /// verified address.
+    pub fn github_from_env() -> Option<(Self, String)> {
+        let client_id = std::env::var("PINPOINT_OAUTH_GITHUB_CLIENT_ID")
+            .ok()?
+            .trim()
+            .to_string();
+        let client_secret = std::env::var("PINPOINT_OAUTH_GITHUB_CLIENT_SECRET")
+            .ok()?
+            .trim()
+            .to_string();
+        if client_id.is_empty() || client_secret.is_empty() {
+            return None;
+        }
+        let public = std::env::var("PINPOINT_PUBLIC_URL")
+            .unwrap_or_else(|_| "http://localhost:8080".to_string());
+        let public = public.trim_end_matches('/');
+        let provider = OAuthProvider::github(client_id);
+        let userinfo_url = "https://api.github.com/user".to_string();
+        let email_url = "https://api.github.com/user/emails".to_string();
+        let client = Self {
+            provider,
+            userinfo_url,
+            email_url: Some(email_url),
+            redirect_uri: format!("{public}/api/v1/auth/oauth/github/callback"),
+        };
+        assert_secure_endpoints(&client);
+        Some((client, client_secret))
+    }
+}
+
+/// Provider endpoints must be HTTPS. Loopback HTTP is allowed for local
+/// development and the mock providers used by the tests, mirroring the
+/// transport policy in ADR-0006.
+pub fn is_secure_provider_url(raw: &str) -> bool {
+    if let Some(rest) = raw.strip_prefix("https://") {
+        return !rest.is_empty();
+    }
+    let Some(rest) = raw.strip_prefix("http://") else {
+        return false;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority.rsplit('@').next().unwrap_or(authority);
+    let hostname = host.split(':').next().unwrap_or("");
+    matches!(hostname, "127.0.0.1" | "localhost" | "[::1]")
+}
+
+/// Fail fast on a misconfigured provider endpoint rather than sending the
+/// client secret or a bearer token over cleartext.
+fn assert_secure_endpoints(client: &OAuthClient) {
+    let urls = [
+        &client.provider.authorize_url,
+        &client.provider.token_url,
+        &client.userinfo_url,
+    ];
+    for url in urls {
+        assert!(
+            is_secure_provider_url(url),
+            "OAuth provider endpoints must use HTTPS (loopback HTTP is allowed for tests): {url}"
+        );
+    }
+    if let Some(email_url) = &client.email_url {
+        assert!(
+            is_secure_provider_url(email_url),
+            "OAuth email endpoint must use HTTPS (loopback HTTP is allowed for tests): {email_url}"
+        );
     }
 }
 
@@ -198,5 +280,19 @@ mod tests {
     fn provider_scopes_non_empty() {
         assert!(!OAuthProvider::google("x".into()).scopes.is_empty());
         assert!(!OAuthProvider::github("x".into()).scopes.is_empty());
+    }
+
+    #[test]
+    fn provider_urls_must_be_https_or_loopback() {
+        assert!(is_secure_provider_url(
+            "https://accounts.google.com/o/oauth2/v2/auth"
+        ));
+        assert!(is_secure_provider_url("http://127.0.0.1:9099/token"));
+        assert!(is_secure_provider_url("http://localhost:9099/token"));
+        assert!(is_secure_provider_url("http://user@127.0.0.1:9099/token"));
+        assert!(!is_secure_provider_url("http://example.com/token"));
+        assert!(!is_secure_provider_url("http://127.0.0.1.evil.com/token"));
+        assert!(!is_secure_provider_url("ftp://example.com/token"));
+        assert!(!is_secure_provider_url("https://"));
     }
 }

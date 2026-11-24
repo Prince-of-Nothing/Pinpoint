@@ -41,6 +41,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [FEATURE] Auth: GitHub OAuth 2.0 sign-in alongside Google, using the primary verified address from `/user/emails` and the same state/PKCE/no-auto-link rules.
 - [FEATURE] Native map: right-click actions (directions from/to here, measure from here, add note here, copy coordinates) and a distance-measure HUD with numbered points, live total, undo and clear.
 - [FEATURE] Web map: friend pins now show the friend's name above the precision circle; the labels are DOM markers, so they also render on the offline basemap that has no glyphs.
 - [FEATURE] Web map: right-click/long-press actions (directions from/to here, measure from here, add note, copy coordinates) and a distance tool with numbered points, live total, undo and clear; `web/app/measure.js` is a pure module served same-origin.

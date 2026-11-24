@@ -15,6 +15,7 @@ assert.match(
   "the button must open the provider start route",
 );
 assert.match(app, /oauth_error/);
+assert.match(app, /github: "GitHub"/, "GitHub must render with its official capitalisation");
 for (const code of [
   "provider_denied",
   "state_mismatch",

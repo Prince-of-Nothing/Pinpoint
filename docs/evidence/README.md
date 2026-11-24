@@ -10,7 +10,7 @@ reproduced with the command shown.
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 cargo build --locked
-cargo test --locked          # 379 lib tests + integration suites
+cargo test --locked          # 380 lib tests + integration suites
 cargo audit                  # 9 accepted advisories, no open vulnerability
 node web/app/test/sharing-ui.mjs
 node web/app/test/admin-ui.mjs

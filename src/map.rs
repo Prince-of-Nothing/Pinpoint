@@ -308,19 +308,70 @@ pub fn render_map_with(
 
         if response.clicked() && ui.input(|i| i.multi_touch()).is_none() {
             if let Some(pos) = response.interact_pointer_pos() {
-                if let Some(bookmark) = bookmark_hit(state, map_rect, pos, 20.0) {
+                let (lat, lon) = screen_to_latlon(
+                    map_rect,
+                    state.map_center_lat,
+                    state.map_center_lon,
+                    state.map_zoom,
+                    pos,
+                );
+                if state.measure_mode {
+                    state.measure_points.push((lat, lon));
+                } else if let Some(bookmark) = bookmark_hit(state, map_rect, pos, 20.0) {
                     state.map_bookmark_click = Some(bookmark);
                 } else {
-                    state.map_click = Some(screen_to_latlon(
-                        map_rect,
-                        state.map_center_lat,
-                        state.map_center_lon,
-                        state.map_zoom,
-                        pos,
-                    ));
+                    state.map_click = Some((lat, lon));
                 }
             }
         }
+
+        // Right-click actions for the point under the pointer. The UI consumes
+        // `map_menu_action` after the map card (route panel, note composer, …).
+        let menu_point = response
+            .interact_pointer_pos()
+            .or_else(|| response.hover_pos())
+            .map(|pos| {
+                screen_to_latlon(
+                    map_rect,
+                    state.map_center_lat,
+                    state.map_center_lon,
+                    state.map_zoom,
+                    pos,
+                )
+            });
+        response.context_menu(|ui| {
+            let Some((lat, lon)) = menu_point else {
+                ui.close();
+                return;
+            };
+            ui.label(
+                RichText::new(format!("{lat:.5}, {lon:.5}"))
+                    .size(10.0)
+                    .color(theme::MUTED),
+            );
+            if ui.button("Directions from here").clicked() {
+                state.map_menu_action =
+                    Some(crate::models::MapMenuAction::DirectionsFrom(lat, lon));
+                ui.close();
+            }
+            if ui.button("Directions to here").clicked() {
+                state.map_menu_action = Some(crate::models::MapMenuAction::DirectionsTo(lat, lon));
+                ui.close();
+            }
+            if ui.button("Measure from here").clicked() {
+                state.map_menu_action = Some(crate::models::MapMenuAction::MeasureFrom(lat, lon));
+                ui.close();
+            }
+            if ui.button("Add note here").clicked() {
+                state.map_menu_action = Some(crate::models::MapMenuAction::AddNote(lat, lon));
+                ui.close();
+            }
+            if ui.button("Copy coordinates").clicked() {
+                state.map_menu_action =
+                    Some(crate::models::MapMenuAction::CopyCoordinates(lat, lon));
+                ui.close();
+            }
+        });
 
         // Drag-to-pan in Web Mercator pixel space. Skip it during a pinch:
         // winit maps the first finger to the pointer, which would otherwise
@@ -587,6 +638,37 @@ pub fn render_map_with(
                 egui::FontId::proportional(label_size),
                 Color32::WHITE,
             );
+        }
+
+        // Distance measure: solid accent polyline with numbered points.
+        if state.measure_mode && !state.measure_points.is_empty() {
+            let points: Vec<Pos2> = state
+                .measure_points
+                .iter()
+                .map(|(lat, lon)| {
+                    project_to_rect(
+                        *lat,
+                        *lon,
+                        state.map_center_lat,
+                        state.map_center_lon,
+                        z,
+                        map_rect,
+                    )
+                })
+                .collect();
+            for pair in points.windows(2) {
+                painter.line_segment([pair[0], pair[1]], Stroke::new(3.0_f32, theme::ACCENT));
+            }
+            for (index, point) in points.iter().enumerate() {
+                painter.circle_filled(*point, 9.0, theme::ACCENT);
+                painter.text(
+                    *point,
+                    egui::Align2::CENTER_CENTER,
+                    (index + 1).to_string(),
+                    egui::FontId::proportional(10.0),
+                    theme::BG,
+                );
+            }
         }
 
         // Metric scale bar (1-2-5 series) in the map's lower-left corner.

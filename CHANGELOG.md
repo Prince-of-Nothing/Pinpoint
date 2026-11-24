@@ -41,6 +41,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [FEATURE] Native map: right-click actions (directions from/to here, measure from here, add note here, copy coordinates) and a distance-measure HUD with numbered points, live total, undo and clear.
 - [FEATURE] Web map: friend pins now show the friend's name above the precision circle; the labels are DOM markers, so they also render on the offline basemap that has no glyphs.
 - [FEATURE] Web map: right-click/long-press actions (directions from/to here, measure from here, add note, copy coordinates) and a distance tool with numbered points, live total, undo and clear; `web/app/measure.js` is a pure module served same-origin.
 - [FEATURE] Web: wide screens now keep the section cards in a right column with a full-bleed map and top-left search, MapLibre gains compass/pitch and fullscreen, and the zoom/fullscreen controls stay clear of the mobile tab bar; the Midterm 2 map, Today and notes screenshots were regenerated from this build.
@@ -70,6 +71,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Distance labels: a folded zero (single-point measure) no longer renders as `-0 m`; the formatter clamps distances to zero.
 - [FIX] Native: the change-password form counts characters instead of UTF-8 bytes, and the register form applies the server's password rule before sending, so a 4–7 emoji password is rejected in the form; a blank email now explains itself instead of doing nothing.
 - [FIX] Web: the register, change-password and admin temporary-password forms count characters like the server instead of UTF-16 units, so a 4–7 emoji password is rejected before the request instead of by the server.
 - [FIX] Web: the 5-second message poll now skips accounts with no friendships, so an idle friendless tab no longer sends two requests every 5 seconds; pending requests keep polling because the other side can accept.

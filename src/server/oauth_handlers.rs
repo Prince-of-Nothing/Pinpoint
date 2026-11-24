@@ -218,6 +218,7 @@ async fn fetch_identity(
     if !is_secure_provider_url(&client.userinfo_url) {
         return Err("invalid_provider_url");
     }
+    // codeql[rust/cleartext-transmission] False positive: is_secure_provider_url requires HTTPS (loopback HTTP only for local tests), and OAuthClient carries no secret.
     let response = http
         .get(&client.userinfo_url)
         .bearer_auth(access_token)

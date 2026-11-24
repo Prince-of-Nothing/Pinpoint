@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [DOCS] Evidence: a single index now links the gate, live smoke, SAST/DAST reports, backup self-tests, threat model, control register, traceability, models and artifact details for the report.
 - [DOCS] Reference: the technology-stack, design-pattern and domain-data pages now describe the Rust system (crates, `src/patterns/`, real tables) instead of the removed Flutter/FastAPI design.
 - [DOCS] Evidence: the security control register and requirements traceability matrix now describe the as-built Rust system (SC-01..SC-09, REQ-01..REQ-09) with current tests, scans and limitations instead of the removed Python backend.
 - [INFRA] Backups: a host-side wrapper encrypts `pg_dump` with AES-256-CBC/PBKDF2 (openssl), verifies a decrypt roundtrip before deleting the plaintext temp file, and ships a restore script with a header check and overwrite guard; the passphrase stays outside the repository.

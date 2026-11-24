@@ -102,7 +102,7 @@ async fn complete_sign_in(
     let Some(secret) = state.oauth_secret(client.provider.name) else {
         return Err("provider_unknown");
     };
-    let Some(endpoints) = state.oauth_endpoints(client.provider.name) else {
+    let Some(endpoints) = state.provider_endpoints(client.provider.name) else {
         return Err("provider_unknown");
     };
     let form = [

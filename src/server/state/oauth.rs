@@ -32,7 +32,7 @@ impl AppState {
             .lock()
             .unwrap()
             .insert(provider.clone(), secret);
-        self.oauth_endpoints
+        self.provider_endpoints
             .lock()
             .unwrap()
             .insert(provider.clone(), client.endpoints());
@@ -45,11 +45,15 @@ impl AppState {
     }
 
     /// Remote endpoints for a configured provider (no secret/id inside).
-    pub fn oauth_endpoints(
+    pub fn provider_endpoints(
         &self,
         provider: &str,
     ) -> Option<crate::security::oauth::OAuthEndpoints> {
-        self.oauth_endpoints.lock().unwrap().get(provider).cloned()
+        self.provider_endpoints
+            .lock()
+            .unwrap()
+            .get(provider)
+            .cloned()
     }
 
     /// Enabled providers, sorted so the client renders a stable order.

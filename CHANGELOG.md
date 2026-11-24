@@ -101,6 +101,7 @@ The per-item flagged list for this release is in
 - [FIX] Native Today: action errors are surfaced, the note draft clears only after a successful POST and only if unchanged, refresh sections load independently, and a 401 clears private lists without letting an in-flight refresh cross accounts.
 - [FIX] Location permission: Android now requests fine and coarse location in one dialog (Android 12+ ignores a fine-only request), asks on the first map view, retries the fix after a grant, and receives one-shot GPS updates through a broadcast receiver. The web client asks once after sign-in and reports the real geolocation error. Native map controls use a solid fill so their glyphs stay readable over the light basemap.
 ### Security
+- [SECURITY] API responses now carry `Cache-Control: no-store`, so a browser or intermediate cache on a shared device cannot replay another account's locations, notes or sessions; static assets keep their own cache headers.
 - [SECURITY] Web: the CSP no longer allows inline styles; all CSS is same-origin or applied through the CSSOM, so `style-src` is `'self'` and the ZAP medium finding is gone.
 - [SECURITY] Private note labels, messages and photos are AES-256-GCM encrypted at rest when `DATA_ENCRYPTION_KEY` is set, with legacy plaintext rows still readable and an invalid key refusing to start; ADR-0025.
 - [SECURITY] Location publishes reject an accuracy outside 0 to 10,000,000 meters, matching the client validation; a crafted request can no longer store a negative or absurd precision.

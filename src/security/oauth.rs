@@ -1,4 +1,4 @@
-//! OAuth2 (authorization code + PKCE) helpers.
+﻿//! OAuth2 (authorization code + PKCE) helpers.
 //!
 //! Secrets never ship in the binary: client IDs come from env, client
 //! secrets (if any) are exchanged server-side only. PKCE (S256) is
@@ -84,15 +84,8 @@ impl OAuthClient {
         let public = std::env::var("PINPOINT_PUBLIC_URL")
             .unwrap_or_else(|_| "http://localhost:8080".to_string());
         let public = public.trim_end_matches('/');
-        let mut provider = OAuthProvider::google(client_id);
-        if let Ok(url) = std::env::var("PINPOINT_OAUTH_GOOGLE_AUTHORIZE_URL") {
-            provider.authorize_url = url;
-        }
-        if let Ok(url) = std::env::var("PINPOINT_OAUTH_GOOGLE_TOKEN_URL") {
-            provider.token_url = url;
-        }
-        let userinfo_url = std::env::var("PINPOINT_OAUTH_GOOGLE_USERINFO_URL")
-            .unwrap_or_else(|_| "https://openidconnect.googleapis.com/v1/userinfo".to_string());
+        let provider = OAuthProvider::google(client_id);
+        let userinfo_url = "https://openidconnect.googleapis.com/v1/userinfo".to_string();
         let client = Self {
             provider,
             userinfo_url,
@@ -121,17 +114,9 @@ impl OAuthClient {
         let public = std::env::var("PINPOINT_PUBLIC_URL")
             .unwrap_or_else(|_| "http://localhost:8080".to_string());
         let public = public.trim_end_matches('/');
-        let mut provider = OAuthProvider::github(client_id);
-        if let Ok(url) = std::env::var("PINPOINT_OAUTH_GITHUB_AUTHORIZE_URL") {
-            provider.authorize_url = url;
-        }
-        if let Ok(url) = std::env::var("PINPOINT_OAUTH_GITHUB_TOKEN_URL") {
-            provider.token_url = url;
-        }
-        let userinfo_url = std::env::var("PINPOINT_OAUTH_GITHUB_USERINFO_URL")
-            .unwrap_or_else(|_| "https://api.github.com/user".to_string());
-        let email_url = std::env::var("PINPOINT_OAUTH_GITHUB_EMAILS_URL")
-            .unwrap_or_else(|_| "https://api.github.com/user/emails".to_string());
+        let provider = OAuthProvider::github(client_id);
+        let userinfo_url = "https://api.github.com/user".to_string();
+        let email_url = "https://api.github.com/user/emails".to_string();
         let client = Self {
             provider,
             userinfo_url,

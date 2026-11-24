@@ -9,6 +9,7 @@ const root = process.cwd();
 const sharingUrl = pathToFileURL(path.resolve("web/app/sharing.js")).href;
 const {
   expiryText,
+  freshnessText,
   friendName,
   initSharing,
   precisionLabel,
@@ -105,6 +106,17 @@ await check("expiryText distinguishes expiry from no expiry", () => {
   assert.equal(expiryText({}, now), "no expiry");
   assert.match(expiryText({ expires_at: at(1) }, now), /^expires /);
   assert.match(expiryText({ expires_at: past }, now), /^expired /);
+});
+
+await check("freshnessText labels the age of a friend's location", () => {
+  const ago = (ms) => new Date(now.getTime() - ms).toISOString();
+  assert.equal(freshnessText(ago(20_000), now), "just now");
+  assert.equal(freshnessText(ago(5 * 60_000), now), "5m ago");
+  assert.equal(freshnessText(ago(3 * 3_600_000), now), "3h ago");
+  assert.equal(freshnessText(ago(2 * 86_400_000), now), "2d ago");
+  assert.equal(freshnessText("not a date", now), "unknown");
+  // A clock-skewed future timestamp is not reported as negative age.
+  assert.equal(freshnessText(ago(-60_000), now), "just now");
 });
 
 await check("keep preserves the stored expiry and mutual direction", () => {

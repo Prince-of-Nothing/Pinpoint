@@ -56,7 +56,7 @@ what remains after the listed countermeasure.
 | T-06 | Information disclosure | API, Postgres | Location over-collection | 4 | 3 | 12 | High | Latest publish + owner-only 7-day trail pruned hourly; precision downgrade before serialization | A DB breach exposes the current point and the owner trail |
 | T-07 | Denial of service | Map proxy, OSM | Scraping or bulk use of OSM services | 3 | 4 | 12 | High | Client 1 req/s Nominatim throttle; server caps (tiles 1200/min, search/reverse 60/min, route 120/min); gateway overwrites `X-Forwarded-For` | Public quota exhaustion under a botnet |
 | T-11 | Tampering | Web client | Stored/reflected XSS reorders UI or steals a session | 4 | 3 | 12 | High | Server CSP, no third-party scripts, `textContent`/`escapeHtml` for user text, validated labels/notes | A new sink added without escaping |
-| T-13 | Information disclosure | Postgres, backups | At-rest exposure of notes, photos, location rows | 4 | 3 | 12 | High | Disk/volume encryption is deployment-dependent; E2E message bodies are ciphertext; passwords are Argon2id | Notes/photos and `pg_dump` backups are not encrypted at rest (documented limitation) |
+| T-13 | Information disclosure | Postgres, backups | At-rest exposure of notes, photos, location rows | 4 | 3 | 12 | High | Note label/message/photo are AES-256-GCM encrypted with `DATA_ENCRYPTION_KEY` before storage; E2E messages are ciphertext; passwords are Argon2id | `pg_dump` backups and location rows are not encrypted at rest (documented limitation) |
 | T-03 | Spoofing | Session layer | Session hijack or cookie theft | 5 | 2 | 10 | High | `__Host-` cookie, `HttpOnly`, `SameSite=Lax`, `Secure` in production, 12 h sliding / 30-day absolute expiry, per-request DB validation, revocation | XSS in a client or a compromised device |
 | T-10 | Tampering | API, DB | Injection through malformed input | 5 | 2 | 10 | High | Strict server validation, sqlx bound parameters only, no string-concatenated SQL, stable 400 envelope | Dependency zero-day (mitigated by `cargo audit`) |
 | T-12 | Tampering | Build, dependencies | Compromised crate or toolchain | 5 | 2 | 10 | High | `Cargo.lock` committed, `cargo audit` gate with an explicit advisory allowlist, pinned patched `cookie` | A malicious maintainer or a new unpublished advisory |
@@ -304,7 +304,8 @@ rate_limited_reports_retry_after
 
 ### Goals
 
-- Protect on-device data (bookmarks) from disk theft, backup snooping, and casual inspection.
+- Protect private data at rest (server notes/photos, on-device bookmarks) from
+  disk theft, backup snooping, and casual inspection.
 - Zeroize keys from memory on drop.
 - Support key rotation.
 
@@ -315,13 +316,23 @@ rate_limited_reports_retry_after
 - **Format:** `ciphertext = nonce (12B) || tag+ciphertext`, base64-encoded for storage.
 - **Key:** 256-bit (`EncryptionKey`), generated via `rand`, held in `KeyManager` (in-memory `Mutex<HashMap<String, EncryptionKey>>` + `current_key`).
 - **Zeroize:** `impl Zeroize for EncryptionKey` + `Drop` calls `zeroize()`.
+- **Server notes:** when `DATA_ENCRYPTION_KEY` is set (base64 32 bytes), the
+  label, message and photo of a place note are encrypted before they reach
+  Postgres or the in-memory store, prefixed with `enc:v1:`. Reads decrypt for
+  the owner; legacy plaintext rows stay readable. The key is validated at
+  startup (an invalid value refuses to start rather than storing plaintext).
 - **Bookmark integration:** `EncryptedBookmarkStore::encrypt_bookmarks(String) -> String` / `decrypt_bookmarks(String) -> String` exists; the UI currently stores owner-only JSON.
 
 ### Limitations (honest)
 
-- The key lives on the same device as the ciphertext. Device theft with key access still breaks confidentiality. The key is persisted in the OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service via `keyring`) — see `src/security/keychain.rs`; platforms without a keychain fall back to an in-memory key.
+- The key lives on the same device as the ciphertext. Device theft with key access still breaks confidentiality. The key is persisted in the OS keychain (Windows Credential Manager / macOS Keychain / Linux Secret Service via `keyring`) - see `src/security/keychain.rs`; platforms without a keychain fall back to an in-memory key.
 - `KeyManager` persists its active key through the keychain via
   `KeyManager::load_or_generate` (see `src/security/encryption.rs`).
+- `pg_dump` backups are not encrypted by this mechanism; they must be
+  protected by the storage layer or a backup wrapper.
+- There is no key-rotation tool yet: rotating `DATA_ENCRYPTION_KEY` makes old
+  notes undecryptable (they are returned as stored ciphertext). Back up the
+  key with the database.
 
 ### Tests
 

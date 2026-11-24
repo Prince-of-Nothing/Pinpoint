@@ -97,6 +97,14 @@ pub struct AesGcmEncryption {
     key: EncryptionKey,
 }
 
+impl std::fmt::Debug for AesGcmEncryption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AesGcmEncryption")
+            .field("key", &"[redacted]")
+            .finish()
+    }
+}
+
 impl AesGcmEncryption {
     pub fn new(key: EncryptionKey) -> Self {
         Self { key }

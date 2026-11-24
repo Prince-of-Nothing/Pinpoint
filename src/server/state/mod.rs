@@ -85,6 +85,8 @@ pub struct AppState {
     pub oauth_clients: Arc<Mutex<HashMap<String, crate::security::oauth::OAuthClient>>>,
     /// Single-use pending authorizations keyed by the opaque state.
     pub oauth_pending: Arc<Mutex<HashMap<String, oauth::PendingOAuth>>>,
+    /// Column cipher for private notes/photos; `None` keeps plaintext (dev).
+    pub data_cipher: Option<Arc<crate::security::encryption::AesGcmEncryption>>,
 }
 
 /// Which deployable this `AppState` backs (controls persistence ownership).
@@ -173,6 +175,75 @@ fn default_oauth_clients() -> HashMap<String, crate::security::oauth::OAuthClien
     clients
 }
 
+/// Column cipher for private notes and photos. `DATA_ENCRYPTION_KEY` is a
+/// base64 32-byte key; an invalid value refuses to start rather than silently
+/// storing plaintext.
+fn data_cipher_from_env() -> Option<Arc<crate::security::encryption::AesGcmEncryption>> {
+    use base64::Engine;
+    let raw = std::env::var("DATA_ENCRYPTION_KEY").ok()?;
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(raw)
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(raw))
+        .unwrap_or_else(|_| panic!("DATA_ENCRYPTION_KEY must be a base64 32-byte key"));
+    let key = crate::security::encryption::EncryptionKey::from_bytes(&bytes)
+        .unwrap_or_else(|_| panic!("DATA_ENCRYPTION_KEY must decode to exactly 32 bytes"));
+    Some(Arc::new(
+        crate::security::encryption::AesGcmEncryption::new(key),
+    ))
+}
+
+/// Marks an encrypted column value (`enc:v1:` + base64 nonce||ciphertext).
+const NOTE_CIPHER_PREFIX: &str = "enc:v1:";
+
+impl AppState {
+    /// Encrypt one private-note field. A crypto error stores the plaintext so
+    /// the note is never lost; the key is validated at startup, so this is
+    /// practically unreachable.
+    pub fn encrypt_note_text(&self, plaintext: &str) -> String {
+        let Some(cipher) = &self.data_cipher else {
+            return plaintext.to_string();
+        };
+        match cipher.encrypt_string(plaintext) {
+            Ok(ciphertext) => format!("{NOTE_CIPHER_PREFIX}{ciphertext}"),
+            Err(_) => {
+                tracing::warn!("note encryption failed; storing the field as plaintext");
+                plaintext.to_string()
+            }
+        }
+    }
+
+    /// Decrypt one private-note field. Legacy plaintext and a missing key return
+    /// the stored value unchanged; a ciphertext is never silently dropped.
+    pub fn decrypt_note_text(&self, stored: &str) -> String {
+        let Some(rest) = stored.strip_prefix(NOTE_CIPHER_PREFIX) else {
+            return stored.to_string();
+        };
+        let Some(cipher) = &self.data_cipher else {
+            return stored.to_string();
+        };
+        cipher.decrypt_string(rest).unwrap_or_else(|_| {
+            tracing::warn!("note decryption failed; returning the stored ciphertext");
+            stored.to_string()
+        })
+    }
+
+    /// Decrypt the three private fields of a note.
+    pub fn decrypt_note(&self, note: &crate::models::PlaceNote) -> crate::models::PlaceNote {
+        crate::models::PlaceNote {
+            label: self.decrypt_note_text(&note.label),
+            message: self.decrypt_note_text(&note.message),
+            photo: note
+                .photo
+                .as_deref()
+                .map(|photo| self.decrypt_note_text(photo)),
+            ..note.clone()
+        }
+    }
+}
 impl AppState {
     pub fn new() -> Self {
         Self::for_owner(ServiceKind::All)
@@ -188,6 +259,7 @@ impl AppState {
             auth_rate: Arc::new(AuthRateLimiter::new()),
             oauth_clients: Arc::new(Mutex::new(default_oauth_clients())),
             oauth_pending: Arc::new(Mutex::new(HashMap::new())),
+            data_cipher: data_cipher_from_env(),
         }
     }
 
@@ -212,6 +284,7 @@ impl AppState {
                     auth_rate: Arc::new(AuthRateLimiter::new()),
                     oauth_clients: Arc::new(Mutex::new(default_oauth_clients())),
                     oauth_pending: Arc::new(Mutex::new(HashMap::new())),
+                    data_cipher: data_cipher_from_env(),
                 };
                 app.init_postgres().await;
                 app

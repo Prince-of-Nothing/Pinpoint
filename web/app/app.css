@@ -2075,3 +2075,16 @@ body:has(.drawer:is(.open, .closing)) .map-controls {
     left: calc((100% - 380px) / 2);
   }
 }
+/* Friend name above the precision circle. DOM labels work on the offline
+   style, which has no glyphs for a MapLibre symbol layer. */
+.friend-label {
+  pointer-events: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(17, 22, 29, 0.82);
+  color: #ffffff;
+  white-space: nowrap;
+  font-size: 0.7rem;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}

@@ -41,6 +41,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [FEATURE] Web map: friend pins now show the friend's name above the precision circle; the labels are DOM markers, so they also render on the offline basemap that has no glyphs.
 - [FEATURE] Web map: right-click/long-press actions (directions from/to here, measure from here, add note, copy coordinates) and a distance tool with numbered points, live total, undo and clear; `web/app/measure.js` is a pure module served same-origin.
 - [FEATURE] Web: wide screens now keep the section cards in a right column with a full-bleed map and top-left search, MapLibre gains compass/pitch and fullscreen, and the zoom/fullscreen controls stay clear of the mobile tab bar; the Midterm 2 map, Today and notes screenshots were regenerated from this build.
 - [FEATURE] Native: the friend list on the map screen now says how old each location is (`just now`, `5m ago`, `2d ago`), matching the web client and using the existing freshness thresholds.

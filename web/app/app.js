@@ -1861,6 +1861,61 @@ document.addEventListener("pinpoint:theme", (event) => {
   mapApi?.setTheme(event.detail === "dark" ? "dark" : "light");
 });
 
+// ---------------------------------------------------------------------------
+// OAuth sign-in
+// ---------------------------------------------------------------------------
+const OAUTH_ERRORS = {
+  provider_denied: "The provider sign-in was cancelled.",
+  state_mismatch: "The sign-in attempt expired. Try again.",
+  exchange_failed: "The provider sign-in failed. Try again.",
+  userinfo_failed: "The provider did not return your profile. Try again.",
+  email_missing: "The provider did not share an email address.",
+  email_unverified: "The provider email is not verified.",
+  email_exists:
+    "An account with this email already exists. Sign in with your password first; linking a provider is not automatic.",
+  account_disabled: "This account is disabled.",
+  account_failed: "The account could not be created. Try again.",
+  provider_unknown: "This sign-in provider is not enabled.",
+};
+
+async function loadOauthProviders() {
+  const box = $("oauth-buttons");
+  if (!box) return;
+  try {
+    const data = await api("/api/v1/auth/providers");
+    const providers = Array.isArray(data?.providers) ? data.providers : [];
+    box.innerHTML = "";
+    for (const provider of providers) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = `Continue with ${provider[0].toUpperCase()}${provider.slice(1)}`;
+      button.addEventListener("click", () => {
+        window.location.assign(
+          `/api/v1/auth/oauth/${encodeURIComponent(provider)}/start`,
+        );
+      });
+      box.appendChild(button);
+    }
+    show(box, providers.length > 0);
+  } catch (_) {
+    show(box, false);
+  }
+}
+
+function showOauthError() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("oauth_error");
+  if (!code) return;
+  setStatus(OAUTH_ERRORS[code] || "Provider sign-in failed.", true);
+  params.delete("oauth_error");
+  const rest = params.toString();
+  history.replaceState(null, "", `${location.pathname}${rest ? `?${rest}` : ""}`);
+}
+
+loadOauthProviders();
+showOauthError();
+
 $("note-photo")?.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   const preview = $("note-preview");

@@ -11,8 +11,8 @@ use sha2::{Digest, Sha256};
 #[derive(Debug, Clone)]
 pub struct OAuthProvider {
     pub name: &'static str,
-    pub authorize_url: &'static str,
-    pub token_url: &'static str,
+    pub authorize_url: String,
+    pub token_url: String,
     pub scopes: &'static [&'static str],
     pub client_id: String,
 }
@@ -21,8 +21,8 @@ impl OAuthProvider {
     pub fn google(client_id: String) -> Self {
         Self {
             name: "google",
-            authorize_url: "https://accounts.google.com/o/oauth2/v2/auth",
-            token_url: "https://oauth2.googleapis.com/token",
+            authorize_url: "https://accounts.google.com/o/oauth2/v2/auth".into(),
+            token_url: "https://oauth2.googleapis.com/token".into(),
             scopes: &["openid", "email", "profile"],
             client_id,
         }
@@ -30,11 +30,57 @@ impl OAuthProvider {
     pub fn github(client_id: String) -> Self {
         Self {
             name: "github",
-            authorize_url: "https://github.com/login/oauth/authorize",
-            token_url: "https://github.com/login/oauth/access_token",
+            authorize_url: "https://github.com/login/oauth/authorize".into(),
+            token_url: "https://github.com/login/oauth/access_token".into(),
             scopes: &["read:user", "user:email"],
             client_id,
         }
+    }
+}
+
+/// A configured client: provider metadata plus the server-side secret, the
+/// userinfo endpoint and the redirect URI registered with the provider.
+#[derive(Debug, Clone)]
+pub struct OAuthClient {
+    pub provider: OAuthProvider,
+    pub client_secret: String,
+    pub userinfo_url: String,
+    pub redirect_uri: String,
+}
+
+impl OAuthClient {
+    /// Google OIDC client from env. Returns `None` when the client ID or the
+    /// secret is missing, so the routes stay disabled on a stock deployment.
+    pub fn google_from_env() -> Option<Self> {
+        let client_id = std::env::var("PINPOINT_OAUTH_GOOGLE_CLIENT_ID")
+            .ok()?
+            .trim()
+            .to_string();
+        let client_secret = std::env::var("PINPOINT_OAUTH_GOOGLE_CLIENT_SECRET")
+            .ok()?
+            .trim()
+            .to_string();
+        if client_id.is_empty() || client_secret.is_empty() {
+            return None;
+        }
+        let public = std::env::var("PINPOINT_PUBLIC_URL")
+            .unwrap_or_else(|_| "http://localhost:8080".to_string());
+        let public = public.trim_end_matches('/');
+        let mut provider = OAuthProvider::google(client_id);
+        if let Ok(url) = std::env::var("PINPOINT_OAUTH_GOOGLE_AUTHORIZE_URL") {
+            provider.authorize_url = url;
+        }
+        if let Ok(url) = std::env::var("PINPOINT_OAUTH_GOOGLE_TOKEN_URL") {
+            provider.token_url = url;
+        }
+        let userinfo_url = std::env::var("PINPOINT_OAUTH_GOOGLE_USERINFO_URL")
+            .unwrap_or_else(|_| "https://openidconnect.googleapis.com/v1/userinfo".to_string());
+        Some(Self {
+            provider,
+            client_secret,
+            userinfo_url,
+            redirect_uri: format!("{public}/api/v1/auth/oauth/google/callback"),
+        })
     }
 }
 

@@ -13,6 +13,7 @@ mod diagnostics;
 mod friendships;
 mod locations;
 pub(crate) mod messages;
+mod oauth;
 mod rate_limit;
 mod sessions;
 mod store;
@@ -80,6 +81,10 @@ pub struct AppState {
     pub deleted_users: Arc<Mutex<HashSet<i64>>>,
     /// Per-client auth throttle (keyed HMAC of the address, never raw IP).
     pub auth_rate: Arc<AuthRateLimiter>,
+    /// OAuth clients enabled by environment (empty on a stock deployment).
+    pub oauth_clients: Arc<Mutex<HashMap<String, crate::security::oauth::OAuthClient>>>,
+    /// Single-use pending authorizations keyed by the opaque state.
+    pub oauth_pending: Arc<Mutex<HashMap<String, oauth::PendingOAuth>>>,
 }
 
 /// Which deployable this `AppState` backs (controls persistence ownership).
@@ -159,11 +164,19 @@ impl ServiceKind {
     }
 }
 
+/// OAuth clients configured by the environment at startup.
+fn default_oauth_clients() -> HashMap<String, crate::security::oauth::OAuthClient> {
+    let mut clients = HashMap::new();
+    if let Some(client) = crate::security::oauth::OAuthClient::google_from_env() {
+        clients.insert("google".to_string(), client);
+    }
+    clients
+}
+
 impl AppState {
     pub fn new() -> Self {
         Self::for_owner(ServiceKind::All)
     }
-
     pub fn for_owner(owner: ServiceKind) -> Self {
         Self {
             store: Arc::new(Mutex::new(Store::new())),
@@ -173,6 +186,8 @@ impl AppState {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             deleted_users: Arc::new(Mutex::new(HashSet::new())),
             auth_rate: Arc::new(AuthRateLimiter::new()),
+            oauth_clients: Arc::new(Mutex::new(default_oauth_clients())),
+            oauth_pending: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -195,6 +210,8 @@ impl AppState {
                     sessions: Arc::new(Mutex::new(HashMap::new())),
                     deleted_users: Arc::new(Mutex::new(HashSet::new())),
                     auth_rate: Arc::new(AuthRateLimiter::new()),
+                    oauth_clients: Arc::new(Mutex::new(default_oauth_clients())),
+                    oauth_pending: Arc::new(Mutex::new(HashMap::new())),
                 };
                 app.init_postgres().await;
                 app

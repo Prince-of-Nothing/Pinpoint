@@ -68,6 +68,11 @@ const MAX_WINDOW_SECS: u64 = 3600;
 
 /// Public endpoints that get a per-client throttle.
 pub fn auth_limit(path: &str) -> Option<AuthLimit> {
+    // OAuth starts and callbacks are unauthenticated; reuse the anonymous
+    // throttle so the flow cannot be used as an unbounded token-exchange proxy.
+    if path.starts_with("/api/v1/auth/oauth/") {
+        return Some(ANONYMOUS_LIMIT);
+    }
     match path {
         "/api/v1/auth/login" => Some(LOGIN_LIMIT),
         "/api/v1/auth/register" => Some(REGISTER_LIMIT),

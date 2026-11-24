@@ -190,6 +190,53 @@ impl AppState {
             .await
     }
 
+    /// OAuth account insert: no password, `identity_subject` bound to the
+    /// provider subject. Fails closed when a configured database cannot write
+    /// the row, so an OAuth session never points at a memory-only account.
+    pub async fn sql_insert_oauth_user(
+        &self,
+        email: &str,
+        full_name: &str,
+        auth_method: &str,
+        identity_subject: &str,
+    ) -> Result<i64, String> {
+        if let Some(pool) = &self.pg {
+            let row: Option<(i64,)> = sqlx::query_as(
+                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, auth_method, public_key, recovery_code_hash, identity_subject) VALUES (NEXTVAL('pinpoint_user_id_seq'), $1, $2, 'resident', true, false, NULL, $3, NULL, NULL, $4) RETURNING id",
+            )
+            .bind(email)
+            .bind(full_name)
+            .bind(auth_method)
+            .bind(identity_subject)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+            if let Some((id,)) = row {
+                return Ok(id);
+            }
+            let row: Option<(i64,)> = sqlx::query_as(
+                "INSERT INTO pinpoint_users (id, email, full_name, role, is_active, must_change_password, password_hash, auth_method, public_key, recovery_code_hash, identity_subject) VALUES ((SELECT COALESCE(MAX(id), 0) + 1 FROM pinpoint_users), $1, $2, 'resident', true, false, NULL, $3, NULL, NULL, $4) RETURNING id",
+            )
+            .bind(email)
+            .bind(full_name)
+            .bind(auth_method)
+            .bind(identity_subject)
+            .fetch_optional(pool)
+            .await
+            .ok()
+            .flatten();
+            if let Some((id,)) = row {
+                return Ok(id);
+            }
+            return Err("oauth user insert failed".to_string());
+        }
+        let mut store = self.store.lock().unwrap();
+        let id = store.next_user_id;
+        store.next_user_id += 1;
+        Ok(id)
+    }
+
     /// Direct user update; no-op when DB unreachable/in-memory mode.
     pub async fn sql_update_user(
         &self,

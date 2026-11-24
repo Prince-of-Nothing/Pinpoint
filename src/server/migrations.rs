@@ -149,6 +149,13 @@ pub const MIGRATIONS: &[(u32, &str, &[&str])] = &[
             "CREATE INDEX IF NOT EXISTS idx_messages_recipient_unread ON pinpoint_messages(recipient_id, read_at)",
         ],
     ),
+    (
+        18,
+        "oauth_identity_subject",
+        &[
+            "CREATE UNIQUE INDEX IF NOT EXISTS pinpoint_users_identity_subject_key ON pinpoint_users (identity_subject) WHERE identity_subject IS NOT NULL",
+        ],
+    ),
 ];
 
 /// Apply all pending migrations (idempotent, recorded in version table).

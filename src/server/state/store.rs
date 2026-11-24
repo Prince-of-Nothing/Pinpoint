@@ -116,6 +116,14 @@ impl Store {
             .find(|u| u.email.trim().eq_ignore_ascii_case(email))
     }
 
+    /// OAuth account lookup by `"provider:subject"` (never by email alone:
+    /// that would let a provider identity take over a password account).
+    pub fn find_user_by_identity(&self, subject: &str) -> Option<&User> {
+        self.users
+            .iter()
+            .find(|u| u.identity_subject.as_deref() == Some(subject))
+    }
+
     pub fn find_user_by_id(&self, id: i64) -> Option<&User> {
         self.users.iter().find(|u| u.id == id)
     }

@@ -1885,3 +1885,111 @@ body:has(.drawer:is(.open, .closing)) .map-controls {
   margin-top: 0.75rem;
 }
 .oauth-buttons button { width: 100%; }
+/* ---------------------------------------------------------------------------
+   Desktop map shell
+   Wide screens get a persistent right column for the section cards, with the
+   map filling the rest. Mobile keeps the bottom sheets and floating tab bar.
+   --------------------------------------------------------------------------- */
+@media (min-width: 981px) {
+  body:has(#app-panel:not(.hidden)) > header {
+    background: var(--glass-strong);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .drawer {
+    top: 3.5rem;
+    right: 0;
+    bottom: 0;
+    left: auto;
+    width: 380px;
+    max-height: none;
+    padding: 0 1.1rem 1.5rem;
+    border: 0;
+    border-left: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+    transform: none;
+    animation: none;
+  }
+  .drawer.closing { animation: none; }
+  .drawer-grab { display: none; }
+  .drawer-head {
+    padding-top: 1rem;
+    cursor: default;
+    touch-action: auto;
+  }
+  .drawer-head h2 { font-size: 1.35rem; }
+
+  /* The drawer is part of the layout while open: the map and its chrome
+     shrink instead of hiding underneath it. */
+  body:has(.drawer.open) .app-shell .map {
+    right: 380px;
+    width: calc(100% - 380px);
+  }
+  body:has(.drawer.open) .map-topbar { right: calc(380px + 1rem); }
+  body:has(.drawer.open) .map-controls { right: calc(380px + 1rem); }
+  body:has(.drawer.open) .side-panel { right: calc(380px + 1rem); }
+  body:has(.drawer.open) .tab-bar {
+    right: 380px;
+    width: min(560px, calc(100% - 380px - 2rem));
+  }
+  /* Desktop never hides its chrome behind the drawer. */
+  body:has(.drawer.open) .map-topbar,
+  body:has(.drawer.open) .map-controls,
+  body:has(.drawer.open) > header h1,
+  body:has(.drawer.open) #session-bar {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .map-topbar {
+    top: 4.4rem;
+    right: 1rem;
+    bottom: auto;
+  }
+  .search-form { max-width: 560px; }
+  .category-chips {
+    top: 8rem;
+    bottom: auto;
+    left: 1rem;
+    max-width: min(560px, calc(100% - 380px - 2rem));
+  }
+  .map-controls {
+    top: 8.4rem;
+    right: 1rem;
+    bottom: auto;
+  }
+  .map-attribution {
+    bottom: 1rem;
+    left: 0.75rem;
+  }
+  .tab-bar {
+    right: 0;
+    left: 0;
+    width: min(560px, calc(100% - 2rem));
+    margin: 0 auto;
+    transform: none;
+  }
+  .side-panel {
+    right: 1rem;
+    bottom: 5.4rem;
+    left: auto;
+    width: 400px;
+    transform: none;
+  }
+}
+/* Keep MapLibre's bottom-right controls clear of the mobile search bar and
+   tab bar; desktop has room at the map edge. */
+@media (max-width: 980px) {
+  .app-shell .maplibregl-ctrl-bottom-right {
+    bottom: calc(9.6rem + var(--safe-bottom));
+  }
+}
+@media (min-width: 981px) {
+  /* Results belong under the top-left search field, not above the tab bar. */
+  .search-results {
+    top: 8rem;
+    bottom: auto;
+    left: 1rem;
+  }
+}

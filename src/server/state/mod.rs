@@ -83,6 +83,9 @@ pub struct AppState {
     pub auth_rate: Arc<AuthRateLimiter>,
     /// OAuth clients enabled by environment (empty on a stock deployment).
     pub oauth_clients: Arc<Mutex<HashMap<String, crate::security::oauth::OAuthClient>>>,
+    /// Server-side client secrets, keyed by provider; kept apart from the
+    /// endpoint URLs so a URL built from a client never carries a secret.
+    pub oauth_secrets: Arc<Mutex<HashMap<String, String>>>,
     /// Single-use pending authorizations keyed by the opaque state.
     pub oauth_pending: Arc<Mutex<HashMap<String, oauth::PendingOAuth>>>,
     /// Column cipher for private notes/photos; `None` keeps plaintext (dev).
@@ -166,16 +169,22 @@ impl ServiceKind {
     }
 }
 
-/// OAuth clients configured by the environment at startup.
-fn default_oauth_clients() -> HashMap<String, crate::security::oauth::OAuthClient> {
+/// OAuth clients and secrets configured by the environment at startup.
+fn default_oauth_clients() -> (
+    HashMap<String, crate::security::oauth::OAuthClient>,
+    HashMap<String, String>,
+) {
     let mut clients = HashMap::new();
-    if let Some(client) = crate::security::oauth::OAuthClient::google_from_env() {
+    let mut secrets = HashMap::new();
+    if let Some((client, secret)) = crate::security::oauth::OAuthClient::google_from_env() {
+        secrets.insert("google".to_string(), secret);
         clients.insert("google".to_string(), client);
     }
-    if let Some(client) = crate::security::oauth::OAuthClient::github_from_env() {
+    if let Some((client, secret)) = crate::security::oauth::OAuthClient::github_from_env() {
+        secrets.insert("github".to_string(), secret);
         clients.insert("github".to_string(), client);
     }
-    clients
+    (clients, secrets)
 }
 
 /// Column cipher for private notes and photos. `DATA_ENCRYPTION_KEY` is a
@@ -252,6 +261,7 @@ impl AppState {
         Self::for_owner(ServiceKind::All)
     }
     pub fn for_owner(owner: ServiceKind) -> Self {
+        let (oauth_clients, oauth_secrets) = default_oauth_clients();
         Self {
             store: Arc::new(Mutex::new(Store::new())),
             pg: None,
@@ -260,7 +270,8 @@ impl AppState {
             sessions: Arc::new(Mutex::new(HashMap::new())),
             deleted_users: Arc::new(Mutex::new(HashSet::new())),
             auth_rate: Arc::new(AuthRateLimiter::new()),
-            oauth_clients: Arc::new(Mutex::new(default_oauth_clients())),
+            oauth_clients: Arc::new(Mutex::new(oauth_clients)),
+            oauth_secrets: Arc::new(Mutex::new(oauth_secrets)),
             oauth_pending: Arc::new(Mutex::new(HashMap::new())),
             data_cipher: data_cipher_from_env(),
         }
@@ -277,6 +288,7 @@ impl AppState {
         }
         match sqlx::PgPool::connect(&database_url).await {
             Ok(pool) => {
+                let (oauth_clients, oauth_secrets) = default_oauth_clients();
                 let app = AppState {
                     store: Arc::new(Mutex::new(Store::new())),
                     pg: Some(pool),
@@ -285,7 +297,8 @@ impl AppState {
                     sessions: Arc::new(Mutex::new(HashMap::new())),
                     deleted_users: Arc::new(Mutex::new(HashSet::new())),
                     auth_rate: Arc::new(AuthRateLimiter::new()),
-                    oauth_clients: Arc::new(Mutex::new(default_oauth_clients())),
+                    oauth_clients: Arc::new(Mutex::new(oauth_clients)),
+                    oauth_secrets: Arc::new(Mutex::new(oauth_secrets)),
                     oauth_pending: Arc::new(Mutex::new(HashMap::new())),
                     data_cipher: data_cipher_from_env(),
                 };

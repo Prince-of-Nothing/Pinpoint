@@ -38,12 +38,12 @@ impl OAuthProvider {
     }
 }
 
-/// A configured client: provider metadata plus the server-side secret, the
-/// userinfo endpoint and the redirect URI registered with the provider.
+/// A configured client: provider metadata, the userinfo endpoint and the
+/// redirect URI registered with the provider. The client secret is kept in
+/// `AppState` separately so endpoint URLs never travel with it.
 #[derive(Debug, Clone)]
 pub struct OAuthClient {
     pub provider: OAuthProvider,
-    pub client_secret: String,
     pub userinfo_url: String,
     /// GitHub exposes verified addresses on a second endpoint; `None` for OIDC
     /// providers that return `email` and `email_verified` in the userinfo.
@@ -54,7 +54,7 @@ pub struct OAuthClient {
 impl OAuthClient {
     /// Google OIDC client from env. Returns `None` when the client ID or the
     /// secret is missing, so the routes stay disabled on a stock deployment.
-    pub fn google_from_env() -> Option<Self> {
+    pub fn google_from_env() -> Option<(Self, String)> {
         let client_id = std::env::var("PINPOINT_OAUTH_GOOGLE_CLIENT_ID")
             .ok()?
             .trim()
@@ -80,19 +80,18 @@ impl OAuthClient {
             .unwrap_or_else(|_| "https://openidconnect.googleapis.com/v1/userinfo".to_string());
         let client = Self {
             provider,
-            client_secret,
             userinfo_url,
             email_url: None,
             redirect_uri: format!("{public}/api/v1/auth/oauth/google/callback"),
         };
         assert_secure_endpoints(&client);
-        Some(client)
+        Some((client, client_secret))
     }
 
     /// GitHub OAuth client from env. GitHub does not put a verified email in
     /// `/user`, so the callback reads `/user/emails` and takes the primary
     /// verified address.
-    pub fn github_from_env() -> Option<Self> {
+    pub fn github_from_env() -> Option<(Self, String)> {
         let client_id = std::env::var("PINPOINT_OAUTH_GITHUB_CLIENT_ID")
             .ok()?
             .trim()
@@ -120,13 +119,12 @@ impl OAuthClient {
             .unwrap_or_else(|_| "https://api.github.com/user/emails".to_string());
         let client = Self {
             provider,
-            client_secret,
             userinfo_url,
             email_url: Some(email_url),
             redirect_uri: format!("{public}/api/v1/auth/oauth/github/callback"),
         };
         assert_secure_endpoints(&client);
-        Some(client)
+        Some((client, client_secret))
     }
 }
 

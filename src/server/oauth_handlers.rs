@@ -99,9 +99,12 @@ async fn complete_sign_in(
     verifier: &str,
 ) -> Result<User, &'static str> {
     let http = reqwest::Client::new();
+    let Some(secret) = state.oauth_secret(client.provider.name) else {
+        return Err("provider_unknown");
+    };
     let form = [
         ("client_id", client.provider.client_id.as_str()),
-        ("client_secret", client.client_secret.as_str()),
+        ("client_secret", secret.as_str()),
         ("code", code),
         ("grant_type", "authorization_code"),
         ("redirect_uri", client.redirect_uri.as_str()),

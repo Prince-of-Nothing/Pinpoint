@@ -49,13 +49,15 @@ fn state_with_provider(idp: &str) -> AppState {
     let mut provider = OAuthProvider::google("test-client-id".into());
     provider.authorize_url = format!("{idp}/authorize");
     provider.token_url = format!("{idp}/token");
-    state.set_oauth_client(OAuthClient {
-        provider,
-        client_secret: "test-secret".into(),
-        userinfo_url: format!("{idp}/userinfo"),
-        email_url: None,
-        redirect_uri: "http://127.0.0.1:8080/api/v1/auth/oauth/google/callback".into(),
-    });
+    state.set_oauth_client(
+        OAuthClient {
+            provider,
+            userinfo_url: format!("{idp}/userinfo"),
+            email_url: None,
+            redirect_uri: "http://127.0.0.1:8080/api/v1/auth/oauth/google/callback".into(),
+        },
+        "test-secret".into(),
+    );
     state
 }
 
@@ -264,13 +266,15 @@ fn state_with_github(idp: &str) -> AppState {
     let mut provider = OAuthProvider::github("test-client-id".into());
     provider.authorize_url = format!("{idp}/authorize");
     provider.token_url = format!("{idp}/token");
-    state.set_oauth_client(OAuthClient {
-        provider,
-        client_secret: "test-secret".into(),
-        userinfo_url: format!("{idp}/user"),
-        email_url: Some(format!("{idp}/emails")),
-        redirect_uri: "http://127.0.0.1:8080/api/v1/auth/oauth/github/callback".into(),
-    });
+    state.set_oauth_client(
+        OAuthClient {
+            provider,
+            userinfo_url: format!("{idp}/user"),
+            email_url: Some(format!("{idp}/emails")),
+            redirect_uri: "http://127.0.0.1:8080/api/v1/auth/oauth/github/callback".into(),
+        },
+        "test-secret".into(),
+    );
     state
 }
 

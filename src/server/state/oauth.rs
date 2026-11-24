@@ -23,13 +23,23 @@ pub struct PendingOAuth {
 }
 
 impl AppState {
-    /// Register (or replace) a provider client. Startup reads the environment;
-    /// tests inject a client that points at a local mock provider.
-    pub fn set_oauth_client(&self, client: OAuthClient) {
+    /// Register (or replace) a provider client and its server-side secret.
+    /// Startup reads the environment; tests inject a client that points at a
+    /// local mock provider.
+    pub fn set_oauth_client(&self, client: OAuthClient, secret: String) {
+        self.oauth_secrets
+            .lock()
+            .unwrap()
+            .insert(client.provider.name.to_string(), secret);
         self.oauth_clients
             .lock()
             .unwrap()
             .insert(client.provider.name.to_string(), client);
+    }
+
+    /// Server-side secret for a configured provider.
+    pub fn oauth_secret(&self, provider: &str) -> Option<String> {
+        self.oauth_secrets.lock().unwrap().get(provider).cloned()
     }
 
     /// Enabled providers, sorted so the client renders a stable order.
@@ -83,7 +93,6 @@ mod tests {
     fn client() -> OAuthClient {
         OAuthClient {
             provider: OAuthProvider::google("client-id".into()),
-            client_secret: "secret".into(),
             userinfo_url: "https://example.invalid/userinfo".into(),
             email_url: None,
             redirect_uri: "https://app.example/api/v1/auth/oauth/google/callback".into(),
@@ -93,7 +102,8 @@ mod tests {
     #[test]
     fn start_and_consume_state_once() {
         let state = AppState::new();
-        state.set_oauth_client(client());
+        state.set_oauth_client(client(), "secret".into());
+        assert_eq!(state.oauth_secret("google").as_deref(), Some("secret"));
         let (token, url) = state.begin_oauth("google").expect("provider enabled");
         assert!(url.contains("code_challenge="));
         assert!(url.contains("state="));
@@ -105,7 +115,7 @@ mod tests {
     #[test]
     fn wrong_provider_and_unknown_provider_fail_closed() {
         let state = AppState::new();
-        state.set_oauth_client(client());
+        state.set_oauth_client(client(), "secret".into());
         let (token, _) = state.begin_oauth("google").unwrap();
         assert!(state.take_oauth_state(&token, "github").is_none());
         assert!(state.begin_oauth("github").is_none());
@@ -115,7 +125,7 @@ mod tests {
     fn providers_are_listed_only_when_configured() {
         let state = AppState::new();
         assert!(!state.oauth_providers().contains(&"google".to_string()));
-        state.set_oauth_client(client());
+        state.set_oauth_client(client(), "secret".into());
         assert_eq!(state.oauth_providers(), vec!["google".to_string()]);
     }
 }

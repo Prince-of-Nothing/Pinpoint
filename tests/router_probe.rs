@@ -1830,3 +1830,36 @@ async fn throttled_login_reports_retry_after() {
         .expect("Retry-After is an integer");
     assert!((1..=300).contains(&secs), "retry hint was {secs}");
 }
+
+#[tokio::test]
+async fn private_map_queries_are_not_cacheable() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    // These answers carry the user's query or coordinates. A shared cache
+    // must not replay them; tiles stay cacheable.
+    let app = router(AppState::new());
+    for uri in [
+        "/map/search?q=ab",
+        "/map/reverse?lat=200&lon=0",
+        "/map/route?from_lat=0&from_lon=0&to_lat=0&to_lon=0&mode=swim",
+    ] {
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{uri}");
+        assert_eq!(resp.headers()["cache-control"], "no-store", "{uri}");
+    }
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/map/tiles/99/0/0")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert!(resp.headers().get("cache-control").is_none());
+}

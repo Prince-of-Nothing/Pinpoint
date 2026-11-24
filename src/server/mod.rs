@@ -261,14 +261,17 @@ async fn security_headers(
     req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> axum::response::Response {
-    // Private API JSON must never be reused from a browser or proxy cache:
-    // a shared device or an intermediate cache could otherwise show one
-    // account's locations or notes to another. Static assets keep their own
-    // cache headers.
-    let is_api = req.uri().path().starts_with("/api/");
+    // Private API JSON and the geocoding/routing answers (they carry the
+    // user's query and coordinates) must never be reused from a browser or
+    // proxy cache: a shared device or intermediate cache could otherwise show
+    // one person's data to another. Tiles keep their public cache header, and
+    // static assets keep their own.
+    let path = req.uri().path();
+    let private =
+        path.starts_with("/api/") || matches!(path, "/map/search" | "/map/reverse" | "/map/route");
     let mut res = next.run(req).await;
     let headers = res.headers_mut();
-    if is_api {
+    if private {
         headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     }
     headers.insert(

@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [DOCS] Evidence: the security control register and requirements traceability matrix now describe the as-built Rust system (SC-01..SC-09, REQ-01..REQ-09) with current tests, scans and limitations instead of the removed Python backend.
 - [INFRA] Backups: a host-side wrapper encrypts `pg_dump` with AES-256-CBC/PBKDF2 (openssl), verifies a decrypt roundtrip before deleting the plaintext temp file, and ships a restore script with a header check and overwrite guard; the passphrase stays outside the repository.
 - [INFRA] DAST: a weekly ZAP baseline workflow starts the in-memory server and scans it, uploading the HTML/JSON report as an artifact; the latest report is committed under `docs/evidence/`.
 - [INFRA] CI now runs CodeQL (Rust) as a SAST gate and Dependabot keeps Cargo and GitHub Actions dependencies current, complementing the existing `cargo audit` allowlist.

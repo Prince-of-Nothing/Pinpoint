@@ -1,6 +1,12 @@
 // Admin → Users: list, search, role/active changes, safe purge.
 // All authorization is enforced by /api/v1/admin/*; this file is only a view.
 
+// Matches the server: count Unicode characters, not UTF-16 units, so an
+// emoji temporary password is judged by its character length.
+function passwordTooShort(value) {
+  return Array.from(value).length < 8;
+}
+
 export const usersModule = {
   id: "users",
   title: "Users",
@@ -24,7 +30,7 @@ export const usersModule = {
             </select>
           </label>
           <label>Temporary password
-            <input id="admin-create-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
+            <input id="admin-create-password" type="password" maxlength="128" autocomplete="new-password" required />
           </label>
           <p class="muted">The user must change this temporary password at first sign-in.</p>
           <button type="submit">Create user</button>
@@ -37,7 +43,7 @@ export const usersModule = {
             <select id="admin-reset-target" required></select>
           </label>
           <label>Temporary password
-            <input id="admin-reset-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required />
+            <input id="admin-reset-password" type="password" maxlength="128" autocomplete="new-password" required />
           </label>
           <label class="admin-reset-mfa">
             <input id="admin-reset-mfa" type="checkbox" />
@@ -207,6 +213,10 @@ export const usersModule = {
       const fullName = el.querySelector("#admin-create-name").value.trim();
       const role = el.querySelector("#admin-create-role").value;
       const password = el.querySelector("#admin-create-password").value;
+      if (passwordTooShort(password)) {
+        ctx.setStatus("Password must be at least 8 characters.", true);
+        return;
+      }
       try {
         await ctx.api("/api/v1/users/", {
           method: "POST",
@@ -225,6 +235,10 @@ export const usersModule = {
       const password = resetPassword.value;
       if (!id) {
         ctx.setStatus("Choose a user to reset.", true);
+        return;
+      }
+      if (passwordTooShort(password)) {
+        ctx.setStatus("Password must be at least 8 characters.", true);
         return;
       }
       try {

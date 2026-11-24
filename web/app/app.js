@@ -53,6 +53,12 @@ function setStatus(text, isError = false) {
   el.classList.toggle("error", isError);
 }
 
+// HTML minlength counts UTF-16 units while the server counts Unicode
+// characters; a 4-emoji password is 8 units but only 4 characters.
+function passwordTooShort(value) {
+  return Array.from(value).length < 8;
+}
+
 async function api(path, { method = "GET", body } = {}) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -265,6 +271,10 @@ async function changePassword() {
   const current = $("password-current").value;
   const next = $("password-new").value;
   const confirm = $("password-confirm").value;
+  if (passwordTooShort(next)) {
+    setStatus("Password must be at least 8 characters.", true);
+    return;
+  }
   if (next !== confirm) {
     setStatus("New passwords do not match.", true);
     return;
@@ -1477,10 +1487,15 @@ $("login-form").addEventListener("submit", async (e) => {
 
 $("register-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const password = $("register-password").value;
+  if (passwordTooShort(password)) {
+    setStatus("Password must be at least 8 characters.", true);
+    return;
+  }
   try {
     await register(
       $("register-email").value.trim(),
-      $("register-password").value,
+      password,
       $("register-name").value.trim(),
     );
     setStatus("Account created.");

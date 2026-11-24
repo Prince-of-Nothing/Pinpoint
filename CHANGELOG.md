@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [INFRA] Backups: a host-side wrapper encrypts `pg_dump` with AES-256-CBC/PBKDF2 (openssl), verifies a decrypt roundtrip before deleting the plaintext temp file, and ships a restore script with a header check and overwrite guard; the passphrase stays outside the repository.
 - [INFRA] DAST: a weekly ZAP baseline workflow starts the in-memory server and scans it, uploading the HTML/JSON report as an artifact; the latest report is committed under `docs/evidence/`.
 - [INFRA] CI now runs CodeQL (Rust) as a SAST gate and Dependabot keeps Cargo and GitHub Actions dependencies current, complementing the existing `cargo audit` allowlist.
 - [DOCS] Security architecture: the threat model is now STRIDE-tagged and scored (impact × likelihood) with a prioritised table, trust boundaries and an attack tree for location disclosure; the weeks 7–15 roadmap page the ADRs link to now exists with the as-built evidence index and open decisions.

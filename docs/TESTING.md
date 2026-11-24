@@ -19,6 +19,7 @@ requirement → implementation → test).
 | Dependency updates | Dependabot (Cargo, GitHub Actions) | `.github/dependabot.yml` | Dependabot |
 | End-to-end smoke | `scripts/smoke.ps1` against a running server | `scripts/` | manual |
 | DAST | OWASP ZAP baseline against the running server | `.github/workflows/dast.yml`, reports in the run artifacts | DAST (weekly) |
+| Backup crypto | `scripts/backup-db.ps1 -SelfTest` (encrypt/decrypt roundtrip), `restore-db.ps1 -SelfTest` (header + hash) | `scripts/` | manual |
 
 ## Required test matrix for location access (the heart of the thesis)
 For each case, assert status code AND payload shape (no leakage):

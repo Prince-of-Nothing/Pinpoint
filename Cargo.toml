@@ -140,7 +140,7 @@ sqlx = { version = "0.8", default-features = false, features = [
 # Desktop keeps accesskit + Linux windowing; Android uses the native activity
 # backend (accesskit is only compatible with game-activity on Android).
 [target.'cfg(not(target_os = "android"))'.dependencies]
-eframe = { version = "0.32", default-features = true, features = ["glow"] }
+eframe = { version = "0.37", default-features = true, features = ["glow"] }
 
 # Separate native WebView window for the shared MapLibre map page. Optional
 # (`map-webview` feature) and desktop-only: it needs WebView2 on Windows,

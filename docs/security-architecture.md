@@ -215,9 +215,11 @@ Server-side timeouts (Rust `src/server/state/sessions.rs`) are authoritative; cl
 
 ### 4.6 OAuth 2.0 Sign-In (Optional, ADR-0024)
 
-Google OIDC, authorization code + PKCE (S256), enabled only when
-`PINPOINT_OAUTH_GOOGLE_CLIENT_ID` and `PINPOINT_OAUTH_GOOGLE_CLIENT_SECRET`
-are set:
+Google OIDC and GitHub OAuth, authorization code + PKCE (S256), enabled only when
+`PINPOINT_OAUTH_GOOGLE_CLIENT_ID`/`_SECRET` or
+`PINPOINT_OAUTH_GITHUB_CLIENT_ID`/`_SECRET` are set. GitHub has no verified
+email in `/user`, so the callback reads `/user/emails` and accepts only the
+primary verified address:
 
 1. `GET /auth/oauth/google/start` stores a pending state with its PKCE
    verifier for ten minutes, sets a short-lived `HttpOnly` `SameSite=Lax`

@@ -35,6 +35,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [FEATURE] Auth: GitHub OAuth 2.0 sign-in alongside Google, using the primary verified address from `/user/emails` and the same state/PKCE/no-auto-link rules.
 - [FEATURE] Auth: optional Google OAuth 2.0 sign-in (authorization code + PKCE) with a single-use state bound to an HttpOnly cookie, a verified-email requirement, no automatic email linking, the same opaque session as password login, and an anonymous per-client throttle; disabled unless the client credentials are configured.
 - [DOCS] Analysis: system models page with the topic, subject, objectives, functional/non-functional/CIA requirements, use-case, sequence, activity, state, ER, component and deployment diagrams, and the threat-to-use-case mapping for the Midterm 1 deliverables.
 - [FEATURE] Web: the tab bar now opens real per-section screens (Friends, Sharing, Today, Chats, Account) instead of scrolling one long drawer, and the map has its own basemap (Offline/Streets) and layer (Friends/Trail/Notes) control.

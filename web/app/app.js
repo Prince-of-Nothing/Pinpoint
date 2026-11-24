@@ -1864,6 +1864,7 @@ document.addEventListener("pinpoint:theme", (event) => {
 // ---------------------------------------------------------------------------
 // OAuth sign-in
 // ---------------------------------------------------------------------------
+const OAUTH_NAMES = { google: "Google", github: "GitHub" };
 const OAUTH_ERRORS = {
   provider_denied: "The provider sign-in was cancelled.",
   state_mismatch: "The sign-in attempt expired. Try again.",
@@ -1889,7 +1890,7 @@ async function loadOauthProviders() {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "secondary";
-      button.textContent = `Continue with ${provider[0].toUpperCase()}${provider.slice(1)}`;
+      button.textContent = `Continue with ${OAUTH_NAMES[provider] || provider}`;
       button.addEventListener("click", () => {
         window.location.assign(
           `/api/v1/auth/oauth/${encodeURIComponent(provider)}/start`,

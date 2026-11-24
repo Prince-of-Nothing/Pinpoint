@@ -39,7 +39,7 @@ the historical/target design and are **not** the current contract.
 | POST | `/auth/login` | — | `{email, password, totp?}` → `200` session + user; `MFA_REQUIRED` if enrolled without a valid code |
 | POST | `/auth/anonymous` | - | `{device_name?, public_key?}` → `201` session + user + **one-time** `recovery_code`; `device_name` follows the display-name rules (1–100 characters), `public_key` is ≤512 characters; `409 ALREADY_SIGNED_IN` while a session is active |
 | POST | `/auth/anonymous/recover` | — | `{recovery_code}` → `200` session + rotated `recovery_code`; old code is invalid |
-| GET | `/auth/providers` | — | `{providers:["google"]}`; only providers whose client credentials are configured |
+| GET | `/auth/providers` | — | `{providers:["github","google"]}`; only providers whose client credentials are configured |
 | GET | `/auth/oauth/:provider/start` | — | `303` to the provider; sets a 10-minute `HttpOnly` `SameSite=Lax` state cookie scoped to `/api/v1/auth/oauth`; PKCE S256 |
 | GET | `/auth/oauth/:provider/callback` | — | verifies the state cookie and PKCE, exchanges the code server-side, requires a verified email, then sets the session cookie and redirects to `/`; an email with an existing password account is refused (`/?oauth_error=email_exists`) and never auto-linked |
 | POST | `/auth/session` | cookie | validate the cookie, return `{user}` + `X-CSRF-Token` |

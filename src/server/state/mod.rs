@@ -172,6 +172,9 @@ fn default_oauth_clients() -> HashMap<String, crate::security::oauth::OAuthClien
     if let Some(client) = crate::security::oauth::OAuthClient::google_from_env() {
         clients.insert("google".to_string(), client);
     }
+    if let Some(client) = crate::security::oauth::OAuthClient::github_from_env() {
+        clients.insert("github".to_string(), client);
+    }
     clients
 }
 

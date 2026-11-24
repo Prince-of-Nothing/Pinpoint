@@ -85,6 +85,7 @@ mod tests {
             provider: OAuthProvider::google("client-id".into()),
             client_secret: "secret".into(),
             userinfo_url: "https://example.invalid/userinfo".into(),
+            email_url: None,
             redirect_uri: "https://app.example/api/v1/auth/oauth/google/callback".into(),
         }
     }

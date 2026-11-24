@@ -14,7 +14,7 @@ production-hardened. See the functional-state matrix and per-item
 
 ## What works today
 
-- **Accounts & sessions** — email/password (Argon2id), optional Google OAuth, and
+- **Accounts & sessions** — email/password (Argon2id), optional Google/GitHub OAuth, and
   anonymous device-bound accounts, opaque `HttpOnly` session cookies + CSRF, session
   list/revoke, logout-all, lockout, TOTP MFA.
 - **E2E messages** — 1:1 text between accepted friends; X25519 + Ed25519 +

@@ -260,8 +260,16 @@ async fn security_headers(
     req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> axum::response::Response {
+    // Private API JSON must never be reused from a browser or proxy cache:
+    // a shared device or an intermediate cache could otherwise show one
+    // account's locations or notes to another. Static assets keep their own
+    // cache headers.
+    let is_api = req.uri().path().starts_with("/api/");
     let mut res = next.run(req).await;
     let headers = res.headers_mut();
+    if is_api {
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
     headers.insert(
         header::STRICT_TRANSPORT_SECURITY,
         HeaderValue::from_static("max-age=31536000; includeSubDomains"),

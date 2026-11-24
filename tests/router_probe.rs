@@ -947,6 +947,8 @@ async fn api_json_carries_baseline_security_headers() {
     assert_eq!(headers["cross-origin-opener-policy"], "same-origin");
     assert_eq!(headers["cross-origin-resource-policy"], "same-origin");
     assert_eq!(headers["x-permitted-cross-domain-policies"], "none");
+    // Private API data must not be cached by a shared browser or proxy.
+    assert_eq!(headers["cache-control"], "no-store");
 }
 
 #[tokio::test]

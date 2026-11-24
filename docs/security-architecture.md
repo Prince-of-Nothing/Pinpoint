@@ -27,18 +27,79 @@ reviewing security changes.
 
 ## 2. Threat Model
 
-| ID | Threat / abuse | Assets at risk | Mitigations | Residual risk |
-|---|---|---|---|---|
-| T-01 | IDOR: read another user's location by ID | Friend locations, shares | Server-side ownership/consent checks; generic 403/404; audit | Client compromise still relies on server |
-| T-02 | Stalking via forgotten grants | Sharer location | Directional shares, precision control, pause/resume, expiry | User error (over-sharing) |
-| T-03 | Session hijack / cookie theft | Session token, CSRF | `__Host-` cookie with HttpOnly, SameSite=Lax, Secure (prod), CSRF double-submit, rotation | XSS in non-Rust clients; mitigated by CSP/escaping in web client |
-| T-04 | CSRF: forged state-changing request | Shares, friendships, password | Double-submit cookie + header on POST/PATCH/DELETE | Token leakage via XSS → same as T-03 |
-| T-05 | Account enumeration / credential stuffing | Accounts | Generic errors, per-client HMAC throttles, per-account lockout | Credential reuse outside Pinpoint |
-| T-06 | Location over-collection | Sharer privacy | Latest publish plus an owner-only 7-day trail pruned hourly; precision downgrade server-side | Server breach exposes current location and the owner trail |
-| T-07 | OSM abuse (scraping / bulk) | OSMF infrastructure, client IP | Client 1 req/s Nominatim throttle; server proxy caps (tiles 1200/min, search/reverse 60/min, route 120/min) | Public service quota exhaustion |
-| T-08 | Bookmark theft on stolen device | Saved places | Owner-only `0600` file on Unix and OS account isolation; AES-256-GCM bookmark primitives exist but are not wired by default | Disk theft or a compromised OS account exposes saved places |
-| T-09 | Request tampering in transit | Location payloads | HTTPS; HMAC signing available for sensitive calls | Client-side signing alone does not authenticate the server (TLS does) |
-| T-10 | Malicious input injection | Server DB, logs | Strict validation (client + server), sqlx parameterized queries, no string-concat SQL | Zero-day in dependencies (mitigated by cargo-audit) |
+### 2.1 Method and scope
+
+Assets: account identity (email, password hash, TOTP secret), session material,
+current location, the owner-only 7-day trail, directional shares, private notes
+and photos, bookmarks, E2E message plaintext (client-only), audit records and
+the OSM provider quotas.
+
+Trust boundaries:
+
+- browser or native app ↔ API over TLS (`__Host-` cookie, CSRF header);
+- API ↔ PostgreSQL (DSN, least-privilege role per service);
+- gateway ↔ OSM providers (Nominatim, OSRM, tiles) with a privacy envelope;
+- app ↔ device storage (bookmarks, E2E key, session snapshot).
+
+Threats were identified per component with STRIDE and scored with a
+DREAD-style impact × likelihood model, `R = I × L`, both on a 1–5 scale.
+Priority bands: **Critical** `R ≥ 15`, **High** `9 ≤ R < 15`, **Medium**
+`4 ≤ R < 9`, **Low** `R < 4`. The table is ordered by `R`; residual risk is
+what remains after the listed countermeasure.
+
+### 2.2 Prioritised threats
+
+| ID | STRIDE | Component | Threat / abuse | Impact | Likelihood | R | Priority | Countermeasure | Residual risk |
+|---|---|---|---|---|---|---|---|---|---|
+| T-02 | Information disclosure | API, shares | Stalking via a forgotten or over-broad grant | 5 | 3 | 15 | Critical | Directional shares, precision control (`city_only`/`approximate`), pause/resume, expiry, owner-only list | User error (deliberate over-sharing) |
+| T-01 | Elevation of privilege | API | IDOR: read another user's location by ID | 4 | 3 | 12 | High | Server-side ownership/consent check on every read; generic 403/404; audit event | A compromised client still relies on the server |
+| T-06 | Information disclosure | API, Postgres | Location over-collection | 4 | 3 | 12 | High | Latest publish + owner-only 7-day trail pruned hourly; precision downgrade before serialization | A DB breach exposes the current point and the owner trail |
+| T-07 | Denial of service | Map proxy, OSM | Scraping or bulk use of OSM services | 3 | 4 | 12 | High | Client 1 req/s Nominatim throttle; server caps (tiles 1200/min, search/reverse 60/min, route 120/min); gateway overwrites `X-Forwarded-For` | Public quota exhaustion under a botnet |
+| T-11 | Tampering | Web client | Stored/reflected XSS reorders UI or steals a session | 4 | 3 | 12 | High | Server CSP, no third-party scripts, `textContent`/`escapeHtml` for user text, validated labels/notes | A new sink added without escaping |
+| T-13 | Information disclosure | Postgres, backups | At-rest exposure of notes, photos, location rows | 4 | 3 | 12 | High | Disk/volume encryption is deployment-dependent; E2E message bodies are ciphertext; passwords are Argon2id | Notes/photos and `pg_dump` backups are not encrypted at rest (documented limitation) |
+| T-03 | Spoofing | Session layer | Session hijack or cookie theft | 5 | 2 | 10 | High | `__Host-` cookie, `HttpOnly`, `SameSite=Lax`, `Secure` in production, 12 h sliding / 30-day absolute expiry, per-request DB validation, revocation | XSS in a client or a compromised device |
+| T-10 | Tampering | API, DB | Injection through malformed input | 5 | 2 | 10 | High | Strict server validation, sqlx bound parameters only, no string-concatenated SQL, stable 400 envelope | Dependency zero-day (mitigated by `cargo audit`) |
+| T-12 | Tampering | Build, dependencies | Compromised crate or toolchain | 5 | 2 | 10 | High | `Cargo.lock` committed, `cargo audit` gate with an explicit advisory allowlist, pinned patched `cookie` | A malicious maintainer or a new unpublished advisory |
+| T-05 | Spoofing | Auth | Account enumeration or credential stuffing | 3 | 3 | 9 | High | Generic errors, constant-time verification for unknown emails, per-client HMAC throttles, per-account lockout | Credential reuse outside Pinpoint |
+| T-04 | Tampering | API | CSRF on a state-changing request | 4 | 2 | 8 | Medium | Double-submit cookie + `X-CSRF-Token` on every unsafe method; 403 `CSRF_FAILED` | Token theft via XSS (same as T-03) |
+| T-09 | Tampering | Transport | Payload tampering in transit | 4 | 2 | 8 | Medium | HTTPS-only client policy (ADR-0006), TLS gateway, HSTS, secure cookies | A compromised CA or client |
+| T-14 | Information disclosure | Logs, diagnostics | Secrets or coordinates leak into logs | 4 | 2 | 8 | Medium | Redaction tests (`crash.rs`), envelope-only errors, no raw IP storage (HMAC keys), 0600/0700 diagnostics files on Unix | Panic messages from a future code path |
+| T-08 | Information disclosure | Device storage | Bookmark theft on a stolen device | 3 | 2 | 6 | Medium | Owner-only `0600` file on Unix, `0700` app-data directory, OS account isolation | Disk theft or a compromised OS account; AES-GCM bookmark primitives not wired by default |
+| T-15 | Elevation of privilege | API, admin | Privilege escalation through admin routes | 5 | 1 | 5 | Medium | Server-side role checks (`admin`/`administrator`), admin actions audited, role changes forbidden on self | A bug in a new admin route |
+
+### 2.3 Attack tree for the top threat
+
+```mermaid
+graph TD
+  G[Read a stranger's location] --> A[Bypass consent checks]
+  G --> B[Steal a session]
+  G --> C[Read data at rest]
+  G --> D[Abuse a trusted friend]
+  A --> A1[Change the ID in the URL]
+  A --> A2[Reuse an expired or paused share]
+  B --> B1[Stored XSS in a label or note]
+  B --> B2[Steal a cookie or session snapshot]
+  C --> C1[DB or backup exposure]
+  C --> C2[Read logs or diagnostics]
+  D --> D1[Ask the friend to screenshot]
+  A1 -.-> M1[Ownership check on every read]
+  A2 -.-> M2[Server-side expiry and pause]
+  B1 -.-> M3[CSP plus escaping]
+  B2 -.-> M4[HttpOnly, SameSite, revocation]
+  C1 -.-> M5[Least-privilege DB role, encrypted volume]
+  C2 -.-> M6[Redaction and 0600 files]
+  D1 -.-> M7[Privacy policy plus precision control]
+```
+
+### 2.4 Out of scope
+
+- physical device seizure with an unlocked app (the optional PIN lock reduces
+  but does not remove this);
+- a malicious database administrator (the DB stores ciphertext for messages
+  only);
+- third-party identity providers (no OAuth login is wired);
+- network-level denial of service before the gateway.
+
 
 ---
 

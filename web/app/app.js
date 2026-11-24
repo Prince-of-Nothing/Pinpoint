@@ -177,6 +177,11 @@ async function enterApp() {
   show($("login-panel"), false);
   show($("session-bar"), true);
   show($("app-panel"), true);
+  // The auth forms are hidden; clear the secrets so they do not linger in the DOM.
+  for (const id of ["login-password", "login-totp", "register-password"]) {
+    const input = $(id);
+    if (input) input.value = "";
+  }
   renderIdentity();
   updateAdminTab();
   // A temporary password blocks the API until it is rotated. Take the user

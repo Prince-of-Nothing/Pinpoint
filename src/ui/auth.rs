@@ -58,9 +58,10 @@ impl PinpointAppUI {
                     && !self.login_password.is_empty()
                 {
                     let email = self.login_email.clone();
-                    let password = self.login_password.clone();
+                    let password = std::mem::take(&mut self.login_password);
                     let totp = {
-                        let code = self.login_totp.trim();
+                        let code = std::mem::take(&mut self.login_totp);
+                        let code = code.trim();
                         if code.is_empty() {
                             None
                         } else {
@@ -233,10 +234,11 @@ impl PinpointAppUI {
                         && !self.register_email.is_empty()
                         && !self.register_password.is_empty()
                     {
+                        let password = std::mem::take(&mut self.register_password);
                         self.spawn_action(
                             PendingAction::Register {
                                 email: self.register_email.clone(),
-                                password: self.register_password.clone(),
+                                password,
                                 full_name: self.register_full_name.clone(),
                             },
                             ctx,

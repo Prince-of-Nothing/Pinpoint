@@ -7,6 +7,9 @@ name: DAST
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/dast.yml"
   schedule:
     - cron: "41 4 * * 1"
 

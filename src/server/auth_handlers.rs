@@ -39,7 +39,7 @@ const HOST_SESSION_COOKIE: &str = "__Host-pinpoint_session";
 /// Loopback HTTP dev keeps the plain name: `__Host-` requires `Secure`.
 const SESSION_COOKIE: &str = "session_id";
 
-fn session_cookie(session_id: &str, secure: bool) -> String {
+pub(crate) fn session_cookie(session_id: &str, secure: bool) -> String {
     if secure {
         format!("{HOST_SESSION_COOKIE}={session_id}; Path=/; HttpOnly; SameSite=Lax; Secure")
     } else {
@@ -49,7 +49,7 @@ fn session_cookie(session_id: &str, secure: bool) -> String {
 
 /// HTTPS detection: TLS proxies (Render) forward the original scheme in
 /// `X-Forwarded-Proto`; an absolute-form `https` request URI also counts.
-fn request_is_secure(headers: &HeaderMap, uri: &axum::http::Uri) -> bool {
+pub(crate) fn request_is_secure(headers: &HeaderMap, uri: &axum::http::Uri) -> bool {
     uri.scheme_str() == Some("https")
         || headers
             .get("x-forwarded-proto")

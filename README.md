@@ -14,8 +14,8 @@ production-hardened. See the functional-state matrix and per-item
 
 ## What works today
 
-- **Accounts & sessions** — email/password (Argon2id) and anonymous
-  device-bound accounts, opaque `HttpOnly` session cookies + CSRF, session
+- **Accounts & sessions** — email/password (Argon2id), optional Google OAuth, and
+  anonymous device-bound accounts, opaque `HttpOnly` session cookies + CSRF, session
   list/revoke, logout-all, lockout, TOTP MFA.
 - **E2E messages** — 1:1 text between accepted friends; X25519 + Ed25519 +
   AES-256-GCM with a ciphertext-only server, safety number and read receipts on
@@ -58,7 +58,8 @@ production-hardened. See the functional-state matrix and per-item
   `PINPOINT_OSRM_URL`, `PINPOINT_OVERPASS_URL`; public providers are demo
   fallbacks only.
 
-**Still pending:** OAuth/passkeys/magic links, iOS build, and physical AArch64
+**Still pending:** passkeys/magic links, an explicit provider-linking flow,
+GitHub OAuth, an iOS build, and physical AArch64
 device validation. See the [roadmap](https://github.com/Prince-of-Nothing/Pinpoint/wiki/Roadmap) and
 [`RELEASE_NOTES.md`](https://github.com/Prince-of-Nothing/Pinpoint/blob/main/RELEASE_NOTES.md).
 

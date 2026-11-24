@@ -26,6 +26,7 @@ mod handlers;
 mod locations_handlers;
 mod messages_handlers;
 mod migrations;
+mod oauth_handlers;
 mod offline_handlers;
 mod state;
 mod status;
@@ -415,6 +416,15 @@ pub fn router(state: AppState) -> Router {
 /// Stateless: the app state is supplied once by the binary's `with_state`.
 pub fn auth_router() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/auth/providers", get(oauth_handlers::providers))
+        .route(
+            "/api/v1/auth/oauth/:provider/start",
+            get(oauth_handlers::start),
+        )
+        .route(
+            "/api/v1/auth/oauth/:provider/callback",
+            get(oauth_handlers::callback),
+        )
         .route("/api/v1/auth/login", post(auth_handlers::login))
         .route("/api/v1/auth/register", post(auth_handlers::register))
         .route("/api/v1/auth/logout", post(auth_handlers::logout))

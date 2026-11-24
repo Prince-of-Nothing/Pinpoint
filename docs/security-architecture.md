@@ -60,6 +60,7 @@ what remains after the listed countermeasure.
 | T-03 | Spoofing | Session layer | Session hijack or cookie theft | 5 | 2 | 10 | High | `__Host-` cookie, `HttpOnly`, `SameSite=Lax`, `Secure` in production, 12 h sliding / 30-day absolute expiry, per-request DB validation, revocation | XSS in a client or a compromised device |
 | T-10 | Tampering | API, DB | Injection through malformed input | 5 | 2 | 10 | High | Strict server validation, sqlx bound parameters only, no string-concatenated SQL, stable 400 envelope | Dependency zero-day (mitigated by `cargo audit`) |
 | T-12 | Tampering | Build, dependencies | Compromised crate or toolchain | 5 | 2 | 10 | High | `Cargo.lock` committed, `cargo audit` gate with an explicit advisory allowlist, pinned patched `cookie` | A malicious maintainer or a new unpublished advisory |
+| T-16 | Spoofing | OAuth | A provider identity takes over a password account | 5 | 2 | 10 | High | Identity bound to the provider subject, verified email required, an existing password email is refused (no auto-link) | A compromised provider account used as the only login |
 | T-05 | Spoofing | Auth | Account enumeration or credential stuffing | 3 | 3 | 9 | High | Generic errors, constant-time verification for unknown emails, per-client HMAC throttles, per-account lockout | Credential reuse outside Pinpoint |
 | T-04 | Tampering | API | CSRF on a state-changing request | 4 | 2 | 8 | Medium | Double-submit cookie + `X-CSRF-Token` on every unsafe method; 403 `CSRF_FAILED` | Token theft via XSS (same as T-03) |
 | T-09 | Tampering | Transport | Payload tampering in transit | 4 | 2 | 8 | Medium | HTTPS-only client policy (ADR-0006), TLS gateway, HSTS, secure cookies | A compromised CA or client |
@@ -97,7 +98,7 @@ graph TD
   but does not remove this);
 - a malicious database administrator (the DB stores ciphertext for messages
   only);
-- third-party identity providers (no OAuth login is wired);
+- a compromised identity-provider account when OAuth is the only way the person signs in (the identity is bound to the provider subject, never to an email);
 - network-level denial of service before the gateway.
 
 
@@ -211,6 +212,32 @@ security::session::tests::custom_config ... ok
 ```
 
 Server-side timeouts (Rust `src/server/state/sessions.rs`) are authoritative; client timeout is UX hardening.
+
+### 4.6 OAuth 2.0 Sign-In (Optional, ADR-0024)
+
+Google OIDC, authorization code + PKCE (S256), enabled only when
+`PINPOINT_OAUTH_GOOGLE_CLIENT_ID` and `PINPOINT_OAUTH_GOOGLE_CLIENT_SECRET`
+are set:
+
+1. `GET /auth/oauth/google/start` stores a pending state with its PKCE
+   verifier for ten minutes, sets a short-lived `HttpOnly` `SameSite=Lax`
+   state cookie scoped to `/api/v1/auth/oauth`, and redirects to Google.
+2. The callback requires the state cookie to match the query state, consumes
+   the state once, and exchanges the code server-side. The client secret and
+   the verifier never reach the browser.
+3. A verified email is mandatory. The identity is stored as
+   `identity_subject = "google:<sub>"`; if the email already has a password
+   account the callback refuses (`email_exists`) instead of linking, so a
+   provider email change cannot become an account takeover.
+4. Success creates the normal opaque session cookie, with the same CSRF,
+   expiry and revocation behavior as password sign-in.
+5. `/auth/oauth/*` is covered by the anonymous per-client throttle; pending
+   states are in memory and fail closed on another replica.
+
+Tests (`tests/oauth.rs`) run the full exchange against a local mock provider:
+new account and session, repeat sign-in reuses the account, an existing
+password email is refused, an unverified email is refused, and a foreign or
+replayed state is refused.
 
 ---
 

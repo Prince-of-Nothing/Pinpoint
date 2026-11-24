@@ -1878,3 +1878,10 @@ body:has(.drawer:is(.open, .closing)) .map-controls {
 .drawer[data-screen="account"] .card:not([data-sections~="account"]) {
   display: none;
 }
+/* OAuth sign-in buttons: only rendered when a provider is configured. */
+.oauth-buttons {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.oauth-buttons button { width: 100%; }

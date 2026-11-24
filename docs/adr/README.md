@@ -49,6 +49,7 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0021 | [Global Map Catalog and Manifest-Driven Offline Regions](./0021-global-map-catalog.md) | Proposed |
 | 0022 | [MFA Disable Requires a TOTP Proof](./0022-mfa-disable-requires-totp.md) | Accepted |
 | 0023 | [End-to-End Encrypted 1:1 Messages (ECIES, not Signal Protocol)](./0023-e2e-messages-ecies.md) | Accepted |
+| 0024 | [Optional OAuth 2.0 (Google) Sign-In](./0024-oauth-sign-in.md) | Accepted |
 
 See the table above; the current architecture summary is in
 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). Design and SDLC context is in the

@@ -525,7 +525,7 @@ pub async fn create_note(
             );
         }
     }
-    let note = {
+    let plaintext = {
         let mut store = state.store.lock().unwrap();
         let id = store.next_note_id;
         store.next_note_id += 1;
@@ -540,13 +540,24 @@ pub async fn create_note(
             created_at: chrono::Utc::now().to_rfc3339(),
         }
     };
-    let Some(id) = state.sql_insert_note(&note).await else {
+    // Private fields are encrypted before they reach Postgres or the store;
+    // the response keeps the plaintext the client just sent.
+    let stored = PlaceNote {
+        label: state.encrypt_note_text(&plaintext.label),
+        message: state.encrypt_note_text(&plaintext.message),
+        photo: plaintext
+            .photo
+            .as_deref()
+            .map(|photo| state.encrypt_note_text(photo)),
+        ..plaintext.clone()
+    };
+    let Some(id) = state.sql_insert_note(&stored).await else {
         return error_envelope("NOTE_SAVE_FAILED", "Could not save the note.");
     };
-    let saved = PlaceNote { id, ..note };
+    let saved = PlaceNote { id, ..plaintext };
     if state.pg.is_none() {
         let mut store = state.store.lock().unwrap();
-        store.place_notes.push(saved.clone());
+        store.place_notes.push(PlaceNote { id, ..stored });
     }
     (StatusCode::CREATED, Json(saved)).into_response()
 }
@@ -571,15 +582,17 @@ pub async fn list_notes(
         let notes: Vec<PlaceNote> = rows
             .into_iter()
             .map(
-                |(id, user_id, latitude, longitude, label, message, photo, created_at)| PlaceNote {
-                    id,
-                    user_id,
-                    latitude,
-                    longitude,
-                    label,
-                    message,
-                    photo,
-                    created_at,
+                |(id, user_id, latitude, longitude, label, message, photo, created_at)| {
+                    state.decrypt_note(&PlaceNote {
+                        id,
+                        user_id,
+                        latitude,
+                        longitude,
+                        label,
+                        message,
+                        photo,
+                        created_at,
+                    })
                 },
             )
             .collect();
@@ -590,7 +603,7 @@ pub async fn list_notes(
         .place_notes
         .iter()
         .filter(|n| n.user_id == cu.user_id)
-        .cloned()
+        .map(|note| state.decrypt_note(note))
         .collect();
     (StatusCode::OK, Json(notes)).into_response()
 }

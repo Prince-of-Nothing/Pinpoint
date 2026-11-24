@@ -90,7 +90,7 @@ header. The cookie value is stored server-side only as a SHA-256 hash.
 | GET | `/locations/me` | cookie | own latest location |
 | GET | `/locations/friends` | cookie | friend locations visible under an active share, precision-downgraded |
 | GET | `/locations/history` | cookie | owner-only trail, 24-hour window (the database retains 7 days and prunes hourly) |
-| GET/POST | `/locations/notes` | cookie (+CSRF) | list / create own private notes: `{latitude, longitude, label?, message, photo?}`; message 1–2000 chars; photo is a JPEG/PNG data URL under 675 KB |
+| GET/POST | `/locations/notes` | cookie (+CSRF) | list / create own private notes: `{latitude, longitude, label?, message, photo?}`; message 1–2000 chars; photo is a JPEG/PNG data URL under 675 KB; stored AES-256-GCM-encrypted when `DATA_ENCRYPTION_KEY` is set |
 | DELETE | `/locations/notes/:id` | cookie + CSRF | delete own note |
 | GET/POST | `/locations/check-ins` | cookie (+CSRF) | list / create own check-ins: `{latitude, longitude, note?, kind}`; `kind` is `manual`, `scheduled` or `trip`; note ≤2000 chars |
 | DELETE | `/locations/check-ins/:id` | cookie + CSRF | delete own check-in |

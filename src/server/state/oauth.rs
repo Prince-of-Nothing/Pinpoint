@@ -27,19 +27,29 @@ impl AppState {
     /// Startup reads the environment; tests inject a client that points at a
     /// local mock provider.
     pub fn set_oauth_client(&self, client: OAuthClient, secret: String) {
+        let provider = client.provider.name.to_string();
         self.oauth_secrets
             .lock()
             .unwrap()
-            .insert(client.provider.name.to_string(), secret);
-        self.oauth_clients
+            .insert(provider.clone(), secret);
+        self.oauth_endpoints
             .lock()
             .unwrap()
-            .insert(client.provider.name.to_string(), client);
+            .insert(provider.clone(), client.endpoints());
+        self.oauth_clients.lock().unwrap().insert(provider, client);
     }
 
     /// Server-side secret for a configured provider.
     pub fn oauth_secret(&self, provider: &str) -> Option<String> {
         self.oauth_secrets.lock().unwrap().get(provider).cloned()
+    }
+
+    /// Remote endpoints for a configured provider (no secret/id inside).
+    pub fn oauth_endpoints(
+        &self,
+        provider: &str,
+    ) -> Option<crate::security::oauth::OAuthEndpoints> {
+        self.oauth_endpoints.lock().unwrap().get(provider).cloned()
     }
 
     /// Enabled providers, sorted so the client renders a stable order.

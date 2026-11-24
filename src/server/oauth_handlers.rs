@@ -102,6 +102,9 @@ async fn complete_sign_in(
     let Some(secret) = state.oauth_secret(client.provider.name) else {
         return Err("provider_unknown");
     };
+    let Some(endpoints) = state.oauth_endpoints(client.provider.name) else {
+        return Err("provider_unknown");
+    };
     let form = [
         ("client_id", client.provider.client_id.as_str()),
         ("client_secret", secret.as_str()),
@@ -131,7 +134,14 @@ async fn complete_sign_in(
         .filter(|token| !token.is_empty())
         .ok_or("exchange_failed")?;
 
-    let identity_info = fetch_identity(&http, client, access_token).await?;
+    let identity_info = fetch_identity(
+        &http,
+        client.provider.name,
+        &endpoints.userinfo_url,
+        endpoints.email_url.as_deref(),
+        access_token,
+    )
+    .await?;
     let identity = format!("{}:{}", client.provider.name, identity_info.subject);
     let email = identity_info.email;
     let full_name = identity_info.name;
@@ -212,15 +222,16 @@ struct IdentityInfo {
 /// address.
 async fn fetch_identity(
     http: &reqwest::Client,
-    client: &OAuthClient,
+    provider_name: &str,
+    userinfo_url: &str,
+    email_url: Option<&str>,
     access_token: &str,
 ) -> Result<IdentityInfo, &'static str> {
-    if !is_secure_provider_url(&client.userinfo_url) {
+    if !is_secure_provider_url(userinfo_url) {
         return Err("invalid_provider_url");
     }
-    // codeql[rust/cleartext-transmission] False positive: is_secure_provider_url requires HTTPS (loopback HTTP only for local tests), and OAuthClient carries no secret.
     let response = http
-        .get(&client.userinfo_url)
+        .get(userinfo_url)
         .bearer_auth(access_token)
         .header(reqwest::header::ACCEPT, "application/json")
         .header(reqwest::header::USER_AGENT, "pinpoint-oauth/1.0")
@@ -231,8 +242,8 @@ async fn fetch_identity(
         return Err("userinfo_failed");
     }
     let info: Value = response.json().await.map_err(|_| "userinfo_failed")?;
-    if client.provider.name == "github" {
-        return github_identity(http, client, access_token, &info).await;
+    if provider_name == "github" {
+        return github_identity(http, email_url, access_token, &info).await;
     }
     let subject = info
         .get("sub")
@@ -267,7 +278,7 @@ async fn fetch_identity(
 
 async fn github_identity(
     http: &reqwest::Client,
-    client: &OAuthClient,
+    email_url: Option<&str>,
     access_token: &str,
     info: &Value,
 ) -> Result<IdentityInfo, &'static str> {
@@ -287,7 +298,7 @@ async fn github_identity(
         .filter(|name| !name.is_empty())
         .unwrap_or(login)
         .to_string();
-    let email_url = client.email_url.as_deref().ok_or("email_missing")?;
+    let email_url = email_url.ok_or("email_missing")?;
     if !is_secure_provider_url(email_url) {
         return Err("invalid_provider_url");
     }

@@ -38,6 +38,14 @@ impl OAuthProvider {
     }
 }
 
+/// The remote endpoints for a provider. Kept separately from the client
+/// credentials so a request URL never shares a container with a secret.
+#[derive(Debug, Clone)]
+pub struct OAuthEndpoints {
+    pub userinfo_url: String,
+    pub email_url: Option<String>,
+}
+
 /// A configured client: provider metadata, the userinfo endpoint and the
 /// redirect URI registered with the provider. The client secret is kept in
 /// `AppState` separately so endpoint URLs never travel with it.
@@ -52,6 +60,13 @@ pub struct OAuthClient {
 }
 
 impl OAuthClient {
+    pub fn endpoints(&self) -> OAuthEndpoints {
+        OAuthEndpoints {
+            userinfo_url: self.userinfo_url.clone(),
+            email_url: self.email_url.clone(),
+        }
+    }
+
     /// Google OIDC client from env. Returns `None` when the client ID or the
     /// secret is missing, so the routes stay disabled on a stock deployment.
     pub fn google_from_env() -> Option<(Self, String)> {

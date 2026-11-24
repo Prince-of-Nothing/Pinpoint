@@ -86,6 +86,8 @@ pub struct AppState {
     /// Server-side client secrets, keyed by provider; kept apart from the
     /// endpoint URLs so a URL built from a client never carries a secret.
     pub oauth_secrets: Arc<Mutex<HashMap<String, String>>>,
+    /// Provider endpoints, kept apart from both the secret and the client id.
+    pub oauth_endpoints: Arc<Mutex<HashMap<String, crate::security::oauth::OAuthEndpoints>>>,
     /// Single-use pending authorizations keyed by the opaque state.
     pub oauth_pending: Arc<Mutex<HashMap<String, oauth::PendingOAuth>>>,
     /// Column cipher for private notes/photos; `None` keeps plaintext (dev).
@@ -173,18 +175,22 @@ impl ServiceKind {
 fn default_oauth_clients() -> (
     HashMap<String, crate::security::oauth::OAuthClient>,
     HashMap<String, String>,
+    HashMap<String, crate::security::oauth::OAuthEndpoints>,
 ) {
     let mut clients = HashMap::new();
     let mut secrets = HashMap::new();
+    let mut endpoints = HashMap::new();
     if let Some((client, secret)) = crate::security::oauth::OAuthClient::google_from_env() {
+        endpoints.insert("google".to_string(), client.endpoints());
         secrets.insert("google".to_string(), secret);
         clients.insert("google".to_string(), client);
     }
     if let Some((client, secret)) = crate::security::oauth::OAuthClient::github_from_env() {
+        endpoints.insert("github".to_string(), client.endpoints());
         secrets.insert("github".to_string(), secret);
         clients.insert("github".to_string(), client);
     }
-    (clients, secrets)
+    (clients, secrets, endpoints)
 }
 
 /// Column cipher for private notes and photos. `DATA_ENCRYPTION_KEY` is a
@@ -261,7 +267,7 @@ impl AppState {
         Self::for_owner(ServiceKind::All)
     }
     pub fn for_owner(owner: ServiceKind) -> Self {
-        let (oauth_clients, oauth_secrets) = default_oauth_clients();
+        let (oauth_clients, oauth_secrets, oauth_endpoints) = default_oauth_clients();
         Self {
             store: Arc::new(Mutex::new(Store::new())),
             pg: None,
@@ -272,6 +278,7 @@ impl AppState {
             auth_rate: Arc::new(AuthRateLimiter::new()),
             oauth_clients: Arc::new(Mutex::new(oauth_clients)),
             oauth_secrets: Arc::new(Mutex::new(oauth_secrets)),
+            oauth_endpoints: Arc::new(Mutex::new(oauth_endpoints)),
             oauth_pending: Arc::new(Mutex::new(HashMap::new())),
             data_cipher: data_cipher_from_env(),
         }
@@ -288,7 +295,7 @@ impl AppState {
         }
         match sqlx::PgPool::connect(&database_url).await {
             Ok(pool) => {
-                let (oauth_clients, oauth_secrets) = default_oauth_clients();
+                let (oauth_clients, oauth_secrets, oauth_endpoints) = default_oauth_clients();
                 let app = AppState {
                     store: Arc::new(Mutex::new(Store::new())),
                     pg: Some(pool),
@@ -299,6 +306,7 @@ impl AppState {
                     auth_rate: Arc::new(AuthRateLimiter::new()),
                     oauth_clients: Arc::new(Mutex::new(oauth_clients)),
                     oauth_secrets: Arc::new(Mutex::new(oauth_secrets)),
+                    oauth_endpoints: Arc::new(Mutex::new(oauth_endpoints)),
                     oauth_pending: Arc::new(Mutex::new(HashMap::new())),
                     data_cipher: data_cipher_from_env(),
                 };

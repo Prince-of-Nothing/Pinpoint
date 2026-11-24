@@ -1106,3 +1106,42 @@ async fn rejected_friend_request_cannot_be_accepted_later() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
 }
+
+#[tokio::test]
+async fn publish_rejects_implausible_accuracy() {
+    let state = pinpoint_desktop::server::AppState::new();
+    let app = pinpoint_desktop::server::router(state);
+    let (cookie, csrf, _, _) = register(&app, "accuracy@example.invalid", "Accuracy").await;
+
+    for accuracy in [-1.0_f64, 10_000_001.0] {
+        let body = format!(r#"{{"latitude":47.01,"longitude":28.86,"accuracy":{accuracy}}}"#);
+        let resp = app
+            .clone()
+            .oneshot(authed_req(
+                "POST",
+                "/api/v1/locations/me",
+                &cookie,
+                &csrf,
+                &body,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            resp.status(),
+            StatusCode::BAD_REQUEST,
+            "accuracy: {accuracy}"
+        );
+    }
+
+    let resp = app
+        .oneshot(authed_req(
+            "POST",
+            "/api/v1/locations/me",
+            &cookie,
+            &csrf,
+            r#"{"latitude":47.01,"longitude":28.86,"accuracy":10}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+}

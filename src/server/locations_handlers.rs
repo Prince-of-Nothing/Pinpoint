@@ -358,6 +358,10 @@ pub async fn publish_location(
     let lat = body.get("latitude").and_then(Value::as_f64).unwrap_or(0.0);
     let lon = body.get("longitude").and_then(Value::as_f64).unwrap_or(0.0);
     let accuracy = body.get("accuracy").and_then(Value::as_f64);
+    let accuracy_check = crate::security::validation::validate_accuracy(accuracy);
+    if !accuracy_check.is_valid() {
+        return error_envelope("VALIDATION_FAILED", &accuracy_check.errors.join("; "));
+    }
     if !(-90.0..=90.0).contains(&lat) || !(-180.0..=180.0).contains(&lon) {
         return error_envelope(
             "VALIDATION_FAILED",

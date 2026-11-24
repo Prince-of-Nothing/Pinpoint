@@ -104,6 +104,7 @@ The per-item flagged list for this release is in
 - [FIX] Native Today: action errors are surfaced, the note draft clears only after a successful POST and only if unchanged, refresh sections load independently, and a 401 clears private lists without letting an in-flight refresh cross accounts.
 - [FIX] Location permission: Android now requests fine and coarse location in one dialog (Android 12+ ignores a fine-only request), asks on the first map view, retries the fix after a grant, and receives one-shot GPS updates through a broadcast receiver. The web client asks once after sign-in and reports the real geolocation error. Native map controls use a solid fill so their glyphs stay readable over the light basemap.
 ### Security
+- [SECURITY] Split services: the auth, users, locations, map, messages, diagnostics and admin binaries now apply the same baseline headers and `no-store` policy as the combined router, so a split deployment cannot serve unprotected responses.
 - [SECURITY] map: search, reverse-geocode and route answers now carry `Cache-Control: no-store` because they contain the query or coordinates; tiles keep their public one-hour cache.
 - [SECURITY] rate limit: 429 responses now carry `Retry-After`, so a client that hits the auth, write or map throttle waits for the window instead of retrying in a tight loop.
 - [SECURITY] API responses now carry `Cache-Control: no-store`, so a browser or intermediate cache on a shared device cannot replay another account's locations, notes or sessions; static assets keep their own cache headers.

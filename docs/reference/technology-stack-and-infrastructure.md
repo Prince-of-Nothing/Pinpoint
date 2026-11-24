@@ -1,115 +1,81 @@
 # Technology Stack and Infrastructure
 
-## Product clients
+The stack is chosen for one property above all: **one Rust codebase** can serve
+the desktop app, the Android app, the iOS target and the API, while the web
+client stays a thin same-origin page. That removes the duplicated validation
+and crypto logic that a split stack would create, and keeps the security
+boundary in code the tests can drive directly.
 
-- Cross-platform mobile client for Android and iPhone where practical.
-- Native location modules for background permissions, battery-aware sampling,
-  geofencing, and platform notifications.
-- Optional web companion for account management, prompt galleries, group
-  administration, and map viewing; web is not assumed to replace mobile
-  background location.
+## Clients
 
-## Backend
-
-- Versioned HTTPS API for identity, friendships, directional consent,
-  profiles, check-ins, current location, maps, caches, groups, prompts,
-  challenges, reports, and notifications.
-- Realtime channel for authorized location and check-in updates, with
-  authorization applied before every event.
-- Background jobs for reminders, stale-state transitions, expiry, moderation
-  queues, prompt scheduling, and notifications.
-- Provider-neutral service boundaries so hosted infrastructure can later move
-  to self-hosted or hybrid deployment.
-
-## Data and storage
-
-- Relational database for users, relationships, permissions, check-ins,
-  prompts, groups, and audit metadata.
-- Encrypted object storage for caches and media with size, type, malware,
-  retention, and deletion controls.
-- Latest-location storage separated from historical or traversal data.
-- Cache, prompt, and user-owned achievement records have explicit retention
-  and deletion rules.
-- Backups are encrypted, access-controlled, tested, and exportable.
-
-## Maps and notifications
-
-- OpenStreetMap data with attribution and a compliant tile provider.
-- Licensed routing/geocoding provider or external navigation deep links.
-- Push notifications for check-ins, sharing changes, reminders, and group
-  activity without leaking sensitive content in notification previews.
-
-## Security and operations
-
-- Passkeys or strong authentication, device/session management, and fresh
-  authentication for sensitive actions.
-- TLS in transit, encryption at rest, separated key management,
-  least-privilege service accounts, rate limits, and audit events.
-- Observability for availability, battery impact, stale updates, notification
-  delivery, authorization failures, abuse reports, and data access.
-- CI checks for tests, dependency vulnerabilities, secret exposure, schema
-  changes, and mobile permission behavior.
-- Disaster recovery, incident response, data export, account deletion, and
-  provider-outage playbooks.
-
-## Initial deployment direction
-
-Use hosted or hybrid services for affordable testing, while keeping
-encryption, backups, data portability, and infrastructure-as-code sufficient
-for future self-hosting. Android is the most realistic first production
-target; iPhone and web support should follow validated battery and
-permission behavior.
-
-## Frozen technology stack (MVP)
-
-This is the frozen, recorded stack decision for the MVP — see also
-[§4.2 Solution Strategy](../architecture/solution-strategy.md#42-frozen-mvp-technology-stack)
-and [§2 Constraints](../architecture/constraints.md).
-
-| Layer | Choice | Rationale |
+| Client | Stack | Notes |
 |---|---|---|
-| Mobile client | Flutter + native platform channels (Android/iOS) for background permissions, battery-aware sampling, geofencing, notifications | Shared UI code and consistent map/UI behavior across Android/iPhone |
-| Backend | FastAPI + SQLAlchemy + Alembic, versioned HTTPS API | Typed APIs, rapid development, async endpoints, background-job integration with Celery, readable security surface |
-| Database | PostgreSQL with SQLAlchemy ORM | Transactions, relationships, system of record for users, relationships, permissions, check-ins, audit metadata |
-| Queue/cache | Redis with strict TTLs + Celery | Durable job queue (reminders, stale-state transitions, expiry, moderation tasks, prompt scheduling, notifications); Redis is never authoritative for permissions/consent |
-| Object storage | S3-compatible encrypted storage, signed URLs, scanning | Metadata in PostgreSQL; short-lived signed URLs; uploads scanned before release; content limits and retention/deletion per policy |
-| Realtime transport | Authenticated WebSocket gateway, per-connection authorization | Recipients subscribe only to resources already allowed by current consent |
-| Identity & auth | OIDC/OAuth 2.0 with PKCE S256 | Short-lived access tokens, rotating refresh tokens, device/session management, passkeys where practical; backend authorization independent of token validity |
-| Maps | OSM-derived tile/routing provider behind a map adapter, with attribution | External navigation deep links in MVP; no private location history sent to map services |
-| Operations | Docker + GitHub Actions CI/CD; managed container hosting with managed PostgreSQL and object storage | Hybrid: managed services for pilot, infra-as-code designed for future self-hosting; Celery worker runs alongside the API |
-| Security controls | SC-01 through SC-09 (see [Security Control Register](./security-control-register.md)) implemented at the API boundary | TLS in transit, encryption at rest, separated key management, least-privilege service accounts, rate limits, audit events |
+| Desktop | Rust + `eframe`/`egui` 0.32 (glow) | Windows/Linux/macOS; the same UI code is the shared `src/ui/` shell |
+| Android | Rust + `eframe` native activity, a small Java bridge for platform APIs | ADR-0013/0017; the APK is assembled by `android/gradlew`, not by `cargo-apk` |
+| iOS | Rust + `eframe`, built with `cargo-xcodebuild` | Target exists; unverified in CI (no Xcode) |
+| Web | Vanilla ES modules, MapLibre GL JS 6.x, PMTiles 4.x, service worker | No framework, no CDN, no third-party scripts; assets are embedded in the server binary |
 
-The choice between Flutter/React Native, FastAPI/Django, and specific hosting
-providers is a recorded decision rather than a hidden assumption. All
-interfaces (identity, relationships, location, content, notifications) are
-designed so they can be separated later if scale requires it.
+## Server
 
-## As built (September MVP)
-
-| Layer | Frozen choice | MVP as built |
+| Concern | Choice | Why |
 |---|---|---|
-| Mobile client | Flutter | Same-origin web client (HTML/JS, MapLibre GL JS 6.18.0 + PMTiles 4.5.0 vendored); Flutter deferred ([ADR 0004](../adr/web-client-for-mvp-demonstration.md)) |
-| Backend | FastAPI + SQLAlchemy + Alembic | FastAPI 0.141, SQLAlchemy 2.1, Alembic 1.20, Pydantic 2 |
-| Database | PostgreSQL | PostgreSQL 16 with a least-privilege runtime role; SQLite in-memory for tests |
-| Queue/cache | Redis + Celery | Redis for rate limiting only; no Celery yet ([ADR 0005](../adr/store-latest-location-only.md)) |
-| Object storage | S3-compatible | Not needed yet (no media in the MVP) |
-| Realtime | WebSocket gateway | 30-second polling from the web client |
-| Identity | OIDC + PKCE | Argon2id passwords + session-bound JWT + rotating refresh tokens ([ADR 0003](../adr/password-auth-with-rotating-refresh-tokens.md)) |
-| Maps | OSM tiles + deep links | OSM tiles with attribution; OSM, Google Maps and `geo:` links |
-| Operations | Docker + GitHub Actions | Docker Compose (+ optional Caddy HTTPS), GitHub Actions CI |
+| HTTP | `axum` 0.7 on `tokio` 1 | Small, type-safe extractors; the same router builds the combined and split binaries |
+| Persistence | `sqlx` 0.8 + PostgreSQL 16 | Compile-checked queries, bound parameters only, migrations in `src/server/migrations.rs` |
+| Sessions | Opaque server-side sessions (ADR-0012) | No bearer JWT to protect or refresh; revocation is a row lookup |
+| Passwords | `argon2` 0.6 (Argon2id PHC) | Memory-hard; legacy PBKDF2 hashes rehash on login |
+| MFA | TOTP (`totp-rs`) with replay protection | No SMS/email dependency |
+| OAuth | Google OIDC + GitHub, authorization code + PKCE (ADR-0024) | Verified email, no auto-linking |
+| E2E messages | `x25519-dalek` 2, `ed25519-dalek` 2, `hkdf` 0.12, `aes-gcm` 0.11 | ECIES, ciphertext-only server (ADR-0023) |
+| Notes at rest | `aes-gcm` 0.11 + `DATA_ENCRYPTION_KEY` | Column encryption before storage (ADR-0025) |
+| HTTP client | `reqwest` 0.12 with rustls | No OpenSSL on the client path; HTTPS-only policy (ADR-0006) |
+| Logging | `tracing`/`tracing-subscriber` | Redacted fields; diagnostics stay local |
+| Time | `chrono` 0.4 | ISO-8601 timestamps across the wire |
 
-All versions are pinned in `backend/requirements*.txt` and checked with
-pip-audit.
+Split deployables (`src/bin/`): `pinpoint-server` (combined), `auth`, `users`,
+`locations`, `messages`, `map`, `diag`, `admin`, plus the web/wasm stubs. They
+share the `AppState` and routers, so the demo and the service-per-container
+deployment run the same handler logic.
 
-## Baseline architecture rationale
+## Data
 
-A modular monolith is used rather than microservices for the MVP: one
-versioned API, one relational database, one worker process, one
-object-storage boundary, and one realtime gateway. This is easier to secure,
-test, deploy, and explain during the internship timeline. Interfaces around
-identity, relationships, location, content, and notifications are kept
-separable so the system can be split later if scale requires it.
+- PostgreSQL tables are prefixed `pinpoint_` (`users`, `friendships`, `shares`,
+  `locations`, `location_history`, `place_notes`, `checkins`, `emergencies`,
+  `sessions`, `messages`, `message_keys`, `diagnostic_reports`, `admin_audit`).
+- Messages are ciphertext only; note label/message/photo are AES-256-GCM
+  encrypted when the key is configured; passwords are Argon2id hashes.
+- Backups: the compose stack writes `pg_dump` every five minutes;
+  `scripts/backup-db.ps1` produces an encrypted, verified off-host copy and
+  `scripts/restore-db.ps1` restores it (see [deployment](../DEPLOYMENT.md)).
 
----
-*See also [ADR index](../adr) — the frozen stack and modular-monolith choice
-are architecturally significant decisions and should be backed by ADRs.*
+## Maps and external services
+
+- MapLibre GL JS renders vector tiles; PMTiles packs provide offline maps.
+- The online basemap is opt-in OpenFreeMap; the default is the installed
+  offline pack, so the app opens without a third-party request.
+- Self-hosted OSM services are the production path (Nominatim, OSRM,
+  Overpass, a tile server); the public instances are demo fallbacks only and
+  are rate-limited by the proxy (ADR-0011, ADR-0021, `docs/OSM_POLICY.md`).
+- Attribution (OSM/ODbL and OpenFreeMap) is always rendered.
+
+## Infrastructure
+
+- `docker-compose.yml`: gateway, replicated services, PostgreSQL, `db-backup`;
+  `docker-compose.https.yml` adds a self-signed TLS gateway for local checks.
+- CI (`.github/workflows/`): Rust gate (fmt, clippy, build, test, cargo audit),
+  web Node checks, wasm compile, macOS/Windows client builds, CodeQL, weekly
+  ZAP baseline, OSM compliance.
+- Secrets come from the environment, never the repository: `DATABASE_URL`,
+  `DATA_ENCRYPTION_KEY`, `PINPOINT_OAUTH_*`, `PINPOINT_BACKUP_PASSPHRASE`.
+
+## Why not the alternatives
+
+| Alternative | Reason not chosen |
+|---|---|
+| Flutter/Kotlin mobile + separate backend | Duplicates crypto and validation; the thesis needs one auditable security core |
+| FastAPI/SQLAlchemy | The historical prototype; removed from the tree (ADR-0007) |
+| JWT + refresh tokens | Adds a second credential and refresh loop without a revocation gain for a same-origin client (ADR-0012) |
+| Hosted map SDK with a key | Third-party script/key in the privacy boundary; MapLibre + PMTiles keeps it same-origin |
+| WebSocket realtime | Polling (5 s web inbox, 30 s native) is enough for the MVP and simpler to secure; realtime is future work |
+
+All Rust versions are pinned in `Cargo.lock`; the web libraries are vendored
+under `web/vendor/`.

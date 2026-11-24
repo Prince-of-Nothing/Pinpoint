@@ -1,89 +1,57 @@
 # Domain Data Model
 
+The as-built model is relational (PostgreSQL 16 in production, the same structs
+in memory for the demo). Tables are prefixed `pinpoint_`; identifiers are
+`BIGINT` and timestamps are ISO-8601 text or `TIMESTAMPTZ`. The ER diagram and
+the field-level rules live in
+[system models](../analysis/system-models.md) and the
+[API contract](./api-contract.md).
+
 ## Core entities
-
-`User`, `UserHandle`, `Profile`, `UserStatus`, `Device`, `Session`,
-`FriendRelationship`, `ConsentGrant`, `LocationShare`, `LocationUpdate`,
-`MovementTrail`, `VisitedRegion`, `FriendMapLayer`, `FriendMapPreference`,
-`TrajectoryEstimate`, `SearchShare`, `MissingPersonEvent`, `Cache`,
-`CachePermission`, `CacheUnlockRule`, `Riddle`, `UnlockEvent`, `Group`,
-`GroupMembership`, `Message`, `Call`, `Prompt`, `Challenge`,
-`ChallengeParticipant`, `ChallengeSubmission`, `Scoreboard`, `Submission`,
-`Rating`, `Report`, `ModerationAction`, `Notification`, `AuditEvent`.
-
-Relationships must encode purpose, scope, expiry, revocation, and visibility. A
-social membership must not imply a `LocationShare`. Precise `LocationUpdate`
-records require stricter retention than public prompt submissions.
-
-## MVP schema (as built)
-
-Implemented in `backend/app/models/` with the Alembic migrations in
-`backend/alembic/versions/`. Every externally visible id is a random UUID;
-all timestamps are timezone-aware UTC.
 
 | Table | Purpose | Key rules |
 |---|---|---|
-| `users` | Account, profile fields (`display_name`, `bio`), `role` (`user`/`admin`), lockout state | `username` and `email` unique and lower-cased; Argon2id `password_hash` |
-| `auth_sessions` | One login on one device: expiry, last activity, revocation reason, IP, user agent, hashed CSRF token | Access tokens are valid only while their session is |
-| `refresh_tokens` | SHA-256 hash of each refresh token, `used_at` for rotation | Reuse of a used token revokes the session |
-| `friendships` | `requester_id`, `addressee_id`, `status` (`pending`/`accepted`) | `pair_key` unique: one row per pair; declined/removed rows are deleted |
-| `blocks` | `blocker_id` → `blocked_id` | Unique pair; creating one removes the friendship and shares |
-| `location_shares` | Directional consent: `owner_id` → `recipient_id`, `precision`, `purpose`, `expires_at`, `revoked_at`, `revoked_reason` | One active share per direction; never implied by friendship |
-| `latest_locations` | One row per user: coordinates, accuracy, battery, charging, `recorded_at`, `received_at` | Latest publish; the owner-only trail lives in `pinpoint_location_history` and is pruned after 7 days |
-| `check_ins` | `due_at`, `grace_minutes`, `status` (`active`/`completed`/`cancelled`), note | Overdue/missed derived on read |
-| `audit_events` | Append-only security events: type, outcome, actor, target, IP, details (JSON) | Never stores secrets or coordinates; runtime DB role cannot update or delete rows |
+| `pinpoint_users` | Accounts | Unique email; `role` (`resident`/`admin`/`administrator`); `auth_method` (`email`/`anonymous`/`oauth`); `identity_subject` unique when set; Argon2id hash; TOTP secret; lockout counters |
+| `pinpoint_sessions` | Opaque sessions | Session id stored as a SHA-256 hash; CSRF token; `auth_method`; `last_activity`; `mfa_pending` |
+| `pinpoint_friendships` | Friend graph | `pending`/`accepted`/`rejected`; a rejected request is final and a new request is required |
+| `pinpoint_shares` | Directional consent | One row per friendship + direction; `precision_level` (`exact`/`approximate`/`city_only`); `is_active` (pause); `expires_at` (24 h default, 168 h cap); label |
+| `pinpoint_locations` | Latest location | One row per user; coordinates + accuracy + `updated_at`; no history in this table |
+| `pinpoint_location_history` | Owner-only trail | 24 h window returned, 7-day retention pruned hourly; never shared |
+| `pinpoint_place_notes` | Private notes | Owner-only; label/message/photo encrypted at rest when `DATA_ENCRYPTION_KEY` is set |
+| `pinpoint_checkins` | Check-ins | `manual`/`scheduled`/`trip`; note bounded; owner-only |
+| `pinpoint_emergencies` | Emergency alerts | Public-to-recipients alert; resolved flag; does not override a paused share |
+| `pinpoint_messages` | E2E envelopes | Ciphertext only (`ciphertext_to`/`ciphertext_from`), nonces, salts, Ed25519 signature, read timestamp; unique signature prevents replay |
+| `pinpoint_message_keys` | Public bundles | X25519 + Ed25519 public keys per user, replaced on rotation |
+| `pinpoint_diagnostic_reports` | Diagnostics | Minimal category/message, no location/IP/device id; capped ingestion |
+| `pinpoint_admin_audit` | Admin audit | Actor, action, target, timestamp for user creation, reset, deactivation and rotation changes |
+| `pinpoint_schema_migrations` | Migration ledger | Applied version + name + timestamp |
 
-`UserHandle`, `Profile`, `Device`, `ConsentGrant` and `LocationUpdate` from
-the conceptual model below are folded into `users`, `auth_sessions`,
-`location_shares` and `latest_locations` for the MVP.
+## Identity and visibility
 
-## Identity and profile
+- A public handle is derived from the user id (`username_for`); emails are
+  never searchable by non-admins.
+- Profile reads are scoped: self, accepted friend, pending request, otherwise
+  `404`; no location or activity is exposed through the profile.
+- A friendship alone grants no location access; an active, unexpired,
+  unpaused share naming the caller as recipient is required on every read.
+- Notes, the trail, bookmarks and check-ins are owner-only by query filter.
+- Account deletion cascades through the tables above and tombstones the id so
+  a stale replica cannot resurrect it.
 
-`User` is identified internally by an immutable ID. `UserHandle` stores the
-unique username, previous-handle policy, and next-allowed-change time.
-`Profile` stores optional nickname, name, image, and presentation preferences.
-`UserStatus` stores content, audience, expiry, creation time, and moderation
-state. API responses must be filtered by the viewer's relationship before
-profile data is returned. See
-[Actors and Accounts](./actors-and-accounts.md) and
-[Profile and Visibility Model](./profile-and-visibility-model.md).
+## Retention and encryption
 
-## Movement, trails, and search (deferred features)
+- The trail is pruned hourly to seven days; the API only returns 24 hours.
+- Messages are ciphertext on the server; only the participants hold plaintext.
+- Passwords are Argon2id PHC hashes; legacy PBKDF2 hashes are rehashed on login.
+- Note label/message/photo use AES-256-GCM (`enc:v1:`), with legacy plaintext
+  rows still readable.
+- Location rows, friendships and profile fields are plaintext; the database
+  role and volume/backup controls are the boundary (residual risk in the
+  [control register](./security-control-register.md), SC-06).
 
-`MovementTrail` stores consented location points with timestamps and
-accuracy. `TrajectoryEstimate` stores the method, time window, likely
-corridor, confidence, and uncertainty. `SearchShare` stores the
-pre-authorized recipients, activation reason, expiry, revocation state, and
-access log. `MissingPersonEvent` records who activated the workflow and when,
-without treating the estimate as confirmed fact. See
-[Movement Trails and Search Corridors](../architecture/movement-trails-and-search-corridors.md).
+## Not in the model
 
-## Visited regions and caches
-
-`VisitedRegion` stores a coarse area summary, confidence, visit window, and
-retention policy. `CacheUnlockRule` stores the geographic range, whether a
-verified visit or historical intersection is required, audience, expiry, and
-riddle requirement. `UnlockEvent` records eligibility and content access
-without exposing the visitor's trail to the creator. See
-[Cache and Permission Model](../architecture/cache-and-permission-model.md).
-
-## Friend maps
-
-`FriendMapLayer` stores a coarse, consented contribution. `FriendMapPreference`
-stores whether the owner shares a layer and whether a viewer hides it
-locally. The composition is calculated from the viewer's authorized layers
-and must not use raw location points as a client-visible API response. See
-[Friend Mosaic Maps](../architecture/friend-mosaic-maps.md).
-
-## Challenges
-
-`Challenge` stores the prompt, source group chat, rules, deadline, scoring
-method, visibility, and moderation state. `ChallengeParticipant` stores
-invitation, acceptance, withdrawal, and display preferences.
-`ChallengeSubmission` and `Scoreboard` store entries and results without
-changing the underlying group or friend permissions. See
-[Friend Challenges and Group Prompts](../explanation/friend-challenges-and-group-prompts.md).
-
----
-*See also [§12 Glossary](../architecture/glossary.md) for short definitions
-of each term, and [API Contract](./api-contract.md) for the wire representation.*
+Groups, prompts, challenges, scoreboards, battery/charging telemetry,
+WebSocket events and push notifications are **not** implemented. They were
+part of the earlier target design and are listed as deferred work; do not
+assume their tables exist.

@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [2.7.0] - 2026-11-25
 ### Changed
 - [DOCS] API contract: a new "Response headers and throttling" section records the baseline headers, the `no-store` rule for API and map-query answers, the tile cache header and the `429` + `Retry-After` behavior.
 - [DOCS] Evidence: a single index now links the gate, live smoke, SAST/DAST reports, backup self-tests, threat model, control register, traceability, models and artifact details for the report.

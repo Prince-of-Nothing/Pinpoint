@@ -109,6 +109,8 @@ export function createMap({
   let noteMarkers = [];
   let measurePoints = [];
   let measureMarkers = [];
+  let friendLocations = [];
+  let friendLabels = [];
   let navigationControl = null;
   let scaleControl = null;
   let fullscreenControl = null;
@@ -151,6 +153,7 @@ export function createMap({
           if (!destroyed) applySelfLocation();
           if (!destroyed) applyTrail();
           if (!destroyed) applyMeasure();
+          if (!destroyed) applyFriendLabels();
         });
       }
       applyView();
@@ -159,6 +162,7 @@ export function createMap({
       applyRoute();
       applyTrail();
       applyMeasure();
+      applyFriendLabels();
       applyFit();
       if (readOnlinePreference()) void setOnline(true, { persist: false });
       if (typeof onLoad === "function") onLoad(api);
@@ -295,7 +299,36 @@ export function createMap({
   /** Replace friend pins with the foundation's precision-coloured circles. */
   function setFriendMarkers(locations) {
     if (destroyed) return 0;
-    return base.setLocations(locations);
+    friendLocations = Array.isArray(locations) ? locations : [];
+    const count = base.setLocations(friendLocations);
+    applyFriendLabels();
+    return count;
+  }
+
+  /**
+   * Names above the circles, as DOM markers: the offline style has no glyphs,
+   * so a MapLibre symbol layer would lose labels on the offline basemap.
+   */
+  function applyFriendLabels() {
+    for (const marker of friendLabels) marker.remove();
+    friendLabels = [];
+    if (!mapReady || destroyed) return;
+    const live = base.getMap();
+    if (!live) return;
+    for (const loc of friendLocations) {
+      const lat = Number(loc?.latitude);
+      const lon = Number(loc?.longitude);
+      const name = String(loc?.user_name ?? "").trim();
+      if (!Number.isFinite(lat) || !Number.isFinite(lon) || !name) continue;
+      const element = document.createElement("div");
+      element.className = "friend-label";
+      element.textContent = name;
+      friendLabels.push(
+        new maplibregl.Marker({ element, anchor: "bottom", offset: [0, -12] })
+          .setLngLat([lon, lat])
+          .addTo(live),
+      );
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -874,6 +907,8 @@ export function createMap({
     routeMarkers = [];
     measureMarkers.forEach((marker) => marker.remove());
     measureMarkers = [];
+    friendLabels.forEach((marker) => marker.remove());
+    friendLabels = [];
     const live = base.getMap();
     if (live) {
       navigationControl?.remove?.();

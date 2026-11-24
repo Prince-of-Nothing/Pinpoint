@@ -104,6 +104,9 @@ assert.match(app, /mapApi\?\.setMeasurePoints\(measurePoints\)/);
 assert.match(map, /container\.addEventListener\("contextmenu", handleContextMenu\)/);
 assert.match(map, /function setMeasurePoints\(points\)/);
 assert.match(map, /id: MEASURE_LAYER/);
+assert.match(map, /function applyFriendLabels/);
+assert.match(map, /element\.className = "friend-label"/);
+assert.match(css, /\.friend-label \{/);
 
 const oneSegment = lineLengthMeters([[0, 0], [0, 0.001]]);
 assert.ok(oneSegment > 100 && oneSegment < 115, `one segment was ${oneSegment} m`);

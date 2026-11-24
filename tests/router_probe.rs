@@ -1794,3 +1794,39 @@ async fn registration_validates_the_email_address() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
 }
+
+#[tokio::test]
+async fn throttled_login_reports_retry_after() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    // The login throttle is per client address; without the header the
+    // router sees no client and never limits.
+    let app = router(AppState::new());
+    let mut last = None;
+    for _ in 0..31 {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/login")
+                    .header("content-type", "application/json")
+                    .header("x-forwarded-for", "203.0.113.7")
+                    .body(Body::from(
+                        r#"{"email":"nobody@example.com","password":"WrongPass!2026"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        last = Some(resp);
+    }
+    let resp = last.expect("the loop made requests");
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+    let secs: u64 = resp.headers()["retry-after"]
+        .to_str()
+        .expect("Retry-After is a header")
+        .parse()
+        .expect("Retry-After is an integer");
+    assert!((1..=300).contains(&secs), "retry hint was {secs}");
+}

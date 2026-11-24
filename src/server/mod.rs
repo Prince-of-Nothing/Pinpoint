@@ -108,12 +108,8 @@ pub async fn session_auth(
     // address is never stored.
     if let Some(limit) = state::auth_limit(req.uri().path()) {
         if let Some(ip) = state::client_ip(req.headers()) {
-            if !state.auth_rate.allow(req.uri().path(), &ip, limit) {
-                return (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    Json(json!({"error": {"code": "RATE_LIMITED", "message": "Too many attempts. Try again later."}})),
-                )
-                    .into_response();
+            if let Some(wait) = state.auth_rate.allow(req.uri().path(), &ip, limit) {
+                return rate_limited(wait, "Too many attempts. Try again later.");
             }
         }
     }
@@ -151,15 +147,10 @@ pub async fn session_auth(
                         .into_response();
                 }
             }
-            if unsafe_method
-                && req.uri().path().starts_with("/api/")
-                && !state.auth_rate.allow_write(session.user_id)
-            {
-                return (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    Json(json!({"error": {"code": "RATE_LIMITED", "message": "Too many writes. Try again later."}})),
-                )
-                    .into_response();
+            if unsafe_method && req.uri().path().starts_with("/api/") {
+                if let Some(wait) = state.auth_rate.allow_write(session.user_id) {
+                    return rate_limited(wait, "Too many writes. Try again later.");
+                }
             }
             // A temporary admin-issued password must be rotated before the
             // account can use anything else. Enforced here so every service
@@ -201,12 +192,8 @@ pub async fn map_rate_limit(
 ) -> axum::response::Response {
     if let Some((bucket, limit)) = state::map_limit(req.uri().path()) {
         if let Some(ip) = state::client_ip(req.headers()) {
-            if !state.auth_rate.allow(bucket, &ip, limit) {
-                return (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    Json(json!({"error": {"code": "RATE_LIMITED", "message": "Too many map requests. Try again later."}})),
-                )
-                    .into_response();
+            if let Some(wait) = state.auth_rate.allow(bucket, &ip, limit) {
+                return rate_limited(wait, "Too many map requests. Try again later.");
             }
         }
     }
@@ -248,6 +235,20 @@ pub async fn converge(
     if method != axum::http::Method::GET {
         state.persist().await;
         eprintln!("CONVERGE persisted");
+    }
+    res
+}
+
+/// 429 with the `Retry-After` seconds RFC 6585 asks for, so a well-behaved
+/// client waits for the window instead of retrying immediately.
+fn rate_limited(retry_after_secs: u64, message: &str) -> axum::response::Response {
+    let mut res = (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(json!({"error": {"code": "RATE_LIMITED", "message": message}})),
+    )
+        .into_response();
+    if let Ok(value) = HeaderValue::from_str(&retry_after_secs.to_string()) {
+        res.headers_mut().insert(header::RETRY_AFTER, value);
     }
     res
 }

@@ -27,6 +27,7 @@ const state = {
   messageConversations: [],
   messageUnread: 0,
   friendshipCount: 0,
+  layers: { friends: true, notes: true },
 };
 
 let accountNameDirty = false;
@@ -1288,10 +1289,12 @@ function pinNoteAt(point) {
 
 async function createAppMap() {
   const pmtilesUrl = await installedPmtilesUrl();
+  const theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
   mapApi = createMap({
     element: $("map"),
     center: [state.map.lat, state.map.lon],
     zoom: state.map.zoom,
+    theme,
     onClick: (point) => nav?.onMapClick(point),
     onLongPress: (point) => pinNoteAt(point),
     onLoad: (api) => {
@@ -1328,10 +1331,11 @@ async function installedPmtilesUrl() {
 function updateMap() {
   ensureMap()
     .then((map) => {
-      map.setFriendMarkers(state.locations);
-      map.setNoteMarkers(state.notes, (note) => showNote(note));
+      map.setFriendMarkers(state.layers.friends ? state.locations : []);
+      map.setNoteMarkers(state.layers.notes ? state.notes : [], (note) => showNote(note));
       if (state.trailVisible) map.drawTrail(state.history);
       else map.clearTrail();
+      renderBasemap();
       if (state.user) promptLocationOnce(map);
     })
     .catch(() => {});
@@ -1604,15 +1608,28 @@ const drawer = $("social-drawer");
 const drawerToggle = $("drawer-toggle");
 const drawerHead = drawer.querySelector(".drawer-head");
 const tabs = [...document.querySelectorAll(".tab-bar [data-tab]")];
-const TAB_CARDS = {
-  friends: "friends-card",
-  chats: "messages-card",
-  sharing: "shares-card",
-  today: "today-card",
-  account: "account-card",
+const TAB_META = {
+  friends: { eyebrow: "People", title: "Friends" },
+  chats: { eyebrow: "Messages", title: "Chats" },
+  sharing: { eyebrow: "Consent", title: "Sharing" },
+  today: { eyebrow: "Your trail", title: "Today" },
+  account: { eyebrow: "Settings", title: "Account" },
 };
 const SHEET_IDS = ["place-sheet", "share-sheet", "route-panel", "message-sheet"];
 let drawerCloseTimer = null;
+
+/** Each tab is its own screen; only its cards are rendered. */
+function setScreen(name) {
+  const meta = TAB_META[name];
+  if (!meta) return;
+  drawer.dataset.screen = name;
+  const eyebrow = $("drawer-eyebrow");
+  if (eyebrow) eyebrow.textContent = meta.eyebrow;
+  const title = $("drawer-title");
+  if (title) title.textContent = meta.title;
+  drawer.scrollTop = 0;
+  setActiveTab(name);
+}
 
 function setActiveTab(name) {
   for (const button of tabs) {
@@ -1684,14 +1701,8 @@ for (const button of tabs) {
       setDrawer(false);
       return;
     }
+    setScreen(name);
     setDrawer(true);
-    setActiveTab(name);
-    $(TAB_CARDS[name])?.scrollIntoView({
-      block: "start",
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-    });
   });
 }
 
@@ -1765,11 +1776,13 @@ $("empty-online")?.addEventListener("click", () => {
 $("online-map-toggle")?.addEventListener("change", updateMapEmptyState);
 $("drawer-close")?.addEventListener("click", () => setDrawer(false));
 
-$("trail-toggle")?.addEventListener("click", () => {
-  state.trailVisible = !state.trailVisible;
+function setTrail(visible) {
+  state.trailVisible = visible;
+  const box = $("layer-trail");
+  if (box) box.checked = visible;
   renderToday();
   updateMap();
-  if (state.trailVisible && state.history.length >= 2) {
+  if (visible && state.history.length >= 2) {
     ensureMap()
       .then((map) =>
         map.fitRoute({
@@ -1778,6 +1791,74 @@ $("trail-toggle")?.addEventListener("click", () => {
       )
       .catch(() => {});
   }
+}
+
+$("trail-toggle")?.addEventListener("click", () => setTrail(!state.trailVisible));
+$("layer-trail")?.addEventListener("change", (event) => setTrail(event.target.checked));
+
+// ---------------------------------------------------------------------------
+// Map options: basemap and layers
+// ---------------------------------------------------------------------------
+/** The account card's checkbox is the single source of truth for the basemap. */
+function renderBasemap() {
+  const online = Boolean($("online-map-toggle")?.checked);
+  for (const [id, expected] of [
+    ["basemap-offline", false],
+    ["basemap-streets", true],
+  ]) {
+    const button = $(id);
+    if (!button) continue;
+    button.classList.toggle("active", online === expected);
+    button.setAttribute("aria-pressed", String(online === expected));
+  }
+}
+
+function chooseBasemap(online) {
+  const toggle = $("online-map-toggle");
+  if (!toggle) return;
+  toggle.checked = online;
+  // The map module switches the style on this event.
+  toggle.dispatchEvent(new Event("change", { bubbles: true }));
+  renderBasemap();
+}
+
+function setMapControls(open) {
+  const panel = $("map-controls");
+  const button = $("map-layers-toggle");
+  if (!panel || !button) return;
+  if (open) renderBasemap();
+  panel.classList.toggle("hidden", !open);
+  button.setAttribute("aria-expanded", String(open));
+}
+
+$("map-layers-toggle")?.addEventListener("click", () => {
+  setMapControls($("map-controls").classList.contains("hidden"));
+});
+$("basemap-offline")?.addEventListener("click", () => chooseBasemap(false));
+$("basemap-streets")?.addEventListener("click", () => chooseBasemap(true));
+$("online-map-toggle")?.addEventListener("change", renderBasemap);
+$("layer-friends")?.addEventListener("change", (event) => {
+  state.layers.friends = event.target.checked;
+  updateMap();
+});
+$("layer-notes")?.addEventListener("change", (event) => {
+  state.layers.notes = event.target.checked;
+  updateMap();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") setMapControls(false);
+});
+document.addEventListener("click", (event) => {
+  const panel = $("map-controls");
+  const button = $("map-layers-toggle");
+  if (!panel || panel.classList.contains("hidden")) return;
+  if (panel.contains(event.target) || button?.contains(event.target)) return;
+  setMapControls(false);
+});
+
+// The theme toggle must repaint the map too, not only the page chrome.
+document.addEventListener("pinpoint:theme", (event) => {
+  mapApi?.setTheme(event.detail === "dark" ? "dark" : "light");
 });
 
 $("note-photo")?.addEventListener("change", async (event) => {

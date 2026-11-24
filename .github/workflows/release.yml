@@ -1,4 +1,4 @@
-﻿# Release pipeline adapted from the ArtCraft/lightcraft-android pattern.
+# Release pipeline adapted from the ArtCraft/lightcraft-android pattern.
 #
 # Pushing a version tag (v1.2.1, v1.3.0-beta, ΓÇª) builds two APKs, re-signs them
 # with the release key and creates a DRAFT GitHub release named after the tag
@@ -192,7 +192,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-apk
           path: dist

@@ -388,7 +388,15 @@ impl PinpointAppUI {
                 for loc in &locations {
                     ui.horizontal_wrapped(|ui| {
                         ui.label(RichText::new(&loc.user_name).strong());
-                        theme::caption(ui, format!("{:.4}, {:.4}", loc.latitude, loc.longitude));
+                        theme::caption(
+                            ui,
+                            format!(
+                                "{:.4}, {:.4} · updated {}",
+                                loc.latitude,
+                                loc.longitude,
+                                crate::models::format_age(&loc.updated_at)
+                            ),
+                        );
                     });
                     ui.horizontal_wrapped(|ui| {
                         if ui.button(i18n::t(lang, key::NAVIGATE)).clicked() {

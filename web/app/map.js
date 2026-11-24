@@ -105,6 +105,7 @@ export function createMap({
   let noteMarkers = [];
   let navigationControl = null;
   let scaleControl = null;
+  let fullscreenControl = null;
   let online = false;
   let onlineBusy = false;
   let onlineSeq = 0;
@@ -123,8 +124,8 @@ export function createMap({
       if (map) {
         if (!navigationControl) {
           navigationControl = new maplibregl.NavigationControl({
-            showCompass: false,
-            visualizePitch: false,
+            showCompass: true,
+            visualizePitch: true,
           });
           map.addControl(navigationControl, "bottom-right");
         }
@@ -134,6 +135,10 @@ export function createMap({
             unit: "metric",
           });
           map.addControl(scaleControl, "bottom-right");
+        }
+        if (!fullscreenControl) {
+          fullscreenControl = new maplibregl.FullscreenControl();
+          map.addControl(fullscreenControl, "bottom-right");
         }
         // A style switch drops the adapter's accuracy layers; re-add them.
         map.on("style.load", () => {
@@ -770,6 +775,7 @@ export function createMap({
     if (live) {
       navigationControl?.remove?.();
       scaleControl?.remove?.();
+      fullscreenControl?.remove?.();
       removeRoute(live);
       if (live.getLayer(SELF_FILL_LAYER)) live.removeLayer(SELF_FILL_LAYER);
       if (live.getLayer(SELF_LINE_LAYER)) live.removeLayer(SELF_LINE_LAYER);
@@ -777,6 +783,7 @@ export function createMap({
     }
     navigationControl = null;
     scaleControl = null;
+    fullscreenControl = null;
     base.destroy();
   }
 

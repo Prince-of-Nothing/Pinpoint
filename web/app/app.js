@@ -193,6 +193,11 @@ async function enterApp() {
   }
   renderIdentity();
   updateAdminTab();
+  // Desktop keeps the section cards in a right column; mobile opens them on
+  // demand over the map.
+  if (window.matchMedia?.("(min-width: 981px)").matches) {
+    setDrawer(true, false);
+  }
   // A temporary password blocks the API until it is rotated. Take the user
   // straight to the Account panel instead of letting every tab fail.
   if (state.user?.must_change_password) {
@@ -1211,6 +1216,7 @@ window.addEventListener("unhandledrejection", (event) => {
   const reason = event.reason;
   showCrash(reason instanceof Error ? reason : new Error(String(reason)));
 });
+window.addEventListener("resize", () => mapApi?.resize?.());
 
 // ---------------------------------------------------------------------------
 // MapLibre/PMTiles map adapter (same-origin assets; app/map.js owns the map)
@@ -1663,6 +1669,9 @@ function setDrawer(open, animate = true) {
   drawer.setAttribute("aria-hidden", String(!open));
   drawerToggle.setAttribute("aria-expanded", String(open));
   if (!open) setActiveTab("map");
+  // The drawer changes the map's width on desktop; MapLibre keeps its old
+  // canvas size until told to resize.
+  requestAnimationFrame(() => mapApi?.resize?.());
 }
 setDrawer(false);
 drawerToggle.addEventListener("click", () => {

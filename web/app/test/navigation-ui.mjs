@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 const page = await readFile("web/app/index.html", "utf8");
 const app = await readFile("web/app/app.js", "utf8");
 const css = await readFile("web/app/app.css", "utf8");
+const map = await readFile("web/app/map.js", "utf8");
 
 const screens = ["friends", "sharing", "today", "chats", "account"];
 
@@ -59,5 +60,27 @@ assert.match(
   /const theme = document\.documentElement\.dataset\.theme/,
   "the map must start with the saved theme",
 );
+
+// Desktop: the section cards are a right column, not a bottom sheet, and the
+// map chrome must not sit under them.
+assert.match(css, /@media \(min-width: 981px\)/);
+assert.match(
+  css,
+  /body:has\(\.drawer\.open\) \.app-shell \.map \{/,
+  "the open drawer must shrink the map instead of overlaying it",
+);
+assert.match(
+  css,
+  /\.app-shell \.maplibregl-ctrl-bottom-right/,
+  "map controls need a mobile offset above the search and tab bars",
+);
+assert.match(
+  app,
+  /matchMedia\?\.\("\(min-width: 981px\)"\)/,
+  "desktop sign-in must open the section column",
+);
+assert.match(map, /showCompass: true/);
+assert.match(map, /visualizePitch: true/);
+assert.match(map, /new maplibregl\.FullscreenControl\(\)/);
 
 console.log("PASS  tabs switch real screens and the map exposes basemap and layer controls");

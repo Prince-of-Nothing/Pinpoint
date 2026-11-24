@@ -4066,7 +4066,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "chrono",
- "crypto-common 0.1.7",
+ "crypto-common 0.2.2",
  "ed25519-dalek",
  "eframe",
  "flate2",

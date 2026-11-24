@@ -4,7 +4,7 @@
 import { createMap } from "./map.js";
 import { initNavigation } from "./nav.js";
 import { createAdminConsole } from "./admin.js";
-import { friendName, initSharing, shareRowModel } from "./sharing.js";
+import { freshnessText, friendName, initSharing, shareRowModel } from "./sharing.js";
 import { initAppearance } from "./appearance.js";
 import {
   cryptoAvailable,
@@ -500,7 +500,7 @@ function renderLocations(items) {
   }
   for (const loc of items) {
     const li = document.createElement("li");
-    li.textContent = `${loc.user_name} · ${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)} · ${loc.precision_level}`;
+    li.textContent = `${loc.user_name} · ${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)} · ${loc.precision_level} · updated ${freshnessText(loc.updated_at)}`;
     ul.appendChild(li);
   }
 }

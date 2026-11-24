@@ -555,6 +555,31 @@ pub fn format_message_time(iso: &str) -> String {
     }
 }
 
+/// Age of a location timestamp: `just now`, `5m ago`, `2h ago`, `3d ago`.
+/// Unparsable input returns `unknown`; a future timestamp (clock skew) clamps
+/// to `just now` instead of showing a negative age.
+pub fn format_age(iso: &str) -> String {
+    let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(iso) else {
+        return "unknown".to_string();
+    };
+    let seconds = (chrono::Utc::now() - parsed.with_timezone(&chrono::Utc))
+        .num_seconds()
+        .max(0);
+    let minutes = (seconds + 30) / 60;
+    if minutes < 1 {
+        "just now".to_string()
+    } else if minutes < 60 {
+        format!("{minutes}m ago")
+    } else {
+        let hours = (minutes + 30) / 60;
+        if hours < 24 {
+            format!("{hours}h ago")
+        } else {
+            format!("{}d ago", (hours + 12) / 24)
+        }
+    }
+}
+
 /// Upper bound on previous peer bundles kept per friend. Old bundles are
 /// public keys only; the cap stops a peer that rotates constantly from growing
 /// local storage without bound.
@@ -615,6 +640,19 @@ mod geo_tests {
         let s: LocationShare = serde_json::from_value(v).expect("legacy share JSON");
         assert!(s.expires_at.is_none());
         assert!(s.label.is_none());
+    }
+
+    #[test]
+    fn age_text_buckets_and_clamps() {
+        use super::format_age;
+        let ago =
+            |seconds: i64| (chrono::Utc::now() - chrono::Duration::seconds(seconds)).to_rfc3339();
+        assert_eq!(format_age(&ago(20)), "just now");
+        assert_eq!(format_age(&ago(5 * 60)), "5m ago");
+        assert_eq!(format_age(&ago(3 * 3600)), "3h ago");
+        assert_eq!(format_age(&ago(2 * 86400)), "2d ago");
+        assert_eq!(format_age("not-a-date"), "unknown");
+        assert_eq!(format_age(&ago(-60)), "just now");
     }
 
     #[test]

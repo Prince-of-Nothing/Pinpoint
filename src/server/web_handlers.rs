@@ -16,6 +16,7 @@ const PRIVACY: &str = include_str!("../../web/privacy.html");
 const APP_JS: &str = include_str!("../../web/app/app.js");
 const MESSAGE_CRYPTO_JS: &str = include_str!("../../web/app/message-crypto.js");
 const MAP_JS: &str = include_str!("../../web/app/map.js");
+const MEASURE_JS: &str = include_str!("../../web/app/measure.js");
 const NAV_JS: &str = include_str!("../../web/app/nav.js");
 const SHARING_JS: &str = include_str!("../../web/app/sharing.js");
 const APPEARANCE_JS: &str = include_str!("../../web/app/appearance.js");
@@ -171,6 +172,10 @@ pub async fn nav_js() -> Response {
         HeaderValue::from_static("text/javascript; charset=utf-8"),
     );
     secure(resp)
+}
+
+pub async fn measure_js() -> Response {
+    module_js(MEASURE_JS)
 }
 
 pub async fn sharing_js() -> Response {

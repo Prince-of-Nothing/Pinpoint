@@ -2,11 +2,16 @@
 // and the map must expose its basemap and layer controls.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const page = await readFile("web/app/index.html", "utf8");
 const app = await readFile("web/app/app.js", "utf8");
 const css = await readFile("web/app/app.css", "utf8");
 const map = await readFile("web/app/map.js", "utf8");
+const { lineLengthMeters } = await import(
+  pathToFileURL(path.resolve("web/app/measure.js")).href
+);
 
 const screens = ["friends", "sharing", "today", "chats", "account"];
 
@@ -82,5 +87,29 @@ assert.match(
 assert.match(map, /showCompass: true/);
 assert.match(map, /visualizePitch: true/);
 assert.match(map, /new maplibregl\.FullscreenControl\(\)/);
+
+// Map actions and the measure tool.
+for (const id of ["map-menu", "measure-hud", "measure-text", "measure-undo", "measure-clear"]) {
+  assert.ok(page.includes(`id="${id}"`), `missing #${id}`);
+}
+for (const action of ["from", "to", "measure", "note", "copy"]) {
+  assert.ok(
+    page.includes(`data-map-action="${action}"`),
+    `missing map action ${action}`,
+  );
+}
+assert.match(app, /onContextMenu: \(point\) => showMapMenu\(point\)/);
+assert.match(app, /function startMeasure\(point\)/);
+assert.match(app, /mapApi\?\.setMeasurePoints\(measurePoints\)/);
+assert.match(map, /container\.addEventListener\("contextmenu", handleContextMenu\)/);
+assert.match(map, /function setMeasurePoints\(points\)/);
+assert.match(map, /id: MEASURE_LAYER/);
+
+const oneSegment = lineLengthMeters([[0, 0], [0, 0.001]]);
+assert.ok(oneSegment > 100 && oneSegment < 115, `one segment was ${oneSegment} m`);
+const twoSegments = lineLengthMeters([[0, 0], [0, 0.001], [0, 0.002]]);
+assert.ok(Math.abs(twoSegments - oneSegment * 2) < 1e-6);
+assert.equal(lineLengthMeters([]), 0);
+assert.equal(lineLengthMeters([["bad", 0]]), 0);
 
 console.log("PASS  tabs switch real screens and the map exposes basemap and layer controls");

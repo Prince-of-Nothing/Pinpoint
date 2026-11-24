@@ -12,6 +12,8 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [FEATURE] Tooling: `scripts/smoke.ps1` drives real sessions against a running server and checks the auth input rules, friendship rejection, location accuracy, share labels, notes, check-ins and the search bound (29 checks; exit code = failures).
+- [DOCS] The testing guide now documents the Rust test layers, CI jobs and commands instead of the removed Go backend and its `thesis_content.md` reference.
 - [DOCS] The threat-model attack tree now says a stolen phone exposes owner-only bookmark JSON, matching the code, instead of claiming AES-GCM bookmarks at rest.
 - [INFRA] CI now runs the pure Node web UI checks (sharing consent and admin form wiring), so client regressions are gated like the Rust suite.
 - [DOCS] The as-built API contract now matches the shipped routes: admin-only user endpoints, `receiver_username`, share labels/expiry/precision, history/notes/check-in fields, the FOSSGIS-only tile fallback and the real session lifetime.

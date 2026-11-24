@@ -1,0 +1,63 @@
+// The tab bar must switch real screens instead of scrolling one long drawer,
+// and the map must expose its basemap and layer controls.
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+
+const page = await readFile("web/app/index.html", "utf8");
+const app = await readFile("web/app/app.js", "utf8");
+const css = await readFile("web/app/app.css", "utf8");
+
+const screens = ["friends", "sharing", "today", "chats", "account"];
+
+const tabs = [...page.matchAll(/data-tab="([a-z]+)"/g)].map((m) => m[1]);
+assert.deepEqual(
+  [...new Set(tabs)].sort(),
+  ["account", "chats", "friends", "map", "sharing", "today"],
+  "the tab bar must offer map plus the five sections",
+);
+
+assert.match(page, /id="social-drawer"[^>]*data-screen="friends"/);
+const sections = [...page.matchAll(/data-sections="([^"]+)"/g)].map((m) => m[1]);
+for (const name of screens) {
+  assert.ok(sections.includes(name), `no card is assigned to ${name}`);
+  assert.ok(
+    css.includes(
+      `.drawer[data-screen="${name}"] .card:not([data-sections~="${name}"])`,
+    ),
+    `missing the ${name} screen rule in app.css`,
+  );
+  assert.match(
+    app,
+    new RegExp(`${name}: \\{ eyebrow:`),
+    `no screen title for ${name}`,
+  );
+}
+
+assert.match(app, /function setScreen\(name\)/);
+assert.match(app, /drawer\.dataset\.screen = name/);
+
+for (const id of [
+  "map-layers-toggle",
+  "map-controls",
+  "basemap-offline",
+  "basemap-streets",
+  "layer-friends",
+  "layer-trail",
+  "layer-notes",
+]) {
+  assert.ok(page.includes(`id="${id}"`), `missing #${id}`);
+}
+
+assert.match(app, /state\.layers\.friends \? state\.locations : \[\]/);
+assert.match(app, /state\.layers\.notes \? state\.notes : \[\]/);
+assert.match(app, /chooseBasemap\(false\)/);
+assert.match(app, /chooseBasemap\(true\)/);
+assert.match(app, /setTrail\(event\.target\.checked\)/);
+assert.match(app, /pinpoint:theme/);
+assert.match(
+  app,
+  /const theme = document\.documentElement\.dataset\.theme/,
+  "the map must start with the saved theme",
+);
+
+console.log("PASS  tabs switch real screens and the map exposes basemap and layer controls");

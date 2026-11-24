@@ -17,6 +17,7 @@ function initTheme() {
   }
   const render = () => {
     root.dataset.theme = theme;
+    document.dispatchEvent(new CustomEvent("pinpoint:theme", { detail: theme }));
     if (!toggle) return;
     toggle.textContent = theme === "dark" ? "Light" : "Dark";
     toggle.setAttribute(

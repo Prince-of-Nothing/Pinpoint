@@ -80,6 +80,8 @@ jobs:
         run: node web/app/test/messages-poll.mjs
       - name: Password length checks
         run: node web/app/test/password-length.mjs
+      - name: Navigation checks
+        run: node web/app/test/navigation-ui.mjs
 
   wasm:
     # Compile-check web clients for wasm32 (Trunk entry bins + wasm cfg paths).

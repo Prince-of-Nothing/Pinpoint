@@ -1993,3 +1993,85 @@ body:has(.drawer:is(.open, .closing)) .map-controls {
     left: 1rem;
   }
 }
+/* Map actions menu (right-click / long-press) and the distance measure HUD. */
+.map-menu {
+  position: absolute;
+  z-index: 1200;
+  display: grid;
+  min-width: 220px;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--glass-strong);
+  box-shadow: var(--shadow);
+}
+.map-menu button {
+  padding: 0.55rem 0.7rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-weight: 500;
+}
+.map-menu button:hover,
+.map-menu button:focus-visible {
+  background: var(--panel-2);
+  color: var(--accent);
+}
+.measure-hud {
+  position: absolute;
+  left: 1rem;
+  bottom: calc(8.8rem + var(--safe-bottom));
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem 0.45rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--glass-strong);
+  box-shadow: var(--shadow);
+}
+.measure-hud span {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.measure-hud button { padding: 0.35rem 0.7rem; }
+.measure-dot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #1f2937;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+@media (max-width: 980px) {
+  .map-menu {
+    top: auto;
+    right: 1rem;
+    bottom: calc(9.4rem + var(--safe-bottom));
+    left: 1rem;
+    max-width: 360px;
+    margin: 0 auto;
+  }
+  .measure-hud {
+    right: 1rem;
+    justify-content: space-between;
+  }
+}
+@media (min-width: 981px) {
+  .measure-hud {
+    bottom: 5.2rem;
+    left: 50%;
+    transform: translateX(-50%);
+  }
+  body:has(.drawer.open) .measure-hud {
+    left: calc((100% - 380px) / 2);
+  }
+}

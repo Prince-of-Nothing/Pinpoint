@@ -25,6 +25,8 @@ const SELF_FILL_LAYER = "pinpoint-self-accuracy-fill";
 const SELF_LINE_LAYER = "pinpoint-self-accuracy-line";
 const TRAIL_SOURCE = "pinpoint-trail";
 const TRAIL_LAYER = "pinpoint-trail-line";
+const MEASURE_SOURCE = "pinpoint-measure";
+const MEASURE_LAYER = "pinpoint-measure-line";
 
 const EMPTY_FEATURES = { type: "FeatureCollection", features: [] };
 
@@ -43,6 +45,7 @@ const EMPTY_FEATURES = { type: "FeatureCollection", features: [] };
  * @param {number} [options.zoom]
  * @param {(point: {lat: number, lon: number}) => void} [options.onClick]
  * @param {(point: {lat: number, lon: number}) => void} [options.onLongPress]
+ * @param {(point: {lat: number, lon: number, x: number, y: number}) => void} [options.onContextMenu]
  * @param {"light"|"dark"} [options.theme] Defaults to dark, matching the shell.
  * @param {string} [options.pmtilesUrl]
  * @param {string} [options.styleUrl]
@@ -55,6 +58,7 @@ export function createMap({
   zoom = 2,
   onClick,
   onLongPress,
+  onContextMenu,
   theme = "dark",
   pmtilesUrl,
   styleUrl,
@@ -103,6 +107,8 @@ export function createMap({
   let routeMarkers = [];
   let trail = null;
   let noteMarkers = [];
+  let measurePoints = [];
+  let measureMarkers = [];
   let navigationControl = null;
   let scaleControl = null;
   let fullscreenControl = null;
@@ -144,6 +150,7 @@ export function createMap({
         map.on("style.load", () => {
           if (!destroyed) applySelfLocation();
           if (!destroyed) applyTrail();
+          if (!destroyed) applyMeasure();
         });
       }
       applyView();
@@ -151,6 +158,7 @@ export function createMap({
       applySelfLocation();
       applyRoute();
       applyTrail();
+      applyMeasure();
       applyFit();
       if (readOnlinePreference()) void setOnline(true, { persist: false });
       if (typeof onLoad === "function") onLoad(api);
@@ -168,6 +176,25 @@ export function createMap({
     if (destroyed) return;
     if (typeof onClick === "function") onClick(point);
   });
+
+  // Right-click (desktop) opens the map actions menu at the pointer.
+  function handleContextMenu(event) {
+    if (destroyed) return;
+    event.preventDefault();
+    const live = base.getMap();
+    if (!live) return;
+    const rect = live.getCanvas().getBoundingClientRect();
+    const point = live.unproject([event.clientX - rect.left, event.clientY - rect.top]);
+    if (typeof onContextMenu === "function") {
+      onContextMenu({
+        lat: point.lat,
+        lon: point.lng,
+        x: event.clientX,
+        y: event.clientY,
+      });
+    }
+  }
+  container.addEventListener("contextmenu", handleContextMenu);
 
   base.setTheme(currentTheme);
 
@@ -247,6 +274,8 @@ export function createMap({
     fitRoute,
     drawTrail,
     clearTrail,
+    setMeasurePoints,
+    clearMeasure,
     setNoteMarkers,
     locate,
     setTheme,
@@ -555,6 +584,77 @@ export function createMap({
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Distance measurement
+  // -------------------------------------------------------------------------
+
+  function setMeasurePoints(points) {
+    measurePoints = (Array.isArray(points) ? points : [])
+      .map(([lat, lon]) => [Number(lat), Number(lon)])
+      .filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon));
+    applyMeasure();
+  }
+
+  function clearMeasure() {
+    measurePoints = [];
+    measureMarkers.forEach((marker) => marker.remove());
+    measureMarkers = [];
+    const live = base.getMap();
+    if (!live) return;
+    if (live.getLayer(MEASURE_LAYER)) live.removeLayer(MEASURE_LAYER);
+    if (live.getSource(MEASURE_SOURCE)) live.removeSource(MEASURE_SOURCE);
+  }
+
+  function applyMeasure() {
+    if (!mapReady) return;
+    const live = base.getMap();
+    if (!live) return;
+    measureMarkers.forEach((marker) => marker.remove());
+    measureMarkers = [];
+    if (!measurePoints.length) {
+      if (live.getLayer(MEASURE_LAYER)) live.removeLayer(MEASURE_LAYER);
+      if (live.getSource(MEASURE_SOURCE)) live.removeSource(MEASURE_SOURCE);
+      return;
+    }
+    const line =
+      measurePoints.length >= 2
+        ? {
+            type: "Feature",
+            properties: {},
+            geometry: {
+              type: "LineString",
+              coordinates: measurePoints.map(([lat, lon]) => [lon, lat]),
+            },
+          }
+        : EMPTY_FEATURES;
+    if (!live.getSource(MEASURE_SOURCE)) {
+      live.addSource(MEASURE_SOURCE, { type: "geojson", data: line });
+      addLayerBelowPins(live, {
+        id: MEASURE_LAYER,
+        type: "line",
+        source: MEASURE_SOURCE,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": "#f59e0b",
+          "line-width": 4,
+          "line-dasharray": [2, 1.5],
+        },
+      });
+    } else {
+      live.getSource(MEASURE_SOURCE).setData(line);
+    }
+    measurePoints.forEach(([lat, lon], index) => {
+      const element = document.createElement("div");
+      element.className = "measure-dot";
+      element.textContent = String(index + 1);
+      measureMarkers.push(
+        new maplibregl.Marker({ element, anchor: "center" })
+          .setLngLat([lon, lat])
+          .addTo(live),
+      );
+    });
+  }
+
   function applyRoute() {
     if (!mapReady) return;
     const live = base.getMap();
@@ -765,12 +865,15 @@ export function createMap({
     onlineBusy = false;
     onlineToggle?.removeEventListener("change", onOnlineToggle);
     unsubscribeClick();
+    container.removeEventListener("contextmenu", handleContextMenu);
     selectedMarker?.remove();
     selectedMarker = null;
     selfMarker?.remove();
     selfMarker = null;
     routeMarkers.forEach((marker) => marker.remove());
     routeMarkers = [];
+    measureMarkers.forEach((marker) => marker.remove());
+    measureMarkers = [];
     const live = base.getMap();
     if (live) {
       navigationControl?.remove?.();

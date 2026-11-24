@@ -15,6 +15,8 @@ requirement → implementation → test).
 | Desktop build | release build of the native client | `src/`, `Cargo.toml` | `client-macos`, `release-windows` |
 | Map data policy | OSM compliance check | tile/search routes and attribution | Map QA |
 | Dependency audit | `cargo audit` with the accepted-advisory list | `Cargo.lock`, `.github/workflows/ci.yml` | `rust` |
+| SAST | CodeQL (Rust) + `cargo clippy -D warnings` | `.github/workflows/codeql.yml` | CodeQL |
+| Dependency updates | Dependabot (Cargo, GitHub Actions) | `.github/dependabot.yml` | Dependabot |
 | End-to-end smoke | `scripts/smoke.ps1` against a running server | `scripts/` | manual |
 
 ## Required test matrix for location access (the heart of the thesis)

@@ -1,7 +1,8 @@
 //! Locations + shares service binary (pure Rust).
 //! Run: `cargo run --bin pinpoint-locations` (BIND_ADDR default 0.0.0.0:8003).
 use pinpoint_desktop::server::{
-    converge, health, locations_router, session_auth, status_routes, AppState, ServiceKind,
+    converge, health, locations_router, security_headers, session_auth, status_routes, AppState,
+    ServiceKind,
 };
 use std::time::Duration;
 
@@ -31,7 +32,8 @@ async fn main() -> anyhow::Result<()> {
         .layer(axum::middleware::from_fn_with_state(
             session_state,
             session_auth,
-        ));
+        ))
+        .layer(axum::middleware::from_fn(security_headers));
     axum::serve(listener, app).await?;
     Ok(())
 }

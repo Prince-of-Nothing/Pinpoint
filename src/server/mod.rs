@@ -256,8 +256,9 @@ fn rate_limited(retry_after_secs: u64, message: &str) -> axum::response::Respons
 /// Baseline security headers on every response. HTML/assets already carry a
 /// stricter set via `web_handlers::secure`; API JSON had none. Does not touch
 /// `Content-Security-Policy`, so the HTML policy is neither replaced nor
-/// duplicated.
-async fn security_headers(
+/// duplicated. Public so the split service binaries in `src/bin/` apply the
+/// same policy as the combined router.
+pub async fn security_headers(
     req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> axum::response::Response {

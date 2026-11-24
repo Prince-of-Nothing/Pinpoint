@@ -18,7 +18,8 @@
 //! user, so it cannot reintroduce a demo or seeded account.
 
 use pinpoint_desktop::server::{
-    admin_router, converge, health, session_auth, status_routes, AppState, ServiceKind,
+    admin_router, converge, health, security_headers, session_auth, status_routes, AppState,
+    ServiceKind,
 };
 use std::time::Duration;
 
@@ -75,7 +76,8 @@ async fn serve() -> anyhow::Result<()> {
         .layer(axum::middleware::from_fn_with_state(
             session_state,
             session_auth,
-        ));
+        ))
+        .layer(axum::middleware::from_fn(security_headers));
     axum::serve(listener, app).await?;
     Ok(())
 }

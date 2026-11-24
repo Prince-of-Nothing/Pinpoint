@@ -1,6 +1,8 @@
 //! Map service binary (pure Rust).
 //! Run: `cargo run --bin pinpoint-map` (BIND_ADDR default 0.0.0.0:8004).
-use pinpoint_desktop::server::{map_rate_limit, map_router, status_routes, AppState, ServiceKind};
+use pinpoint_desktop::server::{
+    map_rate_limit, map_router, security_headers, status_routes, AppState, ServiceKind,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -12,9 +14,14 @@ async fn main() -> anyhow::Result<()> {
     let rate_state = state.clone();
     axum::serve(
         listener,
-        map_router().merge(status_routes()).with_state(state).layer(
-            axum::middleware::from_fn_with_state(rate_state, map_rate_limit),
-        ),
+        map_router()
+            .merge(status_routes())
+            .with_state(state)
+            .layer(axum::middleware::from_fn_with_state(
+                rate_state,
+                map_rate_limit,
+            ))
+            .layer(axum::middleware::from_fn(security_headers)),
     )
     .await?;
     Ok(())

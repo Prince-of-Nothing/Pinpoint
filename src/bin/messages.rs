@@ -5,7 +5,8 @@
 //! friendships for the accepted-friends check and display names, but never
 //! writes them.
 use pinpoint_desktop::server::{
-    converge, health, messages_router, session_auth, status_routes, AppState, ServiceKind,
+    converge, health, messages_router, security_headers, session_auth, status_routes, AppState,
+    ServiceKind,
 };
 use std::time::Duration;
 
@@ -34,7 +35,8 @@ async fn main() -> anyhow::Result<()> {
         .layer(axum::middleware::from_fn_with_state(
             session_state,
             session_auth,
-        ));
+        ))
+        .layer(axum::middleware::from_fn(security_headers));
     axum::serve(listener, app).await?;
     Ok(())
 }

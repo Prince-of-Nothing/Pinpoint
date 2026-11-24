@@ -8,6 +8,7 @@ Essential development docs stay in this directory:
 - [Security model](./SECURITY.md) and [security architecture](./security-architecture.md)
 - [Privacy](./PRIVACY.md) and [issue taxonomy](./ISSUE_TAXONOMY.md)
 - [API contract](./reference/api-contract.md)
+- [System models and requirements](./analysis/system-models.md)
 - [Development roadmap and evidence](./explanation/development-roadmap-and-evidence.md)
 - [Architecture Decision Records](./adr/README.md)
 - [Midterm 2 package](./midterm2/README.md) - report, demo, deck, handout, Q&A and checklist

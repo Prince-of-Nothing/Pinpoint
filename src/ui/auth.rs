@@ -231,15 +231,14 @@ impl PinpointAppUI {
 
                 ui.horizontal_wrapped(|ui| {
                     if theme::primary_button(ui, "Create Account").clicked() {
-                        // Validate with the server's own rule before sending;
+                        // Validate with the server's own rules before sending;
                         // the server counts characters, not UTF-8 bytes.
-                        let password_check =
-                            crate::security::validation::validate_password(&self.register_password);
-                        if self.register_email.trim().is_empty() {
-                            self.app
-                                .set_error(Some("Enter your email address.".to_string()));
-                        } else if !password_check.is_valid() {
-                            self.app.set_error(Some(password_check.errors.join("; ")));
+                        let check = crate::security::validation::validate_registration_form(
+                            &self.register_email,
+                            &self.register_password,
+                        );
+                        if !check.is_valid() {
+                            self.app.set_error(Some(check.errors.join("; ")));
                         } else {
                             let password = std::mem::take(&mut self.register_password);
                             self.spawn_action(

@@ -30,6 +30,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [DOCS] API contract: the as-built page now records the accuracy bound, the registration and anonymous-sign-up validation rules, the character-count convention, and that only a pending friend request can be answered.
 - [FEATURE] Admin: both consoles can require or clear a password rotation without resetting the password; the admin user PATCH accepts `must_change_password` and audits the change.
 - [FEATURE] Web admin: resetting a password now opens a masked form with a user picker and a clear-MFA checkbox instead of a browser prompt.
 - [FEATURE] Native admin: the users list flags accounts that still need to change a temporary password and accounts with MFA enabled.

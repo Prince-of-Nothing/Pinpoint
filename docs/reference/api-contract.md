@@ -25,6 +25,9 @@ the historical/target design and are **not** the current contract.
   { "error": { "code": "VALIDATION_FAILED", "message": "email is required" } }
   ```
 - Timestamps are ISO 8601 UTC. IDs are integers.
+- Text limits below count Unicode **characters**, not UTF-8 bytes. Display text
+  (names, labels, note messages, emails, app versions) rejects C0/C1 and Unicode
+  bidi control characters; passwords reject every control character.
 - Unauthenticated requests to protected endpoints return `401`
   `UNAUTHENTICATED`; a missing/wrong CSRF token returns `403` `CSRF_FAILED`.
 
@@ -32,9 +35,9 @@ the historical/target design and are **not** the current contract.
 
 | Method | Path | Auth | Notes |
 |---|---|---|---|
-| POST | `/auth/register` | — | `{email, password, full_name}` → `201` session + user |
+| POST | `/auth/register` | — | `{email, password, full_name}` → `201` session + user. Email is trimmed, lowercased and must be ≤254 characters with exactly one `@` and a dotted domain; full name 1–100 characters; password 8–128 characters |
 | POST | `/auth/login` | — | `{email, password, totp?}` → `200` session + user; `MFA_REQUIRED` if enrolled without a valid code |
-| POST | `/auth/anonymous` | - | `{device_name?, public_key?}` → `201` session + user + **one-time** `recovery_code`; `409 ALREADY_SIGNED_IN` while a session is active |
+| POST | `/auth/anonymous` | - | `{device_name?, public_key?}` → `201` session + user + **one-time** `recovery_code`; `device_name` follows the display-name rules (1–100 characters), `public_key` is ≤512 characters; `409 ALREADY_SIGNED_IN` while a session is active |
 | POST | `/auth/anonymous/recover` | — | `{recovery_code}` → `200` session + rotated `recovery_code`; old code is invalid |
 | POST | `/auth/session` | cookie | validate the cookie, return `{user}` + `X-CSRF-Token` |
 | GET | `/auth/me` | cookie | current user |
@@ -69,7 +72,7 @@ header. The cookie value is stored server-side only as a SHA-256 hash.
 | DELETE | `/admin/users/:id` | cookie + admin + CSRF | purge an account (admin console) |
 | GET | `/friendships/` | cookie | list friendships involving the caller |
 | POST | `/friendships/` | cookie + CSRF | `{receiver_username}` → pending request (`receiver_email` is a legacy exact-match fallback) |
-| POST | `/friendships/:id/respond` | cookie + CSRF | `{action:"accept"\|"reject"}` (receiver only) |
+| POST | `/friendships/:id/respond` | cookie + CSRF | `{action:"accept"\|"reject"}` (receiver only); only a pending request can be answered (`400 FRIENDSHIP_NOT_PENDING`), and a rejected request needs a fresh one |
 | DELETE | `/friendships/:id` | cookie + CSRF | remove a friendship and its shares |
 
 ## Locations & shares — `/api/v1/locations/*`
@@ -80,7 +83,7 @@ header. The cookie value is stored server-side only as a SHA-256 hash.
 | POST | `/locations/shares` | cookie + CSRF | `{friendship_id, direction?, precision_level?, duration_hours? \| expires_at?, label?}` — 24 h default in the UI, `duration_hours` capped at 168; label ≤120 chars |
 | PATCH | `/locations/shares/:id` | cookie + CSRF | owner only; any of `is_active`, `precision_level`, `direction`, `label`, `duration_hours`/`expires_at` |
 | DELETE | `/locations/shares/:id` | cookie + CSRF | revoke (owner only) |
-| POST | `/locations/me` | cookie + CSRF | `{latitude, longitude, accuracy?}` — publish latest location |
+| POST | `/locations/me` | cookie + CSRF | `{latitude, longitude, accuracy?}` — publish latest location; latitude −90..90, longitude −180..180, `accuracy` 0–10,000,000 m |
 | GET | `/locations/me` | cookie | own latest location |
 | GET | `/locations/friends` | cookie | friend locations visible under an active share, precision-downgraded |
 | GET | `/locations/history` | cookie | owner-only trail, 24-hour window (the database retains 7 days and prunes hourly) |

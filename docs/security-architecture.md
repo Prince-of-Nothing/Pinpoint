@@ -502,9 +502,22 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 cargo fmt --all -- --check                    → EXIT:0
 cargo clippy --all-targets -- -D warnings     → EXIT:0
 cargo build --locked                          → EXIT:0
-cargo test --locked                           → 373 lib tests + integration suites → EXIT:0
+cargo test --locked                           → 378 lib tests + integration suites → EXIT:0
 cargo-audit (CI rust job)                     → 9 accepted advisories, no open vulnerability
 ```
+
+### DAST baseline
+
+`.github/workflows/dast.yml` builds the server, starts it in memory and runs
+the ZAP baseline weekly (and when the workflow changes). The latest report is
+committed as `docs/evidence/zap-baseline.{html,json}`.
+
+Current result: 0 failures; one medium-risk warning (`style-src
+'unsafe-inline'` in the CSP, required by the MapLibre map surface and its
+dynamic panels) and four informational findings (suspicious comments,
+cacheability). Tightening the style policy needs a visual regression pass and a
+nonce/hash-based policy, so it is recorded as a remaining risk rather than
+changed blindly.
 
 Security and pattern test coverage:
 

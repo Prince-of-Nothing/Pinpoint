@@ -12,6 +12,12 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Changed
+- [DOCS] API contract: a new "Response headers and throttling" section records the baseline headers, the `no-store` rule for API and map-query answers, the tile cache header and the `429` + `Retry-After` behavior.
+- [DOCS] Evidence: a single index now links the gate, live smoke, SAST/DAST reports, backup self-tests, threat model, control register, traceability, models and artifact details for the report.
+- [DOCS] Reference: the technology-stack, design-pattern and domain-data pages now describe the Rust system (crates, `src/patterns/`, real tables) instead of the removed Flutter/FastAPI design.
+- [DOCS] Evidence: the security control register and requirements traceability matrix now describe the as-built Rust system (SC-01..SC-09, REQ-01..REQ-09) with current tests, scans and limitations instead of the removed Python backend.
+- [INFRA] Backups: a host-side wrapper encrypts `pg_dump` with AES-256-CBC/PBKDF2 (openssl), verifies a decrypt roundtrip before deleting the plaintext temp file, and ships a restore script with a header check and overwrite guard; the passphrase stays outside the repository.
+- [INFRA] DAST: a weekly ZAP baseline workflow starts the in-memory server and scans it, uploading the HTML/JSON report as an artifact; the latest report is committed under `docs/evidence/`.
 - [INFRA] CI now runs CodeQL (Rust) as a SAST gate and Dependabot keeps Cargo and GitHub Actions dependencies current, complementing the existing `cargo audit` allowlist.
 - [DOCS] Security architecture: the threat model is now STRIDE-tagged and scored (impact × likelihood) with a prioritised table, trust boundaries and an attack tree for location disclosure; the weeks 7–15 roadmap page the ADRs link to now exists with the as-built evidence index and open decisions.
 - [INFRA] Native password forms now share pure, testable validators for registration and password change, covering 4-emoji rejection, 8-emoji acceptance, a missing current password, forced rotation and confirmation mismatch; the security-architecture test evidence matches the 373-test suite.
@@ -36,6 +42,12 @@ The per-item flagged list for this release is in
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
 - [FEATURE] Auth: GitHub OAuth 2.0 sign-in alongside Google, using the primary verified address from `/user/emails` and the same state/PKCE/no-auto-link rules.
+- [FEATURE] Native map: right-click actions (directions from/to here, measure from here, add note here, copy coordinates) and a distance-measure HUD with numbered points, live total, undo and clear.
+- [FEATURE] Web map: friend pins now show the friend's name above the precision circle; the labels are DOM markers, so they also render on the offline basemap that has no glyphs.
+- [FEATURE] Web map: right-click/long-press actions (directions from/to here, measure from here, add note, copy coordinates) and a distance tool with numbered points, live total, undo and clear; `web/app/measure.js` is a pure module served same-origin.
+- [FEATURE] Web: wide screens now keep the section cards in a right column with a full-bleed map and top-left search, MapLibre gains compass/pitch and fullscreen, and the zoom/fullscreen controls stay clear of the mobile tab bar; the Midterm 2 map, Today and notes screenshots were regenerated from this build.
+- [FEATURE] Native: the friend list on the map screen now says how old each location is (`just now`, `5m ago`, `2d ago`), matching the web client and using the existing freshness thresholds.
+- [FEATURE] Web: the friend-locations list now says how long ago each friend last shared a location (`just now`, `5m ago`, `2d ago`), so stale data is not mistaken for a live position.
 - [FEATURE] Auth: optional Google OAuth 2.0 sign-in (authorization code + PKCE) with a single-use state bound to an HttpOnly cookie, a verified-email requirement, no automatic email linking, the same opaque session as password login, and an anonymous per-client throttle; disabled unless the client credentials are configured.
 - [DOCS] Analysis: system models page with the topic, subject, objectives, functional/non-functional/CIA requirements, use-case, sequence, activity, state, ER, component and deployment diagrams, and the threat-to-use-case mapping for the Midterm 1 deliverables.
 - [FEATURE] Web: the tab bar now opens real per-section screens (Friends, Sharing, Today, Chats, Account) instead of scrolling one long drawer, and the map has its own basemap (Offline/Streets) and layer (Friends/Trail/Notes) control.
@@ -60,6 +72,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Distance labels: a folded zero (single-point measure) no longer renders as `-0 m`; the formatter clamps distances to zero.
 - [FIX] Native: the change-password form counts characters instead of UTF-8 bytes, and the register form applies the server's password rule before sending, so a 4–7 emoji password is rejected in the form; a blank email now explains itself instead of doing nothing.
 - [FIX] Web: the register, change-password and admin temporary-password forms count characters like the server instead of UTF-16 units, so a 4–7 emoji password is rejected before the request instead of by the server.
 - [FIX] Web: the 5-second message poll now skips accounts with no friendships, so an idle friendless tab no longer sends two requests every 5 seconds; pending requests keep polling because the other side can accept.
@@ -97,6 +110,11 @@ The per-item flagged list for this release is in
 - [FIX] Native Today: action errors are surfaced, the note draft clears only after a successful POST and only if unchanged, refresh sections load independently, and a 401 clears private lists without letting an in-flight refresh cross accounts.
 - [FIX] Location permission: Android now requests fine and coarse location in one dialog (Android 12+ ignores a fine-only request), asks on the first map view, retries the fix after a grant, and receives one-shot GPS updates through a broadcast receiver. The web client asks once after sign-in and reports the real geolocation error. Native map controls use a solid fill so their glyphs stay readable over the light basemap.
 ### Security
+- [SECURITY] Split services: the auth, users, locations, map, messages, diagnostics and admin binaries now apply the same baseline headers and `no-store` policy as the combined router, so a split deployment cannot serve unprotected responses.
+- [SECURITY] map: search, reverse-geocode and route answers now carry `Cache-Control: no-store` because they contain the query or coordinates; tiles keep their public one-hour cache.
+- [SECURITY] rate limit: 429 responses now carry `Retry-After`, so a client that hits the auth, write or map throttle waits for the window instead of retrying in a tight loop.
+- [SECURITY] API responses now carry `Cache-Control: no-store`, so a browser or intermediate cache on a shared device cannot replay another account's locations, notes or sessions; static assets keep their own cache headers.
+- [SECURITY] Web: the CSP no longer allows inline styles; all CSS is same-origin or applied through the CSSOM, so `style-src` is `'self'` and the ZAP medium finding is gone.
 - [SECURITY] Private note labels, messages and photos are AES-256-GCM encrypted at rest when `DATA_ENCRYPTION_KEY` is set, with legacy plaintext rows still readable and an invalid key refusing to start; ADR-0025.
 - [SECURITY] Location publishes reject an accuracy outside 0 to 10,000,000 meters, matching the client validation; a crafted request can no longer store a negative or absurd precision.
 - [SECURITY] Login and registration password/TOTP inputs are cleared on submit and after a successful sign-in, so credentials do not linger in hidden forms.

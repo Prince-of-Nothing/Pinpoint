@@ -108,12 +108,8 @@ pub async fn session_auth(
     // address is never stored.
     if let Some(limit) = state::auth_limit(req.uri().path()) {
         if let Some(ip) = state::client_ip(req.headers()) {
-            if !state.auth_rate.allow(req.uri().path(), &ip, limit) {
-                return (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    Json(json!({"error": {"code": "RATE_LIMITED", "message": "Too many attempts. Try again later."}})),
-                )
-                    .into_response();
+            if let Some(wait) = state.auth_rate.allow(req.uri().path(), &ip, limit) {
+                return rate_limited(wait, "Too many attempts. Try again later.");
             }
         }
     }
@@ -151,15 +147,10 @@ pub async fn session_auth(
                         .into_response();
                 }
             }
-            if unsafe_method
-                && req.uri().path().starts_with("/api/")
-                && !state.auth_rate.allow_write(session.user_id)
-            {
-                return (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    Json(json!({"error": {"code": "RATE_LIMITED", "message": "Too many writes. Try again later."}})),
-                )
-                    .into_response();
+            if unsafe_method && req.uri().path().starts_with("/api/") {
+                if let Some(wait) = state.auth_rate.allow_write(session.user_id) {
+                    return rate_limited(wait, "Too many writes. Try again later.");
+                }
             }
             // A temporary admin-issued password must be rotated before the
             // account can use anything else. Enforced here so every service
@@ -201,12 +192,8 @@ pub async fn map_rate_limit(
 ) -> axum::response::Response {
     if let Some((bucket, limit)) = state::map_limit(req.uri().path()) {
         if let Some(ip) = state::client_ip(req.headers()) {
-            if !state.auth_rate.allow(bucket, &ip, limit) {
-                return (
-                    StatusCode::TOO_MANY_REQUESTS,
-                    Json(json!({"error": {"code": "RATE_LIMITED", "message": "Too many map requests. Try again later."}})),
-                )
-                    .into_response();
+            if let Some(wait) = state.auth_rate.allow(bucket, &ip, limit) {
+                return rate_limited(wait, "Too many map requests. Try again later.");
             }
         }
     }
@@ -252,16 +239,42 @@ pub async fn converge(
     res
 }
 
+/// 429 with the `Retry-After` seconds RFC 6585 asks for, so a well-behaved
+/// client waits for the window instead of retrying immediately.
+fn rate_limited(retry_after_secs: u64, message: &str) -> axum::response::Response {
+    let mut res = (
+        StatusCode::TOO_MANY_REQUESTS,
+        Json(json!({"error": {"code": "RATE_LIMITED", "message": message}})),
+    )
+        .into_response();
+    if let Ok(value) = HeaderValue::from_str(&retry_after_secs.to_string()) {
+        res.headers_mut().insert(header::RETRY_AFTER, value);
+    }
+    res
+}
+
 /// Baseline security headers on every response. HTML/assets already carry a
 /// stricter set via `web_handlers::secure`; API JSON had none. Does not touch
 /// `Content-Security-Policy`, so the HTML policy is neither replaced nor
-/// duplicated.
-async fn security_headers(
+/// duplicated. Public so the split service binaries in `src/bin/` apply the
+/// same policy as the combined router.
+pub async fn security_headers(
     req: axum::http::Request<axum::body::Body>,
     next: Next,
 ) -> axum::response::Response {
+    // Private API JSON and the geocoding/routing answers (they carry the
+    // user's query and coordinates) must never be reused from a browser or
+    // proxy cache: a shared device or intermediate cache could otherwise show
+    // one person's data to another. Tiles keep their public cache header, and
+    // static assets keep their own.
+    let path = req.uri().path();
+    let private =
+        path.starts_with("/api/") || matches!(path, "/map/search" | "/map/reverse" | "/map/route");
     let mut res = next.run(req).await;
     let headers = res.headers_mut();
+    if private {
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
     headers.insert(
         header::STRICT_TRANSPORT_SECURITY,
         HeaderValue::from_static("max-age=31536000; includeSubDomains"),
@@ -319,6 +332,7 @@ pub fn router(state: AppState) -> Router {
         .route("/message-crypto.js", get(web_handlers::message_crypto_js))
         .route("/map.js", get(web_handlers::map_js))
         .route("/nav.js", get(web_handlers::nav_js))
+        .route("/measure.js", get(web_handlers::measure_js))
         .route("/sharing.js", get(web_handlers::sharing_js))
         .route("/appearance.js", get(web_handlers::appearance_js))
         .route("/admin.js", get(web_handlers::admin_js))

@@ -1,61 +1,54 @@
 # Requirements Traceability Matrix (RTM)
 
-This matrix maps every MVP requirement to its UI implementation, API
-endpoint, database model, security controls, test coverage, and evidence.
-The chain runs: **REQ → UI → API → DB → security control → test →
-evidence**.
+This matrix maps each MVP requirement to its UI surface, API endpoint, data
+model, security control, automated tests and evidence. The chain runs:
+**REQ → UI → API → DB → security control → test → evidence**. It describes the
+**as-built Rust system**; the detailed field rules are in the
+[API contract](./api-contract.md) and the models in
+[system models](../analysis/system-models.md).
 
-| REQ | UI / Screen | API Endpoint(s) | Database Table(s) | Security Control(s) | Tests | Evidence |
+| REQ | UI surface | API endpoint(s) | Data | Security control(s) | Tests | Evidence |
 |---|---|---|---|---|---|---|
-| **REQ-01** Profile privacy | Profile screen; views for self/friend/non-friend/blocked | `GET /api/v1/users/{id}`; filtered responses | `users`, `profiles` | SC-03 Private-by-default profiles; SC-04 Input/API security | Profile views from all 5 actor contexts (self, friend, group member, non-friend, blocked); verify no location/activity exposed to non-friends | Demo screenshot of each viewer type; test report |
-| **REQ-02** Mutual friendship | Friends screen; /friendships/* operations | `POST/GET/DELETE /api/v1/friendships/{id}`; status endpoint | `friendships` | SC-02 Directional authorization; SC-04 Input/API security; SC-05 Session/transport security | Accept/decline/revoke/block state changes auditable; friendship does not auto-grant location access; IDOR tests on friendship endpoints | Demo video of friendship flow; test report with audit log verification |
-| **REQ-03** Directional location sharing | Share Location screen; location card on map | `POST /api/v1/location-shares/`; `GET /api/v1/location-shares/{id}`; `DELETE /api/v1/location-shares/{id}` | `location_shares` | SC-02 Directional authorization (recipient-owned); SC-04 Input/API security; SC-06 Data protection | Recipient-only access; non-friend denial; revoked-share denial; expired-share denial; IDOR attempts with another user's ID; cross-account tests | Demo screenshot of share creation/revocation; test report verifying directional consent |
-| **REQ-04** Battery-aware updates | Location settings screen; battery presets | `GET /api/v1/users/me`; location update flow | `users`, `user_status`, `latest_locations` | SC-07 Battery and stale-state safety; SC-04 Input/API security | Battery profiles tested; offline periods; OS-paused updates; low-battery states; stale UI behavior (no live indicator when stale); clock differences | Battery test log; stale-state UI verification video |
-| **REQ-05** Check-ins | Check-in screen; create/scheduled/trip check-ins | `POST /api/v1/check-ins/`; `GET /api/v1/check-ins/{id}/status`; `POST /api/v1/check-ins/{id}/complete`; `POST /api/v1/check-ins/{id}/cancel`; `POST /api/v1/check-ins/{id}/acknowledge` | `check_ins`, `check_in_events` | SC-07 Battery/stale-state safety; SC-04 Input/API security; SC-09 Incident response | Reminders sent; grace period observed; cancellation; completion state; failure/missed state; escalation flow; reminders before escalation | Demo of full check-in lifecycle; test report with reminder/grace/complete/fail verification |
-| **REQ-06** Stale-state display | Friend map; location card | `GET /api/v1/latest_locations`; WebSocket location updates | `latest_locations` | SC-07 Battery and stale-state safety; SC-04 Input/API security; SC-02 Directional authorization | Stale data never displayed with live indicator; dead device does not claim current battery; last-update timestamp shown; accuracy and battery info visible; clear stale/dead state after extended signal loss | UI verification: stale state vs live state comparison; test report on stale/dead transitions |
-| **REQ-07** Map and navigation | Map screen; friends display; navigation links | `GET /api/v1/map/friends`; `GET /api/v1/map/navigation/deep-link` | `users`, `location_shares`; no location history stored in map API | SC-02 Directional authorization (unauthorized friends absent); SC-04 Input/API security; SC-06 Data protection (no private data in links) | Attribution appears on map; unauthorized friends absent from `/map/friends`; external navigation links contain only coordinate + label (no friendship/sharing/history data); IDOR test on map endpoint | Map screenshot with attribution; deep link URL inspected (no private params); test report on navigation privacy |
-| **REQ-08** Security baseline | N/A (cross-cutting) | All endpoints | All relevant tables | SC-01 Authentication; SC-04 Input/API security; SC-05 Session/transport security; SC-06 Data protection; SC-09 Incident response | Input validation/parameterized queries on all endpoints; session/token protection; rate limiting on sensitive endpoints; error responses safe (no stack traces); security events recorded for authz/IDOR/rate limit/input | Security control register entries for SC-01 through SC-09; penetration test summary; dependency/vulnerability scan |
-| **REQ-09** Documentation evidence | N/A (documentation screen) | N/A | N/A | All relevant security controls | RTM itself is the evidence artifact; mentor review of architecture, stack, data model, security, testing, and deferred-scope docs | This RTM document; architecture proposal sign-off; mentor review checklist |
+| **REQ-01** Account and profile privacy | Web/desktop sign-in, register, Account; native login/register | `POST /auth/register`, `/auth/login`, `/auth/anonymous`, `/auth/anonymous/recover`, `GET/PATCH /auth/me`, `/users/:id`, `/users/me` | `pinpoint_users`, `pinpoint_sessions` | SC-01 Authentication; SC-03 Private-by-default; SC-05 Session/transport | `tests/router_probe.rs`, `tests/auth_password.rs`, `tests/oauth.rs`, `scripts/smoke.ps1` | Security docs; live smoke (email bidi 400, Unicode 201) |
+| **REQ-02** Mutual friendship | Friends screen (web drawer, native Friends) | `GET/POST /friendships/`, `POST /friendships/:id/respond`, `DELETE /friendships/:id` | `pinpoint_friendships` | SC-02 Directional authorization; SC-04 Input/API | `tests/router_probe.rs`, `scripts/smoke.ps1` (reject → no revive → fresh request → accept) | Smoke output |
+| **REQ-03** Directional location sharing | Sharing screen; map share sheet | `POST/PATCH/DELETE /locations/shares`, `GET /locations/shares` | `pinpoint_shares` | SC-02 Directional authorization; SC-04 Input/API | `tests/location_consent.rs`, `scripts/smoke.ps1` (label bidi/newline) | Test report; smoke |
+| **REQ-04** Publish location and freshness | Map publish form; native publish | `POST/GET /locations/me`, `GET /locations/friends` | `pinpoint_locations` | SC-02 consent on read; SC-04 validation; SC-07 latest-only + timestamp | `tests/location_consent.rs` (accuracy bounds, consent, precision), `scripts/smoke.ps1` | Smoke (`accuracy_neg=400`, `accuracy_high=400`, `accuracy_ok=200`) |
+| **REQ-05** Private trail, notes and check-ins | Today screen (web/native) | `GET /locations/history`, `GET/POST/DELETE /locations/notes`, `/locations/check-ins` | `pinpoint_location_history`, `pinpoint_place_notes`, `pinpoint_checkins` | SC-03 owner-only; SC-06 encryption at rest | `tests/today.rs`, `tests/note_encryption.rs`, `scripts/smoke.ps1` | Tests; smoke (note/check-in bounds) |
+| **REQ-06** Map, search and routing | Map screen; offline catalog | `GET /map/tiles/:z/:x/:y`, `/map/search`, `/map/reverse`, `/map/route`, `/map/capabilities`, `/map/attribution`; `/offline/packs/*` | No private data; OSM proxy | SC-04 validation; SC-07 availability; OSM policy (ADR-0011/0021) | `tests/map_route_e2e.rs`, `tests/map_offline_e2e.rs`, `map-qa.yml`, `scripts/smoke.ps1` (search 120/121) | Map QA workflow; smoke |
+| **REQ-07** End-to-end encrypted messages | Chats (web/native); safety number sheet | `PUT /messages/key`, `GET /messages/key/:id`, `POST/GET /messages`, `/messages/conversations`, `/messages/unread`, `/messages/read` | `pinpoint_messages`, `pinpoint_message_keys` (ciphertext only) | SC-06 data protection; ADR-0023 | `tests/contract.rs`, `tests/router_probe.rs`, message vectors (`tests/message-vector.json`, `web/app/test/message-js-vector.json`) | Vector tests |
+| **REQ-08** Security baseline | Cross-cutting | All authenticated routes | All tables | SC-01…SC-09 | `cargo clippy -D warnings`, `cargo test`, `cargo audit`, CodeQL, ZAP baseline, smoke | CI; [DAST report](../evidence/zap-baseline.html); control register |
+| **REQ-09** Documentation and evidence | N/A | N/A | N/A | All controls | Documentation review | This RTM; [security architecture](../security-architecture.md); [system models](../analysis/system-models.md); [evidence](../evidence/); ADRs |
 
-## Implementation status (as built, September MVP)
+## Implementation status (as built)
 
 | REQ | Status | Implemented by | Automated tests |
 |---|---|---|---|
-| REQ-01 Profile privacy | **Implemented** (usernames + optional display name; group-member view N/A until groups exist) | `GET/PATCH /users/me`, `GET /users/{username}` | `test_social.py` (profile tests) |
-| REQ-02 Mutual friendship | **Implemented** | `/friendships`, `/blocks` | `test_social.py`, IDOR matrix |
-| REQ-03 Directional sharing | **Implemented** (exact/approximate, purpose, expiry, revoke) | `/location-shares`, `GET /locations/visible` | `test_location_shares.py`, `test_locations.py` |
-| REQ-04 Battery-aware updates | **Partial**: server stores battery/charging and flags low battery; web client presets + automatic saver; native background sampling deferred to the Flutter app | `PUT /locations/me`, web client | `test_locations.py::test_low_battery_flag` |
-| REQ-05 Check-ins | **Partial**: manual check-ins with grace period, overdue/missed states, visible to share recipients; scheduled/trip check-ins and push reminders deferred | `/check-ins` | `test_checkins.py` |
-| REQ-06 Stale-state display | **Implemented** (live/stale/dead/unknown, last-known battery, no live indicator when stale) | `GET /locations/visible`, map markers | `test_locations.py::test_freshness_transitions` |
-| REQ-07 Map and navigation | **Implemented** in the web client (OSM + attribution, unauthorised friends absent, coordinate-only links); built-in routing deferred | web client, `navigation` field | `test_locations.py::test_navigation_links_contain_only_coordinates`, e2e run |
-| REQ-08 Security baseline | **Implemented** for the MVP scope (see register for limitations) | all endpoints | [Security Test Report](../evidence/security-test-report.md) |
-| REQ-09 Documentation evidence | **Implemented** | this repository | [Evidence index](../evidence/README.md) |
+| REQ-01 Account and profile privacy | **Implemented** — email/password + TOTP, anonymous + recovery, Google OAuth; GitHub OAuth implemented, PR pending | `src/server/auth_handlers.rs`, `src/security/password.rs`, `src/security/oauth.rs` | `tests/router_probe.rs`, `tests/auth_password.rs`, `tests/oauth.rs` |
+| REQ-02 Mutual friendship | **Implemented** — request/accept/reject/remove; a rejected request needs a fresh one | `src/server/users_handlers.rs` | `tests/router_probe.rs`, `scripts/smoke.ps1` |
+| REQ-03 Directional sharing | **Implemented** — `exact`/`approximate`/`city_only`, pause, expiry (24 h default, 168 h cap), revoke | `src/server/locations_handlers.rs` | `tests/location_consent.rs` |
+| REQ-04 Publish and freshness | **Implemented** — coordinates/accuracy validated, latest-only row with `updated_at`; no battery sampling | `src/server/locations_handlers.rs`, `src/models.rs` | `tests/location_consent.rs` |
+| REQ-05 Private activity | **Implemented** — owner-only 24 h trail (7-day retention pruned hourly), notes/photos, check-ins (`manual`/`scheduled`/`trip` labels) | `src/server/locations_handlers.rs` | `tests/today.rs`, `tests/note_encryption.rs` |
+| REQ-06 Map and routing | **Implemented** — MapLibre + PMTiles, opt-in OpenFreeMap, OSRM proxy, search/reverse, attribution | `src/server/mod.rs`, `web/app/map.js`, `src/osm.rs` | `tests/map_route_e2e.rs`, `tests/map_offline_e2e.rs`, `map-qa.yml` |
+| REQ-07 E2E messages | **Implemented** — ECIES (X25519 + HKDF-SHA256 + AES-256-GCM + Ed25519), ciphertext-only server, safety number, read receipts | `src/security/e2e.rs`, `src/server/messages_handlers.rs` | Message vectors, `tests/contract.rs` |
+| REQ-08 Security baseline | **Implemented** for the MVP scope; SC-06 (location rows), SC-07 (no battery/push) and SC-08 (no SIEM) are partial | all endpoints | CI + CodeQL + ZAP + smoke |
+| REQ-09 Documentation and evidence | **Implemented** | this repository | This RTM, docs index, evidence folder |
 
-Note: the endpoint names in the matrix above reflect the original plan; the
-implemented paths are listed in [API Contract (as built)](./api-contract.md)
-(e.g. `latest_locations` is `GET /locations/visible`; map data comes from the
-same endpoint).
+## Deferred / not in the MVP
+
+- Battery and charging telemetry, scheduled reminders and push notifications.
+- Passkeys/magic links, explicit OAuth provider linking, GitHub OAuth merge.
+- Database-level encryption for location rows and an automated key-rotation
+  tool; the encrypted backup wrapper covers off-host copies.
+- Multi-replica shared rate limiting and session pending-state storage.
 
 ## How to read the matrix
 
-- **REQ** – The requirement number from REQ-01 through REQ-09 (see
-  [MVP Requirements and Acceptance Criteria](./mvp-requirements-and-acceptance-criteria.md)).
-- **UI / Screen** – The mobile screen or web page where the requirement is
-  visible/interacted with.
-- **API Endpoint(s)** – The versioned API contract endpoint(s) that
-  implement the requirement (see [API Contract](./api-contract.md)).
-- **Database Table(s)** – The PostgreSQL tables that store the relevant data
-  (see [Domain Data Model](./domain-data-model.md)).
-- **Security Control(s)** – The SC from the
-  [Security Control Register](./security-control-register.md) that applies.
-- **Tests** – The key test scenarios that validate the requirement
-  end-to-end.
-- **Evidence** – What can be shown/presented to the mentor as proof of
-  implementation.
-
-## Status tracking (not shown in table)
-
-All rows default to **Planned** → **In Progress** → **Implemented** →
-**Verified** as work is completed. The rightmost column (Evidence) is the
-primary artifact that moves a row from "planned" to "implemented" for
-mentor review.
+- **UI surface** names the screen in the web client and, where it exists, the
+  native egui screen.
+- **API endpoint(s)** are the as-built paths; field rules and status codes are
+  in the [API contract](./api-contract.md).
+- **Tests** are runnable: `cargo test --locked`, `scripts/smoke.ps1`, and the
+  web checks under `web/app/test/`.
+- **Evidence** points to a report, workflow or command output; the control
+  register explains the problem, relevance, implementation and limitations of
+  each SC item.

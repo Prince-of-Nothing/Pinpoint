@@ -1,103 +1,28 @@
-# Design Patterns and Principles (TMPS)
+# Design Patterns
 
-This reference catalogues the object-oriented design patterns and principles
-("TMPS": SOLID plus the classic GoF pattern set) applied in the backend, and —
-for each one — the security purpose it serves and the code that implements it.
-It is the reviewable companion to [ADR-0003](../adr/0003-structure-backend-around-design-patterns.md).
+The security-critical paths are small and explicit, but several recurring
+structures follow documented design patterns. `src/patterns/` holds compact
+reference implementations with **23 unit tests**; the table also names the
+production code that uses the same idea, so the pattern is not only a teaching
+artifact.
 
-Code lives under [`backend/app/`](../../backend/app). Every pattern entry links
-to its implementation and its regression test.
+| Pattern | Category | Reference implementation | Where the app uses it | Why it matters here |
+|---|---|---|---|---|
+| Repository | Structural | `src/patterns/repository.rs` (traits for users, friendships, shares, locations) | `src/server/state/store.rs` and the `state/users.rs`, `state/locations.rs`, `state/sessions.rs` load/persist code | Data access is behind one module per table; handlers never build SQL strings, and tests drive the same router with an in-memory store |
+| Strategy | Behavioural | `src/patterns/strategy.rs` (`PrecisionStrategy`: exact/approximate/city-only) | Precision is applied in `src/server/locations_handlers.rs` before serialization | A consent decision is one swap of a strategy, not a fork in every handler; the precision is validated at the boundary |
+| Command | Behavioural | `src/patterns/command.rs` (`LoginCommand`, `PublishLocationCommand`, `CreateShareCommand`) | `PendingAction` in `src/app.rs` / `src/ui.rs` | User actions become values the async runner executes, so the UI never performs network work on the render thread |
+| State | Behavioural | `src/patterns/state.rs` (`ScreenState`, `StateContext`) | `StateContext` is used by `src/app.rs`; `CurrentScreen` drives the shell | Screen transitions are explicit, which keeps the login/registration secret-clearing and the expired-session reset in one place |
+| Observer | Behavioural | `src/patterns/observer.rs` (`EventSubject`, `Observer`, `AppEvent`) | Refresh-on-change callbacks (`onChanged: refresh`) and the polling loops | One change can refresh the map, lists and badges without the producers knowing the consumers |
+| Factory | Creational | `src/patterns/factory.rs` (`ApiClientFactory`) | `build_backend`/`build_default_backend` in `src/backend/mod.rs` | The REST, failover and browser adapters are selected once at startup; the app targets `DynBackend` |
+| Decorator | Structural | `src/patterns/decorator.rs` (`LoggingApiClient<C>`) | `FailoverBackend` in `src/backend/failover.rs` wraps several backends with retry/failover | Cross-cutting behaviour is added around a backend without changing the handler code or the security checks |
+| Proxy | Structural | `src/patterns/proxy.rs` (`ProxyLocationService`) | Offline mode and `FailoverBackend` sit between the UI and the network | A request can be served from cache/offline or retried on another replica while the caller sees one interface |
 
-## Why patterns here at all
+## How to read this
 
-In a safety-critical API, security behaviour that is scattered across routers
-cannot be audited, tested, or replaced. Patterns give each control a **single
-named home**; the [Security Control Register](./security-control-register.md)
-then maps controls to those homes one-to-one.
-
-## Pattern catalogue
-
-| # | Pattern | Type | Where | Security purpose |
-|---|---------|------|-------|------------------|
-| 1 | Singleton | Creational | [`core/config.py`](../../backend/app/core/config.py) (`get_settings`), [`db/session.py`](../../backend/app/db/session.py) (engine/factory), [`services/token_service.py`](../../backend/app/services/token_service.py) (`get_token_service`), [`services/rate_limit.py`](../../backend/app/services/rate_limit.py) (`get_rate_limiter`) | One hardened configuration; no per-request re-parsing of secrets, one algorithm allowlist everywhere |
-| 2 | Factory | Creational | [`main.py`](../../backend/app/main.py) (`create_application`), [`services/rate_limit.py`](../../backend/app/services/rate_limit.py) (backend selection), [`services/authorization.py`](../../backend/app/services/authorization.py) (`get_precision_reducer`) | Testable app instances; production rate-limit backend swapped without touching callers |
-| 3 | Facade | Structural | [`services/auth_service.py`](../../backend/app/services/auth_service.py) (`AuthService`), [`services/token_service.py`](../../backend/app/services/token_service.py) (`TokenService`) | One reviewed path for login/logout/password change; no endpoint can authenticate "its own way" |
-| 4 | Repository | Structural | [`repositories/people.py`](../../backend/app/repositories/people.py), [`repositories/locations.py`](../../backend/app/repositories/locations.py) | Queries centralised and parameterised (injection surface = one layer); services own transactions |
-| 5 | Decorator (middleware) | Structural | [`middleware/security_headers.py`](../../backend/app/middleware/security_headers.py), CORS + TrustedHost in [`main.py`](../../backend/app/main.py) | Defence-in-depth headers (HSTS, CSP, nosniff) and host allowlisting on **every** response |
-| 6 | Decorator-style dependencies | Structural | [`api/deps.py`](../../backend/app/api/deps.py) (`rate_limit()`, `csrf_protect`, `require_fresh_password`, `require_role`) | Cross-cutting gates compose onto endpoints declaratively; a new endpoint cannot forget them silently |
-| 7 | Strategy | Behavioural | [`services/authorization.py`](../../backend/app/services/authorization.py) (`LocationAccessPolicy`, `ProfileVisibilityPolicy`, `RelationshipService`), [`services/password_policy.py`](../../backend/app/services/password_policy.py) (rules) | Visibility and consent decisions are swappable, individually tested algorithms — never inline `if`s |
-| 8 | Registry + Open/Closed | Behavioural | [`services/authorization.py`](../../backend/app/services/authorization.py) (`PRECISION_REDUCERS`) | New precision levels are added without editing the access policy; unknown levels **fail closed** to the coarsest reducer |
-| 9 | Chain of Responsibility | Behavioural | [`services/password_policy.py`](../../backend/app/services/password_policy.py) (`PasswordPolicy`) | Every rule runs and reports; a missing/unknown rule can never silently accept a password |
-| 10 | Template Method | Behavioural | [`services/auth_service.py`](../../backend/app/services/auth_service.py) (`_apply_password_change`) | Self-service and forced password changes share one skeleton: policy → hash → token-version bump → session revocation → audit |
-| 11 | Null Object | Behavioural | [`services/security.py`](../../backend/app/services/security.py) (`get_dummy_password_hash`) | Unknown-account logins still burn one bcrypt comparison — response timing cannot enumerate accounts |
-| 12 | Observer | Behavioural | [`services/audit.py`](../../backend/app/services/audit.py) (`AuditLogger` + handlers) | Audit sinks (log, DB) attach without touching business code; a failing sink never breaks the flow |
-
-## SOLID mapping
-
-| Principle | How it shows up in this codebase |
-|---|---|
-| **S**ingle Responsibility | Each module owns one job: routers translate HTTP, services own decisions, repositories own queries, middleware owns headers. `security.py` holds only primitives; orchestration lives in `AuthService`. |
-| **O**pen/Closed | Precision reducers and password rules extend via registration; adding a policy never edits existing routers. |
-| **L**iskov Substitution | Any `RateLimiter` (memory/redis) or `PrecisionReducer` implementation is interchangeable; the protocol signatures are honoured exactly, and both rate-limiter backends are exercised. |
-| **I**nterface Segregation | Narrow dependency providers (`get_user_repository`, `get_friendship_repository`, …) instead of one "god" session object; `RateLimiter` is a one-method protocol. |
-| **D**ependency Inversion | Routers depend on repository/service abstractions injected by FastAPI, not on `SessionLocal`; tests swap implementations via `Depends` overrides. |
-
-Supporting principles: **DRY** (one `get_auth_context()` for both credential
-types), **Fail-safe defaults** (coarsest precision on unknown level, generic
-401 on every credential failure, production refuses placeholder secrets),
-**Least privilege** (viewer-filtered responses; owner-only revocation),
-**Complete mediation** (every location read runs `LocationAccessPolicy`).
-
-## Request lifecycle (patterns in action)
-
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant MW as Middleware<br/>(Decorator)
-    participant R as Router
-    participant D as Dependencies<br/>(DI)
-    participant S as Service<br/>(Facade/Strategy)
-    participant Repo as Repository
-    participant DB as Database
-
-    C->>MW: Request
-    MW->>MW: TrustedHost, Security Headers
-    MW->>R: Forward
-    R->>D: Depends(get_auth_context, rate_limit, csrf_protect)
-    D->>Repo: resolve credential → session → user
-    Repo-->>D: User
-    D->>R: AuthContext
-    R->>S: domain operation
-    S->>Repo: queries only (no commit)
-    S->>S: policy decision (Strategy)
-    S->>DB: commit (transaction boundary)
-    S-->>R: result (already filtered/reduced)
-    R-->>C: 200 + RFC 7807 on error
-```
-
-*Figure: one request, showing where each pattern applies. See
-[Sequence: Authorized Location Read](../architecture/diagrams/sequence-authorized-location-read.md)
-for the domain-level flow.*
-
-## Layering rules (enforced by review)
-
-1. Routers never query the ORM directly — only via repositories.
-2. Services never import FastAPI types.
-3. Repositories never `commit()` — the service owns the transaction.
-4. `get_auth_context()` is the **only** place credentials are accepted.
-5. Visibility decisions live in policies, never inline in endpoints.
-
-## Known limitations (honest list)
-
-- The in-memory rate limiter is per process; production must set
-  `RATE_LIMIT_BACKEND=redis` (fallback is logged at boot).
-- The common-password deny-list is small; replace with a breached-password
-  corpus before release.
-- bcrypt is pinned to 4.0.1 for passlib compatibility.
-- Table creation uses `create_all` at startup; Alembic migrations are still
-  to be wired (tracked in [Risks and Technical Debt](../architecture/risks-and-technical-debt.md)).
-
----
-*See also: [Security Architecture and Data Protection](../architecture/security-architecture-and-data-protection.md),
-[API Security Implementation](./api-security-implementation.md), and the
-[Diagrams index](../architecture/diagrams/README.md).*
+- The reference modules are intentionally small and tested; they are not a
+  second implementation of the app.
+- When a pattern touches a security rule (Repository, Strategy, State), the
+  controlling test is named in the
+  [control register](./security-control-register.md), not in this page.
+- Adding a new pattern is not a goal by itself: the course asks for
+  explainable structure, not the largest catalogue.

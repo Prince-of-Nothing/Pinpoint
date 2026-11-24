@@ -31,6 +31,28 @@ the historical/target design and are **not** the current contract.
 - Unauthenticated requests to protected endpoints return `401`
   `UNAUTHENTICATED`; a missing/wrong CSRF token returns `403` `CSRF_FAILED`.
 
+### Response headers and throttling
+
+- Every response carries `Strict-Transport-Security`
+  (`max-age=31536000; includeSubDomains`), `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`,
+  `Permissions-Policy: geolocation=(self), camera=(), microphone=(), payment=(),
+  usb=()`, `Cross-Origin-Opener-Policy: same-origin`,
+  `Cross-Origin-Resource-Policy: same-origin` and
+  `X-Permitted-Cross-Domain-Policies: none`. The web shell adds a strict CSP
+  through `web_handlers::secure`.
+- `/api/*` responses, including errors, carry `Cache-Control: no-store`, so a
+  browser or proxy cache cannot replay one account's data. The geocoding
+  answers `/map/search`, `/map/reverse` and `/map/route` are `no-store` for the
+  same reason (they contain the query or coordinates). Map tiles carry
+  `Cache-Control: public, max-age=3600` plus the ODbL attribution headers;
+  static assets keep their own cache headers.
+- Auth endpoints, diagnostic reports, the public map proxy and authenticated
+  writes are throttled per client address or account
+  (`src/server/state/rate_limit.rs`). A throttled request returns `429
+  RATE_LIMITED` with `Retry-After: <seconds>`; the client should wait for that
+  window instead of retrying immediately.
+
 ## Auth — `/api/v1/auth/*`
 
 | Method | Path | Auth | Notes |

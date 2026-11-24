@@ -1,0 +1,78 @@
+name: DAST
+
+# Baseline dynamic scan of the running server. Weekly and on demand so it never
+# blocks a pull request, but the report is attached to the run and kept as an
+# artifact. The scan is unauthenticated: it covers the login page, static
+# assets, the map proxy and the public API surface.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/dast.yml"
+      - "web/app/**"
+      - "src/server/web_handlers.rs"
+  schedule:
+    - cron: "41 4 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dast-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zap-baseline:
+    name: ZAP baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install system dependencies (egui/winit link, reqwest TLS)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libssl-dev libxcb-render0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libgl1-mesa-dev
+      - name: Cache cargo registry and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-dast-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build server
+        run: cargo build --locked --bin pinpoint-server
+      - name: Start server (in-memory)
+        run: |
+          BIND_ADDR=127.0.0.1:8080 ./target/debug/pinpoint-server &
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/health >/dev/null; then
+              echo "server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server did not start" >&2
+          exit 1
+      - name: ZAP baseline scan
+        run: |
+          mkdir -p dast
+          chmod 777 dast
+          docker run --rm --network host -u root \
+            -v "$PWD/dast:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://127.0.0.1:8080 \
+              -r zap-report.html -J zap-report.json -I
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline
+          path: dast/
+          if-no-files-found: warn

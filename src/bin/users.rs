@@ -1,7 +1,8 @@
 //! Users + friendships service binary (pure Rust).
 //! Run: `cargo run --bin pinpoint-users` (BIND_ADDR default 0.0.0.0:8002).
 use pinpoint_desktop::server::{
-    converge, health, session_auth, status_routes, users_router, AppState, ServiceKind,
+    converge, health, security_headers, session_auth, status_routes, users_router, AppState,
+    ServiceKind,
 };
 use std::time::Duration;
 
@@ -30,7 +31,8 @@ async fn main() -> anyhow::Result<()> {
         .layer(axum::middleware::from_fn_with_state(
             session_state,
             session_auth,
-        ));
+        ))
+        .layer(axum::middleware::from_fn(security_headers));
     axum::serve(listener, app).await?;
     Ok(())
 }

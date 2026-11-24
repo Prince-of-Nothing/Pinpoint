@@ -60,6 +60,27 @@ docker compose --profile demo up -d alice bob
 - For a self-signed TLS dev gateway: `./docker/gen-certs.sh && docker compose -f docker-compose.yml -f docker-compose.https.yml up -d`.
 - The internal gateway name is allowed plaintext only through `PINPOINT_ALLOW_PLAINTEXT_HOSTS=gateway`; every other host requires HTTPS.
 
+### Encrypted backups and restore
+
+The `db-backup` volume holds plaintext dumps. For an encrypted, off-host copy use the wrapper:
+
+```powershell
+$env:PINPOINT_BACKUP_PASSPHRASE = "a long passphrase kept outside the repository"
+powershell -ExecutionPolicy Bypass -File scripts/backup-db.ps1 -OutDir D:\pinpoint-backups
+```
+
+It streams `pg_dump --format=custom` from the db container, encrypts with AES-256-CBC + PBKDF2 (200,000 iterations) through openssl, decrypts the result and compares SHA-256 hashes, and only then deletes the plaintext temporary file. Without `PINPOINT_BACKUP_PASSPHRASE` it refuses to run; it never writes an unencrypted backup. `-SelfTest` checks the crypto path without Docker.
+
+Restore into the running stack:
+
+```powershell
+$env:PINPOINT_BACKUP_PASSPHRASE = "the same passphrase"
+powershell -ExecutionPolicy Bypass -File scripts/restore-db.ps1 `
+  -File D:\pinpoint-backups\pinpoint-20260101T120000.dump.enc -ConfirmRestore
+```
+
+The restore script checks the `PGDMP` archive header and runs `pg_restore --clean --if-exists --no-owner`, which **replaces the current objects**. Stop the application services first, rehearse on a disposable database, and keep the passphrase stored separately from the backups. When the encrypted wrapper is the only accepted path, stop the plaintext loop with `docker compose stop db-backup` and protect or delete its volume.
+
 ## 4. Production checklist
 
 - Terminate TLS at the gateway (Caddy/nginx) and enable HSTS. HTTPS sessions use `__Host-pinpoint_session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and no `Domain`.

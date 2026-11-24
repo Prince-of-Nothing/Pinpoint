@@ -8,7 +8,8 @@
 //! are read or stored. Admin listing/triage runs on the admin service (8006).
 
 use pinpoint_desktop::server::{
-    converge, diagnostic_router, health, session_auth, status_routes, AppState, ServiceKind,
+    converge, diagnostic_router, health, security_headers, session_auth, status_routes, AppState,
+    ServiceKind,
 };
 use std::time::Duration;
 
@@ -37,7 +38,8 @@ async fn main() -> anyhow::Result<()> {
         .layer(axum::middleware::from_fn_with_state(
             session_state,
             session_auth,
-        ));
+        ))
+        .layer(axum::middleware::from_fn(security_headers));
     axum::serve(listener, app).await?;
     Ok(())
 }

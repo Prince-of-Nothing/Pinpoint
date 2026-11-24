@@ -397,6 +397,26 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     planRoute();
   }
 
+  /** Set the route origin from a map point and open the route panel. */
+  function routeFrom(point) {
+    const lat = Number(point?.lat);
+    const lon = Number(point?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    route.origin = {
+      lat,
+      lon,
+      label: `Dropped pin (${lat.toFixed(4)}, ${lon.toFixed(4)})`,
+    };
+    route.via = [];
+    route.addingStop = false;
+    route.stopIndex = 0;
+    renderRouteFields();
+    routePanel.classList.remove("hidden");
+    placeSheet.classList.add("hidden");
+    if (route.destination) planRoute();
+    else setStatus("Origin set. Choose a destination.");
+  }
+
   function centerOrigin() {
     const c = mapApi.map.getCenter();
     return { lat: c.lat, lon: c.lng, label: `Map centre (${c.lat.toFixed(4)}, ${c.lng.toFixed(4)})` };
@@ -1182,6 +1202,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     selected: () => selected,
     selectPlace,
     openRouteFor,
+    routeFrom,
     refreshStorage: renderStorage,
   };
 }

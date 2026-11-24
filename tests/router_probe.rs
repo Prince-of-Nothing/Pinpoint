@@ -947,6 +947,8 @@ async fn api_json_carries_baseline_security_headers() {
     assert_eq!(headers["cross-origin-opener-policy"], "same-origin");
     assert_eq!(headers["cross-origin-resource-policy"], "same-origin");
     assert_eq!(headers["x-permitted-cross-domain-policies"], "none");
+    // Private API data must not be cached by a shared browser or proxy.
+    assert_eq!(headers["cache-control"], "no-store");
 }
 
 #[tokio::test]
@@ -1791,4 +1793,98 @@ async fn registration_validates_the_email_address() {
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn throttled_login_reports_retry_after() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    // The login throttle is per client address; without the header the
+    // router sees no client and never limits.
+    let app = router(AppState::new());
+    let mut last = None;
+    for _ in 0..31 {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/auth/login")
+                    .header("content-type", "application/json")
+                    .header("x-forwarded-for", "203.0.113.7")
+                    .body(Body::from(
+                        r#"{"email":"nobody@example.com","password":"WrongPass!2026"}"#,
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        last = Some(resp);
+    }
+    let resp = last.expect("the loop made requests");
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+    let secs: u64 = resp.headers()["retry-after"]
+        .to_str()
+        .expect("Retry-After is a header")
+        .parse()
+        .expect("Retry-After is an integer");
+    assert!((1..=300).contains(&secs), "retry hint was {secs}");
+}
+
+#[tokio::test]
+async fn private_map_queries_are_not_cacheable() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    // These answers carry the user's query or coordinates. A shared cache
+    // must not replay them; tiles stay cacheable.
+    let app = router(AppState::new());
+    for uri in [
+        "/map/search?q=ab",
+        "/map/reverse?lat=200&lon=0",
+        "/map/route?from_lat=0&from_lon=0&to_lat=0&to_lon=0&mode=swim",
+    ] {
+        let resp = app
+            .clone()
+            .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{uri}");
+        assert_eq!(resp.headers()["cache-control"], "no-store", "{uri}");
+    }
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/map/tiles/99/0/0")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    assert!(resp.headers().get("cache-control").is_none());
+}
+
+#[tokio::test]
+async fn measure_module_is_served() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    let app = router(AppState::new());
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/measure.js")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(resp.headers()["content-type"]
+        .to_str()
+        .unwrap()
+        .contains("javascript"));
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    assert!(String::from_utf8_lossy(&bytes).contains("lineLengthMeters"));
 }

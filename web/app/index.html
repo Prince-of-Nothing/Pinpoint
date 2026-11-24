@@ -198,6 +198,20 @@
 
         <div id="search-results" class="search-results hidden" aria-live="polite"></div>
 
+        <div id="map-menu" class="map-menu hidden" role="menu" aria-label="Map actions">
+          <button type="button" role="menuitem" data-map-action="from">Directions from here</button>
+          <button type="button" role="menuitem" data-map-action="to">Directions to here</button>
+          <button type="button" role="menuitem" data-map-action="measure">Measure from here</button>
+          <button type="button" role="menuitem" data-map-action="note">Add note here</button>
+          <button type="button" role="menuitem" data-map-action="copy">Copy coordinates</button>
+        </div>
+
+        <div id="measure-hud" class="measure-hud hidden" role="status" aria-live="polite">
+          <span id="measure-text">0 m</span>
+          <button type="button" id="measure-undo" class="secondary">Undo</button>
+          <button type="button" id="measure-clear">Clear</button>
+        </div>
+
         <div id="nav-banner" class="nav-banner hidden" role="status" aria-live="polite">
           <div class="nav-next">
             <span id="nav-step">Route preview</span>

@@ -2,9 +2,10 @@
 // Talks to /api/v1 with the session cookie + X-CSRF-Token double-submit.
 
 import { createMap } from "./map.js";
-import { initNavigation } from "./nav.js";
+import { initNavigation, formatDistance } from "./nav.js";
+import { lineLengthMeters } from "./measure.js";
 import { createAdminConsole } from "./admin.js";
-import { friendName, initSharing, shareRowModel } from "./sharing.js";
+import { freshnessText, friendName, initSharing, shareRowModel } from "./sharing.js";
 import { initAppearance } from "./appearance.js";
 import {
   cryptoAvailable,
@@ -193,6 +194,11 @@ async function enterApp() {
   }
   renderIdentity();
   updateAdminTab();
+  // Desktop keeps the section cards in a right column; mobile opens them on
+  // demand over the map.
+  if (window.matchMedia?.("(min-width: 981px)").matches) {
+    setDrawer(true, false);
+  }
   // A temporary password blocks the API until it is rotated. Take the user
   // straight to the Account panel instead of letting every tab fail.
   if (state.user?.must_change_password) {
@@ -500,7 +506,7 @@ function renderLocations(items) {
   }
   for (const loc of items) {
     const li = document.createElement("li");
-    li.textContent = `${loc.user_name} · ${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)} · ${loc.precision_level}`;
+    li.textContent = `${loc.user_name} · ${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)} · ${loc.precision_level} · updated ${freshnessText(loc.updated_at)}`;
     ul.appendChild(li);
   }
 }
@@ -1211,6 +1217,7 @@ window.addEventListener("unhandledrejection", (event) => {
   const reason = event.reason;
   showCrash(reason instanceof Error ? reason : new Error(String(reason)));
 });
+window.addEventListener("resize", () => mapApi?.resize?.());
 
 // ---------------------------------------------------------------------------
 // MapLibre/PMTiles map adapter (same-origin assets; app/map.js owns the map)
@@ -1220,6 +1227,9 @@ let mapPromise = null;
 let nav = null;
 let adminConsole = null;
 let sharing = null;
+let measureMode = false;
+let measurePoints = [];
+let mapMenuPoint = null;
 
 function canAdmin() {
   return ["admin", "administrator"].includes(state.user?.role);
@@ -1287,6 +1297,82 @@ function pinNoteAt(point) {
   $("note-message")?.focus();
 }
 
+function hideMapMenu() {
+  $("map-menu")?.classList.add("hidden");
+}
+
+/** Right-click / long-press actions for the point under the pointer. */
+function showMapMenu(point) {
+  const lat = Number(point?.lat);
+  const lon = Number(point?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+  mapMenuPoint = { lat, lon };
+  const menu = $("map-menu");
+  if (!menu) return;
+  let x = Number(point.x);
+  let y = Number(point.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    const live = mapApi?.getMap?.();
+    const canvas = live?.getCanvas?.();
+    if (live && canvas) {
+      const projected = live.project([lon, lat]);
+      const rect = canvas.getBoundingClientRect();
+      x = rect.left + projected.x;
+      y = rect.top + projected.y;
+    } else {
+      x = window.innerWidth / 2;
+      y = window.innerHeight / 2;
+    }
+  }
+  const narrow = window.matchMedia?.("(max-width: 980px)").matches;
+  menu.style.left = narrow ? "" : `${Math.max(8, Math.min(x, window.innerWidth - 236))}px`;
+  menu.style.top = narrow ? "" : `${Math.max(64, Math.min(y, window.innerHeight - 230))}px`;
+  menu.classList.remove("hidden");
+  menu.querySelector("button")?.focus();
+}
+
+function updateMeasureHud() {
+  const text = $("measure-text");
+  if (!text) return;
+  const total = lineLengthMeters(measurePoints);
+  const count = measurePoints.length;
+  text.textContent = count
+    ? `${formatDistance(total)} · ${count} ${count === 1 ? "point" : "points"}`
+    : "Click the map to measure";
+}
+
+function startMeasure(point) {
+  const lat = Number(point?.lat);
+  const lon = Number(point?.lon);
+  measureMode = true;
+  measurePoints =
+    Number.isFinite(lat) && Number.isFinite(lon) ? [[lat, lon]] : [];
+  mapApi?.setMeasurePoints(measurePoints);
+  updateMeasureHud();
+  show($("measure-hud"), true);
+  hideMapMenu();
+  setStatus("Measuring. Click the map to add points.");
+}
+
+function addMeasurePoint(point) {
+  const lat = Number(point?.lat);
+  const lon = Number(point?.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+  measurePoints.push([lat, lon]);
+  mapApi?.setMeasurePoints(measurePoints);
+  updateMeasureHud();
+}
+
+function stopMeasure(clear = true) {
+  measureMode = false;
+  if (clear) {
+    measurePoints = [];
+    mapApi?.clearMeasure();
+  }
+  updateMeasureHud();
+  show($("measure-hud"), false);
+}
+
 async function createAppMap() {
   const pmtilesUrl = await installedPmtilesUrl();
   const theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
@@ -1295,8 +1381,12 @@ async function createAppMap() {
     center: [state.map.lat, state.map.lon],
     zoom: state.map.zoom,
     theme,
-    onClick: (point) => nav?.onMapClick(point),
-    onLongPress: (point) => pinNoteAt(point),
+    onClick: (point) => {
+      if (measureMode) addMeasurePoint(point);
+      else nav?.onMapClick(point);
+    },
+    onLongPress: (point) => showMapMenu(point),
+    onContextMenu: (point) => showMapMenu(point),
     onLoad: (api) => {
       api.setNoteMarkers(state.notes, (note) => showNote(note));
       if (state.trailVisible) api.drawTrail(state.history);
@@ -1604,6 +1694,55 @@ $("locate-button").addEventListener("click", async () => {
   }
 });
 
+$("map-menu")?.addEventListener("click", (event) => {
+  const action = event.target.closest("[data-map-action]")?.dataset.mapAction;
+  if (!action || !mapMenuPoint) return;
+  const point = mapMenuPoint;
+  hideMapMenu();
+  if (action === "from") {
+    nav?.routeFrom(point);
+  } else if (action === "to") {
+    nav?.openRouteFor({
+      latitude: point.lat,
+      longitude: point.lon,
+      short_name: "Dropped pin",
+      display_name: "Dropped pin",
+    });
+  } else if (action === "measure") {
+    startMeasure(point);
+  } else if (action === "note") {
+    pinNoteAt(point);
+  } else if (action === "copy") {
+    const text = `${point.lat.toFixed(5)}, ${point.lon.toFixed(5)}`;
+    const write = navigator.clipboard?.writeText(text);
+    if (write) {
+      write.then(
+        () => setStatus("Coordinates copied."),
+        () => setStatus("Could not copy coordinates.", true),
+      );
+    } else {
+      setStatus("Clipboard is unavailable.", true);
+    }
+  }
+});
+
+$("measure-undo")?.addEventListener("click", () => {
+  measurePoints.pop();
+  mapApi?.setMeasurePoints(measurePoints);
+  updateMeasureHud();
+  if (!measurePoints.length) stopMeasure(true);
+});
+$("measure-clear")?.addEventListener("click", () => stopMeasure(true));
+
+// A pointer anywhere outside the menu dismisses it; the map's own contextmenu
+// then opens a fresh one at the new point.
+document.addEventListener("pointerdown", (event) => {
+  const menu = $("map-menu");
+  if (menu && !menu.classList.contains("hidden") && !menu.contains(event.target)) {
+    hideMapMenu();
+  }
+});
+
 const drawer = $("social-drawer");
 const drawerToggle = $("drawer-toggle");
 const drawerHead = drawer.querySelector(".drawer-head");
@@ -1663,6 +1802,9 @@ function setDrawer(open, animate = true) {
   drawer.setAttribute("aria-hidden", String(!open));
   drawerToggle.setAttribute("aria-expanded", String(open));
   if (!open) setActiveTab("map");
+  // The drawer changes the map's width on desktop; MapLibre keeps its old
+  // canvas size until told to resize.
+  requestAnimationFrame(() => mapApi?.resize?.());
 }
 setDrawer(false);
 drawerToggle.addEventListener("click", () => {
@@ -1672,6 +1814,16 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   // The admin overlay owns Escape while it is open.
   if (!$("admin-panel").classList.contains("hidden")) return;
+  if (!$("map-menu").classList.contains("hidden")) {
+    hideMapMenu();
+    event.preventDefault();
+    return;
+  }
+  if (measureMode) {
+    stopMeasure(true);
+    event.preventDefault();
+    return;
+  }
   if (drawerToggle.getAttribute("aria-expanded") === "true") {
     setDrawer(false);
     drawerToggle.focus();

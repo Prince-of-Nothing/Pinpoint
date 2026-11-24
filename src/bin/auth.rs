@@ -1,7 +1,8 @@
 //! Auth service binary (pure Rust).
 //! Run: `cargo run --bin pinpoint-auth` (BIND_ADDR default 0.0.0.0:8001).
 use pinpoint_desktop::server::{
-    auth_router, converge, health, session_auth, status_routes, AppState, ServiceKind,
+    auth_router, converge, health, security_headers, session_auth, status_routes, AppState,
+    ServiceKind,
 };
 use std::time::Duration;
 
@@ -30,7 +31,8 @@ async fn main() -> anyhow::Result<()> {
         .layer(axum::middleware::from_fn_with_state(
             session_state,
             session_auth,
-        ));
+        ))
+        .layer(axum::middleware::from_fn(security_headers));
     axum::serve(listener, app).await?;
     Ok(())
 }

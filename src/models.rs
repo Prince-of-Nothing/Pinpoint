@@ -369,6 +369,8 @@ pub fn bearing_deg(lat1: f64, lon1: f64, lat2: f64, lon2: f64) -> f64 {
 
 /// Human-readable distance for the given unit preference.
 pub fn format_distance(metres: f64, metric: bool) -> String {
+    // A folded sum can produce -0.0 on some paths; distances are never negative.
+    let metres = metres.max(0.0);
     if metric {
         if metres < 1000.0 {
             format!("{metres:.0} m")
@@ -434,6 +436,16 @@ pub enum AppState {
     Admin,
 }
 
+/// One-shot action chosen from the native map's context menu.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MapMenuAction {
+    DirectionsFrom(f64, f64),
+    DirectionsTo(f64, f64),
+    MeasureFrom(f64, f64),
+    AddNote(f64, f64),
+    CopyCoordinates(f64, f64),
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct AppData {
     pub user: Option<User>,
@@ -450,6 +462,11 @@ pub struct AppData {
     pub map_click: Option<(f64, f64)>,
     /// One-shot bookmark tap (name, latitude, longitude) consumed by the UI.
     pub map_bookmark_click: Option<(String, f64, f64)>,
+    /// One-shot choice from the native map's right-click menu.
+    pub map_menu_action: Option<MapMenuAction>,
+    /// Distance-measure mode and its tapped points (lat, lon).
+    pub measure_mode: bool,
+    pub measure_points: Vec<(f64, f64)>,
     /// Nearby POI results from the last Overpass query (Places screen).
     pub poi_results: Vec<crate::osm::Poi>,
     /// Last calculated route (summary/steps/GPX export).
@@ -555,6 +572,49 @@ pub fn format_message_time(iso: &str) -> String {
     }
 }
 
+/// Total great-circle length of a `(lat, lon)` polyline in metres.
+pub fn path_length_m(points: &[(f64, f64)]) -> f64 {
+    points
+        .windows(2)
+        .map(|pair| haversine_m(pair[0].0, pair[0].1, pair[1].0, pair[1].1))
+        .sum()
+}
+
+/// One-line measure readout shared by the native map HUD.
+pub fn measure_label(points: &[(f64, f64)]) -> String {
+    let count = points.len();
+    format!(
+        "Measure: {} · {count} {}",
+        format_distance(path_length_m(points), true),
+        if count == 1 { "point" } else { "points" }
+    )
+}
+
+/// Age of a location timestamp: `just now`, `5m ago`, `2h ago`, `3d ago`.
+/// Unparsable input returns `unknown`; a future timestamp (clock skew) clamps
+/// to `just now` instead of showing a negative age.
+pub fn format_age(iso: &str) -> String {
+    let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(iso) else {
+        return "unknown".to_string();
+    };
+    let seconds = (chrono::Utc::now() - parsed.with_timezone(&chrono::Utc))
+        .num_seconds()
+        .max(0);
+    let minutes = (seconds + 30) / 60;
+    if minutes < 1 {
+        "just now".to_string()
+    } else if minutes < 60 {
+        format!("{minutes}m ago")
+    } else {
+        let hours = (minutes + 30) / 60;
+        if hours < 24 {
+            format!("{hours}h ago")
+        } else {
+            format!("{}d ago", (hours + 12) / 24)
+        }
+    }
+}
+
 /// Upper bound on previous peer bundles kept per friend. Old bundles are
 /// public keys only; the cap stops a peer that rotates constantly from growing
 /// local storage without bound.
@@ -615,6 +675,38 @@ mod geo_tests {
         let s: LocationShare = serde_json::from_value(v).expect("legacy share JSON");
         assert!(s.expires_at.is_none());
         assert!(s.label.is_none());
+    }
+
+    #[test]
+    fn age_text_buckets_and_clamps() {
+        use super::format_age;
+        let ago =
+            |seconds: i64| (chrono::Utc::now() - chrono::Duration::seconds(seconds)).to_rfc3339();
+        assert_eq!(format_age(&ago(20)), "just now");
+        assert_eq!(format_age(&ago(5 * 60)), "5m ago");
+        assert_eq!(format_age(&ago(3 * 3600)), "3h ago");
+        assert_eq!(format_age(&ago(2 * 86400)), "2d ago");
+        assert_eq!(format_age("not-a-date"), "unknown");
+        assert_eq!(format_age(&ago(-60)), "just now");
+    }
+
+    #[test]
+    fn path_length_sums_segments() {
+        use super::{measure_label, path_length_m};
+        assert_eq!(path_length_m(&[]), 0.0);
+        assert_eq!(path_length_m(&[(47.0, 28.0)]), 0.0);
+        let one = path_length_m(&[(47.0, 28.0), (47.0, 28.001)]);
+        assert!(one > 70.0 && one < 80.0, "one segment was {one} m");
+        let two = path_length_m(&[(47.0, 28.0), (47.0, 28.001), (47.0, 28.002)]);
+        assert!((two - one * 2.0).abs() < 1e-6);
+        assert_eq!(measure_label(&[(47.0, 28.0)]), "Measure: 0 m · 1 point");
+        assert_eq!(
+            measure_label(&[(47.0, 28.0), (47.0, 28.001)]),
+            format!(
+                "Measure: {} · 2 points",
+                crate::models::format_distance(one, true)
+            )
+        );
     }
 
     #[test]

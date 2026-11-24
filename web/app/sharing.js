@@ -53,6 +53,19 @@ export function expiryText(share, now = Date.now()) {
   return `${expiry.getTime() <= at ? "expired" : "expires"} ${expiry.toLocaleString()}`;
 }
 
+/** Age of a friend's last published location, e.g. "5m ago" or "2d ago". */
+export function freshnessText(iso, now = Date.now()) {
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) return "unknown";
+  const current = now instanceof Date ? now.getTime() : Number(now);
+  const minutes = Math.max(0, Math.round((current - at) / 60_000));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
 /** True when the requested form grants more than the stored share. */
 export function shareWidens(current, form, now = Date.now()) {
   if (!current) return false;

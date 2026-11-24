@@ -1,9 +1,11 @@
 //! Map screen
+use super::route::RoutePoint;
 use super::theme;
 use super::{PendingAction, PinpointAppUI};
+use crate::app::CurrentScreen;
 use crate::i18n::{self, key};
 use crate::map;
-use crate::models::FriendLocation;
+use crate::models::{FriendLocation, MapMenuAction};
 use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
@@ -116,6 +118,23 @@ impl PinpointAppUI {
             let binding = self.app.data();
             let mut data = binding.lock().unwrap();
             map::render_map_with(ui, &mut data, map_height, Some(&backend_url), online, true);
+            if data.measure_mode {
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(crate::models::measure_label(&data.measure_points))
+                            .size(12.0)
+                            .strong(),
+                    );
+                    if ui.button("Undo").clicked() {
+                        data.measure_points.pop();
+                    }
+                    if ui.button("Clear").clicked() {
+                        data.measure_mode = false;
+                        data.measure_points.clear();
+                    }
+                });
+            }
         });
 
         let binding = self.app.data();
@@ -138,6 +157,66 @@ impl PinpointAppUI {
             self.spawn_action(PendingAction::Locate, ctx);
         }
         self.handle_map_click(ctx);
+        self.handle_map_menu(ctx);
+    }
+
+    /// Consume one right-click action from the native map menu.
+    fn handle_map_menu(&mut self, ctx: &egui::Context) {
+        let action = { self.app.data().lock().unwrap().map_menu_action.take() };
+        let Some(action) = action else {
+            return;
+        };
+        match action {
+            MapMenuAction::DirectionsFrom(lat, lon) => {
+                self.route_plan.origin = Some(RoutePoint::new(lat, lon, "Dropped pin"));
+                self.route_plan.open = true;
+                self.route_plan.error = None;
+                self.app
+                    .set_notice(Some("Origin set. Choose a destination.".into()));
+            }
+            MapMenuAction::DirectionsTo(lat, lon) => {
+                if self.route_plan.origin.is_none() {
+                    let origin = {
+                        let binding = self.app.data();
+                        let data = binding.lock().unwrap();
+                        data.my_location
+                            .as_ref()
+                            .map(|loc| RoutePoint::new(loc.latitude, loc.longitude, "My location"))
+                    }
+                    .unwrap_or_else(|| {
+                        RoutePoint::new(
+                            map::DEFAULT_CENTER_LAT,
+                            map::DEFAULT_CENTER_LON,
+                            "Map centre",
+                        )
+                    });
+                    self.route_plan.origin = Some(origin);
+                }
+                self.route_plan.destination = Some(RoutePoint::new(lat, lon, "Dropped pin"));
+                self.route_plan.open = true;
+                self.route_plan.error = None;
+            }
+            MapMenuAction::MeasureFrom(lat, lon) => {
+                let data = self.app.data();
+                let mut data = data.lock().unwrap();
+                data.measure_mode = true;
+                data.measure_points.clear();
+                data.measure_points.push((lat, lon));
+                drop(data);
+                self.app
+                    .set_notice(Some("Measuring. Click the map to add points.".into()));
+            }
+            MapMenuAction::AddNote(lat, lon) => {
+                self.center_map_at(lat, lon);
+                self.app.set_screen(CurrentScreen::Today);
+                self.app
+                    .set_notice(Some("Add a private note for this point.".into()));
+            }
+            MapMenuAction::CopyCoordinates(lat, lon) => {
+                ctx.copy_text(format!("{lat:.5}, {lon:.5}"));
+                self.app.set_notice(Some("Coordinates copied.".into()));
+            }
+        }
     }
 
     fn draw_map_details(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -388,7 +467,15 @@ impl PinpointAppUI {
                 for loc in &locations {
                     ui.horizontal_wrapped(|ui| {
                         ui.label(RichText::new(&loc.user_name).strong());
-                        theme::caption(ui, format!("{:.4}, {:.4}", loc.latitude, loc.longitude));
+                        theme::caption(
+                            ui,
+                            format!(
+                                "{:.4}, {:.4} · updated {}",
+                                loc.latitude,
+                                loc.longitude,
+                                crate::models::format_age(&loc.updated_at)
+                            ),
+                        );
                     });
                     ui.horizontal_wrapped(|ui| {
                         if ui.button(i18n::t(lang, key::NAVIGATE)).clicked() {
@@ -558,6 +645,7 @@ impl PinpointAppUI {
             crate::map::render_map_with(ui, &mut data, height, Some(&backend_url), online, true);
         }
         self.handle_map_click(ctx);
+        self.handle_map_menu(ctx);
 
         let panel = theme::PANEL.gamma_multiply(0.98);
         let panel_solid = theme::PANEL;

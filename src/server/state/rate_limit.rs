@@ -136,28 +136,30 @@ impl AuthRateLimiter {
         }
     }
 
-    /// Record one attempt and report whether it fits `limit`. The bucket is
-    /// the request path, so login and register do not consume each other.
-    pub fn allow(&self, bucket: &str, client: &str, limit: AuthLimit) -> bool {
+    /// Record one attempt. Returns the seconds until the window resets when
+    /// the attempt is over `limit`, or `None` when it fits. The bucket is the
+    /// request path, so login and register do not consume each other.
+    pub fn allow(&self, bucket: &str, client: &str, limit: AuthLimit) -> Option<u64> {
         let key = self.digest(bucket, client);
         let now = Instant::now();
         let mut windows = self.windows.lock().unwrap();
         let stale = MAX_WINDOW_SECS.saturating_mul(2);
         windows.retain(|_, (start, _)| now.duration_since(*start).as_secs() < stale);
         let entry = windows.entry(key).or_insert((now, 0));
-        if now.duration_since(entry.0).as_secs() >= limit.window_secs {
+        let elapsed = now.duration_since(entry.0).as_secs();
+        if elapsed >= limit.window_secs {
             *entry = (now, 0);
         }
         if entry.1 >= limit.max {
-            return false;
+            return Some(limit.window_secs.saturating_sub(elapsed).max(1));
         }
         entry.1 += 1;
-        true
+        None
     }
 
     /// Cap authenticated unsafe requests per account. The HMAC key is
     /// unnecessary for an opaque account id, but it keeps one keying path.
-    pub fn allow_write(&self, user_id: i64) -> bool {
+    pub fn allow_write(&self, user_id: i64) -> Option<u64> {
         self.allow("write", &format!("user:{user_id}"), WRITE_LIMIT)
     }
 
@@ -186,21 +188,24 @@ mod tests {
             max: 2,
             window_secs: 60,
         };
-        assert!(limiter.allow("/login", "203.0.113.7", limit));
-        assert!(limiter.allow("/login", "203.0.113.7", limit));
-        assert!(!limiter.allow("/login", "203.0.113.7", limit));
-        assert!(limiter.allow("/register", "203.0.113.7", limit));
-        assert!(limiter.allow("/login", "203.0.113.8", limit));
+        assert!(limiter.allow("/login", "203.0.113.7", limit).is_none());
+        assert!(limiter.allow("/login", "203.0.113.7", limit).is_none());
+        let wait = limiter
+            .allow("/login", "203.0.113.7", limit)
+            .expect("third attempt is throttled");
+        assert!((1..=60).contains(&wait), "retry hint was {wait}");
+        assert!(limiter.allow("/register", "203.0.113.7", limit).is_none());
+        assert!(limiter.allow("/login", "203.0.113.8", limit).is_none());
     }
 
     #[test]
     fn write_cap_is_per_user() {
         let limiter = AuthRateLimiter::new();
         for _ in 0..120 {
-            assert!(limiter.allow_write(7));
+            assert!(limiter.allow_write(7).is_none());
         }
-        assert!(!limiter.allow_write(7));
-        assert!(limiter.allow_write(8));
+        assert!(limiter.allow_write(7).is_some());
+        assert!(limiter.allow_write(8).is_none());
     }
 
     #[test]
@@ -236,7 +241,7 @@ mod tests {
             max: 1,
             window_secs: 60,
         };
-        assert!(limiter.allow("/login", "203.0.113.7", limit));
+        assert!(limiter.allow("/login", "203.0.113.7", limit).is_none());
         let windows = limiter.windows.lock().unwrap();
         assert!(windows.keys().all(|key| !key.contains("203.0.113.7")));
     }

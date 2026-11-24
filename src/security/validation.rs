@@ -283,6 +283,8 @@ mod tests {
         assert!(validate_password("password123").is_valid());
         assert!(validate_password("Str0ng!Pass").is_valid());
         assert!(validate_password("éééééééé").is_valid());
+        // Eight characters, thirty-two UTF-8 bytes.
+        assert!(validate_password("😀😀😀😀😀😀😀😀").is_valid());
     }
 
     #[test]
@@ -290,6 +292,8 @@ mod tests {
         assert!(!validate_password("").is_valid());
         assert!(!validate_password("short").is_valid());
         assert!(!validate_password("ééééééé").is_valid());
+        // Four characters but sixteen UTF-8 bytes; must still be too short.
+        assert!(!validate_password("😀😀😀😀").is_valid());
         assert!(!validate_password(&"a".repeat(129)).is_valid());
     }
 

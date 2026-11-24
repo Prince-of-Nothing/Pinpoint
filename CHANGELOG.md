@@ -53,6 +53,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Native: the change-password form counts characters instead of UTF-8 bytes, and the register form applies the server's password rule before sending, so a 4–7 emoji password is rejected in the form; a blank email now explains itself instead of doing nothing.
 - [FIX] Web: the register, change-password and admin temporary-password forms count characters like the server instead of UTF-16 units, so a 4–7 emoji password is rejected before the request instead of by the server.
 - [FIX] Web: the 5-second message poll now skips accounts with no friendships, so an idle friendless tab no longer sends two requests every 5 seconds; pending requests keep polling because the other side can accept.
 - [FIX] Native sign-out: a session the server has already expired now signs out locally instead of reporting a failed logout, and a refresh that meets a 401 returns to the sign-in screen instead of leaving every action erroring.

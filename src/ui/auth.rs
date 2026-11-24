@@ -230,19 +230,27 @@ impl PinpointAppUI {
                 ui.add_space(10.0);
 
                 ui.horizontal_wrapped(|ui| {
-                    if theme::primary_button(ui, "Create Account").clicked()
-                        && !self.register_email.is_empty()
-                        && !self.register_password.is_empty()
-                    {
-                        let password = std::mem::take(&mut self.register_password);
-                        self.spawn_action(
-                            PendingAction::Register {
-                                email: self.register_email.clone(),
-                                password,
-                                full_name: self.register_full_name.clone(),
-                            },
-                            ctx,
-                        );
+                    if theme::primary_button(ui, "Create Account").clicked() {
+                        // Validate with the server's own rule before sending;
+                        // the server counts characters, not UTF-8 bytes.
+                        let password_check =
+                            crate::security::validation::validate_password(&self.register_password);
+                        if self.register_email.trim().is_empty() {
+                            self.app
+                                .set_error(Some("Enter your email address.".to_string()));
+                        } else if !password_check.is_valid() {
+                            self.app.set_error(Some(password_check.errors.join("; ")));
+                        } else {
+                            let password = std::mem::take(&mut self.register_password);
+                            self.spawn_action(
+                                PendingAction::Register {
+                                    email: self.register_email.clone(),
+                                    password,
+                                    full_name: self.register_full_name.clone(),
+                                },
+                                ctx,
+                            );
+                        }
                     }
                     ui.add_space(10.0);
                     if ui.button("Sign in instead").clicked() {

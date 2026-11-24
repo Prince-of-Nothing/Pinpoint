@@ -513,12 +513,12 @@ cargo-audit (CI rust job)                     → 9 accepted advisories, no open
 the ZAP baseline weekly (and when the workflow changes). The latest report is
 committed as `docs/evidence/zap-baseline.{html,json}`.
 
-Current result: 0 failures; one medium-risk warning (`style-src
-'unsafe-inline'` in the CSP, required by the MapLibre map surface and its
-dynamic panels) and four informational findings (suspicious comments,
-cacheability). Tightening the style policy needs a visual regression pass and a
-nonce/hash-based policy, so it is recorded as a remaining risk rather than
-changed blindly.
+Current result: 0 failures, 0 medium warnings and four informational findings
+(suspicious comments, cacheability). The earlier `style-src 'unsafe-inline'`
+warning was removed by tightening the policy to `style-src 'self'`: the app has
+no inline style markup and MapLibre positions elements through the CSSOM. The
+strict policy was verified in the browser (no `securitypolicyviolation` events)
+before merging.
 
 Security and pattern test coverage:
 

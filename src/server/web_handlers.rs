@@ -64,9 +64,11 @@ const SW_JS: &str = include_str!("../../web/sw.js");
 // `font-src` is explicit even though the UI uses system fonts, so a future
 // `@font-face` cannot silently pull a remote file. MapLibre's module worker is
 // same-origin, and PMTiles range requests stay under `connect-src 'self'`.
-// MapLibre positions its canvas and controls with inline style attributes, so
-// style-src must allow inline CSS. Scripts stay strict: only same-origin
-// modules and the SQLite WASM evaluator are allowed.
+// MapLibre positions its canvas and controls through the CSSOM
+// (`element.style.*`), which CSP does not treat as inline CSS; the app's own
+// styles live in same-origin stylesheets. No markup uses `style="..."`, so
+// `style-src 'self'` is enough. Scripts stay strict: only same-origin modules
+// and the SQLite WASM evaluator are allowed.
 //
 // The one remote host is the opt-in OpenFreeMap basemap (style, tiles, glyphs
 // and sprites all live on `tiles.openfreemap.org`); it is off by default, so
@@ -75,7 +77,7 @@ const SW_JS: &str = include_str!("../../web/sw.js");
 // (`docs/offline/android-webview-online.md` §3).
 const CSP: &str = "default-src 'self'; img-src 'self' data: https://tiles.openfreemap.org; \
 script-src 'self' 'wasm-unsafe-eval'; \
-worker-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; \
+worker-src 'self'; style-src 'self'; font-src 'self'; \
 connect-src 'self' https://tiles.openfreemap.org; base-uri 'none'; \
 frame-ancestors 'none'; form-action 'self'; object-src 'none'; \
 manifest-src 'self'";
@@ -530,6 +532,10 @@ mod tests {
         assert!(!CSP.contains("blob:"), "blob source in {CSP}");
         assert_eq!(directive("worker-src"), "worker-src 'self'");
         assert_eq!(directive("font-src"), "font-src 'self'");
+        // Styles are same-origin files or CSSOM assignments, never inline
+        // markup; allowing 'unsafe-inline' would weaken the XSS barrier.
+        assert_eq!(directive("style-src"), "style-src 'self'");
+        assert!(!CSP.contains("style-src 'self' 'unsafe-inline'"));
         // Nothing that executes code or renders frames was widened.
         assert_eq!(directive("default-src"), "default-src 'self'");
         assert_eq!(

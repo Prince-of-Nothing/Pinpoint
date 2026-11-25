@@ -12,10 +12,14 @@ use super::state::AppState;
 use super::{error_envelope, CurrentUser, IntoResponse};
 
 /// One valid Argon2id hash used only to equalize login timing for unknown or
-/// inactive accounts. It is never compared for access.
+/// inactive accounts. It is never compared for access, so it hashes a random
+/// throwaway secret: only its cost has to match a real hash.
 fn dummy_password_hash() -> &'static str {
     static HASH: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    HASH.get_or_init(|| crate::security::password::hash_password("pinpoint-login-timing", 0))
+    HASH.get_or_init(|| {
+        let throwaway = format!("{:032x}", rand::random::<u128>());
+        crate::security::password::hash_password(&throwaway, 0)
+    })
 }
 
 fn user_json(u: &crate::models::User) -> Value {
@@ -1218,11 +1222,14 @@ mod registration_tests {
     #[test]
     fn dummy_hash_is_a_valid_argon2id_hash() {
         let hash = super::dummy_password_hash();
+        // A real Argon2id hash, so verifying against it costs what a real
+        // account costs; computed once per process.
         assert!(hash.starts_with("$argon2id$"));
-        assert!(crate::security::password::verify_password(
-            "pinpoint-login-timing",
-            hash
-        ));
-        assert!(!crate::security::password::verify_password("wrong", hash));
+        assert_eq!(hash, super::dummy_password_hash());
+        // Its secret is random: no guessable password, including the old
+        // fixed one, unlocks it.
+        for guess in ["pinpoint-login-timing", "wrong", ""] {
+            assert!(!crate::security::password::verify_password(guess, hash));
+        }
     }
 }

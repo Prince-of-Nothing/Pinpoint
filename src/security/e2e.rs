@@ -20,7 +20,7 @@ use aead::Aead;
 use aes_gcm::{Aes256Gcm, KeyInit};
 use base64::Engine;
 use hybrid_array::Array;
-use rand::RngCore;
+use rand::Rng;
 use typenum::{U12, U32};
 
 /// Derive a location encryption key from a user's password.
@@ -28,8 +28,7 @@ use typenum::{U12, U32};
 /// Uses PBKDF2-HMAC-SHA256 with a random 16-byte salt and 100k iterations.
 /// Format: `e2e$<salt_b64>$<iters>$<key_b64>`
 pub fn derive_location_key(password: &str) -> String {
-    let mut salt = [0u8; 16];
-    rand::thread_rng().fill_bytes(&mut salt);
+    let salt: [u8; 16] = rand::thread_rng().gen();
     let key = pbkdf2(password.as_bytes(), &salt, 100_000);
     let b64 = base64::engine::general_purpose::STANDARD;
     format!(
@@ -51,17 +50,11 @@ pub fn encrypt_location(location_key: &str, lat: f64, lon: f64, accuracy: f64) -
     let key_bytes = base64::engine::general_purpose::STANDARD
         .decode(key_b64)
         .ok()?;
-    if key_bytes.len() != 32 {
-        return None;
-    }
-
-    let mut key_arr = [0u8; 32];
-    key_arr.copy_from_slice(&key_bytes);
+    let key_arr = <[u8; 32]>::try_from(key_bytes.as_slice()).ok()?;
     let key_ga: Array<u8, U32> = key_arr.into();
     let cipher = Aes256Gcm::new(&key_ga);
 
-    let mut nonce_bytes = [0u8; 12];
-    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+    let nonce_bytes: [u8; 12] = rand::thread_rng().gen();
     let nonce_ga: Array<u8, U12> = nonce_bytes.into();
 
     let payload = serde_json::json!({"lat": lat, "lon": lon, "acc": accuracy});
@@ -98,17 +91,11 @@ pub fn decrypt_location(location_key: &str, encrypted: &str) -> Option<(f64, f64
     }
     let key_b64 = key_parts[3];
     let key_bytes = b64.decode(key_b64).ok()?;
-    if key_bytes.len() != 32 {
-        return None;
-    }
-
-    let mut key_arr = [0u8; 32];
-    key_arr.copy_from_slice(&key_bytes);
+    let key_arr = <[u8; 32]>::try_from(key_bytes.as_slice()).ok()?;
     let key_ga: Array<u8, U32> = key_arr.into();
     let cipher = Aes256Gcm::new(&key_ga);
 
-    let mut nonce_arr = [0u8; 12];
-    nonce_arr.copy_from_slice(&nonce_bytes);
+    let nonce_arr = <[u8; 12]>::try_from(nonce_bytes.as_slice()).ok()?;
     let nonce_ga: Array<u8, U12> = nonce_arr.into();
 
     let plaintext = cipher.decrypt(&nonce_ga, ciphertext.as_slice()).ok()?;

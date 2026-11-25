@@ -616,6 +616,23 @@ impl PinpointAppUI {
     }
 }
 
+/// The map bottom sheet Escape should close, if any.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EscapableSheet {
+    Publish,
+    Place,
+}
+
+fn sheet_escape_target(publish_open: bool, place_open: bool) -> Option<EscapableSheet> {
+    if publish_open {
+        Some(EscapableSheet::Publish)
+    } else if place_open {
+        Some(EscapableSheet::Place)
+    } else {
+        None
+    }
+}
+
 impl PinpointAppUI {
     /// Map-first touch layout that mirrors the web shell: full-bleed map,
     /// floating search/zoom/locate controls, results dropdown and a bottom
@@ -626,6 +643,21 @@ impl PinpointAppUI {
         let height = (ui.available_height() - 26.0).max(320.0);
         let backend_url = self.app.backend_url();
         let online = !self.app.is_offline_mode();
+
+        let blocked = self.crash_dialog.is_some()
+            || self.update_dialog_open
+            || self.share_sheet.is_some()
+            || self.route_plan.open;
+        if super::escape_dismisses(ctx.input(|i| i.key_pressed(egui::Key::Escape)), blocked) {
+            match sheet_escape_target(
+                self.mobile_publish_open,
+                self.mobile_selected_place.is_some(),
+            ) {
+                Some(EscapableSheet::Publish) => self.mobile_publish_open = false,
+                Some(EscapableSheet::Place) => self.mobile_selected_place = None,
+                None => {}
+            }
+        }
 
         // A click in the MapLibre WebView comes back through JNI. Follow it on
         // the egui map and keep the point for the share control once the
@@ -1183,4 +1215,26 @@ pub(crate) fn encode_component(value: &str) -> String {
             }
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{sheet_escape_target, EscapableSheet};
+
+    #[test]
+    fn escape_prefers_publish_then_place() {
+        assert_eq!(
+            sheet_escape_target(true, false),
+            Some(EscapableSheet::Publish)
+        );
+        assert_eq!(
+            sheet_escape_target(false, true),
+            Some(EscapableSheet::Place)
+        );
+        assert_eq!(
+            sheet_escape_target(true, true),
+            Some(EscapableSheet::Publish)
+        );
+        assert_eq!(sheet_escape_target(false, false), None);
+    }
 }

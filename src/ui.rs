@@ -2158,7 +2158,9 @@ impl PinpointAppUI {
         }
         if publish_requested {
             self.app.set_screen(CurrentScreen::Map);
-            self.mobile_publish_open = true;
+            // The sheet flag only feeds the compact map; desktop already shows
+            // the publish card in the map details column.
+            self.mobile_publish_open = compact;
             self.mobile_nav_open = false;
         }
         if refresh_requested {

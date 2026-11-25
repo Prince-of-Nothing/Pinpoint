@@ -70,9 +70,10 @@ struct DrawerChanges {
     close: bool,
 }
 
-/// Escape closes the drawer unless a dialog or sheet owns the keyboard.
-fn escape_closes_drawer(escape: bool, modal_open: bool) -> bool {
-    escape && !modal_open
+/// Escape dismisses a surface unless a dialog or sheet above it owns the
+/// keyboard.
+fn escape_dismisses(escape: bool, blocked: bool) -> bool {
+    escape && !blocked
 }
 
 fn drawer_changes(
@@ -2025,7 +2026,7 @@ impl PinpointAppUI {
             || self.mobile_publish_open
             || self.mobile_selected_place.is_some();
         let escape = ctx.input(|i| i.key_pressed(egui::Key::Escape));
-        if escape_closes_drawer(escape, modal_open) {
+        if escape_dismisses(escape, modal_open) {
             self.mobile_nav_open = false;
             return;
         }
@@ -2556,7 +2557,7 @@ impl eframe::App for PinpointAppUI {
 #[cfg(test)]
 mod tests {
     use super::{
-        drawer_changes, drawer_overlays_map, egui, escape_closes_drawer, is_wide_width,
+        drawer_changes, drawer_overlays_map, egui, escape_dismisses, is_wide_width,
         overlay_click_dismisses, CurrentScreen, DrawerChanges, Lang, DRAWER_OVERLAY_MAX_WIDTH,
         WIDE_LAYOUT_MIN_WIDTH,
     };
@@ -2609,10 +2610,10 @@ mod tests {
     }
 
     #[test]
-    fn escape_closes_the_drawer_only_without_a_dialog() {
-        assert!(escape_closes_drawer(true, false));
-        assert!(!escape_closes_drawer(true, true));
-        assert!(!escape_closes_drawer(false, false));
+    fn escape_dismisses_only_without_a_blocking_modal() {
+        assert!(escape_dismisses(true, false));
+        assert!(!escape_dismisses(true, true));
+        assert!(!escape_dismisses(false, false));
     }
 
     #[test]

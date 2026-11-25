@@ -164,6 +164,8 @@ jobs:
         run: node web/app/test/live-search-shortcut.cjs
       - name: Web drawer live check
         run: node web/app/test/live-web-drawer.cjs
+      - name: Route sheet live check
+        run: node web/app/test/live-route-escape.cjs
       - name: Stop server
         if: always()
         run: kill "$(cat "$RUNNER_TEMP/pinpoint-server.pid")" 2>/dev/null || true

@@ -56,6 +56,11 @@ struct DrawerChanges {
     close: bool,
 }
 
+/// Escape closes the drawer unless a dialog or sheet owns the keyboard.
+fn escape_closes_drawer(escape: bool, modal_open: bool) -> bool {
+    escape && !modal_open
+}
+
 fn drawer_changes(
     chosen: Option<CurrentScreen>,
     chosen_lang: Option<Lang>,
@@ -1999,6 +2004,17 @@ impl PinpointAppUI {
     /// The "More" drawer: a bottom sheet on phones/narrow windows and a right
     /// side panel on wide desktop windows.
     fn draw_nav_drawer(&mut self, ctx: &egui::Context, compact: bool) {
+        let modal_open = self.crash_dialog.is_some()
+            || self.update_dialog_open
+            || self.share_sheet.is_some()
+            || self.route_plan.open
+            || self.mobile_publish_open
+            || self.mobile_selected_place.is_some();
+        let escape = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        if escape_closes_drawer(escape, modal_open) {
+            self.mobile_nav_open = false;
+            return;
+        }
         let lang = self.lang;
         let current = self.app.current_screen();
         let mut chosen: Option<CurrentScreen> = None;
@@ -2503,7 +2519,8 @@ impl eframe::App for PinpointAppUI {
 #[cfg(test)]
 mod tests {
     use super::{
-        drawer_changes, is_wide_width, CurrentScreen, DrawerChanges, Lang, WIDE_LAYOUT_MIN_WIDTH,
+        drawer_changes, escape_closes_drawer, is_wide_width, CurrentScreen, DrawerChanges, Lang,
+        WIDE_LAYOUT_MIN_WIDTH,
     };
 
     #[test]
@@ -2527,6 +2544,13 @@ mod tests {
             drawer_changes(None, None, true, false, true).publish_open,
             Some(true)
         );
+    }
+
+    #[test]
+    fn escape_closes_the_drawer_only_without_a_dialog() {
+        assert!(escape_closes_drawer(true, false));
+        assert!(!escape_closes_drawer(true, true));
+        assert!(!escape_closes_drawer(false, false));
     }
 
     #[test]

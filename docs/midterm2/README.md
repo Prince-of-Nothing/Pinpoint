@@ -18,7 +18,7 @@ from the live **v2.6.1** system.
 | [`Q-and-A.md`](./Q-and-A.md) | 20 likely questions with verified/reported/not-built answers | Prepare for questions |
 | [`Admin-Demo.md`](./Admin-Demo.md) | Admin promotion and verification runbook | Use only with the deployment DB |
 | [`reviews/`](./reviews) | Deck QA, artifact, live security/a11y and fact-check evidence | Supporting evidence, not submitted prose |
-| [`assets/`](./assets) | Screenshots: login, desktop and mobile map, Today, notes, offline pack and native map/route; the native captures are current to 2.7.0 | Slides and report references |
+| [`assets/`](./assets) | Screenshots: login, desktop and mobile map, Today, notes, offline pack and native map/route; the native captures are current to 3.0.0 | Slides and report references |
 
 ## Quick start
 

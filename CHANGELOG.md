@@ -13,7 +13,7 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] Web: pressing `/` focuses the place search box when not typing and no drawer, sheet or dialog is open; the predicate is a tested module served at `/search-shortcut.js`.
-- [FEATURE] Native map: `+`/`=`/`-` zoom, `0` resets the view, `F` fits pins and `L` locates when no dialog or text field owns the keyboard; the map buttons show the shortcuts on hover.
+- [FEATURE] Native map: `+`/`=`/`-` zoom, `0` resets the view, `F` fits pins, `L` locates and `R` refreshes when no dialog or text field owns the keyboard; the map buttons show the shortcuts on hover.
 - [FEATURE] Web: clicking the visible map closes the open drawer; the outside-click predicate is a tested module served at `/drawer-dismiss.js`.
 - [INFRA] Release: the macOS job now builds, checks and packages `pinpoint-server-macos-$VERSION.zip` (`/health`, `/privacy`, `/`), and the release job validates and attaches it next to the desktop app bundle. v3.0.0 now carries the 5,432,742 B macOS server asset.
 - [FEATURE] Web map layers: the layers panel offers Streets, Satellite (EOX Sentinel-2 cloudless 2016, CC BY 4.0, as a hybrid under roads and labels) and Offline map types, plus 3D buildings and Terrain (hill shading and raised relief from Terrain Tiles on AWS), with the camera tilting for 3D. All are opt-in and stored per device; the CSP admits exactly the two new tile hosts, the attribution shows their credits, and the privacy page now lists every optional map provider (ADR-0026).

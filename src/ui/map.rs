@@ -72,6 +72,7 @@ impl PinpointAppUI {
         let mut fit_pins = false;
         let mut reset = false;
         let mut locate = false;
+        let mut refresh = false;
 
         let modal_open = self.crash_dialog.is_some()
             || self.update_dialog_open
@@ -89,6 +90,7 @@ impl PinpointAppUI {
                     egui::Key::Num0,
                     egui::Key::F,
                     egui::Key::L,
+                    egui::Key::R,
                 ] {
                     if !input.key_pressed(key) {
                         continue;
@@ -99,6 +101,7 @@ impl PinpointAppUI {
                         Some(MapKeyAction::ResetView) => reset = true,
                         Some(MapKeyAction::FitPins) => fit_pins = true,
                         Some(MapKeyAction::Locate) => locate = true,
+                        Some(MapKeyAction::Refresh) => refresh = true,
                         None => {}
                     }
                 }
@@ -193,6 +196,9 @@ impl PinpointAppUI {
         drop(data);
         if locate {
             self.spawn_action(PendingAction::Locate, ctx);
+        }
+        if refresh {
+            self.spawn_action(PendingAction::RefreshAll, ctx);
         }
         self.handle_map_click(ctx);
         self.handle_map_menu(ctx);
@@ -661,6 +667,7 @@ enum MapKeyAction {
     ResetView,
     FitPins,
     Locate,
+    Refresh,
 }
 
 struct MapShortcut {
@@ -670,7 +677,7 @@ struct MapShortcut {
     action_label: &'static str,
 }
 
-const MAP_SHORTCUTS: [MapShortcut; 5] = [
+const MAP_SHORTCUTS: [MapShortcut; 6] = [
     MapShortcut {
         keys: &[egui::Key::Plus, egui::Key::Equals],
         key_label: "+ / =",
@@ -700,6 +707,12 @@ const MAP_SHORTCUTS: [MapShortcut; 5] = [
         key_label: "L",
         action: MapKeyAction::Locate,
         action_label: "Locate me",
+    },
+    MapShortcut {
+        keys: &[egui::Key::R],
+        key_label: "R",
+        action: MapKeyAction::Refresh,
+        action_label: "Refresh",
     },
 ];
 
@@ -1358,6 +1371,7 @@ mod tests {
         );
         assert_eq!(map_key_action(egui::Key::F), Some(MapKeyAction::FitPins));
         assert_eq!(map_key_action(egui::Key::L), Some(MapKeyAction::Locate));
+        assert_eq!(map_key_action(egui::Key::R), Some(MapKeyAction::Refresh));
         assert_eq!(map_key_action(egui::Key::A), None);
     }
 
@@ -1371,6 +1385,7 @@ mod tests {
                 ("0", "Reset view"),
                 ("F", "Fit pins"),
                 ("L", "Locate me"),
+                ("R", "Refresh"),
             ]
         );
         for shortcut in MAP_SHORTCUTS.iter() {

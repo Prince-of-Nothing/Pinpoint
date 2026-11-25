@@ -114,7 +114,7 @@ from the debug desktop binary; they show the three responsive placements.
 ## Native About evidence
 
 - [Map shortcuts card](../assets/native-about-shortcuts.png) — desktop About
-  lists `+ / =`, `-`, `0`, `F` and `L`; captured with
+  lists `+ / =`, `-`, `0`, `F`, `L` and `R`; captured with
   `PINPOINT_SCREENSHOT_SCREEN=about` (About is reached from Profile).
 
 ## Web drawer layout

@@ -81,6 +81,11 @@ PRs and `CHANGELOG.md`.
   security config present. Build and `aapt` verification steps are in
   [deployment](../DEPLOYMENT.md). The full release check is
   `pwsh scripts/check-release.ps1 -Base http://127.0.0.1:8080 -Apk <apk>`.
+- Windows desktop: `pinpoint-desktop-windows-x64-3.0.0.zip` (5,722,217 B);
+  release binary reports `Pinpoint 3.0.0`.
+- Windows server/web: `pinpoint-server-windows-x64-3.0.0.zip` (5,179,101 B);
+  the web client is embedded, `/health` reports `3.0.0` and `/` serves HTML.
+  There is no separate static/wasm web bundle to download.
 
 ## How to read a claim
 

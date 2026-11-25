@@ -42,8 +42,17 @@ use tokio::runtime::Runtime;
 /// right-hand side panel.
 const WIDE_LAYOUT_MIN_WIDTH: f32 = 820.0;
 
+/// Below this width the open drawer overlays the map instead of reserving
+/// 380 pt. The map screen needs 300 pt for details + 320 pt for the map +
+/// 24 pt gap, so a 380 pt panel leaves too little room below 1100 pt.
+const DRAWER_OVERLAY_MAX_WIDTH: f32 = 1100.0;
+
 fn is_wide_width(width: f32) -> bool {
     width >= WIDE_LAYOUT_MIN_WIDTH
+}
+
+fn drawer_overlays_map(width: f32) -> bool {
+    width < DRAWER_OVERLAY_MAX_WIDTH
 }
 
 /// Plain state changes requested by one frame of the "More" drawer.
@@ -2189,12 +2198,22 @@ impl PinpointAppUI {
                 });
             });
         };
+        let screen_width = ctx.screen_rect().width();
         if compact {
             egui::TopBottomPanel::bottom("mobile_nav")
                 .resizable(false)
                 .exact_height((ctx.screen_rect().height() * 0.82).clamp(320.0, 520.0))
                 .frame(frame)
                 .show(ctx, &mut draw);
+        } else if drawer_overlays_map(screen_width) {
+            egui::Area::new(egui::Id::new("desktop_nav_overlay"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(egui::pos2(screen_width - 380.0, 0.0))
+                .show(ctx, |ui| {
+                    ui.set_width(380.0);
+                    ui.set_min_height(ctx.screen_rect().height());
+                    frame.show(ui, |ui| draw(ui));
+                });
         } else {
             egui::SidePanel::right("desktop_nav")
                 .resizable(false)
@@ -2519,8 +2538,8 @@ impl eframe::App for PinpointAppUI {
 #[cfg(test)]
 mod tests {
     use super::{
-        drawer_changes, escape_closes_drawer, is_wide_width, CurrentScreen, DrawerChanges, Lang,
-        WIDE_LAYOUT_MIN_WIDTH,
+        drawer_changes, drawer_overlays_map, escape_closes_drawer, is_wide_width, CurrentScreen,
+        DrawerChanges, Lang, DRAWER_OVERLAY_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH,
     };
 
     #[test]
@@ -2544,6 +2563,12 @@ mod tests {
             drawer_changes(None, None, true, false, true).publish_open,
             Some(true)
         );
+    }
+
+    #[test]
+    fn drawer_overlays_below_1100() {
+        assert!(drawer_overlays_map(DRAWER_OVERLAY_MAX_WIDTH - 1.0));
+        assert!(!drawer_overlays_map(DRAWER_OVERLAY_MAX_WIDTH));
     }
 
     #[test]

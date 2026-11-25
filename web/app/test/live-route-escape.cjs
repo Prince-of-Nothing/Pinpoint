@@ -22,7 +22,7 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
     await page.click("#drawer-toggle");
   }
 
-  await page.locator("#map").click({ button: "right", position: { x: 80, y: 550 } });
+  await page.mouse.click(80, 550, { button: "right" });
   await page.waitForSelector("#map-menu:not(.hidden)", { timeout: 5000 });
   await page.click('[data-map-action="from"]');
   await page.waitForSelector("#route-panel:not(.hidden)", { timeout: 5000 });

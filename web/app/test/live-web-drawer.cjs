@@ -26,11 +26,14 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   await page.click("#social-drawer h2");
   assert.equal(await expanded(), "true", "a click inside the drawer keeps it open");
 
-  await page.locator("#map").click({ position: { x: 120, y: 500 } });
+  await page.mouse.click(120, 500);
   assert.equal(await expanded(), "false", "a click on the map closes the drawer");
 
-  // Layout: 1280 is a 380 px right column, 700 is a full-width bottom sheet.
-  if ((await expanded()) !== "true") await page.click("#drawer-toggle");
+  // The map click can open a place sheet (hiding the topbar); open the
+  // drawer directly for the layout assertions.
+  await page.evaluate(() => document.getElementById("drawer-toggle").click());
+  await page.waitForTimeout(200);
+  assert.equal(await expanded(), "true", "drawer reopens for the layout check");
   const wide = await page.evaluate(() => {
     const cs = getComputedStyle(document.getElementById("social-drawer"));
     return { position: cs.position, left: cs.left, right: cs.right, width: cs.width };

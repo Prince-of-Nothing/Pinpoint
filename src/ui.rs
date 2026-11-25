@@ -38,6 +38,14 @@ use route::RoutePlan;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
 
+/// Desktop width (pt) at which the drawer moves from a bottom sheet to a
+/// right-hand side panel.
+const WIDE_LAYOUT_MIN_WIDTH: f32 = 820.0;
+
+fn is_wide_width(width: f32) -> bool {
+    width >= WIDE_LAYOUT_MIN_WIDTH
+}
+
 #[derive(Clone)]
 #[allow(dead_code)]
 enum PendingAction {
@@ -580,6 +588,10 @@ impl PinpointAppUI {
         data.map_center_lat = 47.0105;
         data.map_center_lon = 28.8638;
         data.map_zoom = 13;
+        // Evidence hook: open the drawer for the wide/narrow screenshots.
+        if std::env::var("PINPOINT_SCREENSHOT_DRAWER").is_ok() {
+            self.mobile_nav_open = true;
+        }
         if std::env::var("PINPOINT_SCREENSHOT_ROUTE").is_ok() {
             self.route_plan.origin = Some(route::RoutePoint::new(47.0245, 28.8322, "Sam (start)"));
             self.route_plan.destination = Some(route::RoutePoint::new(
@@ -949,15 +961,8 @@ impl PinpointAppUI {
 
     /// Touch/narrow layout: always on phones, below 820 pt on desktop.
     fn is_compact(ctx: &egui::Context) -> bool {
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        {
-            let _ = ctx;
-            true
-        }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        {
-            ctx.screen_rect().width() < 820.0
-        }
+        cfg!(any(target_os = "android", target_os = "ios"))
+            || !is_wide_width(ctx.screen_rect().width())
     }
 
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
@@ -1658,8 +1663,9 @@ impl PinpointAppUI {
             (CurrentScreen::ChangePassword, key::PASSWORD),
         ];
         ui.horizontal(|ui| {
-            let refresh_width = 110.0;
-            let tabs_width = (ui.available_width() - refresh_width).max(240.0);
+            // Room for the "More" drawer button plus Refresh.
+            let trailing_width = 190.0;
+            let tabs_width = (ui.available_width() - trailing_width).max(240.0);
             ui.allocate_ui_with_layout(
                 egui::vec2(tabs_width, 44.0),
                 egui::Layout::left_to_right(Align::Center),
@@ -1687,6 +1693,15 @@ impl PinpointAppUI {
                         });
                 },
             );
+            if ui
+                .add(egui::Button::selectable(
+                    self.mobile_nav_open,
+                    RichText::new("More ☰").size(14.0),
+                ))
+                .clicked()
+            {
+                self.mobile_nav_open = !self.mobile_nav_open;
+            }
             if ui.button(i18n::t(lang, key::REFRESH)).clicked() {
                 let app = self.app.clone();
                 let rt = Arc::new(Runtime::new().expect("tokio"));
@@ -1943,6 +1958,214 @@ impl PinpointAppUI {
             }
         }
     }
+
+    /// The "More" drawer: a bottom sheet on phones/narrow windows and a right
+    /// side panel on wide desktop windows.
+    fn draw_nav_drawer(&mut self, ctx: &egui::Context, compact: bool) {
+        let lang = self.lang;
+        let current = self.app.current_screen();
+        let mut chosen: Option<CurrentScreen> = None;
+        let mut chosen_lang: Option<Lang> = None;
+        let mut publish_requested = false;
+        let mut refresh_requested = false;
+        let (is_admin, update_available, unread_messages) = {
+            let data = self.app.data();
+            let data = data.lock().unwrap();
+            let is_admin = data
+                .user
+                .as_ref()
+                .map(|u| {
+                    (u.role.eq_ignore_ascii_case("admin")
+                        || u.role.eq_ignore_ascii_case("administrator"))
+                        && u.is_active
+                })
+                .unwrap_or(false);
+            (
+                is_admin,
+                data.update_status.is_available(),
+                data.unread_messages,
+            )
+        };
+        let frame = egui::Frame::NONE
+            .fill(theme::PANEL)
+            .inner_margin(egui::Margin::symmetric(12, 6));
+        let mut draw = |ui: &mut egui::Ui| {
+            if compact {
+                let (handle, _) =
+                    ui.allocate_exact_size(egui::vec2(42.0, 4.0), egui::Sense::hover());
+                ui.painter().rect_filled(handle, 2.0, theme::BORDER);
+                ui.add_space(6.0);
+            }
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("More").size(22.0).strong());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("×").clicked() {
+                        chosen = Some(current.clone());
+                    }
+                });
+            });
+            theme::caption(
+                ui,
+                if compact {
+                    "Places, saved pins and settings. The tabs stay at the bottom."
+                } else {
+                    "Places, saved pins and settings."
+                },
+            );
+            ui.add_space(8.0);
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                let tile_width = (ui.available_width() - 8.0) / 2.0;
+                ui.horizontal(|ui| {
+                    for (label, icon, primary, requested) in [
+                        ("Publish", "+", true, &mut publish_requested),
+                        ("Refresh", "↻", false, &mut refresh_requested),
+                    ] {
+                        let ink = if primary {
+                            theme::ACCENT_INK
+                        } else {
+                            theme::TEXT
+                        };
+                        let button = egui::Button::new(
+                            RichText::new(format!("{icon}\n{label}"))
+                                .size(14.0)
+                                .strong()
+                                .color(ink),
+                        )
+                        .fill(if primary {
+                            theme::ACCENT
+                        } else {
+                            theme::PANEL_2
+                        })
+                        .stroke(egui::Stroke::new(
+                            1.0_f32,
+                            if primary {
+                                theme::ACCENT
+                            } else {
+                                theme::BORDER
+                            },
+                        ))
+                        .corner_radius(egui::CornerRadius::same(14))
+                        .min_size(egui::vec2(tile_width, 64.0));
+                        if ui.add(button).clicked() {
+                            *requested = true;
+                        }
+                    }
+                });
+                ui.add_space(8.0);
+                let mut tools: Vec<(CurrentScreen, &str, &str)> = vec![
+                    (CurrentScreen::Messages, "Messages", "M"),
+                    (CurrentScreen::Places, "Places", "P"),
+                    (CurrentScreen::Bookmarks, "Saved", "B"),
+                    (CurrentScreen::Trips, "Trips", "T"),
+                    (CurrentScreen::Emergency, "SOS", "!"),
+                    (CurrentScreen::Profile, "Profile", "U"),
+                    (
+                        CurrentScreen::About,
+                        if update_available {
+                            "Update!"
+                        } else {
+                            "Updates"
+                        },
+                        "U",
+                    ),
+                    (CurrentScreen::Admin, "Admin", "A"),
+                    (CurrentScreen::Kiosk, "Kiosk", "K"),
+                    (CurrentScreen::ChangePassword, "Password", "PW"),
+                ];
+                if !is_admin {
+                    tools.retain(|(screen, _, _)| *screen != CurrentScreen::Admin);
+                }
+                egui::Grid::new("mobile_tools_grid")
+                    .num_columns(2)
+                    .spacing([8.0, 8.0])
+                    .show(ui, |ui| {
+                        for (index, (screen, label, icon)) in tools.iter().enumerate() {
+                            let selected = current == *screen;
+                            let tile_label =
+                                if *screen == CurrentScreen::Messages && unread_messages > 0 {
+                                    format!("{icon}\n{label} ({unread_messages})")
+                                } else {
+                                    format!("{icon}\n{label}")
+                                };
+                            let button = egui::Button::new(
+                                RichText::new(tile_label)
+                                    .size(13.0)
+                                    .strong()
+                                    .color(if selected {
+                                        theme::ACCENT_INK
+                                    } else {
+                                        theme::TEXT
+                                    }),
+                            )
+                            .fill(if selected {
+                                theme::ACCENT
+                            } else {
+                                theme::PANEL_2
+                            })
+                            .stroke(egui::Stroke::new(
+                                1.0_f32,
+                                if selected {
+                                    theme::ACCENT
+                                } else {
+                                    theme::BORDER
+                                },
+                            ))
+                            .corner_radius(egui::CornerRadius::same(14))
+                            .min_size(egui::vec2(tile_width, 66.0));
+                            if ui.add(button).clicked() {
+                                chosen = Some(screen.clone());
+                            }
+                            if index % 2 == 1 {
+                                ui.end_row();
+                            }
+                        }
+                    });
+                ui.add_space(8.0);
+                ui.separator();
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Language").size(12.0));
+                    egui::ComboBox::from_id_salt("mobile_lang")
+                        .selected_text(lang.native_name())
+                        .show_ui(ui, |ui| {
+                            for l in Lang::all() {
+                                if ui.selectable_label(lang == *l, l.native_name()).clicked() {
+                                    chosen_lang = Some(*l);
+                                }
+                            }
+                        });
+                });
+            });
+        };
+        if compact {
+            egui::TopBottomPanel::bottom("mobile_nav")
+                .resizable(false)
+                .exact_height((ctx.screen_rect().height() * 0.82).clamp(320.0, 520.0))
+                .frame(frame)
+                .show(ctx, &mut draw);
+        } else {
+            egui::SidePanel::right("desktop_nav")
+                .resizable(false)
+                .exact_width(380.0)
+                .frame(frame)
+                .show(ctx, &mut draw);
+        }
+        if let Some(screen) = chosen {
+            self.app.set_screen(screen);
+            self.mobile_nav_open = false;
+        }
+        if let Some(l) = chosen_lang {
+            self.lang = l;
+        }
+        if publish_requested {
+            self.app.set_screen(CurrentScreen::Map);
+            self.mobile_publish_open = true;
+            self.mobile_nav_open = false;
+        }
+        if refresh_requested {
+            self.spawn_action(PendingAction::RefreshAll, ctx);
+            self.mobile_nav_open = false;
+        }
+    }
 }
 
 impl eframe::App for PinpointAppUI {
@@ -2065,199 +2288,8 @@ impl eframe::App for PinpointAppUI {
             self.app.current_screen(),
             CurrentScreen::Login | CurrentScreen::Register
         );
-        if compact && self.mobile_nav_open {
-            let lang = self.lang;
-            let current = self.app.current_screen();
-            let mut chosen: Option<CurrentScreen> = None;
-            let mut chosen_lang: Option<Lang> = None;
-            let mut publish_requested = false;
-            let mut refresh_requested = false;
-            let (is_admin, update_available, unread_messages) = {
-                let data = self.app.data();
-                let data = data.lock().unwrap();
-                let is_admin = data
-                    .user
-                    .as_ref()
-                    .map(|u| {
-                        (u.role.eq_ignore_ascii_case("admin")
-                            || u.role.eq_ignore_ascii_case("administrator"))
-                            && u.is_active
-                    })
-                    .unwrap_or(false);
-                (
-                    is_admin,
-                    data.update_status.is_available(),
-                    data.unread_messages,
-                )
-            };
-            egui::TopBottomPanel::bottom("mobile_nav")
-                .resizable(false)
-                .exact_height((ctx.screen_rect().height() * 0.82).clamp(320.0, 520.0))
-                .frame(
-                    egui::Frame::NONE
-                        .fill(theme::PANEL)
-                        .inner_margin(egui::Margin::symmetric(12, 6)),
-                )
-                .show(ctx, |ui| {
-                    let (handle, _) =
-                        ui.allocate_exact_size(egui::vec2(42.0, 4.0), egui::Sense::hover());
-                    ui.painter().rect_filled(handle, 2.0, theme::BORDER);
-                    ui.add_space(6.0);
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("More").size(22.0).strong());
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("×").clicked() {
-                                chosen = Some(current.clone());
-                            }
-                        });
-                    });
-                    theme::caption(
-                        ui,
-                        "Places, saved pins and settings. The tabs stay at the bottom.",
-                    );
-                    ui.add_space(8.0);
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        let tile_width = (ui.available_width() - 8.0) / 2.0;
-                        ui.horizontal(|ui| {
-                            for (label, icon, primary, requested) in [
-                                ("Publish", "+", true, &mut publish_requested),
-                                ("Refresh", "↻", false, &mut refresh_requested),
-                            ] {
-                                let ink = if primary {
-                                    theme::ACCENT_INK
-                                } else {
-                                    theme::TEXT
-                                };
-                                let button = egui::Button::new(
-                                    RichText::new(format!("{icon}\n{label}"))
-                                        .size(14.0)
-                                        .strong()
-                                        .color(ink),
-                                )
-                                .fill(if primary {
-                                    theme::ACCENT
-                                } else {
-                                    theme::PANEL_2
-                                })
-                                .stroke(egui::Stroke::new(
-                                    1.0_f32,
-                                    if primary {
-                                        theme::ACCENT
-                                    } else {
-                                        theme::BORDER
-                                    },
-                                ))
-                                .corner_radius(egui::CornerRadius::same(14))
-                                .min_size(egui::vec2(tile_width, 64.0));
-                                if ui.add(button).clicked() {
-                                    *requested = true;
-                                }
-                            }
-                        });
-                        ui.add_space(8.0);
-                        let mut tools: Vec<(CurrentScreen, &str, &str)> = vec![
-                            (CurrentScreen::Messages, "Messages", "M"),
-                            (CurrentScreen::Places, "Places", "P"),
-                            (CurrentScreen::Bookmarks, "Saved", "B"),
-                            (CurrentScreen::Trips, "Trips", "T"),
-                            (CurrentScreen::Emergency, "SOS", "!"),
-                            (CurrentScreen::Profile, "Profile", "U"),
-                            (
-                                CurrentScreen::About,
-                                if update_available {
-                                    "Update!"
-                                } else {
-                                    "Updates"
-                                },
-                                "U",
-                            ),
-                            (CurrentScreen::Admin, "Admin", "A"),
-                            (CurrentScreen::Kiosk, "Kiosk", "K"),
-                            (CurrentScreen::ChangePassword, "Password", "PW"),
-                        ];
-                        if !is_admin {
-                            tools.retain(|(screen, _, _)| *screen != CurrentScreen::Admin);
-                        }
-                        egui::Grid::new("mobile_tools_grid")
-                            .num_columns(2)
-                            .spacing([8.0, 8.0])
-                            .show(ui, |ui| {
-                                for (index, (screen, label, icon)) in tools.iter().enumerate() {
-                                    let selected = current == *screen;
-                                    let tile_label = if *screen == CurrentScreen::Messages
-                                        && unread_messages > 0
-                                    {
-                                        format!("{icon}\n{label} ({unread_messages})")
-                                    } else {
-                                        format!("{icon}\n{label}")
-                                    };
-                                    let button = egui::Button::new(
-                                        RichText::new(tile_label).size(13.0).strong().color(
-                                            if selected {
-                                                theme::ACCENT_INK
-                                            } else {
-                                                theme::TEXT
-                                            },
-                                        ),
-                                    )
-                                    .fill(if selected {
-                                        theme::ACCENT
-                                    } else {
-                                        theme::PANEL_2
-                                    })
-                                    .stroke(egui::Stroke::new(
-                                        1.0_f32,
-                                        if selected {
-                                            theme::ACCENT
-                                        } else {
-                                            theme::BORDER
-                                        },
-                                    ))
-                                    .corner_radius(egui::CornerRadius::same(14))
-                                    .min_size(egui::vec2(tile_width, 66.0));
-                                    if ui.add(button).clicked() {
-                                        chosen = Some(screen.clone());
-                                    }
-                                    if index % 2 == 1 {
-                                        ui.end_row();
-                                    }
-                                }
-                            });
-                        ui.add_space(8.0);
-                        ui.separator();
-                        ui.horizontal(|ui| {
-                            ui.label(RichText::new("Language").size(12.0));
-                            egui::ComboBox::from_id_salt("mobile_lang")
-                                .selected_text(lang.native_name())
-                                .show_ui(ui, |ui| {
-                                    for l in Lang::all() {
-                                        if ui
-                                            .selectable_label(lang == *l, l.native_name())
-                                            .clicked()
-                                        {
-                                            chosen_lang = Some(*l);
-                                        }
-                                    }
-                                });
-                        });
-                    });
-                });
-            if let Some(screen) = chosen {
-                self.app.set_screen(screen);
-                self.mobile_nav_open = false;
-            }
-            if let Some(l) = chosen_lang {
-                self.lang = l;
-            }
-            if publish_requested {
-                self.app.set_screen(CurrentScreen::Map);
-                self.mobile_publish_open = true;
-                self.mobile_nav_open = false;
-            }
-            if refresh_requested {
-                self.spawn_action(PendingAction::RefreshAll, ctx);
-                self.mobile_nav_open = false;
-            }
+        if self.mobile_nav_open {
+            self.draw_nav_drawer(ctx, compact);
         }
 
         if compact && !auth_screen && !self.mobile_nav_open {
@@ -2422,5 +2454,16 @@ impl eframe::App for PinpointAppUI {
         if self.app.screenshot_mode() && !self.app.screenshot_taken() {
             ctx.request_repaint();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_wide_width, WIDE_LAYOUT_MIN_WIDTH};
+
+    #[test]
+    fn drawer_breakpoint_switches_to_the_side_panel() {
+        assert!(!is_wide_width(WIDE_LAYOUT_MIN_WIDTH - 1.0));
+        assert!(is_wide_width(WIDE_LAYOUT_MIN_WIDTH));
     }
 }

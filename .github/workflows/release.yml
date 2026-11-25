@@ -200,6 +200,57 @@ jobs:
           key: release-windows
       - name: Build release binaries
         run: cargo build --release --locked --bin pinpoint-desktop --bin pinpoint-server
+      - name: Verify Windows binaries
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          $helpOut = "$env:RUNNER_TEMP\pinpoint-desktop-help.out"
+          $helpErr = "$env:RUNNER_TEMP\pinpoint-desktop-help.err"
+          $desktop = Start-Process -FilePath "target\release\pinpoint-desktop.exe" -ArgumentList "--help" `
+            -NoNewWindow -Wait -PassThru -RedirectStandardOutput $helpOut -RedirectStandardError $helpErr
+          if ($desktop.ExitCode -ne 0) { throw "pinpoint-desktop --help failed" }
+          $help = (Get-Content $helpOut -Raw -ErrorAction SilentlyContinue) +
+            (Get-Content $helpErr -Raw -ErrorAction SilentlyContinue)
+          if ($help -notmatch [regex]::Escape($version)) {
+            throw "desktop --help does not report $version"
+          }
+          $port = 18080
+          $env:BIND_ADDR = "127.0.0.1:$port"
+          Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+          $server = Start-Process -FilePath "target/release/pinpoint-server.exe" -PassThru `
+            -RedirectStandardOutput "$env:RUNNER_TEMP\pinpoint-server.out" `
+            -RedirectStandardError "$env:RUNNER_TEMP\pinpoint-server.err"
+          try {
+            $health = $null
+            $deadline = (Get-Date).AddSeconds(30)
+            while (-not $health -and (Get-Date) -lt $deadline) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $health = Invoke-RestMethod "http://127.0.0.1:$port/health" -TimeoutSec 2
+              } catch {}
+            }
+            if (-not $health) { throw "server did not become healthy" }
+            if ($health.version -ne $version) {
+              throw "server /health version '$($health.version)' != $version"
+            }
+            Add-Type -AssemblyName System.Net.Http
+            $client = [System.Net.Http.HttpClient]::new()
+            try {
+              $response = $client.GetAsync("http://127.0.0.1:$port/").GetAwaiter().GetResult()
+              if (-not $response.IsSuccessStatusCode) {
+                throw "web client returned $([int]$response.StatusCode)"
+              }
+              $mediaType = $response.Content.Headers.ContentType.MediaType
+              if ($mediaType -notmatch 'text/html') {
+                throw "web client content type is '$mediaType'"
+              }
+            } finally {
+              $client.Dispose()
+            }
+            Write-Host "desktop and server report $version; /health and / passed"
+          } finally {
+            if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
+          }
       - name: Package desktop and server/web ZIPs
         shell: pwsh
         run: |

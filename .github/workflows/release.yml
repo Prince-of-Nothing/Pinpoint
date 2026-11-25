@@ -199,16 +199,31 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: release-apk
           path: dist
+
+      - name: Install Android build-tools (aapt)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "build-tools;$ANDROID_BUILD_TOOLS" >/dev/null
+
+      - name: Verify the downloaded draft APK
+        shell: pwsh
+        run: |
+          $apk = Get-ChildItem dist/*.apk | Select-Object -First 1
+          if (-not $apk) { throw "No APK in dist/" }
+          ./scripts/check-release.ps1 -SkipHealth -Apk $apk.FullName
 
       - name: Draft the release
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --draft --verify-tag \
             --title "$GITHUB_REF_NAME" \
-            --notes "## What's Changed" \
+            --notes-file RELEASE_NOTES.md \
             -- dist/*
           echo "Draft **$GITHUB_REF_NAME** is ready: fill in What's Changed and publish it." >>"$GITHUB_STEP_SUMMARY"

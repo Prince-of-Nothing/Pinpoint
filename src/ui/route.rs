@@ -436,6 +436,15 @@ impl super::PinpointAppUI {
         if !self.route_plan.open {
             return;
         }
+        let blocked = self.crash_dialog.is_some()
+            || self.update_dialog_open
+            || self.share_sheet.is_some()
+            || self.mobile_publish_open
+            || self.mobile_selected_place.is_some();
+        if super::escape_dismisses(ctx.input(|i| i.key_pressed(egui::Key::Escape)), blocked) {
+            self.route_plan.open = false;
+            return;
+        }
         let width = ctx.screen_rect().width();
         let panel = theme::PANEL.gamma_multiply(0.98);
         let border = theme::BORDER;

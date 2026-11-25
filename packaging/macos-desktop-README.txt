@@ -1,11 +1,16 @@
 Pinpoint @VERSION@ - macOS desktop client
 
-Run:
-  ./pinpoint-desktop --backend http://127.0.0.1:8080
+This ZIP contains `Pinpoint.app`, an unsigned app bundle.
 
-Use an HTTPS backend for anything other than loopback. The client reports
-version @VERSION@; check with:
-  ./pinpoint-desktop --help
+Install:
+  1. Unzip and drag `Pinpoint.app` to Applications.
+  2. On first launch, Control-click the app and choose Open (Gatekeeper
+     warning for an unsigned build).
 
-Built on macos-latest (arm64). This build is unsigned; macOS may ask for
-confirmation the first time it is opened.
+Run from Terminal:
+  /Applications/Pinpoint.app/Contents/MacOS/pinpoint-desktop --backend http://127.0.0.1:8080
+
+Use an HTTPS backend for anything other than loopback. Check the version:
+  /Applications/Pinpoint.app/Contents/MacOS/pinpoint-desktop --help
+
+Built on macos-latest (arm64). Map data © OpenStreetMap contributors (ODbL).

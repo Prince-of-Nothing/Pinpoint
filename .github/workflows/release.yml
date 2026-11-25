@@ -284,7 +284,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             pkg-config libssl-dev libxcb-render0-dev libxcb-shape0-dev \
             libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev \
-            libgl1-mesa-dev zip
+            libgl1-mesa-dev zip desktop-file-utils
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-linux
@@ -304,8 +304,11 @@ jobs:
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           mkdir -p dist/linux
           cp target/release/pinpoint-desktop dist/linux/
+          cp packaging/pinpoint.desktop dist/linux/
+          cp android/res/mipmap-xxxhdpi/ic_launcher.png dist/linux/pinpoint.png
           sed "s/@VERSION@/$version/g" packaging/linux-desktop-README.txt > dist/linux/README.txt
-          (cd dist/linux && zip -j "../pinpoint-desktop-linux-x64-$version.zip" pinpoint-desktop README.txt)
+          desktop-file-validate dist/linux/pinpoint.desktop
+          (cd dist/linux && zip -j "../pinpoint-desktop-linux-x64-$version.zip" pinpoint-desktop pinpoint.desktop pinpoint.png README.txt)
       - uses: actions/upload-artifact@v4
         with:
           name: release-linux
@@ -336,10 +339,40 @@ jobs:
       - name: Package macOS ZIP
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
-          mkdir -p dist
-          cp target/release/pinpoint-desktop dist/
+          IFS=. read -r major minor patch <<<"$version"
+          build="$((major * 10000 + minor * 100 + patch))"
+          app="dist/Pinpoint.app"
+          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" build
+          cp target/release/pinpoint-desktop "$app/Contents/MacOS/pinpoint-desktop"
+          sed -e "s/@VERSION@/$version/g" -e "s/@BUILD@/$build/g" \
+            packaging/macos-Info.plist > "$app/Contents/Info.plist"
+          iconset="build/Pinpoint.iconset"
+          rm -rf "$iconset"
+          mkdir -p "$iconset"
+          src="android/res/mipmap-xxxhdpi/ic_launcher.png"
+          while read -r size name; do
+            sips -z "$size" "$size" "$src" --out "$iconset/$name" >/dev/null
+          done <<'EOF'
+          16 icon_16x16.png
+          32 icon_16x16@2x.png
+          32 icon_32x32.png
+          64 icon_32x32@2x.png
+          128 icon_128x128.png
+          256 icon_128x128@2x.png
+          256 icon_256x256.png
+          512 icon_256x256@2x.png
+          512 icon_512x512.png
+          1024 icon_512x512@2x.png
+          EOF
+          iconutil -c icns "$iconset" -o "$app/Contents/Resources/Pinpoint.icns"
           sed "s/@VERSION@/$version/g" packaging/macos-desktop-README.txt > dist/README.txt
-          (cd dist && zip -j "pinpoint-desktop-macos-$version.zip" pinpoint-desktop README.txt)
+          plutil -lint "$app/Contents/Info.plist"
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "$version"
+          test "$(plutil -extract CFBundleVersion raw -o - "$app/Contents/Info.plist")" = "$build"
+          test -f "$app/Contents/Resources/Pinpoint.icns"
+          help_out="$("$app/Contents/MacOS/pinpoint-desktop" --help 2>&1 || true)"
+          grep -Fq "$version" <<<"$help_out"
+          (cd dist && zip -qry "pinpoint-desktop-macos-$version.zip" Pinpoint.app README.txt)
       - uses: actions/upload-artifact@v4
         with:
           name: release-macos
@@ -423,11 +456,20 @@ jobs:
           if (-not (Test-Path (Join-Path $root "pinpoint-desktop"))) {
             throw "Linux ZIP is missing pinpoint-desktop"
           }
+          foreach ($name in @("pinpoint.desktop", "pinpoint.png", "README.txt")) {
+            if (-not (Test-Path (Join-Path $root $name))) {
+              throw "Linux ZIP is missing $name"
+            }
+          }
+          $desktop = Get-Content (Join-Path $root "pinpoint.desktop") -Raw
+          if ($desktop -notmatch 'Exec=pinpoint-desktop' -or $desktop -notmatch 'Icon=pinpoint') {
+            throw "Linux desktop entry is malformed"
+          }
           $readme = Get-Content (Join-Path $root "README.txt") -Raw
           if ($readme -notmatch [regex]::Escape("Pinpoint $version")) {
             throw "Linux README does not report $version"
           }
-          Write-Host "Linux ZIP contains pinpoint-desktop and README $version"
+          Write-Host "Linux ZIP contains binary, desktop entry, icon and README $version"
 
       - name: Verify downloaded macOS ZIP
         shell: pwsh
@@ -438,14 +480,27 @@ jobs:
           $root = Join-Path $env:RUNNER_TEMP "macos-zip"
           Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
           Expand-Archive $zip.FullName $root
-          if (-not (Test-Path (Join-Path $root "pinpoint-desktop"))) {
-            throw "macOS ZIP is missing pinpoint-desktop"
+          $app = Join-Path $root "Pinpoint.app"
+          $binary = Join-Path $app "Contents/MacOS/pinpoint-desktop"
+          $plistPath = Join-Path $app "Contents/Info.plist"
+          $icon = Join-Path $app "Contents/Resources/Pinpoint.icns"
+          if (-not (Test-Path $binary)) { throw "macOS app is missing its executable" }
+          if (-not (Test-Path $icon)) { throw "macOS app is missing its icon" }
+          if (-not (Test-Path $plistPath)) { throw "macOS app is missing Info.plist" }
+          $plist = Get-Content $plistPath -Raw
+          if ($plist -notmatch "<key>CFBundleShortVersionString</key>\s*<string>$([regex]::Escape($version))</string>") {
+            throw "macOS Info.plist version does not match $version"
+          }
+          $parts = $version.Split('.')
+          $build = [int]$parts[0] * 10000 + [int]$parts[1] * 100 + [int]$parts[2]
+          if ($plist -notmatch "<key>CFBundleVersion</key>\s*<string>$build</string>") {
+            throw "macOS Info.plist build does not match $build"
           }
           $readme = Get-Content (Join-Path $root "README.txt") -Raw
           if ($readme -notmatch [regex]::Escape("Pinpoint $version")) {
             throw "macOS README does not report $version"
           }
-          Write-Host "macOS ZIP contains pinpoint-desktop and README $version"
+          Write-Host "macOS ZIP contains Pinpoint.app $version ($build), icon and README"
 
       - name: Install Android build-tools (aapt)
         run: |

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Pinpoint
+GenericName=Private location sharing
+Comment=Share your location only with friends you choose
+Exec=pinpoint-desktop %U
+Icon=pinpoint
+Terminal=false
+Categories=Network;Utility;
+Keywords=location;map;friends;privacy;
+StartupWMClass=pinpoint-desktop

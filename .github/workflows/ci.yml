@@ -104,6 +104,8 @@ jobs:
         run: node web/app/test/password-length.mjs
       - name: Navigation checks
         run: node web/app/test/navigation-ui.mjs
+      - name: Drawer dismissal checks
+        run: node web/app/test/drawer-dismiss.mjs
       - name: OAuth UI checks
         run: node web/app/test/oauth-ui.mjs
 

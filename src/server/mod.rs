@@ -332,6 +332,7 @@ pub fn router(state: AppState) -> Router {
         .route("/message-crypto.js", get(web_handlers::message_crypto_js))
         .route("/map.js", get(web_handlers::map_js))
         .route("/nav.js", get(web_handlers::nav_js))
+        .route("/drawer-dismiss.js", get(web_handlers::drawer_dismiss_js))
         .route("/measure.js", get(web_handlers::measure_js))
         .route("/sharing.js", get(web_handlers::sharing_js))
         .route("/appearance.js", get(web_handlers::appearance_js))

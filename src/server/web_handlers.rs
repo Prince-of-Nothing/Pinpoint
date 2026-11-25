@@ -20,6 +20,7 @@ const MEASURE_JS: &str = include_str!("../../web/app/measure.js");
 const MAP_LAYERS_JS: &str = include_str!("../../web/app/map-layers.js");
 const NAV_JS: &str = include_str!("../../web/app/nav.js");
 const DRAWER_DISMISS_JS: &str = include_str!("../../web/app/drawer-dismiss.js");
+const SEARCH_SHORTCUT_JS: &str = include_str!("../../web/app/search-shortcut.js");
 const SHARING_JS: &str = include_str!("../../web/app/sharing.js");
 const APPEARANCE_JS: &str = include_str!("../../web/app/appearance.js");
 const ADMIN_JS: &str = include_str!("../../web/app/admin.js");
@@ -192,6 +193,15 @@ pub async fn nav_js() -> Response {
 
 pub async fn drawer_dismiss_js() -> Response {
     let mut resp = DRAWER_DISMISS_JS.into_response();
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/javascript; charset=utf-8"),
+    );
+    secure(resp)
+}
+
+pub async fn search_shortcut_js() -> Response {
+    let mut resp = SEARCH_SHORTCUT_JS.into_response();
     resp.headers_mut().insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("text/javascript; charset=utf-8"),

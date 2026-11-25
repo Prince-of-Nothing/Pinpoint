@@ -3,6 +3,7 @@
 
 import { createMap } from "./map.js";
 import { drawerOutsideClickDismisses } from "./drawer-dismiss.js";
+import { shouldFocusSearch } from "./search-shortcut.js";
 import { initNavigation, formatDistance } from "./nav.js";
 import { lineLengthMeters } from "./measure.js";
 import { createAdminConsole } from "./admin.js";
@@ -1862,6 +1863,28 @@ document.addEventListener("pointerdown", (event) => {
     inMap: Boolean(target.closest?.("#map")),
   })) {
     setDrawer(false);
+  }
+});
+document.addEventListener("keydown", (event) => {
+  const target = event.target;
+  const inField =
+    target instanceof HTMLElement &&
+    (target.matches("input, textarea, select") || target.isContentEditable);
+  const blocked =
+    !$("admin-panel").classList.contains("hidden") ||
+    drawerToggle.getAttribute("aria-expanded") === "true" ||
+    SHEET_IDS.some((id) => {
+      const el = $(id);
+      return el && !el.classList.contains("hidden");
+    });
+  if (shouldFocusSearch({
+    key: event.key,
+    inField,
+    modifier: event.ctrlKey || event.metaKey || event.altKey,
+    blocked,
+  })) {
+    event.preventDefault();
+    $("search-input").focus();
   }
 });
 document.addEventListener("keydown", (event) => {

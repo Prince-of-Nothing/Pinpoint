@@ -19,6 +19,7 @@ node web/app/test/messages-poll.mjs
 node web/app/test/password-length.mjs
 node web/app/test/navigation-ui.mjs
 node web/app/test/drawer-dismiss.mjs
+node web/app/test/search-shortcut.mjs
 node web/app/test/oauth-ui.mjs
 ```
 

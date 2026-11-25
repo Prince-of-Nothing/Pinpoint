@@ -110,6 +110,8 @@ jobs:
         run: node web/app/test/navigation-ui.mjs
       - name: Drawer dismissal checks
         run: node web/app/test/drawer-dismiss.mjs
+      - name: Search shortcut checks
+        run: node web/app/test/search-shortcut.mjs
       - name: OAuth UI checks
         run: node web/app/test/oauth-ui.mjs
 

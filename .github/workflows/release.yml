@@ -171,6 +171,13 @@ jobs:
             } >>"$GITHUB_STEP_SUMMARY"
           done
 
+      - name: Check release version consistency
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          ./scripts/check-release.ps1 -SkipHealth -Apk "dist/pinpoint-android-$env:VERSION.apk"
+
       - uses: actions/upload-artifact@v4
         with:
           name: release-apk

@@ -55,6 +55,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [INFRA] Release job: the downloaded Windows ZIPs are extracted and checked for the expected `pinpoint-desktop.exe`/`pinpoint-server.exe` and README version before the draft is created.
 - [INFRA] Release workflow: the Windows job checks `pinpoint-desktop.exe --help`, starts `pinpoint-server.exe`, and asserts `/health` reports the Cargo version and `/` returns HTML before packaging.
 - [INFRA] Release workflow: a `windows-latest` job builds `pinpoint-desktop.exe` and `pinpoint-server.exe`, packages both ZIPs with dynamic READMEs, and the release job attaches them next to the APK.
 - [INFRA] v3.0.0 release assets now include `pinpoint-desktop-windows-x64-3.0.0.zip` and `pinpoint-server-windows-x64-3.0.0.zip`; the server zip serves the embedded web client, so no separate web bundle is needed.

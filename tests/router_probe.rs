@@ -160,6 +160,15 @@ async fn health_route_matches_all_services() {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK, "/health missing");
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            json["version"],
+            env!("CARGO_PKG_VERSION"),
+            "/health version drifted from Cargo.toml"
+        );
     }
 }
 

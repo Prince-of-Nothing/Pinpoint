@@ -294,6 +294,38 @@ jobs:
           name: release-windows
           path: dist
 
+      - name: Verify downloaded Windows ZIPs
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          $desktopZip = "dist/pinpoint-desktop-windows-x64-$version.zip"
+          $serverZip = "dist/pinpoint-server-windows-x64-$version.zip"
+          if (-not (Test-Path $desktopZip)) { throw "Missing $desktopZip" }
+          if (-not (Test-Path $serverZip)) { throw "Missing $serverZip" }
+          $root = Join-Path $env:RUNNER_TEMP "windows-zips"
+          Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $desktopZip (Join-Path $root "desktop")
+          Expand-Archive $serverZip (Join-Path $root "server")
+          foreach ($entry in @(
+            @{ Path = "desktop/pinpoint-desktop.exe"; Label = "desktop exe" },
+            @{ Path = "desktop/README.txt"; Label = "desktop README" },
+            @{ Path = "server/pinpoint-server.exe"; Label = "server exe" },
+            @{ Path = "server/README.txt"; Label = "server README" }
+          )) {
+            if (-not (Test-Path (Join-Path $root $entry.Path))) {
+              throw "Missing $($entry.Label)"
+            }
+          }
+          $desktopReadme = Get-Content (Join-Path $root "desktop/README.txt") -Raw
+          $serverReadme = Get-Content (Join-Path $root "server/README.txt") -Raw
+          if ($desktopReadme -notmatch [regex]::Escape("Pinpoint $version")) {
+            throw "desktop README does not report $version"
+          }
+          if ($serverReadme -notmatch [regex]::Escape("Pinpoint $version")) {
+            throw "server README does not report $version"
+          }
+          Write-Host "Windows ZIPs contain the expected exes and README $version"
+
       - name: Install Android build-tools (aapt)
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true

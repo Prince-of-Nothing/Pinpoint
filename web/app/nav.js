@@ -1195,10 +1195,6 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       showResults(false);
       hidePlace();
     }
-    if (e.key === "/" && document.activeElement !== input) {
-      e.preventDefault();
-      input.focus();
-    }
   });
 
   renderStorage();

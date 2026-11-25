@@ -1,6 +1,7 @@
 // "/" focuses the place search only when the user is not typing, not using a
 // modifier, and no drawer/sheet/dialog is open.
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { shouldFocusSearch } from "../search-shortcut.js";
 
 const base = { key: "/", inField: false, modifier: false, blocked: false };
@@ -32,4 +33,16 @@ assert.equal(
   "other keys are ignored",
 );
 
-console.log("PASS  search shortcut truth table");
+const page = await readFile("web/app/index.html", "utf8");
+const input = page.match(/<input[^>]*id="search-input"[^>]*>/s)?.[0] ?? "";
+assert.ok(input, "search input is missing");
+assert.ok(
+  input.includes('title="Press / to search"'),
+  "the search input needs the title hint",
+);
+assert.ok(
+  input.includes('aria-keyshortcuts="/"'),
+  "the search input needs aria-keyshortcuts",
+);
+
+console.log("PASS  search shortcut truth table and hint");

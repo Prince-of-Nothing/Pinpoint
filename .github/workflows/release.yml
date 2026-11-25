@@ -537,6 +537,18 @@ jobs:
           if (-not $apk) { throw "No APK in dist/" }
           ./scripts/check-release.ps1 -SkipHealth -Apk $apk.FullName
 
+      - name: Verify the downloaded APK signature
+        shell: bash
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          apk="$(ls dist/*.apk | head -n 1)"
+          certs="$("$apksigner" verify --print-certs "$apk")"
+          if [ "$GITHUB_REF_TYPE" = tag ] && grep -q "CN=Pinpoint Build" <<<"$certs"; then
+            echo "::error::$apk is still signed with the throwaway build key"
+            exit 1
+          fi
+          echo "APK signature valid: $(grep 'certificate DN' <<<"$certs")"
+
       - name: Draft the release
         if: github.ref_type == 'tag'
         run: |

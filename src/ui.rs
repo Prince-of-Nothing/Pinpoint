@@ -46,6 +46,43 @@ fn is_wide_width(width: f32) -> bool {
     width >= WIDE_LAYOUT_MIN_WIDTH
 }
 
+/// Plain state changes requested by one frame of the "More" drawer.
+#[derive(Debug, Default, PartialEq, Eq)]
+struct DrawerChanges {
+    screen: Option<CurrentScreen>,
+    lang: Option<Lang>,
+    publish_open: Option<bool>,
+    refresh: bool,
+    close: bool,
+}
+
+fn drawer_changes(
+    chosen: Option<CurrentScreen>,
+    chosen_lang: Option<Lang>,
+    publish: bool,
+    refresh: bool,
+    compact: bool,
+) -> DrawerChanges {
+    let mut changes = DrawerChanges {
+        screen: chosen,
+        lang: chosen_lang,
+        ..Default::default()
+    };
+    changes.close = changes.screen.is_some();
+    if publish {
+        changes.screen = Some(CurrentScreen::Map);
+        // The sheet flag only feeds the compact map; desktop already shows the
+        // publish card in the map details column.
+        changes.publish_open = Some(compact);
+        changes.close = true;
+    }
+    if refresh {
+        changes.refresh = true;
+        changes.close = true;
+    }
+    changes
+}
+
 #[derive(Clone)]
 #[allow(dead_code)]
 enum PendingAction {
@@ -2149,23 +2186,27 @@ impl PinpointAppUI {
                 .frame(frame)
                 .show(ctx, &mut draw);
         }
-        if let Some(screen) = chosen {
+        let changes = drawer_changes(
+            chosen,
+            chosen_lang,
+            publish_requested,
+            refresh_requested,
+            compact,
+        );
+        if let Some(screen) = changes.screen {
             self.app.set_screen(screen);
+        }
+        if let Some(lang) = changes.lang {
+            self.lang = lang;
+        }
+        if let Some(publish_open) = changes.publish_open {
+            self.mobile_publish_open = publish_open;
+        }
+        if changes.close {
             self.mobile_nav_open = false;
         }
-        if let Some(l) = chosen_lang {
-            self.lang = l;
-        }
-        if publish_requested {
-            self.app.set_screen(CurrentScreen::Map);
-            // The sheet flag only feeds the compact map; desktop already shows
-            // the publish card in the map details column.
-            self.mobile_publish_open = compact;
-            self.mobile_nav_open = false;
-        }
-        if refresh_requested {
+        if changes.refresh {
             self.spawn_action(PendingAction::RefreshAll, ctx);
-            self.mobile_nav_open = false;
         }
     }
 }
@@ -2461,11 +2502,47 @@ impl eframe::App for PinpointAppUI {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_wide_width, WIDE_LAYOUT_MIN_WIDTH};
+    use super::{
+        drawer_changes, is_wide_width, CurrentScreen, DrawerChanges, Lang, WIDE_LAYOUT_MIN_WIDTH,
+    };
 
     #[test]
     fn drawer_breakpoint_switches_to_the_side_panel() {
         assert!(!is_wide_width(WIDE_LAYOUT_MIN_WIDTH - 1.0));
         assert!(is_wide_width(WIDE_LAYOUT_MIN_WIDTH));
+    }
+
+    #[test]
+    fn publish_shortcut_opens_the_sheet_only_when_compact() {
+        assert_eq!(
+            drawer_changes(None, None, true, false, false),
+            DrawerChanges {
+                screen: Some(CurrentScreen::Map),
+                publish_open: Some(false),
+                close: true,
+                ..Default::default()
+            }
+        );
+        assert_eq!(
+            drawer_changes(None, None, true, false, true).publish_open,
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn drawer_actions_close_the_panel_and_keep_the_screen_otherwise() {
+        let chosen = drawer_changes(Some(CurrentScreen::Today), None, false, false, false);
+        assert_eq!(chosen.screen, Some(CurrentScreen::Today));
+        assert!(chosen.close);
+        assert_eq!(chosen.publish_open, None);
+
+        let language = drawer_changes(None, Some(Lang::En), false, false, true);
+        assert_eq!(language.lang, Some(Lang::En));
+        assert!(!language.close);
+
+        let refresh = drawer_changes(None, None, false, true, false);
+        assert!(refresh.refresh);
+        assert!(refresh.close);
+        assert_eq!(refresh.screen, None);
     }
 }

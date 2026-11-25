@@ -53,7 +53,24 @@ jobs:
         run: cargo test --locked
       - name: Release version consistency
         shell: pwsh
-        run: ./scripts/check-release.ps1 -SkipHealth -SkipApk
+        run: |
+          $env:BIND_ADDR = "127.0.0.1:8080"
+          Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+          $server = Start-Process -FilePath "./target/debug/pinpoint-server" -PassThru
+          try {
+            $health = $null
+            $deadline = (Get-Date).AddSeconds(30)
+            while (-not $health -and (Get-Date) -lt $deadline) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $health = Invoke-RestMethod "http://127.0.0.1:8080/health" -TimeoutSec 2
+              } catch {}
+            }
+            if (-not $health) { throw "pinpoint-server did not become healthy" }
+            ./scripts/check-release.ps1 -Base http://127.0.0.1:8080 -SkipApk
+          } finally {
+            if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
+          }
       - name: Dependency vulnerability audit (cargo-audit)
         uses: rustsec/audit-check@v2.0.0
         with:

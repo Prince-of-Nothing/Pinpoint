@@ -14,6 +14,7 @@ The per-item flagged list for this release is in
 ### Added
 - [INFRA] Release job: the downloaded APK is re-verified with `apksigner`; a tag release fails if it still carries the throwaway build key.
 - [INFRA] `scripts/check-release.ps1` now also asserts a running server's `/privacy` names the Cargo version, so an embedded stale policy fails the check.
+- [INFRA] CI `rust` now builds and starts `pinpoint-server` and runs the full release check (`-SkipApk`) against it, so `/health` and `/privacy` are gated on every push and PR.
 
 ### Changed
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.

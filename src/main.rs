@@ -44,6 +44,21 @@ fn print_help_and_exit() -> ! {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+/// Screenshot evidence hook: `PINPOINT_SCREENSHOT_SIZE=700x800`.
+fn window_size_from_env() -> [f32; 2] {
+    parse_window_size(&std::env::var("PINPOINT_SCREENSHOT_SIZE").unwrap_or_default())
+        .unwrap_or([1200.0, 800.0])
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn parse_window_size(raw: &str) -> Option<[f32; 2]> {
+    let (width, height) = raw.split_once(|c: char| c.eq_ignore_ascii_case(&'x'))?;
+    let width: f32 = width.trim().parse().ok()?;
+    let height: f32 = height.trim().parse().ok()?;
+    (width >= 320.0 && height >= 240.0).then_some([width, height])
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
@@ -151,7 +166,7 @@ fn main() {
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([1200.0, 800.0])
+            .with_inner_size(window_size_from_env())
             .with_title("Pinpoint — Map First"),
         ..Default::default()
     };
@@ -165,4 +180,18 @@ fn main() {
 #[cfg(target_arch = "wasm32")]
 fn main() {
     eprintln!("Web target - use wasm-bindgen entry point");
+}
+
+#[cfg(all(test, not(target_arch = "wasm32")))]
+mod tests {
+    use super::parse_window_size;
+
+    #[test]
+    fn screenshot_window_size_parses_and_rejects_garbage() {
+        assert_eq!(parse_window_size("700x800"), Some([700.0, 800.0]));
+        assert_eq!(parse_window_size(" 640X480 "), Some([640.0, 480.0]));
+        assert_eq!(parse_window_size("700"), None);
+        assert_eq!(parse_window_size("100x800"), None);
+        assert_eq!(parse_window_size("widex800"), None);
+    }
 }

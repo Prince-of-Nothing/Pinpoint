@@ -408,7 +408,7 @@ impl PinpointAppUI {
         } else {
             prefs.server_url.clone()
         };
-        Self {
+        let ui = Self {
             app,
             rt: Runtime::new().expect("Failed to create tokio runtime"),
             lang: Lang::system(),
@@ -513,7 +513,72 @@ impl PinpointAppUI {
             update_check_started: false,
             update_dialog_open: false,
             update_dialog_for: None,
+        };
+        if ui.app.screenshot_mode() {
+            ui.seed_screenshot_state();
         }
+        ui
+    }
+
+    /// Give `--screenshot` a deterministic native map instead of the login
+    /// screen. Uses example data only; no session or backend call.
+    fn seed_screenshot_state(&self) {
+        let now = chrono::Utc::now().to_rfc3339();
+        let data = self.app.data();
+        let mut data = data.lock().unwrap();
+        data.user = Some(crate::models::User {
+            id: 1,
+            username: "demo-user".into(),
+            email: "demo@example.invalid".into(),
+            full_name: "Demo User".into(),
+            role: "resident".into(),
+            is_active: true,
+            must_change_password: false,
+            password_hash: None,
+            totp_secret: None,
+            mfa_enabled: false,
+            mfa_last_step: 0,
+            failed_login_attempts: 0,
+            locked_until: None,
+            auth_method: "email".into(),
+            public_key: None,
+            recovery_code_hash: None,
+            identity_subject: None,
+        });
+        data.locations = vec![
+            crate::models::FriendLocation {
+                user_id: 2,
+                user_name: "Sam".into(),
+                latitude: 47.0245,
+                longitude: 28.8322,
+                precision_level: "exact".into(),
+                updated_at: now.clone(),
+                accuracy: Some(10.0),
+            },
+            crate::models::FriendLocation {
+                user_id: 3,
+                user_name: "Mira".into(),
+                latitude: 47.0055,
+                longitude: 28.8500,
+                precision_level: "approximate".into(),
+                updated_at: now,
+                accuracy: Some(800.0),
+            },
+        ];
+        data.my_location = Some(crate::models::FriendLocation {
+            user_id: 1,
+            user_name: "Demo User".into(),
+            latitude: 47.0105,
+            longitude: 28.8638,
+            precision_level: "exact".into(),
+            updated_at: chrono::Utc::now().to_rfc3339(),
+            accuracy: Some(8.0),
+        });
+        data.map_center_lat = 47.0105;
+        data.map_center_lon = 28.8638;
+        data.map_zoom = 13;
+        drop(data);
+        self.app.set_screen(CurrentScreen::Map);
     }
 
     /// Mark the mobile offline fallback as untrusted so it cannot restore or
@@ -1901,27 +1966,46 @@ impl eframe::App for PinpointAppUI {
                 self.mobile_selected_place = Some(place);
             }
         }
-        // Handle screenshot mode
+        // Screenshot mode: request a real window capture once the first
+        // frames have settled, then write it and close.
         if self.app.screenshot_mode() && !self.app.screenshot_taken() {
             self.app.increment_screenshot_counter();
-
-            if self.app.screenshot_counter() > 120 {
-                if let Some(path) = self.app.screenshot_path().clone() {
-                    // Create a representative PNG
-                    let mut img = image::RgbaImage::new(1200, 800);
-                    for (x, y, pixel) in img.enumerate_pixels_mut() {
-                        let r = ((x as f32 / 1200.0) * 255.0) as u8;
-                        let g = ((y as f32 / 800.0) * 255.0) as u8;
-                        let b = 100u8;
-                        *pixel = image::Rgba([r, g, b, 255]);
+            let frame = self.app.screenshot_counter();
+            if frame == 121 {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
+                ctx.request_repaint();
+            } else if frame > 121 {
+                let captured = ctx.input(|input| {
+                    input.events.iter().find_map(|event| match event {
+                        egui::Event::Screenshot { image, .. } => Some(Arc::clone(image)),
+                        _ => None,
+                    })
+                });
+                if let Some(image) = captured {
+                    if let Some(path) = self.app.screenshot_path().clone() {
+                        let mut rgba = Vec::with_capacity(image.pixels.len().saturating_mul(4));
+                        for pixel in &image.pixels {
+                            rgba.extend_from_slice(&pixel.to_array());
+                        }
+                        if let Some(buffer) = image::RgbaImage::from_raw(
+                            image.size[0] as u32,
+                            image.size[1] as u32,
+                            rgba,
+                        ) {
+                            let _ = buffer.save(&path);
+                        }
                     }
-
-                    let _ = img.save(&path);
-
                     self.app.set_screenshot_taken(true);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     return;
                 }
+                if frame > 400 {
+                    // A backend without readback support must not hang CI.
+                    self.app.set_screenshot_taken(true);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    return;
+                }
+                ctx.request_repaint();
             }
         }
 

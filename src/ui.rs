@@ -2611,9 +2611,18 @@ mod tests {
 
     #[test]
     fn escape_dismisses_only_without_a_blocking_modal() {
-        assert!(escape_dismisses(true, false));
-        assert!(!escape_dismisses(true, true));
-        assert!(!escape_dismisses(false, false));
+        for (escape, blocked, expected) in [
+            (true, false, true),
+            (true, true, false),
+            (false, false, false),
+            (false, true, false),
+        ] {
+            assert_eq!(
+                escape_dismisses(escape, blocked),
+                expected,
+                "escape={escape} blocked={blocked}"
+            );
+        }
     }
 
     #[test]

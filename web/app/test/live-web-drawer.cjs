@@ -29,8 +29,31 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   await page.locator("#map").click({ position: { x: 120, y: 500 } });
   assert.equal(await expanded(), "false", "a click on the map closes the drawer");
 
+  // Layout: 1280 is a 380 px right column, 700 is a full-width bottom sheet.
+  if ((await expanded()) !== "true") await page.click("#drawer-toggle");
+  const wide = await page.evaluate(() => {
+    const cs = getComputedStyle(document.getElementById("social-drawer"));
+    return { position: cs.position, left: cs.left, right: cs.right, width: cs.width };
+  });
+  assert.equal(wide.position, "absolute", "wide drawer positioning");
+  assert.equal(wide.left, "900px", "wide drawer left edge");
+  assert.equal(wide.right, "0px", "wide drawer right edge");
+  assert.equal(wide.width, "380px", "wide drawer width");
+
+  await page.setViewportSize({ width: 700, height: 720 });
+  await page.waitForTimeout(300);
+  const narrow = await page.evaluate(() => {
+    const cs = getComputedStyle(document.getElementById("social-drawer"));
+    return { position: cs.position, left: cs.left, right: cs.right, width: cs.width, bottom: cs.bottom };
+  });
+  assert.equal(narrow.position, "absolute", "narrow drawer positioning");
+  assert.equal(narrow.left, "0px", "narrow drawer left edge");
+  assert.equal(narrow.right, "0px", "narrow drawer right edge");
+  assert.equal(narrow.width, "700px", "narrow drawer full width");
+  assert.notEqual(narrow.bottom, "auto", "narrow drawer is bottom-anchored");
+
   await browser.close();
-  console.log("PASS  live web drawer open/inside/map-click");
+  console.log("PASS  live web drawer open/inside/map-click/layout");
 })().catch((error) => {
   console.error(error);
   process.exit(1);

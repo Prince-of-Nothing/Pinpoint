@@ -20,6 +20,7 @@ The per-item flagged list for this release is in
 - [FEATURE] Native: Escape closes the "More" drawer unless a dialog or bottom sheet is open.
 - [FEATURE] Native: Escape also closes the route planner, unless a dialog or sheet above it is open; both use the tested `escape_dismisses` helper.
 - [FEATURE] Native: Escape closes the share sheet unless a crash/update dialog is above it; the shared escape decision table now covers all four cases.
+- [FEATURE] Native: Escape closes the map publish/selected-place bottom sheets (unless a dialog, share sheet or the route planner is above them); the sheet-target table is unit-tested.
 - [FEATURE] Native: clicking the map outside the 820–1100 px drawer overlay dismisses it; a pure hit-test helper is unit-tested.
 - [INFRA] Native: drawer post-actions go through a pure `drawer_changes` helper; unit tests cover the compact/desktop Publish branch and close/refresh behavior.
 - [INFRA] Screenshot mode: `PINPOINT_SCREENSHOT_SIZE=WxH` overrides the evidence window size; the 700x800 capture confirms the drawer stays a bottom sheet below 820 pt.

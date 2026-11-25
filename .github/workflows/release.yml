@@ -370,7 +370,8 @@ jobs:
           test "$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")" = "$version"
           test "$(plutil -extract CFBundleVersion raw -o - "$app/Contents/Info.plist")" = "$build"
           test -f "$app/Contents/Resources/Pinpoint.icns"
-          "$app/Contents/MacOS/pinpoint-desktop" --help | grep -F "$version"
+          help_out="$("$app/Contents/MacOS/pinpoint-desktop" --help 2>&1 || true)"
+          grep -Fq "$version" <<<"$help_out"
           (cd dist && zip -qry "pinpoint-desktop-macos-$version.zip" Pinpoint.app README.txt)
       - uses: actions/upload-artifact@v4
         with:

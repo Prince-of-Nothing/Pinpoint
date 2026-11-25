@@ -4,12 +4,14 @@
 **Status:** Unified desktop, mobile and web release.
 
 **Artifacts:** `pinpoint-android-3.0.0.apk` (signed universal:
-`arm64-v8a` + `armeabi-v7a`, minSdk 26, targetSdk 35) and the source archives
-for the `v3.0.0` tag. The web client is served by `pinpoint-server` from the
-same crate; the Windows/Linux/macOS desktop binaries are built by the `client`
-CI jobs. iOS reports `CFBundleShortVersionString` 3.0.0 / build 30000. The APK
-keeps `allowBackup=0`, `usesCleartextTraffic=0` and the network security
-config.
+`arm64-v8a` + `armeabi-v7a`, minSdk 26, targetSdk 35),
+`pinpoint-desktop-windows-x64-3.0.0.zip` (5,722,217 B, release build) and
+`pinpoint-server-windows-x64-3.0.0.zip` (5,179,101 B, release build) plus the
+source archives for the `v3.0.0` tag. The server zip **is** the web bundle:
+the web client is embedded, so run `pinpoint-server.exe` and open
+`http://127.0.0.1:8080/`; there is no separate CDN or wasm download. iOS
+reports `CFBundleShortVersionString` 3.0.0 / build 30000. The APK keeps
+`allowBackup=0`, `usesCleartextTraffic=0` and the network security config.
 
 ## What is in 3.0
 
@@ -40,6 +42,8 @@ encrypted notes and ECIES message envelopes are unchanged from 2.7.x.
   integration suites.
 - `scripts/smoke.ps1`: **29 passed, 0 failed**.
 - `/health` and the desktop About screen report `3.0.0` from the crate.
+- Windows desktop `--help` reports `Pinpoint 3.0.0`; the server zip's
+  `/health` reports `3.0.0` and `/` serves the web client (`text/html`).
 - CI `rust`, CodeQL, `web-tests`, wasm, macOS/Windows clients and ZAP pass.
 - APK `aapt`/`apksigner`: `com.pinpoint.desktop` **3.0.0 (30000)**, signed
   universal (`arm64-v8a` + `armeabi-v7a`), minSdk 26 / target 35,

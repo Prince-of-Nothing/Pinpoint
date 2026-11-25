@@ -98,6 +98,24 @@
     proxy or a configured provider.
   </p>
 
+  <h2>Optional online map layers</h2>
+  <p>
+    The web map opens offline. Three map layers are off until you turn them on,
+    and each loads map images directly from its provider while it is on:
+  </p>
+  <table>
+    <tr><th>Layer</th><th>Provider (host)</th><th>What the provider sees</th></tr>
+    <tr><td>Streets (online map)</td><td>OpenFreeMap (<code>tiles.openfreemap.org</code>)</td><td rowspan="3">Your IP address and the tiles for the area on screen, like any website you load images from. Never your account, friends, shares, notes or published location.</td></tr>
+    <tr><td>Satellite</td><td>EOX Sentinel-2 cloudless (<code>tiles.maps.eox.at</code>)</td></tr>
+    <tr><td>Terrain</td><td>Terrain Tiles on AWS Open Data (<code>elevation-tiles-prod.s3.amazonaws.com</code>)</td></tr>
+  </table>
+  <p>
+    The page's security policy allows no other remote host. Satellite imagery:
+    Sentinel-2 cloudless by EOX IT Services GmbH (contains modified Copernicus
+    Sentinel data 2016), CC BY 4.0. Elevation: Mapzen terrain tiles, with SRTM
+    and GMTED2010 data courtesy of the U.S. Geological Survey and other sources.
+  </p>
+
   <p class="muted">
     <a href="/">Back to Pinpoint</a> ·
     <a href="https://github.com/Prince-of-Nothing/Pinpoint">Source</a> ·

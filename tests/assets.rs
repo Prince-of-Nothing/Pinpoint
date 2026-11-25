@@ -23,6 +23,10 @@ const ATTRIBUTION_URLS: &[&str] = &[
     "https://www.openstreetmap.org/copyright",
     "https://www.openmaptiles.org/",
     "https://opendatacommons.org/licenses/odbl/1-0/",
+    // Credits shown only while the opt-in Satellite / Terrain layers are on
+    // (ADR-0026); EOX asks for the s2maps.eu link with the imagery.
+    "https://s2maps.eu",
+    "https://github.com/tilezen/joerd/blob/master/docs/attribution.md",
 ];
 
 const BANNED_HOSTS: &[&str] = &[

@@ -10,10 +10,12 @@
 
 import { createMap as createFoundationMap } from "/map-assets/map.js";
 import * as maplibregl from "/vendor/maplibre-gl.js";
+import { applyLayers, targetPitch } from "./map-layers.js";
 
 const DEFAULT_STYLE_URL = "/map-assets/style.json";
 const DEFAULT_PMTILES_URL = "/map-assets/fixtures/monaco.pmtiles";
 const ONLINE_STORAGE_KEY = "pinpoint.onlineMapWeb";
+const LAYERS_STORAGE_KEY = "pinpoint.mapLayersWeb";
 const ONLINE_TIMEOUT_MS = 10000;
 
 const FRIEND_LAYER = "pinpoint-locations-circles";
@@ -117,6 +119,8 @@ export function createMap({
   let online = false;
   let onlineBusy = false;
   let onlineSeq = 0;
+  // Satellite, terrain and 3D buildings (map-layers.js); stored per device.
+  let extraLayers = readLayersPreference();
 
   const base = createFoundationMap({
     container,
@@ -150,6 +154,7 @@ export function createMap({
         }
         // A style switch drops the adapter's accuracy layers; re-add them.
         map.on("style.load", () => {
+          if (!destroyed) applyExtraLayers();
           if (!destroyed) applySelfLocation();
           if (!destroyed) applyTrail();
           if (!destroyed) applyMeasure();
@@ -157,6 +162,12 @@ export function createMap({
         });
       }
       applyView();
+      applyExtraLayers();
+      renderLayerCredits();
+      // A stored 3D choice reopens tilted, as it was left.
+      if (map && (extraLayers.terrain || extraLayers.buildings)) {
+        map.setPitch(targetPitch(extraLayers, map.getPitch()));
+      }
       applySelectedMarker();
       applySelfLocation();
       applyRoute();
@@ -285,6 +296,9 @@ export function createMap({
     setTheme,
     getTheme,
     setOnline,
+    setLayers,
+    getLayers,
+    isOnline: () => online,
     resize,
     destroy,
     getMap() {
@@ -779,6 +793,66 @@ export function createMap({
   }
 
   // -------------------------------------------------------------------------
+  // Satellite, terrain and 3D buildings (opt-in, map-layers.js)
+  // -------------------------------------------------------------------------
+
+  function applyExtraLayers() {
+    if (!mapReady || destroyed) return;
+    const live = base.getMap();
+    if (!live) return;
+    // Not `isStyleLoaded()`: that stays false until tiles arrive, which would
+    // skip the re-apply on `style.load`. Mid-switch, MapLibre throws "Style is
+    // not done loading"; the next `style.load` applies the layers instead.
+    try {
+      applyLayers(live, extraLayers);
+    } catch (error) {
+      if (!/not done loading/i.test(String(error?.message))) {
+        console.warn("[pinpoint-map] could not apply map layers", error);
+      }
+    }
+  }
+
+  function renderLayerCredits() {
+    document
+      .getElementById("map-attribution-satellite")
+      ?.classList.toggle("hidden", !extraLayers.satellite);
+    document
+      .getElementById("map-attribution-terrain")
+      ?.classList.toggle("hidden", !extraLayers.terrain);
+  }
+
+  /**
+   * Turn satellite imagery, terrain or 3D buildings on or off. The choice is
+   * stored on this device and re-applied after every style switch; the camera
+   * tilts for raised content and flattens when there is none.
+   *
+   * @param {{satellite?: boolean, terrain?: boolean, buildings?: boolean}} next
+   */
+  function setLayers(next = {}) {
+    if (destroyed) return getLayers();
+    const before = extraLayers;
+    extraLayers = {
+      satellite: Boolean(next.satellite ?? before.satellite),
+      terrain: Boolean(next.terrain ?? before.terrain),
+      buildings: Boolean(next.buildings ?? before.buildings),
+    };
+    saveLayersPreference(extraLayers);
+    renderLayerCredits();
+    applyExtraLayers();
+    const live = base.getMap();
+    const raisedChanged =
+      before.terrain !== extraLayers.terrain || before.buildings !== extraLayers.buildings;
+    if (live && mapReady && raisedChanged) {
+      live.easeTo({ pitch: targetPitch(extraLayers, live.getPitch()), duration: 600 });
+    }
+    return getLayers();
+  }
+
+  function getLayers() {
+    return { ...extraLayers };
+  }
+
+  // -------------------------------------------------------------------------
   // Online basemap (opt-in)
   // -------------------------------------------------------------------------
 
@@ -939,6 +1013,27 @@ function readConfig(key, metaName) {
   const meta = document.querySelector(`meta[name="${metaName}"]`);
   const content = meta?.getAttribute("content");
   return content && content.trim() ? content.trim() : null;
+}
+
+function readLayersPreference() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LAYERS_STORAGE_KEY) || "{}");
+    return {
+      satellite: stored?.satellite === true,
+      terrain: stored?.terrain === true,
+      buildings: stored?.buildings === true,
+    };
+  } catch {
+    return { satellite: false, terrain: false, buildings: false };
+  }
+}
+
+function saveLayersPreference(layers) {
+  try {
+    localStorage.setItem(LAYERS_STORAGE_KEY, JSON.stringify(layers));
+  } catch {
+    // Storage can be unavailable (private mode); the choice lasts for the page.
+  }
 }
 
 function readOnlinePreference() {

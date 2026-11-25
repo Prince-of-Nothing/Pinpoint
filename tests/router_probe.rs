@@ -1897,3 +1897,30 @@ async fn measure_module_is_served() {
         .unwrap();
     assert!(String::from_utf8_lossy(&bytes).contains("lineLengthMeters"));
 }
+
+#[tokio::test]
+async fn map_layers_module_is_served() {
+    use pinpoint_desktop::server::{router, AppState};
+
+    let app = router(AppState::new());
+    let resp = app
+        .oneshot(
+            Request::builder()
+                .uri("/map-layers.js")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
+    assert!(resp.headers()["content-type"]
+        .to_str()
+        .unwrap()
+        .contains("javascript"));
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body = String::from_utf8_lossy(&bytes);
+    assert!(body.contains("export function applyLayers"));
+    assert!(body.contains("https://tiles.maps.eox.at/"));
+}

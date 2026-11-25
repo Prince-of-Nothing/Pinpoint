@@ -56,8 +56,14 @@ for (const id of [
 
 assert.match(app, /state\.layers\.friends \? state\.locations : \[\]/);
 assert.match(app, /state\.layers\.notes \? state\.notes : \[\]/);
-assert.match(app, /chooseBasemap\(false\)/);
-assert.match(app, /chooseBasemap\(true\)/);
+for (const kind of ["offline", "streets", "satellite"]) {
+  assert.match(app, new RegExp(`chooseBasemap\\("${kind}"\\)`), `no ${kind} map type`);
+}
+assert.match(
+  app,
+  /if \(!event\.target\.checked && mapApi\?\.getLayers\?\.\(\)\.satellite\)/,
+  "turning the online map off must drop satellite imagery too",
+);
 assert.match(app, /setTrail\(event\.target\.checked\)/);
 assert.match(app, /pinpoint:theme/);
 assert.match(

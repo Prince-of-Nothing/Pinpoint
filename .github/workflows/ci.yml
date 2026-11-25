@@ -100,6 +100,8 @@ jobs:
         run: node web/app/test/messages-poll.mjs
       - name: Friends/sharing poll checks
         run: node web/app/test/social-poll.mjs
+      - name: Map layer checks
+        run: node web/app/test/map-layers.mjs
       - name: Search feedback checks
         run: node web/app/test/search-feedback.mjs
       - name: Password length checks

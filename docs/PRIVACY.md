@@ -35,6 +35,21 @@
   short retention; it is pseudonymous, used only for abuse prevention, and never
   for location or profiling.
 
+## Optional online map layers
+The web map opens offline. Three layers are off by default and, while on, load
+map images straight from their provider (ADR-0021, ADR-0026):
+
+| Layer | Provider (host) |
+|---|---|
+| Streets (online map) | OpenFreeMap — `tiles.openfreemap.org` |
+| Satellite | EOX Sentinel-2 cloudless 2016, CC BY 4.0 — `tiles.maps.eox.at` |
+| Terrain (hill shading, 3D relief) | Terrain Tiles on AWS Open Data — `elevation-tiles-prod.s3.amazonaws.com` |
+
+Each provider sees the requester's IP address and the tile coordinates of the
+area on screen. None of them receives account data, friend pins, shares, notes
+or published locations. The CSP admits exactly these hosts for images and
+fetches, and nothing else. 3D buildings use the vector tiles already loaded.
+
 ## Diagnostics you choose to send
 - The web client keeps the latest uncaught error in memory only. Nothing is sent
   until you press **Send report**.

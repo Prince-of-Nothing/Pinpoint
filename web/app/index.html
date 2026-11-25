@@ -128,6 +128,16 @@
             <span class="sep">·</span>
             tiles by OpenFreeMap
           </span>
+          <span id="map-attribution-satellite" class="hidden">
+            <span class="sep">·</span>
+            <a href="https://s2maps.eu" target="_blank" rel="noopener noreferrer">Sentinel-2 cloudless</a>
+            by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2016)
+          </span>
+          <span id="map-attribution-terrain" class="hidden">
+            <span class="sep">·</span>
+            Terrain:
+            <a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md" target="_blank" rel="noopener noreferrer">Mapzen, USGS and others</a>
+          </span>
         </div>
 
         <div class="map-topbar">
@@ -182,18 +192,35 @@
 
         <div id="map-controls" class="map-controls hidden" role="group" aria-label="Map options">
           <div class="map-control-group">
-            <span class="map-control-label">Basemap</span>
-            <div class="mode-tabs" role="group" aria-label="Basemap">
-              <button type="button" class="mode active" id="basemap-offline" aria-pressed="true">Offline</button>
-              <button type="button" class="mode" id="basemap-streets" aria-pressed="false">Streets</button>
+            <span class="map-control-label">Map type</span>
+            <div class="basemap-cards" role="group" aria-label="Map type">
+              <button type="button" class="basemap-card" id="basemap-streets" aria-pressed="false">
+                <span class="basemap-swatch streets" aria-hidden="true"></span>Streets
+              </button>
+              <button type="button" class="basemap-card" id="basemap-satellite" aria-pressed="false">
+                <span class="basemap-swatch satellite" aria-hidden="true"></span>Satellite
+              </button>
+              <button type="button" class="basemap-card active" id="basemap-offline" aria-pressed="true">
+                <span class="basemap-swatch offline" aria-hidden="true"></span>Offline
+              </button>
             </div>
           </div>
           <div class="map-control-group">
-            <span class="map-control-label">Layers</span>
+            <span class="map-control-label">3D</span>
+            <label class="map-layer"><input type="checkbox" id="layer-buildings" /> 3D buildings</label>
+            <label class="map-layer"><input type="checkbox" id="layer-terrain" /> Terrain</label>
+          </div>
+          <div class="map-control-group">
+            <span class="map-control-label">On the map</span>
             <label class="map-layer"><input type="checkbox" id="layer-friends" checked /> Friends</label>
             <label class="map-layer"><input type="checkbox" id="layer-trail" /> Trail</label>
             <label class="map-layer"><input type="checkbox" id="layer-notes" checked /> Notes</label>
           </div>
+          <p class="map-control-note">
+            Streets and Satellite load tiles from OpenFreeMap and EOX, Terrain
+            from AWS. They see the area on screen, never your account, friends
+            or location.
+          </p>
         </div>
 
         <div id="search-results" class="search-results hidden" aria-live="polite"></div>

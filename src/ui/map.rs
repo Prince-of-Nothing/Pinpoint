@@ -88,6 +88,7 @@ impl PinpointAppUI {
                     egui::Key::Minus,
                     egui::Key::Num0,
                     egui::Key::F,
+                    egui::Key::L,
                 ] {
                     if !input.key_pressed(key) {
                         continue;
@@ -97,6 +98,7 @@ impl PinpointAppUI {
                         Some(MapKeyAction::ZoomOut) => zoom_delta -= 1,
                         Some(MapKeyAction::ResetView) => reset = true,
                         Some(MapKeyAction::FitPins) => fit_pins = true,
+                        Some(MapKeyAction::Locate) => locate = true,
                         None => {}
                     }
                 }
@@ -119,7 +121,7 @@ impl PinpointAppUI {
                             self.toggle_webview_map();
                         }
                     }
-                    if ui.button("Locate").clicked() {
+                    if ui.button("Locate").on_hover_text("Locate me (L)").clicked() {
                         locate = true;
                     }
                     if ui
@@ -658,6 +660,7 @@ enum MapKeyAction {
     ZoomOut,
     ResetView,
     FitPins,
+    Locate,
 }
 
 struct MapShortcut {
@@ -667,7 +670,7 @@ struct MapShortcut {
     action_label: &'static str,
 }
 
-const MAP_SHORTCUTS: [MapShortcut; 4] = [
+const MAP_SHORTCUTS: [MapShortcut; 5] = [
     MapShortcut {
         keys: &[egui::Key::Plus, egui::Key::Equals],
         key_label: "+ / =",
@@ -691,6 +694,12 @@ const MAP_SHORTCUTS: [MapShortcut; 4] = [
         key_label: "F",
         action: MapKeyAction::FitPins,
         action_label: "Fit pins",
+    },
+    MapShortcut {
+        keys: &[egui::Key::L],
+        key_label: "L",
+        action: MapKeyAction::Locate,
+        action_label: "Locate me",
     },
 ];
 
@@ -1348,6 +1357,7 @@ mod tests {
             Some(MapKeyAction::ResetView)
         );
         assert_eq!(map_key_action(egui::Key::F), Some(MapKeyAction::FitPins));
+        assert_eq!(map_key_action(egui::Key::L), Some(MapKeyAction::Locate));
         assert_eq!(map_key_action(egui::Key::A), None);
     }
 
@@ -1360,6 +1370,7 @@ mod tests {
                 ("-", "Zoom out"),
                 ("0", "Reset view"),
                 ("F", "Fit pins"),
+                ("L", "Locate me"),
             ]
         );
         for shortcut in MAP_SHORTCUTS.iter() {

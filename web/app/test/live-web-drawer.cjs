@@ -1,5 +1,6 @@
-// Live check for the web drawer: opening it, clicking inside it and clicking
-// the visible map (which should dismiss it).
+// Live check for the web drawer: opening it, clicking inside it, Escape
+// closing it (with focus back on the toggle) and clicking the visible map
+// (which should dismiss it).
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
 
@@ -25,6 +26,17 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
 
   await page.click("#social-drawer h2");
   assert.equal(await expanded(), "true", "a click inside the drawer keeps it open");
+
+  await page.keyboard.press("Escape");
+  assert.equal(await expanded(), "false", "Escape closes the drawer");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "drawer-toggle",
+    "Escape returns focus to the drawer toggle",
+  );
+
+  await page.click("#drawer-toggle");
+  assert.equal(await expanded(), "true", "drawer reopens for the map click");
 
   await page.mouse.click(120, 500);
   assert.equal(await expanded(), "false", "a click on the map closes the drawer");
@@ -56,7 +68,7 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   assert.notEqual(narrow.bottom, "auto", "narrow drawer is bottom-anchored");
 
   await browser.close();
-  console.log("PASS  live web drawer open/inside/map-click/layout");
+  console.log("PASS  live web drawer open/inside/escape/map-click/layout");
 })().catch((error) => {
   console.error(error);
   process.exit(1);

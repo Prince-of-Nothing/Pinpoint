@@ -280,7 +280,7 @@ jobs:
           if-no-files-found: error
 
   linux:
-    name: Linux desktop
+    name: Linux desktop and server
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -296,8 +296,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-linux
-      - name: Build release binary
-        run: cargo build --release --locked --bin pinpoint-desktop
+      - name: Build release binaries
+        run: cargo build --release --locked --bin pinpoint-desktop --bin pinpoint-server
       - name: Verify Linux binary
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
@@ -307,6 +307,22 @@ jobs:
             exit 1
           fi
           echo "desktop reports $version"
+      - name: Verify Linux server
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          port=18081
+          BIND_ADDR="127.0.0.1:$port" target/release/pinpoint-server &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          health=""
+          for _ in $(seq 1 60); do
+            if health="$(curl -fsS "http://127.0.0.1:$port/health")"; then break; fi
+            sleep 0.5
+          done
+          grep -Fq "\"version\":\"$version\"" <<<"$health"
+          curl -fsS "http://127.0.0.1:$port/privacy" | grep -Fq "Version $version"
+          curl -fsS "http://127.0.0.1:$port/" | grep -Fq "Pinpoint"
+          echo "server serves /health, /privacy and / at $version"
       - name: Launch Linux binary under Xvfb
         run: |
           xvfb-run -a -s "-screen 0 1280x800x24" \
@@ -316,16 +332,19 @@ jobs:
           size="$(stat -c%s "$RUNNER_TEMP/linux-launch.png")"
           echo "Linux launch screenshot: $size bytes"
           test "$size" -gt 100000
-      - name: Package Linux ZIP
+      - name: Package Linux ZIPs
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
-          mkdir -p dist/linux
+          mkdir -p dist/linux dist/server
           cp target/release/pinpoint-desktop dist/linux/
           cp packaging/pinpoint.desktop dist/linux/
           cp android/res/mipmap-xxxhdpi/ic_launcher.png dist/linux/pinpoint.png
           sed "s/@VERSION@/$version/g" packaging/linux-desktop-README.txt > dist/linux/README.txt
           desktop-file-validate dist/linux/pinpoint.desktop
           (cd dist/linux && zip -j "../pinpoint-desktop-linux-x64-$version.zip" pinpoint-desktop pinpoint.desktop pinpoint.png README.txt)
+          cp target/release/pinpoint-server dist/server/
+          sed "s/@VERSION@/$version/g" packaging/linux-server-README.txt > dist/server/README.txt
+          (cd dist/server && zip -j "../pinpoint-server-linux-x64-$version.zip" pinpoint-server README.txt)
       - uses: actions/upload-artifact@v4
         with:
           name: release-linux
@@ -491,7 +510,7 @@ jobs:
           }
 
   verify-linux:
-    name: Verify downloaded Linux desktop
+    name: Verify downloaded Linux packages
     needs: linux
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -524,6 +543,26 @@ jobs:
           size="$(stat -c%s "$screenshot")"
           test "$size" -gt 100000
           echo "downloaded Linux desktop reports $version; screenshot $size bytes"
+      - name: Run the packaged server
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          root="$RUNNER_TEMP/linux-server-zip"
+          rm -rf "$root"
+          unzip -q "dist/pinpoint-server-linux-x64-$version.zip" -d "$root"
+          chmod +x "$root/pinpoint-server"
+          port=18082
+          BIND_ADDR="127.0.0.1:$port" "$root/pinpoint-server" &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          health=""
+          for _ in $(seq 1 60); do
+            if health="$(curl -fsS "http://127.0.0.1:$port/health")"; then break; fi
+            sleep 0.5
+          done
+          grep -Fq "\"version\":\"$version\"" <<<"$health"
+          curl -fsS "http://127.0.0.1:$port/privacy" | grep -Fq "Version $version"
+          curl -fsS "http://127.0.0.1:$port/" | grep -Fq "Pinpoint"
+          echo "downloaded Linux server serves /health, /privacy and / at $version"
 
   verify-macos:
     name: Verify downloaded macOS app
@@ -644,6 +683,24 @@ jobs:
             throw "Linux README does not report $version"
           }
           Write-Host "Linux ZIP contains binary, desktop entry, icon and README $version"
+
+      - name: Verify downloaded Linux server ZIP
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          $zip = "dist/pinpoint-server-linux-x64-$version.zip"
+          if (-not (Test-Path $zip)) { throw "Missing $zip" }
+          $root = Join-Path $env:RUNNER_TEMP "linux-server-zip"
+          Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip $root
+          if (-not (Test-Path (Join-Path $root "pinpoint-server"))) {
+            throw "Linux server ZIP is missing pinpoint-server"
+          }
+          $readme = Get-Content (Join-Path $root "README.txt") -Raw
+          if ($readme -notmatch [regex]::Escape("Pinpoint $version")) {
+            throw "Linux server README does not report $version"
+          }
+          Write-Host "Linux server ZIP contains pinpoint-server and README $version"
 
       - name: Verify downloaded macOS ZIP
         shell: pwsh

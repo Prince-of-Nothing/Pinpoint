@@ -1062,10 +1062,52 @@ async function pollMessages() {
   }
 }
 
+// Friend requests, shares and friend locations change on other devices. The
+// native client re-fetches them on a 30 s loop; do the same while the page is
+// visible so friend pins and incoming requests do not stay stale until reload.
+const SOCIAL_POLL_MS = 30_000;
+let socialPollBusy = false;
+
+async function pollSocial() {
+  if (!state.user || state.user.must_change_password || document.hidden || socialPollBusy)
+    return;
+  socialPollBusy = true;
+  const userId = state.user.id;
+  try {
+    const [friendships, shares, locations] = await Promise.all([
+      api("/api/v1/friendships/"),
+      api("/api/v1/locations/shares"),
+      api("/api/v1/locations/friends"),
+    ]);
+    // Signed out (or into another account) while the requests were in flight.
+    if (state.user?.id !== userId) return;
+    const friends = Array.isArray(friendships) ? friendships : [];
+    // Rebuilding a list drops keyboard focus from its buttons; leave a list
+    // the user is working in for the next tick.
+    if (!$("friends-list").contains(document.activeElement)) renderFriends(friends);
+    if (!$("shares-list").contains(document.activeElement)) {
+      renderShares(Array.isArray(shares) ? shares : [], friends);
+    }
+    state.locations = Array.isArray(locations) ? locations : [];
+    renderLocations(state.locations);
+    mapApi?.setFriendMarkers(state.layers.friends ? state.locations : []);
+  } catch (_) {
+    // Offline or a transient failure: keep what is on screen.
+  } finally {
+    socialPollBusy = false;
+  }
+}
+
 setInterval(pollMessages, 5000);
+setInterval(pollSocial, SOCIAL_POLL_MS);
+function pollAll() {
+  pollMessages();
+  pollSocial();
+}
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) pollMessages();
+  if (!document.hidden) pollAll();
 });
+window.addEventListener("online", pollAll);
 
 function showRecoveryCode(code) {
   $("recovery-code").textContent = code;
@@ -1855,6 +1897,8 @@ for (const button of tabs) {
     }
     setScreen(name);
     setDrawer(true);
+    // Opening a people screen shows current requests and shares at once.
+    if (name === "friends" || name === "sharing") pollSocial();
   });
 }
 

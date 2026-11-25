@@ -17,6 +17,7 @@ The per-item flagged list for this release is in
 - [INFRA] CI `rust` now builds and starts `pinpoint-server` and runs the full release check (`-SkipApk`) against it, so `/health` and `/privacy` are gated on every push and PR.
 - [INFRA] The release workflow's Windows job now also asserts `/privacy` names the Cargo version before packaging the server ZIP.
 - [INFRA] A release `verify-windows` job extracts the downloaded Windows ZIPs, runs the packaged desktop `--help` and server, and requires the crate version, `/health`, `/privacy` and `/` to pass before drafting.
+- [INFRA] Release `verify-linux` and `verify-macos` jobs run the downloaded bundles: Linux under Xvfb with a screenshot, macOS by opening `Pinpoint.app` and requiring it to stay alive.
 
 ### Changed
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.

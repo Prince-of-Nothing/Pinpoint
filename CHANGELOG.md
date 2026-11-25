@@ -56,9 +56,9 @@ The per-item flagged list for this release is in
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
 - [INFRA] Desktop packaging: macOS now ships a `Pinpoint.app` bundle with Info.plist/icns and Linux ships `pinpoint.desktop` + icon, both validated in the release jobs.
-- [INFRA] v3.0.0 release also attaches `pinpoint-desktop-macos-3.0.0.zip` (6,012,178 B); the tag workflow builds a macOS ZIP from now on.
+- [INFRA] v3.0.0 release also attaches `pinpoint-desktop-macos-3.0.0.zip` (6,131,546 B); the tag workflow builds a macOS ZIP from now on.
 - [INFRA] Release workflow: a macOS job builds `pinpoint-desktop`, checks `--help`, packages a README ZIP and the release job verifies and attaches it.
-- [INFRA] v3.0.0 release also attaches `pinpoint-desktop-linux-x64-3.0.0.zip` (10,054,098 B); the tag workflow builds a Linux desktop ZIP from now on.
+- [INFRA] v3.0.0 release also attaches `pinpoint-desktop-linux-x64-3.0.0.zip` (10,057,368 B); the tag workflow builds a Linux desktop ZIP from now on.
 - [INFRA] Release workflow: a Linux x86_64 job builds `pinpoint-desktop`, checks `--help`, packages a README ZIP and the release job verifies and attaches it.
 - [INFRA] Release job: the downloaded Windows ZIPs are extracted and checked for the expected `pinpoint-desktop.exe`/`pinpoint-server.exe` and README version before the draft is created.
 - [INFRA] Release workflow: the Windows job checks `pinpoint-desktop.exe --help`, starts `pinpoint-server.exe`, and asserts `/health` reports the Cargo version and `/` returns HTML before packaging.

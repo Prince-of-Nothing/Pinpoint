@@ -73,6 +73,36 @@ impl PinpointAppUI {
         let mut reset = false;
         let mut locate = false;
 
+        let modal_open = self.crash_dialog.is_some()
+            || self.update_dialog_open
+            || self.share_sheet.is_some()
+            || self.route_plan.open
+            || self.mobile_publish_open
+            || self.mobile_selected_place.is_some()
+            || self.recovery_code_visible();
+        if !modal_open && !ctx.wants_keyboard_input() {
+            ctx.input(|input| {
+                for key in [
+                    egui::Key::Plus,
+                    egui::Key::Equals,
+                    egui::Key::Minus,
+                    egui::Key::Num0,
+                    egui::Key::F,
+                ] {
+                    if !input.key_pressed(key) {
+                        continue;
+                    }
+                    match map_key_action(key) {
+                        Some(MapKeyAction::ZoomIn) => zoom_delta += 1,
+                        Some(MapKeyAction::ZoomOut) => zoom_delta -= 1,
+                        Some(MapKeyAction::ResetView) => reset = true,
+                        Some(MapKeyAction::FitPins) => fit_pins = true,
+                        None => {}
+                    }
+                }
+            });
+        }
+
         theme::full_card(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.horizontal(|ui| {
@@ -94,14 +124,19 @@ impl PinpointAppUI {
                     }
                     if ui
                         .add_enabled(has_pins, egui::Button::new("Fit pins"))
+                        .on_hover_text("Fit pins (F)")
                         .clicked()
                     {
                         fit_pins = true;
                     }
-                    if ui.button("Reset view").clicked() {
+                    if ui
+                        .button("Reset view")
+                        .on_hover_text("Reset view (0)")
+                        .clicked()
+                    {
                         reset = true;
                     }
-                    if ui.button("+").clicked() {
+                    if ui.button("+").on_hover_text("Zoom in (+)").clicked() {
                         zoom_delta = 1;
                     }
                     ui.label(
@@ -109,7 +144,7 @@ impl PinpointAppUI {
                             .size(12.0)
                             .color(theme::MUTED),
                     );
-                    if ui.button("−").clicked() {
+                    if ui.button("−").on_hover_text("Zoom out (-)").clicked() {
                         zoom_delta = -1;
                     }
                 });
@@ -613,6 +648,25 @@ impl PinpointAppUI {
                 }
             }
         });
+    }
+}
+
+/// Desktop map keyboard shortcuts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MapKeyAction {
+    ZoomIn,
+    ZoomOut,
+    ResetView,
+    FitPins,
+}
+
+fn map_key_action(key: egui::Key) -> Option<MapKeyAction> {
+    match key {
+        egui::Key::Plus | egui::Key::Equals => Some(MapKeyAction::ZoomIn),
+        egui::Key::Minus => Some(MapKeyAction::ZoomOut),
+        egui::Key::Num0 => Some(MapKeyAction::ResetView),
+        egui::Key::F => Some(MapKeyAction::FitPins),
+        _ => None,
     }
 }
 
@@ -1220,7 +1274,27 @@ pub(crate) fn encode_component(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{sheet_escape_target, EscapableSheet};
+    use super::egui;
+    use super::{map_key_action, sheet_escape_target, EscapableSheet, MapKeyAction};
+
+    #[test]
+    fn map_shortcuts_map_to_actions() {
+        assert_eq!(map_key_action(egui::Key::Plus), Some(MapKeyAction::ZoomIn));
+        assert_eq!(
+            map_key_action(egui::Key::Equals),
+            Some(MapKeyAction::ZoomIn)
+        );
+        assert_eq!(
+            map_key_action(egui::Key::Minus),
+            Some(MapKeyAction::ZoomOut)
+        );
+        assert_eq!(
+            map_key_action(egui::Key::Num0),
+            Some(MapKeyAction::ResetView)
+        );
+        assert_eq!(map_key_action(egui::Key::F), Some(MapKeyAction::FitPins));
+        assert_eq!(map_key_action(egui::Key::A), None);
+    }
 
     #[test]
     fn escape_prefers_publish_then_place() {

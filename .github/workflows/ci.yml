@@ -168,6 +168,8 @@ jobs:
         run: node web/app/test/live-route-escape.cjs
       - name: Place sheet live check
         run: node web/app/test/live-place-escape.cjs
+      - name: Search keyboard live check
+        run: node web/app/test/live-search-keyboard.cjs
       - name: Stop server
         if: always()
         run: kill "$(cat "$RUNNER_TEMP/pinpoint-server.pid")" 2>/dev/null || true

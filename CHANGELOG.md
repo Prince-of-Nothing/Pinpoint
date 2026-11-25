@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Web search: ArrowDown moves from the search box into the results, ArrowUp/ArrowDown cycle them, Enter opens the focused place, and Escape returns focus to the search box.
 - [INFRA] CI: a `web-live` job builds and starts the server, then runs headless-Chromium checks for the `/` shortcut (bare focus, in-field typing, modifier and open-drawer blocking), the drawer (opening, inside clicks, map-click dismissal, 1280/700 layout), the route sheet (opens from the map menu, Escape closes) and the place sheet (map click opens, Escape closes, reverse geocode stubbed so no tiles or Nominatim).
 - [FEATURE] Web: pressing `/` focuses the place search box when not typing and no drawer, sheet or dialog is open; the predicate is a tested module served at `/search-shortcut.js`.
 - [FEATURE] Native map: `+`/`=`/`-` zoom, `0` resets the view, `F` fits pins, `L` locates and `R` refreshes when no dialog or text field owns the keyboard; the map buttons show the shortcuts on hover.
@@ -50,6 +51,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Web search: pressing Enter now cancels the pending autocomplete run, so a late rebuild cannot replace the results under a keyboard user.
 - [FIX] Tests: the `app_lock` lockout-remaining test sets its deadline after the Argon2 hash and also checks an expired deadline, so slow CI hashing no longer flakes it.
 - [FIX] Web: removed the duplicate ungated `/` listener in `nav.js`; search focus now respects modifiers, text fields and open drawers/sheets, and the input advertises the shortcut via `title` and `aria-keyshortcuts`.
 - [FIX] Web search: a failed request (offline, server unreachable, rate-limited) now shows its reason and a Retry button in the results panel instead of "No places found near here"; searches show "Searching…", empty answers name the query, and an installed offline index says it searched the offline map.

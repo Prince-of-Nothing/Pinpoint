@@ -1037,6 +1037,9 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   // deployment is self-hosted (Nominatim policy forbids public autocomplete).
   form.addEventListener("submit", (e) => {
     e.preventDefault();
+    // Enter replaces the pending autocomplete run; a late one would rebuild
+    // the results under the keyboard user.
+    clearTimeout(debounceTimer);
     runSearch(input.value);
   });
   input.addEventListener("input", () => {
@@ -1071,6 +1074,29 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     if (!place) return;
     showResults(false);
     selectPlace(place);
+  });
+
+  // Keyboard access: ArrowDown leaves the box, arrows cycle the results and
+  // native Enter clicks the focused button.
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown") return;
+    const first = results.querySelector("button.result");
+    if (!first || results.classList.contains("hidden")) return;
+    event.preventDefault();
+    first.focus();
+  });
+  results.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const buttons = [...results.querySelectorAll("button.result")];
+    const index = buttons.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    if (event.key === "ArrowUp" && index === 0) {
+      input.focus();
+      return;
+    }
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    buttons[(index + step + buttons.length) % buttons.length].focus();
   });
 
   $("place-close").addEventListener("click", hidePlace);
@@ -1192,6 +1218,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
+      if (results.contains(document.activeElement)) input.focus();
       showResults(false);
       hidePlace();
     }

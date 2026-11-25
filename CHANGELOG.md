@@ -12,7 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
-- [INFRA] Release: the Linux job now builds, checks and packages `pinpoint-server-linux-x64-$VERSION.zip` (`/health`, `/privacy`, `/`), and the release job validates and attaches it next to the Windows server ZIP.
+- [INFRA] Release: the Linux job now builds, checks and packages `pinpoint-server-linux-x64-$VERSION.zip` (`/health`, `/privacy`, `/`), and the release job validates and attaches it next to the Windows server ZIP. v3.0.0 now carries the 6,489,283 B Linux server asset.
 - [FEATURE] Native desktop: the "More" drawer opens as a right-hand side panel on wide windows (the map/details column shrinks); narrow windows and phones keep the bottom sheet. A breakpoint test pins the 820 pt switch.
 - [FEATURE] Native: Escape closes the "More" drawer unless a dialog or bottom sheet is open.
 - [INFRA] Native: drawer post-actions go through a pure `drawer_changes` helper; unit tests cover the compact/desktop Publish branch and close/refresh behavior.

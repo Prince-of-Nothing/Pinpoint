@@ -1,6 +1,6 @@
 // Live check for the web drawer: opening it, clicking inside it, Escape
-// closing it (with focus back on the toggle) and clicking the visible map
-// (which should dismiss it).
+// closing it (with focus back on the toggle), clicking the visible map
+// (which should dismiss it), and the 1280/900/700 layouts.
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
 
@@ -55,6 +55,29 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   assert.equal(wide.right, "0px", "wide drawer right edge");
   assert.equal(wide.width, "380px", "wide drawer width");
 
+  // Just below the side-panel breakpoint the drawer overlays the full-width
+  // map instead of reserving a column.
+  await page.setViewportSize({ width: 900, height: 720 });
+  await page.waitForTimeout(300);
+  const band = await page.evaluate(() => {
+    const drawer = getComputedStyle(document.getElementById("social-drawer"));
+    const map = getComputedStyle(document.getElementById("map"));
+    return {
+      position: drawer.position,
+      left: drawer.left,
+      right: drawer.right,
+      width: drawer.width,
+      bottom: drawer.bottom,
+      mapWidth: map.width,
+    };
+  });
+  assert.equal(band.position, "absolute", "900 px drawer positioning");
+  assert.equal(band.left, "0px", "900 px drawer left edge");
+  assert.equal(band.right, "0px", "900 px drawer right edge");
+  assert.equal(band.width, "900px", "900 px drawer full width");
+  assert.notEqual(band.bottom, "auto", "900 px drawer is bottom-anchored");
+  assert.equal(band.mapWidth, "900px", "the map keeps the full width under the drawer");
+
   await page.setViewportSize({ width: 700, height: 720 });
   await page.waitForTimeout(300);
   const narrow = await page.evaluate(() => {
@@ -67,8 +90,16 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   assert.equal(narrow.width, "700px", "narrow drawer full width");
   assert.notEqual(narrow.bottom, "auto", "narrow drawer is bottom-anchored");
 
+  await page.keyboard.press("Escape");
+  assert.equal(await expanded(), "false", "Escape closes the narrow drawer");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "drawer-toggle",
+    "narrow Escape returns focus to the drawer toggle",
+  );
+
   await browser.close();
-  console.log("PASS  live web drawer open/inside/escape/map-click/layout");
+  console.log("PASS  live web drawer open/inside/escape/map-click/layout-1280-900-700");
 })().catch((error) => {
   console.error(error);
   process.exit(1);

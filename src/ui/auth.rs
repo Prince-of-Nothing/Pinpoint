@@ -137,6 +137,12 @@ impl PinpointAppUI {
         let Some(code) = self.app.data().lock().unwrap().recovery_code.clone() else {
             return;
         };
+        let blocked = self.update_dialog_open || self.crash_dialog.is_some();
+        if super::escape_dismisses(ctx.input(|i| i.key_pressed(egui::Key::Escape)), blocked) {
+            self.app.data().lock().unwrap().recovery_code = None;
+            self.show_recover_form = false;
+            return;
+        }
         let mut copy = false;
         let mut dismiss = false;
         egui::Area::new(egui::Id::new("recovery_code_panel"))

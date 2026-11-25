@@ -440,7 +440,8 @@ impl super::PinpointAppUI {
             || self.update_dialog_open
             || self.share_sheet.is_some()
             || self.mobile_publish_open
-            || self.mobile_selected_place.is_some();
+            || self.mobile_selected_place.is_some()
+            || self.recovery_code_visible();
         if super::escape_dismisses(ctx.input(|i| i.key_pressed(egui::Key::Escape)), blocked) {
             self.route_plan.open = false;
             return;

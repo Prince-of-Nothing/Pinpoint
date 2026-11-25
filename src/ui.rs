@@ -1029,6 +1029,11 @@ impl PinpointAppUI {
             || !is_wide_width(ctx.screen_rect().width())
     }
 
+    /// True while the one-time recovery-code modal is on screen.
+    pub(crate) fn recovery_code_visible(&self) -> bool {
+        self.app.data().lock().unwrap().recovery_code.is_some()
+    }
+
     fn spawn_action(&mut self, action: PendingAction, ctx: &egui::Context) {
         let app = Arc::clone(&self.app);
         let note_saved = Arc::clone(&self.note_saved);
@@ -2031,7 +2036,8 @@ impl PinpointAppUI {
             || self.share_sheet.is_some()
             || self.route_plan.open
             || self.mobile_publish_open
-            || self.mobile_selected_place.is_some();
+            || self.mobile_selected_place.is_some()
+            || self.recovery_code_visible();
         let escape = ctx.input(|i| i.key_pressed(egui::Key::Escape));
         if escape_dismisses(escape, modal_open) {
             self.mobile_nav_open = false;

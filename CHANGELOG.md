@@ -14,6 +14,7 @@ The per-item flagged list for this release is in
 
 ## [3.0.0] - 2026-11-25
 ### Changed
+- [DOCS] Version audit: the evidence index and deployment guide now name the 3.0.0 crate and `Pinpoint-mobile-3.0.0-debug.apk` (30000); the Midterm 2 package is explicitly marked as the v2.6.1 snapshot.
 - [RELEASE] Pinpoint 3.0.0 unifies the desktop, Android/iOS and web version on the same Rust crate. API v1, the PostgreSQL schema, cookies and encrypted message/note formats are unchanged, so there is no data migration.
 - [INFRA] The web service worker cache is bumped to `pinpoint-offline-v10` so installed clients refresh their precached shell on this major release.
 

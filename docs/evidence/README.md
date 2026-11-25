@@ -73,8 +73,9 @@ PRs and `CHANGELOG.md`.
 
 ## Artifact
 
-- Android debug APK: `Pinpoint-mobile-2.6.1-debug.apk` (build from the current
-  `main`): `com.pinpoint.desktop` 2.6.1 (20601), `arm64-v8a`, minSdk 26,
+- Current release: [`v3.0.0`](https://github.com/Prince-of-Nothing/Pinpoint/releases/tag/v3.0.0)
+  with `Pinpoint-mobile-3.0.0-debug.apk` (76,387,294 B):
+  `com.pinpoint.desktop` 3.0.0 (30000), `arm64-v8a`, minSdk 26,
   targetSdk 35, `allowBackup=0`, `usesCleartextTraffic=0`, network security
   config present. Build and `aapt` verification steps are in
   [deployment](../DEPLOYMENT.md).

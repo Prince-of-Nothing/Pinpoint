@@ -8,7 +8,7 @@
 `pinpoint-desktop-linux-x64-3.0.0.zip` (10,057,368 B: binary + `pinpoint.desktop` + icon),
 `pinpoint-desktop-macos-3.0.0.zip` (6,131,546 B: unsigned `Pinpoint.app`),
 `pinpoint-desktop-windows-x64-3.0.0.zip` (5,722,217 B, release build) and
-`pinpoint-server-windows-x64-3.0.0.zip` (5,179,101 B, release build) plus the
+`pinpoint-server-windows-x64-3.0.0.zip` (5,179,113 B, release build) plus the
 source archives for the `v3.0.0` tag. The server zip **is** the web bundle:
 the web client is embedded, so run `pinpoint-server.exe` and open
 `http://127.0.0.1:8080/`; there is no separate CDN or wasm download. iOS
@@ -45,7 +45,8 @@ encrypted notes and ECIES message envelopes are unchanged from 2.7.x.
 - `scripts/smoke.ps1`: **29 passed, 0 failed**.
 - `/health` and the desktop About screen report `3.0.0` from the crate.
 - Windows desktop `--help` reports `Pinpoint 3.0.0`; the server zip's
-  `/health` reports `3.0.0` and `/` serves the web client (`text/html`).
+  `/health` reports `3.0.0`, `/` serves the web client (`text/html`) and
+  `/privacy` names release `3.0.0`.
 - Linux desktop `--help` reports `3.0.0` in the release workflow.
 - macOS desktop `--help` reports `3.0.0`; the workflow launches `Pinpoint.app`
   and checks the process stays alive.

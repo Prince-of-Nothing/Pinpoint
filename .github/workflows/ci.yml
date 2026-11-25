@@ -115,6 +115,57 @@ jobs:
       - name: OAuth UI checks
         run: node web/app/test/oauth-ui.mjs
 
+  web-live:
+    # Headless Chromium against the served web client: the "/" shortcut must
+    # focus search only when the field, modifiers and open surfaces allow it.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libssl-dev libxcb-render0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libgl1-mesa-dev
+      - name: Cache cargo registry and build output
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build server
+        run: cargo build --locked --bin pinpoint-server
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Playwright
+        run: |
+          npm install --no-save --no-package-lock playwright@1.65.1
+          npx playwright install --with-deps chromium
+      - name: Start server
+        run: |
+          BIND_ADDR=127.0.0.1:8080 target/debug/pinpoint-server &
+          echo $! >"$RUNNER_TEMP/pinpoint-server.pid"
+          for _ in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8080/health >/dev/null; then exit 0; fi
+            sleep 0.5
+          done
+          echo "::error::pinpoint-server did not become healthy"
+          exit 1
+      - name: Search shortcut live check
+        run: node web/app/test/live-search-shortcut.cjs
+      - name: Stop server
+        if: always()
+        run: kill "$(cat "$RUNNER_TEMP/pinpoint-server.pid")" 2>/dev/null || true
+
   wasm:
     # Compile-check web clients for wasm32 (Trunk entry bins + wasm cfg paths).
     runs-on: ubuntu-latest

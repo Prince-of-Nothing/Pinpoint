@@ -2,7 +2,7 @@
 
 **Current release:** 3.0.0 · **Stack:** one Rust crate (`pinpoint-desktop`) with an Axum server, a desktop client, an Android app and a web client served by the same server.
 
-Release assets: the signed universal Android APK, `pinpoint-desktop-windows-x64-3.0.0.zip`, and `pinpoint-server-windows-x64-3.0.0.zip`. The server zip includes the web client; run it and open `http://127.0.0.1:8080/`. The tag workflow builds the Windows ZIPs on a `windows-latest` runner so future releases attach them automatically.
+Release assets: the signed universal Android APK, `pinpoint-desktop-windows-x64-3.0.0.zip`, and `pinpoint-server-windows-x64-3.0.0.zip`. The server zip includes the web client; run it and open `http://127.0.0.1:8080/`. The tag workflow builds the Windows ZIPs on a `windows-latest` runner and checks desktop `--help`, `/health` and `/` before packaging, so future releases attach verified assets automatically.
 
 This page covers the supported paths: local in-memory, local PostgreSQL, the Docker Compose stack, a production checklist, the desktop/Android builds and the verification gate. The archived Go/Python/Kotlin prototypes are not buildable from this tree; see ADR-0007.
 

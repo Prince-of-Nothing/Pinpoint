@@ -340,16 +340,23 @@ mod tests {
     #[test]
     fn lockout_remaining_reads_the_persisted_deadline() {
         let (store, dir) = temp_store("remaining");
-        let now = now_ms();
-        let record = LockRecord {
+        let mut record = LockRecord {
             pin_hash: hash_password("1234", DEFAULT_ITERS),
             created_at: chrono::Utc::now().to_rfc3339(),
             failures: 3,
-            locked_until_ms: now + 5_000,
+            // Set the deadline after hashing: slow CI hashing must not eat it.
+            locked_until_ms: now_ms() + 5_000,
         };
         store.save(&record).unwrap();
         let remaining = store.lockout_remaining().expect("lockout should remain");
-        assert!(remaining.as_millis() > 3_000 && remaining.as_millis() <= 5_000);
+        assert!(remaining.as_millis() > 0 && remaining.as_millis() <= 5_000);
+
+        record.locked_until_ms = now_ms() - 1;
+        store.save(&record).unwrap();
+        assert!(
+            store.lockout_remaining().is_none(),
+            "expired lockout must end"
+        );
         std::fs::remove_dir_all(dir).ok();
     }
 

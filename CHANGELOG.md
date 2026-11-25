@@ -35,6 +35,7 @@ The per-item flagged list for this release is in
 - [INFRA] Release `verify-linux` and `verify-macos` jobs run the downloaded bundles: Linux under Xvfb with a screenshot, macOS by opening `Pinpoint.app` and requiring it to stay alive.
 
 ### Changed
+- [DOCS] Evidence: live Chromium captures of the web drawer at 1280×720 (right column) and 700×720 (bottom sheet) are committed under `docs/assets` and linked from the evidence index.
 - [DOCS] Evidence: committed the native drawer captures (1200 px side panel, 900 px overlay, 700 px bottom sheet) under `docs/assets` and linked them from the evidence index.
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 

@@ -90,6 +90,9 @@ PRs and `CHANGELOG.md`.
 - Linux server/web: `pinpoint-server-linux-x64-3.0.0.zip` (6,489,283 B);
   the web client is embedded, `/health` and `/privacy` report `3.0.0` and `/`
   serves HTML.
+- macOS server/web: `pinpoint-server-macos-3.0.0.zip` (5,432,742 B, arm64);
+  the embedded web client reports `3.0.0` from `/health` and `/privacy` and
+  serves HTML at `/`.
 - Windows server/web: `pinpoint-server-windows-x64-3.0.0.zip` (5,179,113 B);
   same embedded web client and endpoint checks. There is no separate
   static/wasm web bundle to download.

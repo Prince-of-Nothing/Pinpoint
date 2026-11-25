@@ -8,7 +8,8 @@
 `pinpoint-desktop-linux-x64-3.0.0.zip` (10,057,368 B: binary + `pinpoint.desktop` + icon),
 `pinpoint-desktop-macos-3.0.0.zip` (6,131,546 B: unsigned `Pinpoint.app`),
 `pinpoint-desktop-windows-x64-3.0.0.zip` (5,722,217 B, release build),
-`pinpoint-server-linux-x64-3.0.0.zip` (6,489,283 B, release build) and
+`pinpoint-server-linux-x64-3.0.0.zip` (6,489,283 B, release build),
+`pinpoint-server-macos-3.0.0.zip` (5,432,742 B, arm64, release build) and
 `pinpoint-server-windows-x64-3.0.0.zip` (5,179,113 B, release build) plus the
 source archives for the `v3.0.0` tag. The server zips **are** the web bundle:
 the web client is embedded, so run `pinpoint-server`/`pinpoint-server.exe` and
@@ -53,6 +54,8 @@ encrypted notes and ECIES message envelopes are unchanged from 2.7.x.
   both in the build job and from the downloaded ZIP.
 - macOS desktop `--help` reports `3.0.0`; the workflow launches `Pinpoint.app`
   and checks the process stays alive.
+- macOS server serves `/health` and `/privacy` at `3.0.0` and `/` as HTML,
+  both in the build job and from the downloaded ZIP.
 - Linux desktop launches under Xvfb and produces an 877,281-byte screenshot.
 - CI `rust`, CodeQL, `web-tests`, wasm, macOS/Windows clients and ZAP pass.
 - APK `aapt`/`apksigner`: `com.pinpoint.desktop` **3.0.0 (30000)**, signed

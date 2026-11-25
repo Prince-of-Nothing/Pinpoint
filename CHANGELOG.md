@@ -30,6 +30,7 @@ The per-item flagged list for this release is in
 
 ### Fixed
 - [FIX] Native: the "More" drawer overlays the map below 1100 px instead of reserving 380 pt, fixing the squeezed map/details columns at 820–1100 px. The side panel still reserves space above the breakpoint.
+- [FIX] Web desktop: with the right-hand column open, the "Choose a map" card, the navigation banner and the status toast centre on the visible map instead of running under the column, and the navigation banner sits below the top search bar instead of covering it.
 - [FIX] Native desktop: the drawer's Publish shortcut now opens the Map screen instead of setting the mobile-only publish-sheet flag, which did nothing on wide windows.
 - [FIX] Web: the privacy page now names the current 3.0.0 release instead of 2.6.1; `scripts/check-release.ps1` fails if the version drifts again.
 - [FIX] Release: rebuilt the v3.0.0 Windows server ZIP from current `main`, so its embedded web client serves `/privacy` with `3.0.0`; asset is now 5,179,113 B.

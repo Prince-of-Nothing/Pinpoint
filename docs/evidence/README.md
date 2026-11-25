@@ -12,6 +12,7 @@ cargo clippy --all-targets -- -D warnings
 cargo build --locked
 cargo test --locked          # 381 lib tests + integration suites
 cargo audit                  # 9 accepted advisories, no open vulnerability
+pwsh scripts/check-release.ps1 -SkipHealth -SkipApk   # Cargo/Gradle/iOS/web metadata
 node web/app/test/sharing-ui.mjs
 node web/app/test/admin-ui.mjs
 node web/app/test/messages-poll.mjs
@@ -78,7 +79,8 @@ PRs and `CHANGELOG.md`.
   `com.pinpoint.desktop` 3.0.0 (30000), `arm64-v8a` + `armeabi-v7a`,
   minSdk 26, targetSdk 35, `allowBackup=0`, `usesCleartextTraffic=0`, network
   security config present. Build and `aapt` verification steps are in
-  [deployment](../DEPLOYMENT.md).
+  [deployment](../DEPLOYMENT.md). The full release check is
+  `pwsh scripts/check-release.ps1 -Base http://127.0.0.1:8080 -Apk <apk>`.
 
 ## How to read a claim
 

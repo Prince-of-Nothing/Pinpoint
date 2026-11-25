@@ -861,6 +861,13 @@ impl PinpointAppUI {
             self.update_dialog_open = false;
             return;
         };
+        // The dialog is topmost; Escape dismisses it like "Later" does.
+        if escape_dismisses(ctx.input(|i| i.key_pressed(egui::Key::Escape)), false) {
+            self.update_dialog_open = false;
+            self.dismiss_update_banner();
+            self.update_dialog_for = None;
+            return;
+        }
         let mut open = self.update_dialog_open;
         let mut close_and_dismiss = false;
         egui::Window::new(format!("Pinpoint {} is available", latest.tag))
@@ -2583,6 +2590,12 @@ mod tests {
             drawer_changes(None, None, true, false, true).publish_open,
             Some(true)
         );
+    }
+
+    #[test]
+    fn escape_closes_the_update_dialog_when_nothing_is_above_it() {
+        assert!(escape_dismisses(true, false));
+        assert!(!escape_dismisses(false, false));
     }
 
     #[test]

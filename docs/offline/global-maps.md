@@ -104,7 +104,9 @@ cannot complete, the old layout keeps serving and nothing is re-downloaded.
 
 The toggle is off by default. When on, MapLibre loads the Liberty style and
 tiles from `https://tiles.openfreemap.org`; the page CSP admits that host only
-while online mode is active. An installed pack style wins over it.
+while online mode is active. An installed pack style wins over it. The opt-in
+Satellite and Terrain layers add `tiles.maps.eox.at` and
+`elevation-tiles-prod.s3.amazonaws.com` on the same terms (ADR-0026).
 
 OpenFreeMap then sees the client IP, user agent and requested `z/x/y` tiles;
 tile coordinates reveal the approximate area being viewed. There are no

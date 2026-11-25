@@ -333,6 +333,7 @@ pub fn router(state: AppState) -> Router {
         .route("/map.js", get(web_handlers::map_js))
         .route("/nav.js", get(web_handlers::nav_js))
         .route("/measure.js", get(web_handlers::measure_js))
+        .route("/map-layers.js", get(web_handlers::map_layers_js))
         .route("/sharing.js", get(web_handlers::sharing_js))
         .route("/appearance.js", get(web_handlers::appearance_js))
         .route("/admin.js", get(web_handlers::admin_js))

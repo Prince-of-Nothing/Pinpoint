@@ -51,6 +51,7 @@ Examples: backend framework, real-time transport (WebSockets vs. MQTT), authenti
 | 0023 | [End-to-End Encrypted 1:1 Messages (ECIES, not Signal Protocol)](./0023-e2e-messages-ecies.md) | Accepted |
 | 0024 | [Optional OAuth 2.0 (Google) Sign-In](./0024-oauth-sign-in.md) | Accepted |
 | 0025 | [Encryption at Rest for Private Notes](./0025-note-encryption-at-rest.md) | Accepted |
+| 0026 | [Opt-in Satellite Imagery, Terrain and 3D Buildings on the Web Map](./0026-opt-in-satellite-and-terrain-layers.md) | Accepted |
 
 See the table above; the current architecture summary is in
 [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md). Design and SDLC context is in the

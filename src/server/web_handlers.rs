@@ -17,6 +17,7 @@ const APP_JS: &str = include_str!("../../web/app/app.js");
 const MESSAGE_CRYPTO_JS: &str = include_str!("../../web/app/message-crypto.js");
 const MAP_JS: &str = include_str!("../../web/app/map.js");
 const MEASURE_JS: &str = include_str!("../../web/app/measure.js");
+const MAP_LAYERS_JS: &str = include_str!("../../web/app/map-layers.js");
 const NAV_JS: &str = include_str!("../../web/app/nav.js");
 const SHARING_JS: &str = include_str!("../../web/app/sharing.js");
 const APPEARANCE_JS: &str = include_str!("../../web/app/appearance.js");
@@ -71,17 +72,31 @@ const SW_JS: &str = include_str!("../../web/sw.js");
 // `style-src 'self'` is enough. Scripts stay strict: only same-origin modules
 // and the SQLite WASM evaluator are allowed.
 //
-// The one remote host is the opt-in OpenFreeMap basemap (style, tiles, glyphs
-// and sprites all live on `tiles.openfreemap.org`); it is off by default, so
-// these sources are only reachable when the user turns the online layer on.
+// Remote hosts are opt-in map layers only, all off by default (ADR-0021,
+// ADR-0026): the OpenFreeMap basemap (style, tiles, glyphs and sprites on
+// `tiles.openfreemap.org`), EOX Sentinel-2 satellite imagery
+// (`tiles.maps.eox.at`) and the Terrain Tiles DEM on AWS
+// (`elevation-tiles-prod.s3.amazonaws.com`). Each is reachable only while the
+// user has that layer on, and only for tiles and images.
 // The vendored MapLibre worker is same-origin, so `worker-src` stays `'self'`
 // (`docs/offline/android-webview-online.md` §3).
-const CSP: &str = "default-src 'self'; img-src 'self' data: https://tiles.openfreemap.org; \
+const CSP: &str = "default-src 'self'; \
+img-src 'self' data: https://tiles.openfreemap.org https://tiles.maps.eox.at \
+https://elevation-tiles-prod.s3.amazonaws.com; \
 script-src 'self' 'wasm-unsafe-eval'; \
 worker-src 'self'; style-src 'self'; font-src 'self'; \
-connect-src 'self' https://tiles.openfreemap.org; base-uri 'none'; \
+connect-src 'self' https://tiles.openfreemap.org https://tiles.maps.eox.at \
+https://elevation-tiles-prod.s3.amazonaws.com; base-uri 'none'; \
 frame-ancestors 'none'; form-action 'self'; object-src 'none'; \
 manifest-src 'self'";
+
+/// Remote map hosts the CSP allows, each behind an opt-in layer.
+#[cfg(test)]
+const OPT_IN_MAP_HOSTS: [&str; 3] = [
+    "https://tiles.openfreemap.org",
+    "https://tiles.maps.eox.at",
+    "https://elevation-tiles-prod.s3.amazonaws.com",
+];
 
 const PERMISSIONS_POLICY: &str = "geolocation=(self), camera=(), microphone=(), payment=(), usb=()";
 
@@ -176,6 +191,10 @@ pub async fn nav_js() -> Response {
 
 pub async fn measure_js() -> Response {
     module_js(MEASURE_JS)
+}
+
+pub async fn map_layers_js() -> Response {
+    module_js(MAP_LAYERS_JS)
 }
 
 pub async fn sharing_js() -> Response {
@@ -520,19 +539,30 @@ mod tests {
     }
 
     #[test]
-    fn csp_allows_the_opt_in_openfreemap_basemap() {
+    fn csp_allows_only_the_opt_in_map_hosts() {
         for name in ["connect-src", "img-src"] {
             let sources = directive(name);
-            assert!(
-                sources.contains("https://tiles.openfreemap.org"),
-                "{name} lacks the tile host: {sources}"
-            );
+            for host in OPT_IN_MAP_HOSTS {
+                assert!(
+                    sources.contains(host),
+                    "{name} lacks the opt-in map host {host}: {sources}"
+                );
+            }
             assert!(
                 sources.contains("'self'"),
                 "{name} dropped same-origin access: {sources}"
             );
+            // Nothing beyond 'self', data: images and the listed map hosts.
+            for source in sources.split_whitespace().skip(1) {
+                assert!(
+                    source == "'self'"
+                        || (name == "img-src" && source == "data:")
+                        || OPT_IN_MAP_HOSTS.contains(&source),
+                    "{name} allows an unlisted source {source}"
+                );
+            }
         }
-        // One origin, no wildcard subdomains, and no blob workers.
+        // Exact hosts, no wildcard subdomains, and no blob workers.
         assert!(!CSP.contains('*'), "wildcard source in {CSP}");
         assert!(!CSP.contains("blob:"), "blob source in {CSP}");
         assert_eq!(directive("worker-src"), "worker-src 'self'");

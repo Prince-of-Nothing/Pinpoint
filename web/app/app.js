@@ -1995,26 +1995,40 @@ $("layer-trail")?.addEventListener("change", (event) => setTrail(event.target.ch
 // ---------------------------------------------------------------------------
 // Map options: basemap and layers
 // ---------------------------------------------------------------------------
-/** The account card's checkbox is the single source of truth for the basemap. */
-function renderBasemap() {
-  const online = Boolean($("online-map-toggle")?.checked);
-  for (const [id, expected] of [
-    ["basemap-offline", false],
-    ["basemap-streets", true],
-  ]) {
-    const button = $(id);
-    if (!button) continue;
-    button.classList.toggle("active", online === expected);
-    button.setAttribute("aria-pressed", String(online === expected));
-  }
+/**
+ * The account card's checkbox decides online vs offline; satellite is the
+ * online style with EOX imagery underneath (map-layers.js).
+ */
+function currentBasemap() {
+  if (!$("online-map-toggle")?.checked) return "offline";
+  return mapApi?.getLayers?.().satellite ? "satellite" : "streets";
 }
 
-function chooseBasemap(online) {
+function renderBasemap() {
+  const active = currentBasemap();
+  for (const kind of ["offline", "streets", "satellite"]) {
+    const button = $(`basemap-${kind}`);
+    if (!button) continue;
+    button.classList.toggle("active", kind === active);
+    button.setAttribute("aria-pressed", String(kind === active));
+  }
+  const layers = mapApi?.getLayers?.() || {};
+  const buildings = $("layer-buildings");
+  if (buildings) buildings.checked = Boolean(layers.buildings);
+  const terrain = $("layer-terrain");
+  if (terrain) terrain.checked = Boolean(layers.terrain);
+}
+
+function chooseBasemap(kind) {
   const toggle = $("online-map-toggle");
   if (!toggle) return;
-  toggle.checked = online;
-  // The map module switches the style on this event.
-  toggle.dispatchEvent(new Event("change", { bubbles: true }));
+  const online = kind !== "offline";
+  mapApi?.setLayers({ satellite: kind === "satellite" });
+  if (toggle.checked !== online) {
+    toggle.checked = online;
+    // The map module switches the style on this event.
+    toggle.dispatchEvent(new Event("change", { bubbles: true }));
+  }
   renderBasemap();
 }
 
@@ -2030,9 +2044,22 @@ function setMapControls(open) {
 $("map-layers-toggle")?.addEventListener("click", () => {
   setMapControls($("map-controls").classList.contains("hidden"));
 });
-$("basemap-offline")?.addEventListener("click", () => chooseBasemap(false));
-$("basemap-streets")?.addEventListener("click", () => chooseBasemap(true));
-$("online-map-toggle")?.addEventListener("change", renderBasemap);
+$("basemap-offline")?.addEventListener("click", () => chooseBasemap("offline"));
+$("basemap-streets")?.addEventListener("click", () => chooseBasemap("streets"));
+$("basemap-satellite")?.addEventListener("click", () => chooseBasemap("satellite"));
+$("online-map-toggle")?.addEventListener("change", (event) => {
+  // Imagery needs the online style; turning the online map off drops it too.
+  if (!event.target.checked && mapApi?.getLayers?.().satellite) {
+    mapApi.setLayers({ satellite: false });
+  }
+  renderBasemap();
+});
+$("layer-buildings")?.addEventListener("change", (event) => {
+  mapApi?.setLayers({ buildings: event.target.checked });
+});
+$("layer-terrain")?.addEventListener("change", (event) => {
+  mapApi?.setLayers({ terrain: event.target.checked });
+});
 $("layer-friends")?.addEventListener("change", (event) => {
   state.layers.friends = event.target.checked;
   updateMap();

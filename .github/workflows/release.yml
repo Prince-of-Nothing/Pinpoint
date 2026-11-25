@@ -271,9 +271,50 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
+  linux:
+    name: Linux desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libssl-dev libxcb-render0-dev libxcb-shape0-dev \
+            libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libgl1-mesa-dev zip
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-linux
+      - name: Build release binary
+        run: cargo build --release --locked --bin pinpoint-desktop
+      - name: Verify Linux binary
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          out="$(target/release/pinpoint-desktop --help 2>&1)"
+          if ! grep -Fq "$version" <<<"$out"; then
+            echo "::error::desktop --help does not report $version"
+            exit 1
+          fi
+          echo "desktop reports $version"
+      - name: Package Linux ZIP
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          mkdir -p dist/linux
+          cp target/release/pinpoint-desktop dist/linux/
+          sed "s/@VERSION@/$version/g" packaging/linux-desktop-README.txt > dist/linux/README.txt
+          (cd dist/linux && zip -j "../pinpoint-desktop-linux-x64-$version.zip" pinpoint-desktop README.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: dist/*.zip
+          if-no-files-found: error
+
   release:
     name: GitHub Release
-    needs: [apk, windows]
+    needs: [apk, windows, linux]
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -292,6 +333,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: release-windows
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-linux
           path: dist
 
       - name: Verify downloaded Windows ZIPs
@@ -325,6 +371,24 @@ jobs:
             throw "server README does not report $version"
           }
           Write-Host "Windows ZIPs contain the expected exes and README $version"
+
+      - name: Verify downloaded Linux ZIP
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          $zip = Get-ChildItem dist/pinpoint-desktop-linux-x64-*.zip | Select-Object -First 1
+          if (-not $zip) { throw "Missing Linux desktop ZIP" }
+          $root = Join-Path $env:RUNNER_TEMP "linux-zip"
+          Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip.FullName $root
+          if (-not (Test-Path (Join-Path $root "pinpoint-desktop"))) {
+            throw "Linux ZIP is missing pinpoint-desktop"
+          }
+          $readme = Get-Content (Join-Path $root "README.txt") -Raw
+          if ($readme -notmatch [regex]::Escape("Pinpoint $version")) {
+            throw "Linux README does not report $version"
+          }
+          Write-Host "Linux ZIP contains pinpoint-desktop and README $version"
 
       - name: Install Android build-tools (aapt)
         run: |

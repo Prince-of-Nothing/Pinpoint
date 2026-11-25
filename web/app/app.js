@@ -1824,6 +1824,7 @@ function setActiveTab(name) {
 }
 
 function setDrawer(open, animate = true) {
+  const wasOpen = drawer.classList.contains("open");
   clearTimeout(drawerCloseTimer);
   drawer.classList.remove("closing");
   if (open) {
@@ -1845,6 +1846,11 @@ function setDrawer(open, animate = true) {
   if (!open && drawer.contains(document.activeElement)) drawerToggle.focus();
   drawer.setAttribute("aria-hidden", String(!open));
   drawerToggle.setAttribute("aria-expanded", String(open));
+  // The bottom sheet takes focus so keyboard users land inside it; the wide
+  // side column must not steal focus from the toggle.
+  if (open && !wasOpen && !window.matchMedia("(min-width: 981px)").matches) {
+    $("drawer-close")?.focus();
+  }
   if (!open) setActiveTab("map");
   // The drawer changes the map's width on desktop; MapLibre keeps its old
   // canvas size until told to resize.

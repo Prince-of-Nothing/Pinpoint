@@ -507,6 +507,19 @@ body:has(#app-panel:not(.hidden)) #session-bar {
 .search-results .result:focus-visible { background: var(--panel-2); }
 .search-results .result .name { display: block; font-weight: 600; }
 .search-results .result .meta { display: block; color: var(--muted); font-size: 0.78rem; }
+.search-results div.result { cursor: default; }
+.search-results div.result:hover { background: transparent; }
+.search-results .search-error {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--danger);
+}
+.search-results .search-retry {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding: 0.35rem 0.8rem;
+}
 
 .side-panel {
   position: absolute;

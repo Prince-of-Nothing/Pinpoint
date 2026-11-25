@@ -305,50 +305,84 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       return;
     }
     if (searchController) searchController.abort();
-    searchController = new AbortController();
+    const controller = new AbortController();
+    searchController = controller;
     const center = mapApi.map.getCenter();
+    renderSearchNote("Searching…");
     try {
       const offline = await getOfflineSearch();
       if (offline) {
         const items = offline
           .search(q, 8)
           .map((result) => toSearchPlace(result, { lat: center.lat, lon: center.lng }));
-        renderResults(items);
+        renderResults(items, `No places in the offline map match “${q}”.`);
         return;
       }
       const url = `/map/search?q=${encodeURIComponent(q)}&lat=${center.lat.toFixed(5)}&lon=${center.lng.toFixed(5)}&limit=8`;
-      const res = await fetch(url, { signal: searchController.signal, credentials: "include" });
+      const res = await fetch(url, { signal: controller.signal, credentials: "include" });
       const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error?.message || "Search failed.");
-      renderResults(Array.isArray(body.results) ? body.results : []);
+      if (!res.ok) throw new Error(body?.error?.message || `Search failed (HTTP ${res.status}).`);
+      renderResults(Array.isArray(body.results) ? body.results : [], `No places match “${q}”.`);
     } catch (err) {
-      if (err.name === "AbortError") return;
-      setStatus(err.message, true);
-      renderResults([]);
+      if (err.name === "AbortError" || controller !== searchController) return;
+      renderSearchError(searchErrorText(err), q);
     }
   }
 
-  function renderResults(items) {
+  // A failed request is not an empty result: say why, and offer a retry.
+  function searchErrorText(err) {
+    if (navigator.onLine === false) {
+      return "You're offline. Search needs a connection unless the offline map is installed.";
+    }
+    if (err instanceof TypeError) {
+      return "Can't reach the Pinpoint server. Check your connection and try again.";
+    }
+    return err?.message || "Search failed.";
+  }
+
+  function renderSearchNote(text, className = "result muted") {
+    currentResults = [];
+    results.innerHTML = "";
+    const note = document.createElement("div");
+    note.className = className;
+    note.textContent = text;
+    results.appendChild(note);
+    showResults(true);
+    return note;
+  }
+
+  function renderSearchError(text, query) {
+    const note = renderSearchNote(text, "result search-error");
+    note.setAttribute("role", "alert");
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "secondary search-retry";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", () => runSearch(query));
+    note.appendChild(retry);
+  }
+
+  function renderResults(items, emptyText = "No places found.") {
+    if (!items.length) {
+      renderSearchNote(emptyText);
+      return;
+    }
     currentResults = items;
     results.innerHTML = "";
-    if (!items.length) {
-      results.innerHTML = '<div class="result muted">No places found near here.</div>';
-    } else {
-      for (const place of items) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "result";
-        btn.dataset.index = String(currentResults.indexOf(place));
-        const name = document.createElement("span");
-        name.className = "name";
-        name.textContent = place.short_name || place.display_name || "Place";
-        const meta = document.createElement("span");
-        meta.className = "meta";
-        const dist = Number.isFinite(place.distance_m) ? ` · ${formatDistance(place.distance_m)}` : "";
-        meta.textContent = `${place.display_name || ""}${dist}`;
-        btn.append(name, meta);
-        results.appendChild(btn);
-      }
+    for (const place of items) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "result";
+      btn.dataset.index = String(currentResults.indexOf(place));
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = place.short_name || place.display_name || "Place";
+      const meta = document.createElement("span");
+      meta.className = "meta";
+      const dist = Number.isFinite(place.distance_m) ? ` · ${formatDistance(place.distance_m)}` : "";
+      meta.textContent = `${place.display_name || ""}${dist}`;
+      btn.append(name, meta);
+      results.appendChild(btn);
     }
     showResults(true);
   }

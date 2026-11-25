@@ -2,8 +2,8 @@
 #
 # Pushing a version tag (v1.2.1, v1.3.0-beta, ΓÇª) builds two APKs, re-signs them
 # with the release key and creates a DRAFT GitHub release named after the tag
-# with an empty "What's Changed" section. Fill that in on GitHub and publish
-# the draft; it becomes the latest release and the in-app checker sees it.
+# with RELEASE_NOTES.md as the body. Publish the draft when it looks right; it
+# becomes the latest release and the in-app checker sees it.
 #
 # A manual run (Actions ΓÇ║ Release ΓÇ║ Run workflow) is a dry run: it builds the
 # APKs at the version in Cargo.toml and keeps them as the run artifact. It
@@ -191,7 +191,7 @@ jobs:
   release:
     name: GitHub Release
     needs: apk
-    if: github.ref_type == 'tag'
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -220,10 +220,11 @@ jobs:
           ./scripts/check-release.ps1 -SkipHealth -Apk $apk.FullName
 
       - name: Draft the release
+        if: github.ref_type == 'tag'
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --draft --verify-tag \
             --title "$GITHUB_REF_NAME" \
             --notes-file RELEASE_NOTES.md \
             -- dist/*
-          echo "Draft **$GITHUB_REF_NAME** is ready: fill in What's Changed and publish it." >>"$GITHUB_STEP_SUMMARY"
+          echo "Draft **$GITHUB_REF_NAME** is ready: review the notes and publish it." >>"$GITHUB_STEP_SUMMARY"

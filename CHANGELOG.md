@@ -55,6 +55,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [INFRA] Release dry run: `workflow_dispatch` now executes the release job's checkout, `aapt` install and downloaded-APK check, skipping only the draft creation.
 - [INFRA] Release workflow: drafts now use `RELEASE_NOTES.md` as the body and re-run `check-release.ps1 -Apk` on the downloaded artifact before drafting, so a generic body or mismatched asset cannot ship.
 - [INFRA] The tag release workflow now runs `scripts/check-release.ps1 -Apk` against the universal APK before drafting, so versionName/versionCode/ABI drift blocks the release.
 - [INFRA] Release consistency: `scripts/check-release.ps1` compares Cargo, Android Gradle, iOS plist, the web cache marker, `/health` and an APK's versionName/versionCode; CI runs the metadata checks and the router tests assert `/health` matches the crate version.

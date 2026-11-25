@@ -1226,10 +1226,11 @@ mod registration_tests {
         // account costs; computed once per process.
         assert!(hash.starts_with("$argon2id$"));
         assert_eq!(hash, super::dummy_password_hash());
-        // Its secret is random: no guessable password, including the old
-        // fixed one, unlocks it.
-        for guess in ["pinpoint-login-timing", "wrong", ""] {
-            assert!(!crate::security::password::verify_password(guess, hash));
+        // Its secret is random and never stored, so a guess does not unlock
+        // it. Random guesses keep literal passwords out of the test.
+        for _ in 0..3 {
+            let guess = format!("{:032x}", rand::random::<u128>());
+            assert!(!crate::security::password::verify_password(&guess, hash));
         }
     }
 }

@@ -87,9 +87,9 @@ PRs and `CHANGELOG.md`.
   the release workflow checks `--help` and launches it under Xvfb.
 - macOS desktop: `pinpoint-desktop-macos-3.0.0.zip` (6,131,546 B: unsigned `Pinpoint.app`);
   the workflow checks `--help`, opens the app and requires the process to stay alive.
-- Windows server/web: `pinpoint-server-windows-x64-3.0.0.zip` (5,179,101 B);
-  the web client is embedded, `/health` reports `3.0.0` and `/` serves HTML.
-  There is no separate static/wasm web bundle to download.
+- Windows server/web: `pinpoint-server-windows-x64-3.0.0.zip` (5,179,113 B);
+  the web client is embedded, `/health` and `/privacy` report `3.0.0` and `/`
+  serves HTML. There is no separate static/wasm web bundle to download.
 
 ## How to read a claim
 

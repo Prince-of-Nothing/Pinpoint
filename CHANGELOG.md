@@ -19,6 +19,7 @@ The per-item flagged list for this release is in
 
 ### Fixed
 - [FIX] Web: the privacy page now names the current 3.0.0 release instead of 2.6.1; `scripts/check-release.ps1` fails if the version drifts again.
+- [FIX] Release: rebuilt the v3.0.0 Windows server ZIP from current `main`, so its embedded web client serves `/privacy` with `3.0.0`; asset is now 5,179,113 B.
 
 ## [3.0.0] - 2026-11-25
 ### Changed

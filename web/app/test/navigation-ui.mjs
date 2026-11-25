@@ -84,6 +84,33 @@ assert.match(
   /matchMedia\?\.\("\(min-width: 981px\)"\)/,
   "desktop sign-in must open the section column",
 );
+
+// The drawer itself must move from the bottom sheet to the right column at the
+// same breakpoint, not just the map.
+const wideCssStart = css.indexOf("@media (min-width: 981px)");
+assert.ok(wideCssStart > 0, "missing the 981 px desktop breakpoint");
+const mobileDrawer =
+  css.slice(0, wideCssStart).match(/\.drawer \{[^}]*\}/s)?.[0] ?? "";
+const wideDrawer =
+  css.slice(wideCssStart).match(/\.drawer \{[^}]*\}/s)?.[0] ?? "";
+assert.match(
+  mobileDrawer,
+  /bottom: calc\(4\.6rem \+ var\(--safe-bottom\)\);/,
+  "the narrow drawer must stay bottom-anchored",
+);
+assert.match(wideDrawer, /left: auto;/, "the wide drawer must leave the left edge");
+assert.match(wideDrawer, /right: 0;/, "the wide drawer must pin to the right edge");
+assert.match(wideDrawer, /width: 380px;/, "the wide drawer must be a 380 px column");
+assert.match(
+  wideDrawer,
+  /border-left: 1px solid var\(--border\);/,
+  "the wide drawer must draw a column divider",
+);
+assert.doesNotMatch(
+  wideDrawer,
+  /bottom: calc\(4\.6rem/,
+  "the wide drawer must not keep the bottom-sheet anchor",
+);
 assert.match(map, /showCompass: true/);
 assert.match(map, /visualizePitch: true/);
 assert.match(map, /new maplibregl\.FullscreenControl\(\)/);

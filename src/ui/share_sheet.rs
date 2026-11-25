@@ -96,6 +96,11 @@ impl super::PinpointAppUI {
             self.share_sheet = None;
             return;
         }
+        let blocked = self.crash_dialog.is_some() || self.update_dialog_open;
+        if super::escape_dismisses(ctx.input(|i| i.key_pressed(egui::Key::Escape)), blocked) {
+            self.share_sheet = None;
+            return;
+        }
         let compact = Self::is_compact(ctx);
         let panel = theme::PANEL.gamma_multiply(0.98);
         let border = theme::BORDER;

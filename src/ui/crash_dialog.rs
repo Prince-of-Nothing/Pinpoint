@@ -77,6 +77,22 @@ impl PinpointAppUI {
     }
 
     pub fn draw_crash_dialog(&mut self, ctx: &egui::Context) {
+        if self.crash_dialog.is_none() {
+            return;
+        }
+        // Escape closes the report like "Close" (mark seen, keep the file).
+        if super::escape_dismisses(
+            ctx.input(|i| i.key_pressed(egui::Key::Escape)),
+            self.update_dialog_open,
+        ) {
+            if let Some(dialog) = self.crash_dialog.as_ref() {
+                if let Some(path) = dialog.path.as_ref() {
+                    crash::mark_seen(path);
+                }
+            }
+            self.crash_dialog = None;
+            return;
+        }
         let mut outcome: Option<CrashDialogOutcome> = None;
         {
             let Some(dialog) = self.crash_dialog.as_mut() else {

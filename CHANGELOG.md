@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] Web tests: the navigation test now pins the drawer's bottom-sheet CSS and its 981 px right-column override (`left: auto`, `right: 0`, `width: 380px`, column divider).
 - [INFRA] Release: the Linux job now builds, checks and packages `pinpoint-server-linux-x64-$VERSION.zip` (`/health`, `/privacy`, `/`), and the release job validates and attaches it next to the Windows server ZIP. v3.0.0 now carries the 6,489,283 B Linux server asset.
 - [FEATURE] Native desktop: the "More" drawer opens as a right-hand side panel on wide windows (the map/details column shrinks); narrow windows and phones keep the bottom sheet. A breakpoint test pins the 820 pt switch.
 - [FEATURE] Native: Escape closes the "More" drawer unless a dialog or bottom sheet is open.

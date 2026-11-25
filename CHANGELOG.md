@@ -39,6 +39,7 @@ The per-item flagged list for this release is in
 ### Changed
 - [DOCS] Evidence: live Chromium captures of the web drawer at 1280×720 (right column) and 700×720 (bottom sheet) are committed under `docs/assets` and linked from the evidence index.
 - [DOCS] Evidence: committed the native drawer captures (1200 px side panel, 900 px overlay, 700 px bottom sheet) under `docs/assets` and linked them from the evidence index.
+- [FIX] Web: on narrow windows and phones the search bar now sits under the header (as on desktop) with results, category chips and the layers menu opening below it, instead of floating above the tab bar over the attribution; the header shows only the @handle, keeping the account email on the Account screen.
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed

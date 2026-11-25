@@ -68,6 +68,10 @@ header h1 {
 }
 
 #session-bar { display: flex; align-items: center; gap: 0.75rem; }
+/* The header shows the public @handle only; the email (or an anonymous
+   account's placeholder address) stays on the Account screen, so it is not
+   on view over the map or in a shared screen. */
+#user-email { display: none; }
 #theme-toggle,
 #logout {
   background: transparent;
@@ -2114,4 +2118,29 @@ body:has(.drawer:is(.open, .closing)) .map-controls {
   font-size: 0.7rem;
   font-weight: 600;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+/* ---------------------------------------------------------------------------
+   Search at the top on every width
+   Narrow windows and phones used to stack the search bar above the tab bar,
+   so results, chips and the layers menu opened upwards over the map and the
+   attribution sat on the search field. The bar now sits under the header as
+   on desktop; the bottom keeps only the tab bar, attribution and controls.
+   --------------------------------------------------------------------------- */
+@media (max-width: 980px) {
+  .map-topbar {
+    top: calc(4.5rem + var(--safe-top));
+    bottom: auto;
+  }
+  .search-results,
+  .category-chips,
+  .map-controls {
+    top: calc(8.3rem + var(--safe-top));
+    bottom: auto;
+  }
+  .search-results { max-height: min(50vh, 420px); }
+  .map-attribution { bottom: calc(4.7rem + var(--safe-bottom)); }
+  .app-shell .maplibregl-ctrl-bottom-right { bottom: calc(6.6rem + var(--safe-bottom)); }
+  .measure-hud,
+  .map-menu { bottom: calc(5.2rem + var(--safe-bottom)); }
+  .nav-banner { top: calc(8.3rem + var(--safe-top)); }
 }

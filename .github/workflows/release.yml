@@ -410,7 +410,7 @@ jobs:
           if-no-files-found: error
 
   verify-windows:
-    name: Verify downloaded Windows server
+    name: Verify downloaded Windows apps
     needs: windows
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
@@ -420,10 +420,25 @@ jobs:
         with:
           name: release-windows
           path: dist
-      - name: Run the packaged server
+      - name: Run the packaged desktop and server
         shell: pwsh
         run: |
           $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          $desktopZip = Get-ChildItem "dist/pinpoint-desktop-windows-x64-$version.zip"
+          if (-not $desktopZip) { throw "Missing desktop ZIP for $version" }
+          $desktopRoot = Join-Path $env:RUNNER_TEMP "packaged-desktop"
+          Remove-Item $desktopRoot -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $desktopZip.FullName $desktopRoot
+          $helpOut = "$env:RUNNER_TEMP\downloaded-desktop-help.out"
+          $helpErr = "$env:RUNNER_TEMP\downloaded-desktop-help.err"
+          $desktop = Start-Process -FilePath (Join-Path $desktopRoot "pinpoint-desktop.exe") -ArgumentList "--help" `
+            -NoNewWindow -Wait -PassThru -RedirectStandardOutput $helpOut -RedirectStandardError $helpErr
+          if ($desktop.ExitCode -ne 0) { throw "downloaded pinpoint-desktop --help failed" }
+          $help = (Get-Content $helpOut -Raw -ErrorAction SilentlyContinue) +
+            (Get-Content $helpErr -Raw -ErrorAction SilentlyContinue)
+          if ($help -notmatch [regex]::Escape($version)) {
+            throw "downloaded desktop --help does not report $version"
+          }
           $zip = Get-ChildItem "dist/pinpoint-server-windows-x64-$version.zip"
           if (-not $zip) { throw "Missing server ZIP for $version" }
           $root = Join-Path $env:RUNNER_TEMP "packaged-server"
@@ -470,7 +485,7 @@ jobs:
             } finally {
               $client.Dispose()
             }
-            Write-Host "downloaded server serves /health and /privacy at $version and / as HTML"
+            Write-Host "downloaded desktop reports $version; server serves /health and /privacy at $version and / as HTML"
           } finally {
             if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
           }

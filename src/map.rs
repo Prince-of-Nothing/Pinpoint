@@ -631,13 +631,19 @@ pub fn render_map_with(
             painter.circle_filled(pin_pos, pin_radius, pin_color);
             painter.circle_stroke(pin_pos, pin_radius, Stroke::new(2.0_f32, theme::BG));
 
-            painter.text(
-                pin_pos + Vec2::new(0.0, -(icon_size * 0.46)),
-                egui::Align2::CENTER_BOTTOM,
-                &loc.user_name,
+            let label_pos = pin_pos + Vec2::new(0.0, -(icon_size * 0.46));
+            let galley = painter.layout_no_wrap(
+                loc.user_name.clone(),
                 egui::FontId::proportional(label_size),
                 Color32::WHITE,
             );
+            let text_top_left = label_pos - Vec2::new(galley.size().x / 2.0, galley.size().y);
+            painter.rect_filled(
+                Rect::from_min_size(text_top_left, galley.size()).expand(3.0),
+                4.0,
+                Color32::from_black_alpha(170),
+            );
+            painter.galley(text_top_left, galley, Color32::WHITE);
         }
 
         // Distance measure: solid accent polyline with numbered points.

@@ -56,6 +56,7 @@ impl PinpointAppUI {
                 },
             );
         });
+        self.draw_route_sheet(ui, ctx, false, ctx.screen_rect().top() + 64.0);
     }
 
     fn draw_map_card(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {

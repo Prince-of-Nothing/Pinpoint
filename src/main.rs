@@ -145,7 +145,9 @@ fn main() {
 
     let mut app = pinpoint_desktop::ui::PinpointAppUI::new(backend, screenshot_path);
 
-    app.set_offline_mode(true);
+    if !app.screenshot_mode() {
+        app.set_offline_mode(true);
+    }
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()

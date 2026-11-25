@@ -74,6 +74,7 @@ The per-item flagged list for this release is in
 - [FEATURE] E2E messages: 1:1 text between accepted friends with X25519 + HKDF-SHA256 + AES-256-GCM and Ed25519 signatures, a ciphertext-only server, safety number, unread counts and read receipts on web and native. This is an ECIES construction, not the Signal Protocol; see ADR-0023 and `docs/messaging.md`.
 - [DOCS] Midterm 2 package: report and PDF, 13-slide deck and PDF, demo script, printable handout, pre-flight checklist, Q&A, admin runbook and evidence reviews under `docs/midterm2/`.
 ### Fixed
+- [FIX] Native map: friend labels now sit in a dark pill so they stay readable on light tiles; the desktop map opens the route panel for map actions and uses the window height, and screenshot mode can use the local backend for real tiles (plus `PINPOINT_SCREENSHOT_ROUTE=1` for a seeded route).
 - [FIX] Native screenshot mode (`--screenshot`) now captures the real egui window with a seeded map screen and demo pins, instead of writing a gradient placeholder; a backend without readback support exits cleanly after a bounded wait.
 - [FIX] Distance labels: a folded zero (single-point measure) no longer renders as `-0 m`; the formatter clamps distances to zero.
 - [FIX] Native: the change-password form counts characters instead of UTF-8 bytes, and the register form applies the server's password rule before sending, so a 4–7 emoji password is rejected in the form; a blank email now explains itself instead of doing nothing.

@@ -83,6 +83,8 @@ PRs and `CHANGELOG.md`.
   `pwsh scripts/check-release.ps1 -Base http://127.0.0.1:8080 -Apk <apk>`.
 - Windows desktop: `pinpoint-desktop-windows-x64-3.0.0.zip` (5,722,217 B);
   release binary reports `Pinpoint 3.0.0`.
+- Linux desktop: `pinpoint-desktop-linux-x64-3.0.0.zip` (10,054,098 B);
+  the release workflow checks the binary `--help` reports `3.0.0`.
 - Windows server/web: `pinpoint-server-windows-x64-3.0.0.zip` (5,179,101 B);
   the web client is embedded, `/health` reports `3.0.0` and `/` serves HTML.
   There is no separate static/wasm web bundle to download.

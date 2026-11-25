@@ -3,12 +3,13 @@
 **Released:** 2026-11-25 - **Version:** `3.0.0` (from `2.7.1`) -
 **Status:** Unified desktop, mobile and web release.
 
-**Artifacts:** `pinpoint-android-3.0.0.apk` (`arm64-v8a`, minSdk 26,
-targetSdk 35) and the source archives for the `v3.0.0` tag. The web client is
-served by `pinpoint-server` from the same crate; the Windows/Linux/macOS
-desktop binaries are built by the `client` CI jobs. iOS reports
-`CFBundleShortVersionString` 3.0.0 / build 30000. The debug APK keeps
-`allowBackup=0`, `usesCleartextTraffic=0` and the network security config.
+**Artifacts:** `pinpoint-android-3.0.0.apk` (signed universal:
+`arm64-v8a` + `armeabi-v7a`, minSdk 26, targetSdk 35) and the source archives
+for the `v3.0.0` tag. The web client is served by `pinpoint-server` from the
+same crate; the Windows/Linux/macOS desktop binaries are built by the `client`
+CI jobs. iOS reports `CFBundleShortVersionString` 3.0.0 / build 30000. The APK
+keeps `allowBackup=0`, `usesCleartextTraffic=0` and the network security
+config.
 
 ## What is in 3.0
 
@@ -40,6 +41,6 @@ encrypted notes and ECIES message envelopes are unchanged from 2.7.x.
 - `scripts/smoke.ps1`: **29 passed, 0 failed**.
 - `/health` and the desktop About screen report `3.0.0` from the crate.
 - CI `rust`, CodeQL, `web-tests`, wasm, macOS/Windows clients and ZAP pass.
-- APK `aapt`: `com.pinpoint.desktop` **3.0.0 (30000)**, `arm64-v8a`,
-  minSdk 26 / target 35, `allowBackup=0`, `usesCleartextTraffic=0`, network
-  security config present.
+- APK `aapt`/`apksigner`: `com.pinpoint.desktop` **3.0.0 (30000)**, signed
+  universal (`arm64-v8a` + `armeabi-v7a`), minSdk 26 / target 35,
+  `allowBackup=0`, `usesCleartextTraffic=0`, network security config present.

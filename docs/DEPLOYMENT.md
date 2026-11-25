@@ -135,7 +135,7 @@ adb shell am start -n com.pinpoint.desktop/.PinpointActivity
 - Pushing a `vX.Y.Z` tag that matches `Cargo.toml` builds one signed universal APK (`arm64-v8a` + `armeabi-v7a`), verifies the certificate and creates a draft GitHub release.
 - Before the draft, the workflow runs `scripts/check-release.ps1 -Apk` so a versionName/versionCode/ABI mismatch fails the release job.
 - The release job checks out the tag, re-runs the same APK check on the downloaded artifact and uses `RELEASE_NOTES.md` as the draft body. It also extracts both Windows ZIPs and checks their exe names and README version, and re-verifies the APK signature with `apksigner` (a tag release rejects the throwaway build key).
-- A separate `windows-latest` job extracts the downloaded Windows ZIPs, runs the downloaded `pinpoint-desktop.exe --help` (crate version), starts that exact `pinpoint-server.exe`, and requires `/health` and `/privacy` to report the crate version and `/` to return HTML before the draft is created.
+- Separate verification jobs run every downloaded package: `windows-latest` runs `pinpoint-desktop.exe --help` and the server (`/health`, `/privacy`, `/`); `ubuntu-latest` runs the downloaded Linux binary under Xvfb and requires a screenshot; `macos-latest` checks the app's `Info.plist` version and opens the downloaded `Pinpoint.app`, requiring the process to stay alive. All must pass before the draft is created.
 - A manual `Release` run performs the same checkout/aapt/downloaded-APK check and skips only the draft creation, so the gate can be exercised without a tag.
 - The published demo release uses that signed universal `pinpoint-android-3.0.0.apk`; the Gradle debug arm64 APK remains the local device build.
 

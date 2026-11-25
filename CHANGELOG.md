@@ -12,7 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
-- [INFRA] CI: a `web-live` job builds and starts the server, then runs headless-Chromium checks for the `/` shortcut (bare focus, in-field typing, modifier and open-drawer blocking) and the drawer (opening, inside clicks and map-click dismissal).
+- [INFRA] CI: a `web-live` job builds and starts the server, then runs headless-Chromium checks for the `/` shortcut (bare focus, in-field typing, modifier and open-drawer blocking) and the drawer (opening, inside clicks, map-click dismissal, and 1280/700 layout).
 - [FEATURE] Web: pressing `/` focuses the place search box when not typing and no drawer, sheet or dialog is open; the predicate is a tested module served at `/search-shortcut.js`.
 - [FEATURE] Native map: `+`/`=`/`-` zoom, `0` resets the view, `F` fits pins, `L` locates and `R` refreshes when no dialog or text field owns the keyboard; the map buttons show the shortcuts on hover.
 - [FEATURE] Web: clicking the visible map closes the open drawer; the outside-click predicate is a tested module served at `/drawer-dismiss.js`.

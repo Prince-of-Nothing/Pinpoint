@@ -22,6 +22,7 @@ The per-item flagged list for this release is in
 - [FEATURE] Native: Escape closes the share sheet unless a crash/update dialog is above it; the shared escape decision table now covers all four cases.
 - [FEATURE] Native: Escape closes the map publish/selected-place bottom sheets (unless a dialog, share sheet or the route planner is above them); the sheet-target table is unit-tested.
 - [FEATURE] Native: Escape closes the update dialog and persists the same dismissed-tag preference as "Later".
+- [FEATURE] Native: Escape closes the one-time recovery-code modal (unless a crash/update dialog is above), and the surfaces below treat it as blocking.
 - [FEATURE] Native: clicking the map outside the 820–1100 px drawer overlay dismisses it; a pure hit-test helper is unit-tested.
 - [INFRA] Native: drawer post-actions go through a pure `drawer_changes` helper; unit tests cover the compact/desktop Publish branch and close/refresh behavior.
 - [INFRA] Screenshot mode: `PINPOINT_SCREENSHOT_SIZE=WxH` overrides the evidence window size; the 700x800 capture confirms the drawer stays a bottom sheet below 820 pt.

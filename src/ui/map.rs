@@ -647,7 +647,8 @@ impl PinpointAppUI {
         let blocked = self.crash_dialog.is_some()
             || self.update_dialog_open
             || self.share_sheet.is_some()
-            || self.route_plan.open;
+            || self.route_plan.open
+            || self.recovery_code_visible();
         if super::escape_dismisses(ctx.input(|i| i.key_pressed(egui::Key::Escape)), blocked) {
             match sheet_escape_target(
                 self.mobile_publish_open,

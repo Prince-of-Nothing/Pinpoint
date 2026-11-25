@@ -84,9 +84,9 @@ PRs and `CHANGELOG.md`.
 - Windows desktop: `pinpoint-desktop-windows-x64-3.0.0.zip` (5,722,217 B);
   release binary reports `Pinpoint 3.0.0`.
 - Linux desktop: `pinpoint-desktop-linux-x64-3.0.0.zip` (10,057,368 B: binary + `pinpoint.desktop` + icon);
-  the release workflow checks the binary `--help` reports `3.0.0`.
+  the release workflow checks `--help` and launches it under Xvfb.
 - macOS desktop: `pinpoint-desktop-macos-3.0.0.zip` (6,131,546 B: unsigned `Pinpoint.app`);
-  the release workflow checks the binary `--help` reports `3.0.0`.
+  the workflow checks `--help`, opens the app and requires the process to stay alive.
 - Windows server/web: `pinpoint-server-windows-x64-3.0.0.zip` (5,179,101 B);
   the web client is embedded, `/health` reports `3.0.0` and `/` serves HTML.
   There is no separate static/wasm web bundle to download.

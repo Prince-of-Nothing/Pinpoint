@@ -47,7 +47,9 @@ encrypted notes and ECIES message envelopes are unchanged from 2.7.x.
 - Windows desktop `--help` reports `Pinpoint 3.0.0`; the server zip's
   `/health` reports `3.0.0` and `/` serves the web client (`text/html`).
 - Linux desktop `--help` reports `3.0.0` in the release workflow.
-- macOS desktop `--help` reports `3.0.0` in the release workflow.
+- macOS desktop `--help` reports `3.0.0`; the workflow launches `Pinpoint.app`
+  and checks the process stays alive.
+- Linux package launches under Xvfb and produces an 876,370-byte screenshot.
 - CI `rust`, CodeQL, `web-tests`, wasm, macOS/Windows clients and ZAP pass.
 - APK `aapt`/`apksigner`: `com.pinpoint.desktop` **3.0.0 (30000)**, signed
   universal (`arm64-v8a` + `armeabi-v7a`), minSdk 26 / target 35,

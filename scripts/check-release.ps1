@@ -88,6 +88,13 @@ if ((Get-Content web/sw.js -Raw) -match 'const VERSION = "pinpoint-offline-v\d+"
     Fail "web/sw.js has no versioned pinpoint-offline cache marker"
 }
 
+# The privacy page is served to users and names the release, so keep it in sync.
+if ((Get-Content web/privacy.html -Raw) -match "Version $([regex]::Escape($version))") {
+    Pass "web privacy page names $version"
+} else {
+    Fail "web/privacy.html does not name version $version"
+}
+
 # ---------------------------------------------------------------------------
 # Running server /health
 # ---------------------------------------------------------------------------

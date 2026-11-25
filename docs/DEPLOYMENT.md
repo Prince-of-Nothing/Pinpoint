@@ -131,7 +131,7 @@ adb shell am start -n com.pinpoint.desktop/.PinpointActivity
 - The APK is assembled by Gradle, not by cargo-apk's generated APK (ADR-0017). Java is only used for platform APIs with no Rust binding.
 - The debug manifest sets `allowBackup=0` and `usesCleartextTraffic=0`; release signing needs the keystore secrets.
 - Pushing a `vX.Y.Z` tag that matches `Cargo.toml` builds one signed universal APK (`arm64-v8a` + `armeabi-v7a`), verifies the certificate and creates a draft GitHub release.
-- The published demo release currently uses the Gradle debug arm64 APK (`Pinpoint-mobile-3.0.0-debug.apk`); the signed universal artifact is produced by that tag workflow as a separate draft.
+- The published demo release uses that signed universal `pinpoint-android-3.0.0.apk`; the Gradle debug arm64 APK remains the local device build.
 
 ## 7. iOS
 

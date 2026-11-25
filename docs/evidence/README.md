@@ -74,10 +74,10 @@ PRs and `CHANGELOG.md`.
 ## Artifact
 
 - Current release: [`v3.0.0`](https://github.com/Prince-of-Nothing/Pinpoint/releases/tag/v3.0.0)
-  with `Pinpoint-mobile-3.0.0-debug.apk` (76,387,294 B):
-  `com.pinpoint.desktop` 3.0.0 (30000), `arm64-v8a`, minSdk 26,
-  targetSdk 35, `allowBackup=0`, `usesCleartextTraffic=0`, network security
-  config present. Build and `aapt` verification steps are in
+  with the signed universal `pinpoint-android-3.0.0.apk` (14,005,317 B):
+  `com.pinpoint.desktop` 3.0.0 (30000), `arm64-v8a` + `armeabi-v7a`,
+  minSdk 26, targetSdk 35, `allowBackup=0`, `usesCleartextTraffic=0`, network
+  security config present. Build and `aapt` verification steps are in
   [deployment](../DEPLOYMENT.md).
 
 ## How to read a claim

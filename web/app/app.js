@@ -2,6 +2,7 @@
 // Talks to /api/v1 with the session cookie + X-CSRF-Token double-submit.
 
 import { createMap } from "./map.js";
+import { drawerOutsideClickDismisses } from "./drawer-dismiss.js";
 import { initNavigation, formatDistance } from "./nav.js";
 import { lineLengthMeters } from "./measure.js";
 import { createAdminConsole } from "./admin.js";
@@ -1851,6 +1852,17 @@ function setDrawer(open, animate = true) {
 setDrawer(false);
 drawerToggle.addEventListener("click", () => {
   setDrawer(drawerToggle.getAttribute("aria-expanded") !== "true");
+});
+document.addEventListener("pointerdown", (event) => {
+  const target = event.target;
+  if (drawerOutsideClickDismisses({
+    open: drawerToggle.getAttribute("aria-expanded") === "true",
+    inDrawer: drawer.contains(target),
+    onToggle: drawerToggle.contains(target),
+    inMap: Boolean(target.closest?.("#map")),
+  })) {
+    setDrawer(false);
+  }
 });
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;

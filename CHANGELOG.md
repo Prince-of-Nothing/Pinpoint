@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Web: clicking the visible map closes the open drawer; the outside-click predicate is a tested module served at `/drawer-dismiss.js`.
 - [INFRA] Release: the macOS job now builds, checks and packages `pinpoint-server-macos-$VERSION.zip` (`/health`, `/privacy`, `/`), and the release job validates and attaches it next to the desktop app bundle. v3.0.0 now carries the 5,432,742 B macOS server asset.
 - [FEATURE] Web: friend requests, shares and friend locations (list and map pins) refresh every 30 s while the page is visible, and at once on returning to the tab, reconnecting or opening Friends/Sharing, matching the native client's polling. Offline ticks keep what is on screen and a focused list is not rebuilt.
 - [INFRA] Web tests: the navigation test now pins the drawer's bottom-sheet CSS and its 981 px right-column override (`left: auto`, `right: 0`, `width: 380px`, column divider).

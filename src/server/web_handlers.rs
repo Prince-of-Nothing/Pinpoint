@@ -18,6 +18,7 @@ const MESSAGE_CRYPTO_JS: &str = include_str!("../../web/app/message-crypto.js");
 const MAP_JS: &str = include_str!("../../web/app/map.js");
 const MEASURE_JS: &str = include_str!("../../web/app/measure.js");
 const NAV_JS: &str = include_str!("../../web/app/nav.js");
+const DRAWER_DISMISS_JS: &str = include_str!("../../web/app/drawer-dismiss.js");
 const SHARING_JS: &str = include_str!("../../web/app/sharing.js");
 const APPEARANCE_JS: &str = include_str!("../../web/app/appearance.js");
 const ADMIN_JS: &str = include_str!("../../web/app/admin.js");
@@ -167,6 +168,15 @@ pub async fn map_js() -> Response {
 
 pub async fn nav_js() -> Response {
     let mut resp = NAV_JS.into_response();
+    resp.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/javascript; charset=utf-8"),
+    );
+    secure(resp)
+}
+
+pub async fn drawer_dismiss_js() -> Response {
+    let mut resp = DRAWER_DISMISS_JS.into_response();
     resp.headers_mut().insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("text/javascript; charset=utf-8"),

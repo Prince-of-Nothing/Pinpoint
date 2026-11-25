@@ -50,6 +50,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Web search: pressing Enter now cancels the pending autocomplete run, so a late rebuild cannot replace the results under a keyboard user.
 - [FIX] Tests: the `app_lock` lockout-remaining test sets its deadline after the Argon2 hash and also checks an expired deadline, so slow CI hashing no longer flakes it.
 - [FIX] Web: removed the duplicate ungated `/` listener in `nav.js`; search focus now respects modifiers, text fields and open drawers/sheets, and the input advertises the shortcut via `title` and `aria-keyshortcuts`.
 - [FIX] Web search: a failed request (offline, server unreachable, rate-limited) now shows its reason and a Retry button in the results panel instead of "No places found near here"; searches show "Searching…", empty answers name the query, and an installed offline index says it searched the offline map.

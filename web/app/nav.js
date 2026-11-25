@@ -1037,6 +1037,9 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   // deployment is self-hosted (Nominatim policy forbids public autocomplete).
   form.addEventListener("submit", (e) => {
     e.preventDefault();
+    // Enter replaces the pending autocomplete run; a late one would rebuild
+    // the results under the keyboard user.
+    clearTimeout(debounceTimer);
     runSearch(input.value);
   });
   input.addEventListener("input", () => {

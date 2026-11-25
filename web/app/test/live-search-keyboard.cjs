@@ -1,5 +1,5 @@
 // Live check for keyboard access to search results: ArrowDown enters the
-// list, Enter opens the place and Escape returns focus to the search box.
+// list, Escape returns to the box, and ArrowDown + Enter opens the place.
 // The search proxy is stubbed so no Nominatim or tiles are needed.
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
@@ -47,7 +47,7 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
 
   await page.fill("#search-input", "keyboard place");
   await page.press("#search-input", "Enter");
-  await page.waitForSelector("#search-results .result", { timeout: 5000 });
+  await page.waitForSelector("#search-results button.result", { timeout: 5000 });
 
   await page.press("#search-input", "ArrowDown");
   assert.equal(
@@ -56,6 +56,21 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
     "ArrowDown moves focus to the first result",
   );
 
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(
+    () => document.getElementById("search-results").classList.contains("hidden"),
+    { timeout: 5000 },
+  );
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "search-input",
+    "Escape returns focus to the search box",
+  );
+
+  // Search again and open the place from the focused result.
+  await page.press("#search-input", "Enter");
+  await page.waitForSelector("#search-results button.result", { timeout: 5000 });
+  await page.press("#search-input", "ArrowDown");
   await page.keyboard.press("Enter");
   await page.waitForSelector("#place-sheet:not(.hidden)", { timeout: 5000 });
   assert.equal(
@@ -68,11 +83,6 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   await page.waitForFunction(
     () => document.getElementById("place-sheet").classList.contains("hidden"),
     { timeout: 5000 },
-  );
-  assert.equal(
-    await page.evaluate(() => document.activeElement?.id),
-    "search-input",
-    "Escape returns focus to the search box",
   );
 
   await browser.close();

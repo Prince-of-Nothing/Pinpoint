@@ -2605,6 +2605,13 @@ mod tests {
     }
 
     #[test]
+    fn crash_dialog_escape_blocks_on_the_update_dialog() {
+        assert!(escape_dismisses(true, false));
+        assert!(!escape_dismisses(true, true));
+        assert!(!escape_dismisses(false, true));
+    }
+
+    #[test]
     fn drawer_overlays_below_1100() {
         assert!(drawer_overlays_map(DRAWER_OVERLAY_MAX_WIDTH - 1.0));
         assert!(!drawer_overlays_map(DRAWER_OVERLAY_MAX_WIDTH));

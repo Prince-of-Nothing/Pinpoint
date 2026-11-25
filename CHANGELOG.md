@@ -13,6 +13,7 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] Native desktop: the "More" drawer opens as a right-hand side panel on wide windows (the map/details column shrinks); narrow windows and phones keep the bottom sheet. A breakpoint test pins the 820 pt switch.
+- [INFRA] Native: drawer post-actions go through a pure `drawer_changes` helper; unit tests cover the compact/desktop Publish branch and close/refresh behavior.
 - [INFRA] Screenshot mode: `PINPOINT_SCREENSHOT_SIZE=WxH` overrides the evidence window size; the 700x800 capture confirms the drawer stays a bottom sheet below 820 pt.
 - [INFRA] Release job: the downloaded APK is re-verified with `apksigner`; a tag release fails if it still carries the throwaway build key.
 - [INFRA] `scripts/check-release.ps1` now also asserts a running server's `/privacy` names the Cargo version, so an embedded stale policy fails the check.

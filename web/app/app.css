@@ -1933,6 +1933,20 @@ body:has(.drawer:is(.open, .closing)) .map-controls {
     right: 380px;
     width: min(560px, calc(100% - 380px - 2rem));
   }
+  /* Overlays centred on the map must centre on the visible map, not the
+     window, or their right side ends up under the column. */
+  body:has(.drawer.open) .map-empty-state { right: 380px; }
+  body:has(.drawer.open) .nav-banner {
+    left: calc((100% - 380px) / 2);
+    width: min(620px, calc(100% - 380px - 2rem));
+  }
+  body:has(.drawer.open) #status {
+    left: calc((100% - 380px) / 2);
+    max-width: calc(100% - 380px - 2rem);
+  }
+  /* The search bar sits at the top on desktop; keep the navigation banner
+     below it instead of covering search, locate and the panel toggles. */
+  .nav-banner { top: 8rem; }
   /* Desktop never hides its chrome behind the drawer. */
   body:has(.drawer.open) .map-topbar,
   body:has(.drawer.open) .map-controls,

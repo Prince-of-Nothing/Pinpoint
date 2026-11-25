@@ -111,6 +111,29 @@ assert.doesNotMatch(
   /bottom: calc\(4\.6rem/,
   "the wide drawer must not keep the bottom-sheet anchor",
 );
+// Overlays centred on the map must centre on the part the column leaves
+// visible, and the navigation banner must not cover the top search bar.
+const wideCss = css.slice(wideCssStart);
+assert.match(
+  wideCss,
+  /body:has\(\.drawer\.open\) \.map-empty-state \{ right: 380px; \}/,
+  "the empty-map card must stay clear of the open column",
+);
+for (const overlay of ["\\.nav-banner", "#status"]) {
+  const rule =
+    wideCss.match(new RegExp(`body:has\\(\\.drawer\\.open\\) ${overlay} \\{[^}]*\\}`, "s"))?.[0] ?? "";
+  assert.match(
+    rule,
+    /left: calc\(\(100% - 380px\) \/ 2\);/,
+    `${overlay} must centre on the visible map while the column is open`,
+  );
+  assert.match(rule, /380px - 2rem/, `${overlay} must not reach under the column`);
+}
+assert.match(
+  wideCss,
+  /\.nav-banner \{ top: 8rem; \}/,
+  "the desktop navigation banner must sit below the top search bar",
+);
 assert.match(map, /showCompass: true/);
 assert.match(map, /visualizePitch: true/);
 assert.match(map, /new maplibregl\.FullscreenControl\(\)/);

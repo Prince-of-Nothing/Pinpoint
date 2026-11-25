@@ -1,6 +1,6 @@
 # Deployment guide — Pinpoint
 
-**Current release:** 2.6.1 · **Stack:** one Rust crate (`pinpoint-desktop`) with an Axum server, a desktop client, an Android app and a web client served by the same server.
+**Current release:** 3.0.0 · **Stack:** one Rust crate (`pinpoint-desktop`) with an Axum server, a desktop client, an Android app and a web client served by the same server.
 
 This page covers the supported paths: local in-memory, local PostgreSQL, the Docker Compose stack, a production checklist, the desktop/Android builds and the verification gate. The archived Go/Python/Kotlin prototypes are not buildable from this tree; see ADR-0007.
 
@@ -131,6 +131,7 @@ adb shell am start -n com.pinpoint.desktop/.PinpointActivity
 - The APK is assembled by Gradle, not by cargo-apk's generated APK (ADR-0017). Java is only used for platform APIs with no Rust binding.
 - The debug manifest sets `allowBackup=0` and `usesCleartextTraffic=0`; release signing needs the keystore secrets.
 - Pushing a `vX.Y.Z` tag that matches `Cargo.toml` builds one signed universal APK (`arm64-v8a` + `armeabi-v7a`), verifies the certificate and creates a draft GitHub release.
+- The published demo release currently uses the Gradle debug arm64 APK (`Pinpoint-mobile-3.0.0-debug.apk`); the signed universal artifact is produced by that tag workflow as a separate draft.
 
 ## 7. iOS
 

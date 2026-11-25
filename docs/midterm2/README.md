@@ -3,6 +3,11 @@
 Everything needed for the Midterm 2 documentation, demo and presentation, built
 from the live **v2.6.1** system.
 
+> This package is the **Midterm 2 snapshot (v2.6.1)** and its live-run
+> evidence. The current release is **v3.0.0**; see
+> [release notes](../../RELEASE_NOTES.md) and the
+> [evidence index](../evidence/README.md).
+
 | File | What it is | Use |
 |---|---|---|
 | [`Midterm2-Report.md`](./Midterm2-Report.md) | Full report: problem, scope, architecture, consent/security, data, verification, limitations, next steps, traceability | Submit as the written documentation |

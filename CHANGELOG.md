@@ -55,6 +55,7 @@ The per-item flagged list for this release is in
 - [DOCS] Security and privacy design notes now describe the real controls: per-account login lockout instead of per-IP limits, and the owner-only 7-day trail instead of "no history".
 - [INFRA] Dependency audit: `audit.toml` records nine unmaintained or unsound transitive advisories with no fixed upgrade as accepted risk, so `cargo audit` passes with no open vulnerability.
 ### Added
+- [INFRA] v3.0.0 release also attaches `pinpoint-desktop-macos-3.0.0.zip` (6,012,178 B); the tag workflow builds a macOS ZIP from now on.
 - [INFRA] Release workflow: a macOS job builds `pinpoint-desktop`, checks `--help`, packages a README ZIP and the release job verifies and attaches it.
 - [INFRA] v3.0.0 release also attaches `pinpoint-desktop-linux-x64-3.0.0.zip` (10,054,098 B); the tag workflow builds a Linux desktop ZIP from now on.
 - [INFRA] Release workflow: a Linux x86_64 job builds `pinpoint-desktop`, checks `--help`, packages a README ZIP and the release job verifies and attaches it.

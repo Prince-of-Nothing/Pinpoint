@@ -352,7 +352,7 @@ jobs:
           if-no-files-found: error
 
   macos:
-    name: macOS desktop
+    name: macOS desktop and server
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -361,8 +361,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-macos
-      - name: Build release binary
-        run: cargo build --release --locked --bin pinpoint-desktop
+      - name: Build release binaries
+        run: cargo build --release --locked --bin pinpoint-desktop --bin pinpoint-server
       - name: Verify macOS binary
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
@@ -372,7 +372,23 @@ jobs:
             exit 1
           fi
           echo "desktop reports $version"
-      - name: Package macOS ZIP
+      - name: Verify macOS server
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          port=18083
+          BIND_ADDR="127.0.0.1:$port" target/release/pinpoint-server &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          health=""
+          for _ in $(seq 1 60); do
+            if health="$(curl -fsS "http://127.0.0.1:$port/health")"; then break; fi
+            sleep 0.5
+          done
+          grep -Fq "\"version\":\"$version\"" <<<"$health"
+          curl -fsS "http://127.0.0.1:$port/privacy" | grep -Fq "Version $version"
+          curl -fsS "http://127.0.0.1:$port/" | grep -Fq "Pinpoint"
+          echo "server serves /health, /privacy and / at $version"
+      - name: Package macOS ZIPs
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           IFS=. read -r major minor patch <<<"$version"
@@ -408,6 +424,10 @@ jobs:
           test -f "$app/Contents/Resources/Pinpoint.icns"
           help_out="$("$app/Contents/MacOS/pinpoint-desktop" --help 2>&1 || true)"
           grep -Fq "$version" <<<"$help_out"
+          mkdir -p dist/server
+          cp target/release/pinpoint-server dist/server/
+          sed "s/@VERSION@/$version/g" packaging/macos-server-README.txt > dist/server/README.txt
+          (cd dist/server && zip -qj "../pinpoint-server-macos-$version.zip" pinpoint-server README.txt)
       - name: Launch macOS app bundle
         run: |
           open -n "$PWD/dist/Pinpoint.app" --args --backend http://127.0.0.1:8080
@@ -565,7 +585,7 @@ jobs:
           echo "downloaded Linux server serves /health, /privacy and / at $version"
 
   verify-macos:
-    name: Verify downloaded macOS app
+    name: Verify downloaded macOS packages
     needs: macos
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
@@ -591,6 +611,26 @@ jobs:
           fi
           echo "downloaded Pinpoint.app reports $version and stayed running"
           pkill -f "Pinpoint.app/Contents/MacOS/pinpoint-desktop" || true
+      - name: Run the packaged server
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          root="$RUNNER_TEMP/macos-server-zip"
+          rm -rf "$root"
+          unzip -q "dist/pinpoint-server-macos-$version.zip" -d "$root"
+          chmod +x "$root/pinpoint-server"
+          port=18084
+          BIND_ADDR="127.0.0.1:$port" "$root/pinpoint-server" &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          health=""
+          for _ in $(seq 1 60); do
+            if health="$(curl -fsS "http://127.0.0.1:$port/health")"; then break; fi
+            sleep 0.5
+          done
+          grep -Fq "\"version\":\"$version\"" <<<"$health"
+          curl -fsS "http://127.0.0.1:$port/privacy" | grep -Fq "Version $version"
+          curl -fsS "http://127.0.0.1:$port/" | grep -Fq "Pinpoint"
+          echo "downloaded macOS server serves /health, /privacy and / at $version"
 
   release:
     name: GitHub Release
@@ -732,6 +772,24 @@ jobs:
             throw "macOS README does not report $version"
           }
           Write-Host "macOS ZIP contains Pinpoint.app $version ($build), icon and README"
+
+      - name: Verify downloaded macOS server ZIP
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          $zip = "dist/pinpoint-server-macos-$version.zip"
+          if (-not (Test-Path $zip)) { throw "Missing $zip" }
+          $root = Join-Path $env:RUNNER_TEMP "macos-server-zip"
+          Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip $root
+          if (-not (Test-Path (Join-Path $root "pinpoint-server"))) {
+            throw "macOS server ZIP is missing pinpoint-server"
+          }
+          $readme = Get-Content (Join-Path $root "README.txt") -Raw
+          if ($readme -notmatch [regex]::Escape("Pinpoint $version")) {
+            throw "macOS server README does not report $version"
+          }
+          Write-Host "macOS server ZIP contains pinpoint-server and README $version"
 
       - name: Install Android build-tools (aapt)
         run: |

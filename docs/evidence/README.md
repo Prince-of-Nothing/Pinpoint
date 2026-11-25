@@ -97,6 +97,18 @@ PRs and `CHANGELOG.md`.
   same embedded web client and endpoint checks. There is no separate
   static/wasm web bundle to download.
 
+## Native drawer layout
+
+Captured with `PINPOINT_SCREENSHOT_DRAWER=1 PINPOINT_SCREENSHOT_SIZE=<WxH>`
+from the debug desktop binary; they show the three responsive placements.
+
+- [Wide side panel](../assets/native-drawer-wide-panel.png) — 1200 px: the
+  drawer reserves the right column and the map/details area shrinks.
+- [Narrow overlay](../assets/native-drawer-overlay.png) — 900 px: the drawer
+  overlays the right edge without squeezing the map.
+- [Mobile bottom sheet](../assets/native-drawer-mobile-sheet.png) — 700 px:
+  the drawer stays a bottom sheet below the 820 pt breakpoint.
+
 ## How to read a claim
 
 Each security page follows the same shape: **problem → why it matters here →

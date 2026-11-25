@@ -12,6 +12,8 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native map: `+`/`=`/`-` zoom, `0` resets the view and `F` fits pins when no dialog or text field owns the keyboard; the map buttons show the shortcuts on hover.
+- [FEATURE] Web: clicking the visible map closes the open drawer; the outside-click predicate is a tested module served at `/drawer-dismiss.js`.
 - [INFRA] Release: the macOS job now builds, checks and packages `pinpoint-server-macos-$VERSION.zip` (`/health`, `/privacy`, `/`), and the release job validates and attaches it next to the desktop app bundle. v3.0.0 now carries the 5,432,742 B macOS server asset.
 - [FEATURE] Web map layers: the layers panel offers Streets, Satellite (EOX Sentinel-2 cloudless 2016, CC BY 4.0, as a hybrid under roads and labels) and Offline map types, plus 3D buildings and Terrain (hill shading and raised relief from Terrain Tiles on AWS), with the camera tilting for 3D. All are opt-in and stored per device; the CSP admits exactly the two new tile hosts, the attribution shows their credits, and the privacy page now lists every optional map provider (ADR-0026).
 - [FEATURE] Web: friend requests, shares and friend locations (list and map pins) refresh every 30 s while the page is visible, and at once on returning to the tab, reconnecting or opening Friends/Sharing, matching the native client's polling. Offline ticks keep what is on screen and a focused list is not rebuilt.
@@ -38,9 +40,11 @@ The per-item flagged list for this release is in
 ### Changed
 - [DOCS] Evidence: live Chromium captures of the web drawer at 1280×720 (right column) and 700×720 (bottom sheet) are committed under `docs/assets` and linked from the evidence index.
 - [DOCS] Evidence: committed the native drawer captures (1200 px side panel, 900 px overlay, 700 px bottom sheet) under `docs/assets` and linked them from the evidence index.
+- [FIX] Web: on narrow windows and phones the search bar now sits under the header (as on desktop) with results, category chips and the layers menu opening below it, instead of floating above the tab bar over the attribution; the header shows only the @handle, keeping the account email on the Account screen.
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Web search: a failed request (offline, server unreachable, rate-limited) now shows its reason and a Retry button in the results panel instead of "No places found near here"; searches show "Searching…", empty answers name the query, and an installed offline index says it searched the offline map.
 - [FIX] Native: the "More" drawer overlays the map below 1100 px instead of reserving 380 pt, fixing the squeezed map/details columns at 820–1100 px. The side panel still reserves space above the breakpoint.
 - [FIX] Web desktop: with the right-hand column open, the "Choose a map" card, the navigation banner and the status toast centre on the visible map instead of running under the column, and the navigation banner sits below the top search bar instead of covering it.
 - [FIX] Native desktop: the drawer's Publish shortcut now opens the Map screen instead of setting the mobile-only publish-sheet flag, which did nothing on wide windows.

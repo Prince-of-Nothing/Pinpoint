@@ -102,10 +102,14 @@ jobs:
         run: node web/app/test/social-poll.mjs
       - name: Map layer checks
         run: node web/app/test/map-layers.mjs
+      - name: Search feedback checks
+        run: node web/app/test/search-feedback.mjs
       - name: Password length checks
         run: node web/app/test/password-length.mjs
       - name: Navigation checks
         run: node web/app/test/navigation-ui.mjs
+      - name: Drawer dismissal checks
+        run: node web/app/test/drawer-dismiss.mjs
       - name: OAuth UI checks
         run: node web/app/test/oauth-ui.mjs
 

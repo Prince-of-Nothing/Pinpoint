@@ -91,6 +91,29 @@ assert.match(
   "desktop sign-in must open the section column",
 );
 
+// Narrow windows and phones: search sits under the header (as on desktop),
+// and its results, chips and the layers menu open below it, not upwards.
+const topSearchStart = css.indexOf("Search at the top on every width");
+assert.ok(topSearchStart > 0, "missing the top-search block");
+const topSearch = css.slice(topSearchStart);
+assert.match(topSearch, /@media \(max-width: 980px\)/);
+assert.match(
+  topSearch,
+  /\.map-topbar \{\s*top: calc\(4\.5rem \+ var\(--safe-top\)\);\s*bottom: auto;/,
+  "the narrow search bar must be top-anchored",
+);
+assert.match(
+  topSearch,
+  /\.search-results,\s*\.category-chips,\s*\.map-controls \{\s*top: calc\(8\.3rem \+ var\(--safe-top\)\);\s*bottom: auto;/,
+  "results, chips and the layers menu must open under the search bar",
+);
+assert.match(
+  topSearch,
+  /\.nav-banner \{ top: calc\(8\.3rem \+ var\(--safe-top\)\); \}/,
+  "the navigation banner must not cover the search bar",
+);
+assert.match(css, /^#user-email \{ display: none; \}/m, "the header must not show the account email");
+
 // The drawer itself must move from the bottom sheet to the right column at the
 // same breakpoint, not just the map.
 const wideCssStart = css.indexOf("@media (min-width: 981px)");

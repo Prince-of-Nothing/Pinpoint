@@ -99,7 +99,7 @@ if ((Get-Content web/privacy.html -Raw) -match "Version $([regex]::Escape($versi
 # Running server /health
 # ---------------------------------------------------------------------------
 if ($SkipHealth) {
-    Skip "server /health (skipped)"
+    Skip "server /health and /privacy (skipped)"
 } else {
     try {
         $health = Invoke-RestMethod -Uri "$Base/health" -TimeoutSec 5
@@ -108,8 +108,14 @@ if ($SkipHealth) {
         } else {
             Fail "/health version '$($health.version)' != $version"
         }
+        $privacy = (Invoke-WebRequest -Uri "$Base/privacy" -TimeoutSec 5 -UseBasicParsing).Content
+        if ($privacy -match "Version $([regex]::Escape($version))") {
+            Pass "/privacy names $version"
+        } else {
+            Fail "/privacy does not name $version"
+        }
     } catch {
-        Fail "could not read $Base/health ($($_.Exception.Message))"
+        Fail "could not read $Base/health or /privacy ($($_.Exception.Message))"
     }
 }
 

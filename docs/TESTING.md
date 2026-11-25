@@ -20,7 +20,7 @@ requirement → implementation → test).
 | End-to-end smoke | `scripts/smoke.ps1` against a running server | `scripts/` | manual |
 | DAST | OWASP ZAP baseline against the running server | `.github/workflows/dast.yml`, reports in the run artifacts | DAST (weekly) |
 | Backup crypto | `scripts/backup-db.ps1 -SelfTest` (encrypt/decrypt roundtrip), `restore-db.ps1 -SelfTest` (header + hash) | `scripts/` | manual |
-| Release consistency | Cargo, Gradle, iOS plist, web cache marker, `/health` and APK versionName/versionCode | `scripts/check-release.ps1` | `rust` (metadata) + release workflow (APK) |
+| Release consistency | Cargo, Gradle, iOS plist, web cache marker, `/health`, `/privacy` and APK versionName/versionCode | `scripts/check-release.ps1` | `rust` (metadata) + release workflow (APK) |
 
 ## Required test matrix for location access (the heart of the thesis)
 For each case, assert status code AND payload shape (no leakage):

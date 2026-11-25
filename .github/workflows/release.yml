@@ -284,7 +284,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             pkg-config libssl-dev libxcb-render0-dev libxcb-shape0-dev \
             libxcb-xfixes0-dev libxkbcommon-dev libxkbcommon-x11-dev \
-            libgl1-mesa-dev zip desktop-file-utils
+            libgl1-mesa-dev libgl1-mesa-dri xvfb xauth zip desktop-file-utils
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-linux
@@ -299,6 +299,15 @@ jobs:
             exit 1
           fi
           echo "desktop reports $version"
+      - name: Launch Linux binary under Xvfb
+        run: |
+          xvfb-run -a -s "-screen 0 1280x800x24" \
+            target/release/pinpoint-desktop --screenshot "$RUNNER_TEMP/linux-launch.png" \
+            --backend http://127.0.0.1:8080
+          test -s "$RUNNER_TEMP/linux-launch.png"
+          size="$(stat -c%s "$RUNNER_TEMP/linux-launch.png")"
+          echo "Linux launch screenshot: $size bytes"
+          test "$size" -gt 100000
       - name: Package Linux ZIP
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
@@ -372,6 +381,19 @@ jobs:
           test -f "$app/Contents/Resources/Pinpoint.icns"
           help_out="$("$app/Contents/MacOS/pinpoint-desktop" --help 2>&1 || true)"
           grep -Fq "$version" <<<"$help_out"
+      - name: Launch macOS app bundle
+        run: |
+          open -n "$PWD/dist/Pinpoint.app" --args --backend http://127.0.0.1:8080
+          sleep 5
+          if ! pgrep -f "Pinpoint.app/Contents/MacOS/pinpoint-desktop" >/dev/null; then
+            echo "::error::Pinpoint.app did not stay running"
+            exit 1
+          fi
+          echo "Pinpoint.app launched"
+          pkill -f "Pinpoint.app/Contents/MacOS/pinpoint-desktop" || true
+      - name: Zip macOS app bundle
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           (cd dist && zip -qry "pinpoint-desktop-macos-$version.zip" Pinpoint.app README.txt)
       - uses: actions/upload-artifact@v4
         with:

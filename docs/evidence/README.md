@@ -109,6 +109,17 @@ from the debug desktop binary; they show the three responsive placements.
 - [Mobile bottom sheet](../assets/native-drawer-mobile-sheet.png) — 700 px:
   the drawer stays a bottom sheet below the 820 pt breakpoint.
 
+## Web drawer layout
+
+Captured from the served web client with a live Chromium viewport (Playwright,
+headless). The drawer state was read from `getComputedStyle` at capture time.
+
+- [Side panel at 1280×720](../assets/web-drawer-side-panel.png) — the drawer is
+  `position: absolute`, `left: 900px`, `width: 380px`, spanning the right column.
+- [Bottom sheet at 700×720](../assets/web-drawer-bottom-sheet.png) — the drawer
+  is full width (`left/right: 0`), bottom-anchored above the tab bar, with the
+  grab handle visible.
+
 ## How to read a claim
 
 Each security page follows the same shape: **problem → why it matters here →

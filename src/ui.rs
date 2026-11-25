@@ -408,7 +408,7 @@ impl PinpointAppUI {
         } else {
             prefs.server_url.clone()
         };
-        let ui = Self {
+        let mut ui = Self {
             app,
             rt: Runtime::new().expect("Failed to create tokio runtime"),
             lang: Lang::system(),
@@ -522,7 +522,10 @@ impl PinpointAppUI {
 
     /// Give `--screenshot` a deterministic native map instead of the login
     /// screen. Uses example data only; no session or backend call.
-    fn seed_screenshot_state(&self) {
+    fn seed_screenshot_state(&mut self) {
+        // A screenshot artifact should show real tiles when the local backend
+        // is reachable; `main` still sets offline mode for normal launches.
+        self.set_offline_mode(false);
         let now = chrono::Utc::now().to_rfc3339();
         let data = self.app.data();
         let mut data = data.lock().unwrap();
@@ -577,6 +580,49 @@ impl PinpointAppUI {
         data.map_center_lat = 47.0105;
         data.map_center_lon = 28.8638;
         data.map_zoom = 13;
+        if std::env::var("PINPOINT_SCREENSHOT_ROUTE").is_ok() {
+            self.route_plan.origin = Some(route::RoutePoint::new(47.0245, 28.8322, "Sam (start)"));
+            self.route_plan.destination = Some(route::RoutePoint::new(
+                47.0055,
+                28.8500,
+                "Mira (destination)",
+            ));
+            self.route_plan.routes = vec![crate::osm::Route {
+                points: vec![
+                    (47.0245, 28.8322),
+                    (47.0180, 28.8420),
+                    (47.0110, 28.8460),
+                    (47.0055, 28.8500),
+                ],
+                distance_m: 2800.0,
+                duration_s: 480.0,
+                steps: vec![
+                    crate::osm::RouteStep {
+                        text: "Head south-east on Bulevardul Grigore Vieru".into(),
+                        distance_m: Some(600.0),
+                        duration_s: Some(110.0),
+                    },
+                    crate::osm::RouteStep {
+                        text: "Continue on Strada București".into(),
+                        distance_m: Some(1200.0),
+                        duration_s: Some(190.0),
+                    },
+                    crate::osm::RouteStep {
+                        text: "Arrive at Mira's pin".into(),
+                        distance_m: Some(1000.0),
+                        duration_s: Some(180.0),
+                    },
+                ],
+                summary: "Bulevardul Grigore Vieru".into(),
+                legs: vec![crate::osm::RouteLeg {
+                    distance_m: 2800.0,
+                    duration_s: 480.0,
+                }],
+            }];
+            self.route_plan.selected = 0;
+            self.route_plan.open = true;
+            self.route_plan.apply_selected(&mut data);
+        }
         drop(data);
         self.app.set_screen(CurrentScreen::Map);
     }
@@ -866,6 +912,11 @@ impl PinpointAppUI {
 
     pub fn set_offline_mode(&mut self, offline: bool) {
         self.app.set_offline_mode(offline);
+    }
+
+    /// True when the process was started with `--screenshot`.
+    pub fn screenshot_mode(&self) -> bool {
+        self.app.screenshot_mode()
     }
 
     /// Share plain text: the Android system share sheet, or the clipboard on

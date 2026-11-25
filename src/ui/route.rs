@@ -482,11 +482,17 @@ impl super::PinpointAppUI {
                             }
                         });
                     });
+                    let screenshot_scroll = if std::env::var("PINPOINT_SCREENSHOT_ROUTE").is_ok() {
+                        330.0
+                    } else {
+                        0.0
+                    };
                     egui::ScrollArea::vertical()
+                        .vertical_scroll_offset(screenshot_scroll)
                         .max_height(if compact {
                             (ctx.screen_rect().height() - top - 130.0).max(240.0)
                         } else {
-                            520.0
+                            (ctx.screen_rect().height() - top - 40.0).max(240.0)
                         })
                         .show(ui, |ui| {
                             ui.add_space(4.0);

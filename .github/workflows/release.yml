@@ -244,10 +244,18 @@ jobs:
               if ($mediaType -notmatch 'text/html') {
                 throw "web client content type is '$mediaType'"
               }
+              $privacyResponse = $client.GetAsync("http://127.0.0.1:$port/privacy").GetAwaiter().GetResult()
+              if (-not $privacyResponse.IsSuccessStatusCode) {
+                throw "privacy page returned $([int]$privacyResponse.StatusCode)"
+              }
+              $privacy = $privacyResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+              if ($privacy -notmatch [regex]::Escape("Version $version")) {
+                throw "privacy page does not name $version"
+              }
             } finally {
               $client.Dispose()
             }
-            Write-Host "desktop and server report $version; /health and / passed"
+            Write-Host "desktop and server report $version; /health, / and /privacy passed"
           } finally {
             if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
           }

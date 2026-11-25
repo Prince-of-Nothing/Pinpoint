@@ -409,9 +409,75 @@ jobs:
           path: dist/*.zip
           if-no-files-found: error
 
+  verify-windows:
+    name: Verify downloaded Windows server
+    needs: windows
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-windows
+          path: dist
+      - name: Run the packaged server
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          $zip = Get-ChildItem "dist/pinpoint-server-windows-x64-$version.zip"
+          if (-not $zip) { throw "Missing server ZIP for $version" }
+          $root = Join-Path $env:RUNNER_TEMP "packaged-server"
+          Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive $zip.FullName $root
+          $port = 18081
+          $env:BIND_ADDR = "127.0.0.1:$port"
+          Remove-Item Env:DATABASE_URL -ErrorAction SilentlyContinue
+          $server = Start-Process -FilePath (Join-Path $root "pinpoint-server.exe") -PassThru `
+            -RedirectStandardOutput "$env:RUNNER_TEMP\packaged-server.out" `
+            -RedirectStandardError "$env:RUNNER_TEMP\packaged-server.err"
+          try {
+            $health = $null
+            $deadline = (Get-Date).AddSeconds(30)
+            while (-not $health -and (Get-Date) -lt $deadline) {
+              Start-Sleep -Milliseconds 500
+              try {
+                $health = Invoke-RestMethod "http://127.0.0.1:$port/health" -TimeoutSec 2
+              } catch {}
+            }
+            if (-not $health) { throw "downloaded server did not become healthy" }
+            if ($health.version -ne $version) {
+              throw "downloaded /health version '$($health.version)' != $version"
+            }
+            Add-Type -AssemblyName System.Net.Http
+            $client = [System.Net.Http.HttpClient]::new()
+            try {
+              $response = $client.GetAsync("http://127.0.0.1:$port/").GetAwaiter().GetResult()
+              if (-not $response.IsSuccessStatusCode) {
+                throw "/ returned $([int]$response.StatusCode)"
+              }
+              $mediaType = $response.Content.Headers.ContentType.MediaType
+              if ($mediaType -notmatch 'text/html') {
+                throw "/ content type is '$mediaType'"
+              }
+              $privacyResponse = $client.GetAsync("http://127.0.0.1:$port/privacy").GetAwaiter().GetResult()
+              if (-not $privacyResponse.IsSuccessStatusCode) {
+                throw "/privacy returned $([int]$privacyResponse.StatusCode)"
+              }
+              $privacy = $privacyResponse.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+              if ($privacy -notmatch [regex]::Escape("Version $version")) {
+                throw "/privacy does not name $version"
+              }
+            } finally {
+              $client.Dispose()
+            }
+            Write-Host "downloaded server serves /health and /privacy at $version and / as HTML"
+          } finally {
+            if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
+          }
+
   release:
     name: GitHub Release
-    needs: [apk, windows, linux, macos]
+    needs: [apk, windows, linux, macos, verify-windows]
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:

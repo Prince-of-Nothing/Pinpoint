@@ -12,6 +12,11 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-11-25
+### Changed
+- [RELEASE] Pinpoint 3.0.0 unifies the desktop, Android/iOS and web version on the same Rust crate. API v1, the PostgreSQL schema, cookies and encrypted message/note formats are unchanged, so there is no data migration.
+- [INFRA] The web service worker cache is bumped to `pinpoint-offline-v10` so installed clients refresh their precached shell on this major release.
+
 ## [2.7.1] - 2026-11-25
 ### Fixed
 - [FIX] Native screenshot mode (`--screenshot`) now captures the real egui window with a seeded map screen and demo pins, instead of writing a gradient placeholder; a backend without readback support exits cleanly after a bounded wait.

@@ -14,7 +14,7 @@
 
 use aead::{Aead, KeyInit};
 use anyhow::{bail, Result};
-use rand::RngCore;
+use rand::Rng;
 use std::path::PathBuf;
 
 /// Unified keychain trait for storing and retrieving secrets.
@@ -58,8 +58,7 @@ impl FileKeychain {
     }
 
     fn encrypt_value(&self, value: &[u8]) -> Result<Vec<u8>> {
-        let mut nonce_bytes = [0u8; 12];
-        rand::thread_rng().fill_bytes(&mut nonce_bytes);
+        let nonce_bytes: [u8; 12] = rand::thread_rng().gen();
         let nonce: hybrid_array::Array<u8, typenum::U12> = nonce_bytes.into();
         let key_arr: hybrid_array::Array<u8, typenum::U32> = self.master_key.into();
         let cipher = aes_gcm::Aes256Gcm::new(&key_arr);
@@ -76,8 +75,7 @@ impl FileKeychain {
             bail!("ciphertext too short");
         }
         let (nonce_bytes, ciphertext) = encrypted.split_at(12);
-        let mut nonce_arr = [0u8; 12];
-        nonce_arr.copy_from_slice(nonce_bytes);
+        let nonce_arr = <[u8; 12]>::try_from(nonce_bytes)?;
         let nonce: hybrid_array::Array<u8, typenum::U12> = nonce_arr.into();
         let key_arr: hybrid_array::Array<u8, typenum::U32> = self.master_key.into();
         let cipher = aes_gcm::Aes256Gcm::new(&key_arr);
@@ -228,14 +226,11 @@ pub fn open_default(dir: Option<PathBuf>) -> Result<Box<dyn Keychain>> {
 /// fresh 256-bit key on first use.
 fn load_or_create_master_key(path: &std::path::Path) -> Result<[u8; 32]> {
     if let Ok(bytes) = std::fs::read(path) {
-        if bytes.len() == 32 {
-            let mut key = [0u8; 32];
-            key.copy_from_slice(&bytes);
+        if let Ok(key) = <[u8; 32]>::try_from(bytes.as_slice()) {
             return Ok(key);
         }
     }
-    let mut key = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut key);
+    let key: [u8; 32] = rand::thread_rng().gen();
     std::fs::write(path, key).map_err(|e| anyhow::anyhow!("write master key: {e}"))?;
     #[cfg(unix)]
     {

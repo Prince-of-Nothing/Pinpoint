@@ -24,7 +24,7 @@ use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use hkdf::Hkdf;
 use hybrid_array::Array;
 use rand::rngs::OsRng;
-use rand::RngCore;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use typenum::{U12, U32};
@@ -213,14 +213,10 @@ pub fn seal(
     let to_shared = ephemeral_secret.diffie_hellman(&recipient_x);
     let from_shared = ephemeral_secret.diffie_hellman(&sender_x);
 
-    let mut salt_to = [0u8; SALT_LEN];
-    let mut salt_from = [0u8; SALT_LEN];
-    let mut nonce_to = [0u8; NONCE_LEN];
-    let mut nonce_from = [0u8; NONCE_LEN];
-    OsRng.fill_bytes(&mut salt_to);
-    OsRng.fill_bytes(&mut salt_from);
-    OsRng.fill_bytes(&mut nonce_to);
-    OsRng.fill_bytes(&mut nonce_from);
+    let salt_to: [u8; SALT_LEN] = OsRng.gen();
+    let salt_from: [u8; SALT_LEN] = OsRng.gen();
+    let nonce_to: [u8; NONCE_LEN] = OsRng.gen();
+    let nonce_from: [u8; NONCE_LEN] = OsRng.gen();
 
     let to_key = derive_key(to_shared.as_bytes(), &salt_to, TO_INFO)?;
     let from_key = derive_key(from_shared.as_bytes(), &salt_from, FROM_INFO)?;
@@ -398,12 +394,7 @@ fn signing_payload(
 
 fn decode_fixed<const N: usize>(encoded: &str) -> Option<[u8; N]> {
     let bytes = B64.decode(encoded).ok()?;
-    if bytes.len() != N {
-        return None;
-    }
-    let mut out = [0u8; N];
-    out.copy_from_slice(&bytes);
-    Some(out)
+    <[u8; N]>::try_from(bytes.as_slice()).ok()
 }
 
 #[cfg(test)]

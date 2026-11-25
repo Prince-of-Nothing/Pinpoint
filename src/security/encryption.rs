@@ -5,7 +5,7 @@
 //! encryption key.
 
 use base64::engine::{general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use rand::RngCore;
+use rand::Rng;
 use std::sync::Mutex;
 
 use aes_gcm::aead::Aead;
@@ -52,19 +52,14 @@ pub struct EncryptionKey {
 impl EncryptionKey {
     /// Creates a new random encryption key.
     pub fn new() -> Self {
-        use rand::RngCore;
-        let mut key = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut key);
-        Self { key }
+        Self {
+            key: rand::thread_rng().gen(),
+        }
     }
 
     /// Creates a key from raw bytes (exactly 32 bytes).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, EncryptionError> {
-        if bytes.len() != 32 {
-            return Err(EncryptionError::InvalidKey);
-        }
-        let mut key = [0u8; 32];
-        key.copy_from_slice(bytes);
+        let key = <[u8; 32]>::try_from(bytes).map_err(|_| EncryptionError::InvalidKey)?;
         Ok(Self { key })
     }
 
@@ -114,8 +109,7 @@ impl AesGcmEncryption {
     pub fn encrypt(&self, plaintext: &[u8]) -> EncryptionResult<Vec<u8>> {
         let cipher = Aes256Gcm::new_from_slice(&self.key.key)
             .map_err(|_| EncryptionError::EncryptionFailed("Invalid key length".to_string()))?;
-        let mut nonce_bytes = [0u8; 12];
-        rand::thread_rng().fill_bytes(&mut nonce_bytes);
+        let nonce_bytes: [u8; 12] = rand::thread_rng().gen();
         let nonce: HybridArray<u8, U12> = nonce_bytes.into();
 
         let ciphertext = cipher

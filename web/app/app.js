@@ -7,7 +7,16 @@ import { shouldFocusSearch } from "./search-shortcut.js";
 import { initNavigation, formatDistance } from "./nav.js";
 import { lineLengthMeters } from "./measure.js";
 import { createAdminConsole } from "./admin.js";
-import { freshnessText, friendName, initSharing, shareRowModel } from "./sharing.js";
+import {
+  avatarHue,
+  freshnessText,
+  friendName,
+  friendRowModel,
+  initials,
+  initSharing,
+  precisionLabel,
+  shareRowModel,
+} from "./sharing.js";
 import { initAppearance } from "./appearance.js";
 import {
   cryptoAvailable,
@@ -381,6 +390,90 @@ async function refresh() {
 // ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
+// People rows: avatar, name over a one-line status, and at most one or two
+// visible actions; the rest live in a "⋯" menu. Built from DOM nodes only.
+function personAvatar(name, hue) {
+  const avatar = document.createElement("span");
+  avatar.className = "avatar";
+  avatar.setAttribute("aria-hidden", "true");
+  avatar.textContent = initials(name);
+  // CSSOM custom property, not a style attribute: allowed by the CSP.
+  avatar.style.setProperty("--avatar-hue", String(hue));
+  return avatar;
+}
+
+function personText(name, status, handle = "") {
+  const text = document.createElement("span");
+  text.className = "person-text";
+  const title = document.createElement("span");
+  title.className = "person-name";
+  title.textContent = name;
+  if (handle) {
+    const sub = document.createElement("span");
+    sub.className = "person-handle";
+    sub.textContent = handle;
+    title.append(" ", sub);
+  }
+  const line = document.createElement("span");
+  line.className = "person-status";
+  line.textContent = status;
+  text.append(title, line);
+  return text;
+}
+
+function rowButton(label, onClick, primary = false) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = label;
+  if (!primary) button.className = "secondary";
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function rowMenu(items) {
+  const menu = document.createElement("details");
+  menu.className = "row-menu";
+  const summary = document.createElement("summary");
+  summary.setAttribute("aria-label", "More actions");
+  summary.textContent = "⋯";
+  const list = document.createElement("div");
+  list.className = "row-menu-list";
+  for (const { label, run, danger } of items) {
+    const item = rowButton(label, () => {
+      menu.open = false;
+      run();
+    });
+    item.className = danger ? "row-menu-item danger-text" : "row-menu-item";
+    list.appendChild(item);
+  }
+  menu.append(summary, list);
+  return menu;
+}
+
+function personRow(className, avatar, text, actions = []) {
+  const li = document.createElement("li");
+  li.className = `person ${className}`.trim();
+  const tools = document.createElement("span");
+  tools.className = "person-actions";
+  tools.append(...actions);
+  li.append(avatar, text, tools);
+  return li;
+}
+
+function showFriendOnMap(loc) {
+  // On phones the drawer covers the map; get it out of the way first.
+  if (window.matchMedia?.("(max-width: 980px)").matches) setDrawer(false);
+  ensureMap()
+    .then((map) =>
+      map.map.flyTo([Number(loc.latitude), Number(loc.longitude)], Math.max(map.map.getZoom(), 15), {
+        duration: 0.6,
+      }),
+    )
+    .catch(() => {});
+}
+
+const FRIEND_ORDER = { incoming: 0, friend: 1, outgoing: 2, rejected: 3 };
+
 function renderFriends(items) {
   // Only non-rejected rows can become an accepted friendship, and messages
   // need one; the poll below is pointless before that.
@@ -391,57 +484,41 @@ function renderFriends(items) {
     ul.innerHTML = '<li class="muted">No friendships yet.</li>';
     return;
   }
-  for (const f of items) {
-    const li = document.createElement("li");
-    const incoming = f.receiver_id === state.user?.id && f.status === "pending";
-    li.innerHTML = `<span>${escapeHtml(f.requester_name)} → ${escapeHtml(f.receiver_name)}</span>
-      <span class="badge ${f.status}">${escapeHtml(f.status)}</span>`;
-    if (incoming) {
-      const accept = document.createElement("button");
-      accept.textContent = "Accept";
-      accept.onclick = () => respond(f.id, "accept");
-      const reject = document.createElement("button");
-      reject.textContent = "Reject";
-      reject.className = "secondary";
-      reject.onclick = () => respond(f.id, "reject");
-      li.append(accept, reject);
-    } else if (f.status === "accepted") {
-      const chat = document.createElement("button");
-      chat.textContent = "Message";
-      chat.className = "secondary";
-      const friendId =
-        f.requester_id === state.user?.id ? f.receiver_id : f.requester_id;
-      chat.onclick = () =>
-        openMessageThread(friendId, friendName(f, state.user?.id));
-      li.appendChild(chat);
-      const manage = document.createElement("button");
-      manage.textContent = "Sharing";
-      manage.className = "secondary";
-      manage.onclick = () => sharing?.open(f);
-      li.appendChild(manage);
-      const remove = document.createElement("button");
-      remove.textContent = "Remove";
-      remove.className = "secondary";
-      remove.onclick = () =>
-        removeFriendship(
-          f.id,
-          "Remove this friend? Any location shares with them stop too.",
-          "Friend removed.",
-        );
-      li.appendChild(remove);
-    } else if (f.requester_id === state.user?.id) {
-      const cancel = document.createElement("button");
-      cancel.textContent = "Cancel request";
-      cancel.className = "secondary";
-      cancel.onclick = () =>
-        removeFriendship(
-          f.id,
-          "Cancel this friend request?",
-          "Friend request cancelled.",
-        );
-      li.appendChild(cancel);
+  const me = state.user?.id;
+  const rows = items
+    .map((f) => ({ f, m: friendRowModel(f, me, state.locations) }))
+    .sort((a, b) => FRIEND_ORDER[a.m.kind] - FRIEND_ORDER[b.m.kind] || a.m.name.localeCompare(b.m.name));
+  for (const { f, m } of rows) {
+    const actions = [];
+    if (m.kind === "incoming") {
+      actions.push(
+        rowButton("Accept", () => respond(f.id, "accept"), true),
+        rowButton("Decline", () => respond(f.id, "reject")),
+      );
+    } else if (m.kind === "friend") {
+      actions.push(rowButton("Message", () => openMessageThread(m.friendId, friendName(f, me))));
+      const menu = [];
+      if (m.location) menu.push({ label: "Show on map", run: () => showFriendOnMap(m.location) });
+      menu.push({ label: "Sharing settings", run: () => sharing?.open(f) });
+      menu.push({
+        label: "Remove friend",
+        danger: true,
+        run: () =>
+          removeFriendship(
+            f.id,
+            "Remove this friend? Any location shares with them stop too.",
+            "Friend removed.",
+          ),
+      });
+      actions.push(rowMenu(menu));
+    } else if (m.kind === "outgoing") {
+      actions.push(
+        rowButton("Cancel", () =>
+          removeFriendship(f.id, "Cancel this friend request?", "Friend request cancelled."),
+        ),
+      );
     }
-    ul.appendChild(li);
+    ul.appendChild(personRow(m.kind, personAvatar(m.name, m.hue), personText(m.name, m.status, m.handle), actions));
   }
 }
 
@@ -466,36 +543,34 @@ function renderShares(items, friendships = []) {
     ul.innerHTML = '<li class="muted">You are not sharing your location.</li>';
     return;
   }
+  const STATUS = { active: "Sharing", paused: "Paused", expired: "Expired" };
   for (const { share: s, model } of rows) {
     const friendship =
       friendships.find((f) => f.id === s.friendship_id) || { id: s.friendship_id };
-    const badge =
-      model.status === "active" ? "accepted" : model.status === "expired" ? "rejected" : "pending";
-    const li = document.createElement("li");
-    const label = model.label ? `${escapeHtml(model.label)} · ` : "";
-    li.innerHTML = `<span>${label}${escapeHtml(friendName(friendship, state.user?.id))} · ${escapeHtml(
-      model.precision,
-    )} · ${escapeHtml(model.expiry)}</span>
-      <span class="badge ${badge}">${model.status}</span>`;
-    const revoke = document.createElement("button");
-    revoke.textContent = "Revoke";
-    revoke.className = "secondary";
-    revoke.onclick = () => revokeShare(s.id);
-    li.appendChild(revoke);
+    const friendId =
+      friendship.requester_id === state.user?.id ? friendship.receiver_id : friendship.requester_id;
+    // Same name as the Friends list: the display name when their location is visible.
+    const name =
+      state.locations.find((loc) => loc.user_id === friendId)?.user_name ||
+      friendName(friendship, state.user?.id);
+    const status = [STATUS[model.status] || model.status, model.precision, model.expiry];
+    if (model.label) status.unshift(model.label);
+    const actions = [];
     if (model.canShareAgain) {
-      const again = document.createElement("button");
-      again.textContent = "Share again";
-      again.className = "secondary";
-      again.onclick = () => sharing?.open(friendship);
-      li.appendChild(again);
+      actions.push(rowButton("Share again", () => sharing?.open(friendship), true));
     } else if (model.canPauseResume) {
-      const toggle = document.createElement("button");
-      toggle.textContent = model.status === "active" ? "Pause" : "Resume";
-      toggle.className = "secondary";
-      toggle.onclick = () => toggleShare(s.id, model.status !== "active");
-      li.appendChild(toggle);
+      const active = model.status === "active";
+      actions.push(rowButton(active ? "Pause" : "Resume", () => toggleShare(s.id, !active)));
     }
-    ul.appendChild(li);
+    actions.push(rowButton("Revoke", () => revokeShare(s.id)));
+    ul.appendChild(
+      personRow(
+        `share-${model.status}`,
+        personAvatar(name, avatarHue(friendId ?? s.friendship_id)),
+        personText(name, status.join(" · ")),
+        actions,
+      ),
+    );
   }
 }
 
@@ -507,9 +582,16 @@ function renderLocations(items) {
     return;
   }
   for (const loc of items) {
-    const li = document.createElement("li");
-    li.textContent = `${loc.user_name} · ${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)} · ${loc.precision_level} · updated ${freshnessText(loc.updated_at)}`;
-    ul.appendChild(li);
+    const name = loc.user_name || "Friend";
+    const row = personRow(
+      "",
+      personAvatar(name, avatarHue(loc.user_id)),
+      personText(name, `Updated ${freshnessText(loc.updated_at)} · ${precisionLabel(loc.precision_level)}`),
+      [rowButton("Show on map", () => showFriendOnMap(loc))],
+    );
+    // Coordinates stay one hover away instead of being the headline.
+    row.title = `${Number(loc.latitude).toFixed(4)}, ${Number(loc.longitude).toFixed(4)}`;
+    ul.appendChild(row);
   }
 }
 
@@ -1084,13 +1166,14 @@ async function pollSocial() {
     // Signed out (or into another account) while the requests were in flight.
     if (state.user?.id !== userId) return;
     const friends = Array.isArray(friendships) ? friendships : [];
+    // Friend rows show location freshness, so update locations first.
+    state.locations = Array.isArray(locations) ? locations : [];
     // Rebuilding a list drops keyboard focus from its buttons; leave a list
     // the user is working in for the next tick.
     if (!$("friends-list").contains(document.activeElement)) renderFriends(friends);
     if (!$("shares-list").contains(document.activeElement)) {
       renderShares(Array.isArray(shares) ? shares : [], friends);
     }
-    state.locations = Array.isArray(locations) ? locations : [];
     renderLocations(state.locations);
     mapApi?.setFriendMarkers(state.layers.friends ? state.locations : []);
   } catch (_) {
@@ -1566,15 +1649,45 @@ async function revokeShare(id) {
   }
 }
 
-async function publish(lat, lon) {
+async function publish(lat, lon, accuracy = 10) {
+  const note = $("publish-status");
   try {
-    await api("/api/v1/locations/me", { method: "POST", body: { latitude: lat, longitude: lon, accuracy: 10 } });
+    await api("/api/v1/locations/me", { method: "POST", body: { latitude: lat, longitude: lon, accuracy } });
     setStatus("Location published.");
+    if (note) {
+      const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      note.textContent = `Shared at ${time} (±${Math.round(accuracy)} m).`;
+    }
     state.map.lat = lat;
     state.map.lon = lon;
     await refresh();
   } catch (e) {
+    if (note) note.textContent = e.message;
     setStatus(e.message, true);
+  }
+}
+
+/** GPS accuracy as the server accepts it: whole metres, 1 m to 100 km. */
+function publishAccuracy(meters) {
+  const value = Number(meters);
+  if (!Number.isFinite(value)) return 10;
+  return Math.min(100_000, Math.max(1, Math.round(value)));
+}
+
+async function publishCurrentLocation() {
+  const button = $("publish-gps");
+  const note = $("publish-status");
+  if (button) button.disabled = true;
+  if (note) note.textContent = "Finding your location…";
+  try {
+    const map = await ensureMap();
+    const fix = await map.locate();
+    await publish(fix.lat, fix.lon, publishAccuracy(fix.accuracy));
+  } catch (err) {
+    if (note) note.textContent = err.message;
+    setStatus(err.message, true);
+  } finally {
+    if (button) button.disabled = false;
   }
 }
 
@@ -1600,6 +1713,9 @@ async function sendFriendRequest(username) {
     }
     await api("/api/v1/friendships/", { method: "POST", body: { receiver_username: handle } });
     setStatus(`Friend request sent to @${handle}.`);
+    // The request now shows in the list; clear the field for the next one.
+    const field = $("friend-username");
+    if (field) field.value = "";
     await refresh();
   } catch (e) {
     setStatus(e.message, true);
@@ -1702,6 +1818,8 @@ $("publish-form").addEventListener("submit", async (e) => {
   }
   await publish(lat, lon);
 });
+
+$("publish-gps")?.addEventListener("click", publishCurrentLocation);
 
 $("friend-form").addEventListener("submit", async (e) => {
   e.preventDefault();

@@ -8,9 +8,12 @@ import { pathToFileURL } from "node:url";
 const root = process.cwd();
 const sharingUrl = pathToFileURL(path.resolve("web/app/sharing.js")).href;
 const {
+  avatarHue,
   expiryText,
   freshnessText,
   friendName,
+  friendRowModel,
+  initials,
   initSharing,
   precisionLabel,
   shareRequestBody,
@@ -387,6 +390,55 @@ await check("clearing a label removes it only for an existing labeled share", ()
   assert.equal(cleared.label, "");
   assert.ok(!("label" in shareRequestBody(null, form({ label: "" }))));
   assert.ok(!("label" in shareRequestBody(share({ expires_at: future }), form({ label: "" }))));
+});
+
+await check("avatars use initials and a stable per-user hue", () => {
+  assert.equal(initials("Bogdan Friend"), "BF");
+  assert.equal(initials("bright-badger-2"), "BB");
+  assert.equal(initials("@ana"), "A");
+  assert.equal(initials("Élise  van der Berg"), "ÉB");
+  assert.equal(initials(""), "?");
+  assert.equal(avatarHue(42), avatarHue(42));
+  assert.ok(avatarHue(42) >= 0 && avatarHue(42) < 360);
+  assert.notEqual(avatarHue(1), avatarHue(2));
+});
+
+await check("friend rows show a person and a status, not requester → receiver", () => {
+  const now = Date.parse("2026-11-26T12:00:00Z");
+  const base = { id: 9, requester_id: 5, receiver_id: 1, requester_name: "bright-badger-2", receiver_name: "brave-badger-1" };
+  const incoming = friendRowModel({ ...base, status: "pending" }, 1, [], now);
+  assert.equal(incoming.kind, "incoming");
+  assert.equal(incoming.status, "Wants to be friends");
+  assert.equal(incoming.name, "bright-badger-2");
+  assert.equal(incoming.handle, "", "no duplicate @handle when the name is the handle");
+  assert.equal(incoming.friendId, 5);
+
+  const outgoing = friendRowModel({ ...base, requester_id: 1, receiver_id: 5, status: "pending" }, 1, [], now);
+  assert.equal(outgoing.kind, "outgoing");
+  assert.equal(outgoing.status, "Request sent");
+  assert.equal(outgoing.name, "brave-badger-1");
+
+  const location = { user_id: 5, user_name: "Bogdan Friend", updated_at: "2026-11-26T11:55:00Z" };
+  const friend = friendRowModel({ ...base, status: "accepted" }, 1, [location], now);
+  assert.equal(friend.kind, "friend");
+  assert.equal(friend.name, "Bogdan Friend");
+  assert.equal(friend.handle, "@bright-badger-2");
+  assert.equal(friend.status, "Sharing location · updated 5m ago");
+  assert.equal(friend.initials, "BF");
+  assert.equal(friend.location, location);
+
+  assert.equal(friendRowModel({ ...base, status: "accepted" }, 1, [], now).status, "Friends");
+  assert.equal(friendRowModel({ ...base, status: "rejected" }, 1, [], now).kind, "rejected");
+});
+
+await check("people lists are built without raw coordinates or the arrow pair", () => {
+  assert.doesNotMatch(appSource, /requester_name\)\} → \$\{escapeHtml\(f\.receiver_name\)/);
+  assert.match(appSource, /friendRowModel\(f, me, state\.locations\)/);
+  assert.doesNotMatch(appSource, /li\.textContent = `\$\{loc\.user_name\} · \$\{Number\(loc\.latitude\)/);
+  assert.match(appSource, /rowButton\("Show on map", \(\) => showFriendOnMap\(loc\)\)/);
+  assert.match(pageSource, /id="publish-gps"/, "missing the GPS share button");
+  assert.match(pageSource, /<details class="publish-manual">[\s\S]*id="publish-form"/, "coordinates must fold under details");
+  assert.match(appSource, /publish\(fix\.lat, fix\.lon, publishAccuracy\(fix\.accuracy\)\)/);
 });
 
 console.log(`sharing UI checks passed: ${passed}`);

@@ -17,6 +17,9 @@ The per-item flagged list for this release is in
 ### Changed
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
+### Fixed
+- [FIX] Web: the privacy page now names the current 3.0.0 release instead of 2.6.1; `scripts/check-release.ps1` fails if the version drifts again.
+
 ## [3.0.0] - 2026-11-25
 ### Changed
 - [DOCS] Release: v3.0.0 now publishes the signed universal `pinpoint-android-3.0.0.apk` (`arm64-v8a` + `armeabi-v7a`, 14,005,317 B); the evidence and deployment pages point at it and the duplicate debug release is gone.

@@ -55,6 +55,11 @@ fn drawer_overlays_map(width: f32) -> bool {
     width < DRAWER_OVERLAY_MAX_WIDTH
 }
 
+/// A click left of the overlay panel dismisses it; clicks on the panel do not.
+fn overlay_click_dismisses(click: Option<egui::Pos2>, panel_left: f32) -> bool {
+    matches!(click, Some(pos) if pos.x < panel_left)
+}
+
 /// Plain state changes requested by one frame of the "More" drawer.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct DrawerChanges {
@@ -2024,6 +2029,20 @@ impl PinpointAppUI {
             self.mobile_nav_open = false;
             return;
         }
+        let screen_width = ctx.screen_rect().width();
+        if !compact && drawer_overlays_map(screen_width) {
+            let click = ctx.input(|i| {
+                if i.pointer.any_click() {
+                    i.pointer.interact_pos()
+                } else {
+                    None
+                }
+            });
+            if overlay_click_dismisses(click, screen_width - 380.0) {
+                self.mobile_nav_open = false;
+                return;
+            }
+        }
         let lang = self.lang;
         let current = self.app.current_screen();
         let mut chosen: Option<CurrentScreen> = None;
@@ -2198,7 +2217,6 @@ impl PinpointAppUI {
                 });
             });
         };
-        let screen_width = ctx.screen_rect().width();
         if compact {
             egui::TopBottomPanel::bottom("mobile_nav")
                 .resizable(false)
@@ -2538,8 +2556,9 @@ impl eframe::App for PinpointAppUI {
 #[cfg(test)]
 mod tests {
     use super::{
-        drawer_changes, drawer_overlays_map, escape_closes_drawer, is_wide_width, CurrentScreen,
-        DrawerChanges, Lang, DRAWER_OVERLAY_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH,
+        drawer_changes, drawer_overlays_map, egui, escape_closes_drawer, is_wide_width,
+        overlay_click_dismisses, CurrentScreen, DrawerChanges, Lang, DRAWER_OVERLAY_MAX_WIDTH,
+        WIDE_LAYOUT_MIN_WIDTH,
     };
 
     #[test]
@@ -2569,6 +2588,24 @@ mod tests {
     fn drawer_overlays_below_1100() {
         assert!(drawer_overlays_map(DRAWER_OVERLAY_MAX_WIDTH - 1.0));
         assert!(!drawer_overlays_map(DRAWER_OVERLAY_MAX_WIDTH));
+    }
+
+    #[test]
+    fn overlay_click_dismisses_only_left_of_the_panel() {
+        let panel_left = 520.0;
+        assert!(overlay_click_dismisses(
+            Some(egui::pos2(100.0, 300.0)),
+            panel_left
+        ));
+        assert!(!overlay_click_dismisses(
+            Some(egui::pos2(panel_left, 300.0)),
+            panel_left
+        ));
+        assert!(!overlay_click_dismisses(
+            Some(egui::pos2(800.0, 300.0)),
+            panel_left
+        ));
+        assert!(!overlay_click_dismisses(None, panel_left));
     }
 
     #[test]

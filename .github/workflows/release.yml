@@ -188,9 +188,41 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/build.p12" "$RUNNER_TEMP/release.jks"
 
+  windows:
+    name: Windows desktop and server
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-windows
+      - name: Build release binaries
+        run: cargo build --release --locked --bin pinpoint-desktop --bin pinpoint-server
+      - name: Package desktop and server/web ZIPs
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          New-Item -ItemType Directory -Force dist/desktop | Out-Null
+          New-Item -ItemType Directory -Force dist/server | Out-Null
+          Copy-Item target/release/pinpoint-desktop.exe dist/desktop/
+          Copy-Item target/release/pinpoint-server.exe dist/server/
+          (Get-Content packaging/windows-desktop-README.txt -Raw).Replace('@VERSION@', $version) |
+            Set-Content dist/desktop/README.txt -NoNewline
+          (Get-Content packaging/windows-server-README.txt -Raw).Replace('@VERSION@', $version) |
+            Set-Content dist/server/README.txt -NoNewline
+          Compress-Archive -Path dist/desktop/* -DestinationPath "dist/pinpoint-desktop-windows-x64-$version.zip" -Force
+          Compress-Archive -Path dist/server/* -DestinationPath "dist/pinpoint-server-windows-x64-$version.zip" -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: dist/*.zip
+          if-no-files-found: error
+
   release:
     name: GitHub Release
-    needs: apk
+    needs: [apk, windows]
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -204,6 +236,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: release-apk
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-windows
           path: dist
 
       - name: Install Android build-tools (aapt)

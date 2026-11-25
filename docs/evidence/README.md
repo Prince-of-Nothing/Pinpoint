@@ -110,6 +110,12 @@ from the debug desktop binary; they show the three responsive placements.
 - [Mobile bottom sheet](../assets/native-drawer-mobile-sheet.png) — 700 px:
   the drawer stays a bottom sheet below the 820 pt breakpoint.
 
+## Native About evidence
+
+- [Map shortcuts card](../assets/native-about-shortcuts.png) — desktop About
+  lists `+ / =`, `-`, `0` and `F`; captured with
+  `PINPOINT_SCREENSHOT_SCREEN=about` (About is reached from Profile).
+
 ## Web drawer layout
 
 Captured from the served web client with a live Chromium viewport (Playwright,

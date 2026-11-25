@@ -694,6 +694,10 @@ impl PinpointAppUI {
         }
         drop(data);
         self.app.set_screen(CurrentScreen::Map);
+        // Evidence hook: seeded screenshots can target About.
+        if std::env::var("PINPOINT_SCREENSHOT_SCREEN").as_deref() == Ok("about") {
+            self.app.set_screen(CurrentScreen::About);
+        }
     }
 
     /// Mark the mobile offline fallback as untrusted so it cannot restore or

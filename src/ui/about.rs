@@ -37,6 +37,24 @@ impl PinpointAppUI {
             );
             ui.add_space(12.0);
 
+            if !compact {
+                theme::card(ui, |ui| {
+                    ui.label(RichText::new("Map shortcuts").size(17.0).strong());
+                    ui.label(
+                        RichText::new("When no dialog or text field is focused.")
+                            .size(12.0)
+                            .color(theme::MUTED),
+                    );
+                    for (keys, action) in crate::ui::map::map_shortcut_rows() {
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(keys).monospace().strong());
+                            ui.label(action);
+                        });
+                    }
+                });
+                ui.add_space(12.0);
+            }
+
             // Privacy: opening About itself never contacts GitHub. The
             // throttled launch check may already have run; the button below
             // forces a fresh check.

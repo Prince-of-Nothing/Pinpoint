@@ -660,14 +660,52 @@ enum MapKeyAction {
     FitPins,
 }
 
+struct MapShortcut {
+    keys: &'static [egui::Key],
+    key_label: &'static str,
+    action: MapKeyAction,
+    action_label: &'static str,
+}
+
+const MAP_SHORTCUTS: [MapShortcut; 4] = [
+    MapShortcut {
+        keys: &[egui::Key::Plus, egui::Key::Equals],
+        key_label: "+ / =",
+        action: MapKeyAction::ZoomIn,
+        action_label: "Zoom in",
+    },
+    MapShortcut {
+        keys: &[egui::Key::Minus],
+        key_label: "-",
+        action: MapKeyAction::ZoomOut,
+        action_label: "Zoom out",
+    },
+    MapShortcut {
+        keys: &[egui::Key::Num0],
+        key_label: "0",
+        action: MapKeyAction::ResetView,
+        action_label: "Reset view",
+    },
+    MapShortcut {
+        keys: &[egui::Key::F],
+        key_label: "F",
+        action: MapKeyAction::FitPins,
+        action_label: "Fit pins",
+    },
+];
+
 fn map_key_action(key: egui::Key) -> Option<MapKeyAction> {
-    match key {
-        egui::Key::Plus | egui::Key::Equals => Some(MapKeyAction::ZoomIn),
-        egui::Key::Minus => Some(MapKeyAction::ZoomOut),
-        egui::Key::Num0 => Some(MapKeyAction::ResetView),
-        egui::Key::F => Some(MapKeyAction::FitPins),
-        _ => None,
-    }
+    MAP_SHORTCUTS
+        .iter()
+        .find(|shortcut| shortcut.keys.contains(&key))
+        .map(|shortcut| shortcut.action)
+}
+
+/// (keys, action) rows for the About screen, derived from the shortcut table.
+pub(crate) fn map_shortcut_rows() -> impl Iterator<Item = (&'static str, &'static str)> {
+    MAP_SHORTCUTS
+        .iter()
+        .map(|shortcut| (shortcut.key_label, shortcut.action_label))
 }
 
 /// Map shortcuts run only when no modal/sheet is open and no text field has
@@ -1282,7 +1320,8 @@ pub(crate) fn encode_component(value: &str) -> String {
 mod tests {
     use super::egui;
     use super::{
-        map_key_action, map_shortcuts_enabled, sheet_escape_target, EscapableSheet, MapKeyAction,
+        map_key_action, map_shortcut_rows, map_shortcuts_enabled, sheet_escape_target,
+        EscapableSheet, MapKeyAction, MAP_SHORTCUTS,
     };
 
     #[test]
@@ -1310,6 +1349,24 @@ mod tests {
         );
         assert_eq!(map_key_action(egui::Key::F), Some(MapKeyAction::FitPins));
         assert_eq!(map_key_action(egui::Key::A), None);
+    }
+
+    #[test]
+    fn about_rows_match_the_shortcut_table() {
+        assert_eq!(
+            map_shortcut_rows().collect::<Vec<_>>(),
+            vec![
+                ("+ / =", "Zoom in"),
+                ("-", "Zoom out"),
+                ("0", "Reset view"),
+                ("F", "Fit pins"),
+            ]
+        );
+        for shortcut in MAP_SHORTCUTS.iter() {
+            for key in shortcut.keys {
+                assert_eq!(map_key_action(*key), Some(shortcut.action));
+            }
+        }
     }
 
     #[test]

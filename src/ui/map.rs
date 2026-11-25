@@ -80,7 +80,7 @@ impl PinpointAppUI {
             || self.mobile_publish_open
             || self.mobile_selected_place.is_some()
             || self.recovery_code_visible();
-        if !modal_open && !ctx.wants_keyboard_input() {
+        if map_shortcuts_enabled(modal_open, ctx.wants_keyboard_input()) {
             ctx.input(|input| {
                 for key in [
                     egui::Key::Plus,
@@ -668,6 +668,12 @@ fn map_key_action(key: egui::Key) -> Option<MapKeyAction> {
         egui::Key::F => Some(MapKeyAction::FitPins),
         _ => None,
     }
+}
+
+/// Map shortcuts run only when no modal/sheet is open and no text field has
+/// focus, so typing "0" or "F" in a form never moves the map.
+fn map_shortcuts_enabled(modal_open: bool, wants_keyboard_input: bool) -> bool {
+    !modal_open && !wants_keyboard_input
 }
 
 /// The map bottom sheet Escape should close, if any.
@@ -1275,7 +1281,17 @@ pub(crate) fn encode_component(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::egui;
-    use super::{map_key_action, sheet_escape_target, EscapableSheet, MapKeyAction};
+    use super::{
+        map_key_action, map_shortcuts_enabled, sheet_escape_target, EscapableSheet, MapKeyAction,
+    };
+
+    #[test]
+    fn map_shortcuts_need_no_modal_and_no_text_focus() {
+        assert!(map_shortcuts_enabled(false, false));
+        assert!(!map_shortcuts_enabled(true, false));
+        assert!(!map_shortcuts_enabled(false, true));
+        assert!(!map_shortcuts_enabled(true, true));
+    }
 
     #[test]
     fn map_shortcuts_map_to_actions() {

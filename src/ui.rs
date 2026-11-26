@@ -18,6 +18,7 @@ pub(crate) mod friends;
 pub(crate) mod kiosk;
 pub(crate) mod map;
 pub(crate) mod messages;
+pub(crate) mod phone_tabs;
 pub(crate) mod places;
 pub(crate) mod profile;
 pub(crate) mod qr;
@@ -1666,12 +1667,27 @@ impl PinpointAppUI {
             let mut nav_open = self.mobile_nav_open;
             let mut sign_in = false;
             let mut sign_out = false;
+            let avatar_name = self
+                .app
+                .data()
+                .lock()
+                .unwrap()
+                .user
+                .as_ref()
+                .map(|user| user.full_name.clone());
             ui.horizontal(|ui| {
-                let lead = if auth_screen { "←" } else { "☰" };
-                if ui
-                    .add(egui::Button::new(lead).min_size(egui::vec2(44.0, 44.0)))
-                    .clicked()
-                {
+                // Signed in, the lead is the avatar that opens the menu with
+                // Account; signed out, it stays the plain menu button.
+                let lead_clicked = if auth_screen {
+                    ui.add(egui::Button::new("←").min_size(egui::vec2(44.0, 44.0)))
+                        .clicked()
+                } else if signed_in {
+                    phone_tabs::avatar_button(ui, avatar_name.as_deref()).clicked()
+                } else {
+                    ui.add(egui::Button::new("☰").min_size(egui::vec2(44.0, 44.0)))
+                        .clicked()
+                };
+                if lead_clicked {
                     if auth_screen {
                         back = true;
                     } else {
@@ -2277,6 +2293,10 @@ impl PinpointAppUI {
                 if !is_admin {
                     tools.retain(|(screen, _, _)| *screen != CurrentScreen::Admin);
                 }
+                if compact {
+                    // Chats is a tab on the phone, so the menu does not repeat it.
+                    tools.retain(|(screen, _, _)| *screen != CurrentScreen::Messages);
+                }
                 egui::Grid::new("mobile_tools_grid")
                     .num_columns(2)
                     .spacing([8.0, 8.0])
@@ -2525,58 +2545,9 @@ impl eframe::App for PinpointAppUI {
         }
 
         if compact && !auth_screen && !self.mobile_nav_open {
-            let current = self.app.current_screen();
-            let mut chosen: Option<CurrentScreen> = None;
-            egui::TopBottomPanel::bottom("mobile_tabbar")
-                .resizable(false)
-                // Android 15 draws edge-to-edge; reserve room for the gesture
-                // navigation bar so the tabs are not under it.
-                .exact_height(74.0)
-                .frame(
-                    egui::Frame::NONE
-                        .fill(theme::PANEL)
-                        .inner_margin(egui::Margin {
-                            left: 4,
-                            right: 4,
-                            top: 4,
-                            bottom: 20,
-                        }),
-                )
-                .show(ctx, |ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    let tab_width = ui.available_width() / 5.0;
-                    ui.horizontal(|ui| {
-                        for (screen, label) in [
-                            (CurrentScreen::Map, "Map"),
-                            (CurrentScreen::Friends, "Friends"),
-                            (CurrentScreen::Sharing, "Sharing"),
-                            (CurrentScreen::Today, "Today"),
-                            (CurrentScreen::Profile, "Me"),
-                        ] {
-                            let selected = current == screen;
-                            let fill = if selected {
-                                theme::ACCENT
-                            } else {
-                                theme::PANEL
-                            };
-                            let text_color = if selected {
-                                theme::ACCENT_INK
-                            } else {
-                                theme::TEXT
-                            };
-                            let button = egui::Button::new(
-                                RichText::new(label).size(12.0).strong().color(text_color),
-                            )
-                            .fill(fill)
-                            .min_size(egui::vec2(tab_width, 46.0))
-                            .corner_radius(egui::CornerRadius::same(10));
-                            if ui.add(button).clicked() {
-                                chosen = Some(screen);
-                            }
-                        }
-                    });
-                });
-            if let Some(screen) = chosen {
+            // Android 15 draws edge-to-edge; the bar reserves room for the
+            // gesture navigation bar below its tabs.
+            if let Some(screen) = phone_tabs::draw_tab_bar(ctx, &self.app.current_screen()) {
                 self.app.set_screen(screen);
             }
         }
@@ -2592,6 +2563,19 @@ impl eframe::App for PinpointAppUI {
         panel.show(ctx, |ui| {
             self.draw_header_bar(ui, ctx);
             self.draw_update_banner(ui);
+            // The People tab holds Friends and Sharing; the switch moves
+            // between them without a bottom tab of its own.
+            if compact
+                && matches!(
+                    self.app.current_screen(),
+                    CurrentScreen::Friends | CurrentScreen::Sharing
+                )
+            {
+                let current = self.app.current_screen();
+                if let Some(screen) = phone_tabs::draw_people_switch(ui, &current) {
+                    self.app.set_screen(screen);
+                }
+            }
             let auth_screen = matches!(
                 self.app.current_screen(),
                 CurrentScreen::Login | CurrentScreen::Register

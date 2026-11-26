@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] Native tests: an egui interaction test opens the real compact publish sheet through the modal gate, asserts background click/scroll isolation and focus on its close control; the publish body is the testable `draw_publish_sheet_view` and the close focus is one-shot.
 - [INFRA] Native tests: an egui interaction test opens the real compact place sheet through the modal gate, asserts background click/scroll isolation and focus on its close control; the place body is the testable `draw_place_sheet_view`.
 - [INFRA] Native tests: an egui interaction test opens the real route sheet through the modal gate, asserts background click/scroll isolation and focus on its close control; the route body is the testable `draw_route_sheet_view`.
 - [INFRA] Native tests: an egui interaction test opens the real share sheet with the modal gate, asserts background click/scroll isolation, and focuses its label field; the sheet body is extracted as the testable `draw_share_sheet_view`.

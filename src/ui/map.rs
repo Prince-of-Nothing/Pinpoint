@@ -170,7 +170,15 @@ impl PinpointAppUI {
             let map_height = (ui.available_height() - 34.0).max(170.0);
             let binding = self.app.data();
             let mut data = binding.lock().unwrap();
-            map::render_map_with(ui, &mut data, map_height, Some(&backend_url), online, true);
+            map::render_map_with(
+                ui,
+                &mut data,
+                map_height,
+                Some(&backend_url),
+                online,
+                true,
+                modal_open,
+            );
             if data.measure_mode {
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
@@ -796,6 +804,8 @@ impl PinpointAppUI {
             || self.share_sheet.is_some()
             || self.route_plan.open
             || self.recovery_code_visible();
+        let map_blocked =
+            blocked || self.mobile_selected_place.is_some() || self.mobile_publish_open;
         if super::escape_dismisses(ctx.input(|i| i.key_pressed(egui::Key::Escape)), blocked) {
             match sheet_escape_target(
                 self.mobile_publish_open,
@@ -823,7 +833,15 @@ impl PinpointAppUI {
         {
             let binding = self.app.data();
             let mut data = binding.lock().unwrap();
-            crate::map::render_map_with(ui, &mut data, height, Some(&backend_url), online, true);
+            crate::map::render_map_with(
+                ui,
+                &mut data,
+                height,
+                Some(&backend_url),
+                online,
+                true,
+                map_blocked,
+            );
         }
         self.handle_map_click(ctx);
         self.handle_map_menu(ctx);

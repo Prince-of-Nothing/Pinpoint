@@ -23,7 +23,7 @@ impl PinpointAppUI {
                  supports stops, avoid options, alternatives and exports.",
             );
             if theme::primary_button(ui, "Open route planner").clicked() {
-                self.route_plan.open = true;
+                self.route_plan.show();
                 if self.route_plan.origin.is_none() {
                     let (lat, lon, name) = {
                         let d = self.app.data();

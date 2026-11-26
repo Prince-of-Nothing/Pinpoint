@@ -213,7 +213,7 @@ impl PinpointAppUI {
         match action {
             MapMenuAction::DirectionsFrom(lat, lon) => {
                 self.route_plan.origin = Some(RoutePoint::new(lat, lon, "Dropped pin"));
-                self.route_plan.open = true;
+                self.route_plan.show();
                 self.route_plan.error = None;
                 self.app
                     .set_notice(Some("Origin set. Choose a destination.".into()));
@@ -237,7 +237,7 @@ impl PinpointAppUI {
                     self.route_plan.origin = Some(origin);
                 }
                 self.route_plan.destination = Some(RoutePoint::new(lat, lon, "Dropped pin"));
-                self.route_plan.open = true;
+                self.route_plan.show();
                 self.route_plan.error = None;
             }
             MapMenuAction::MeasureFrom(lat, lon) => {
@@ -542,7 +542,7 @@ impl PinpointAppUI {
                                 loc.longitude,
                                 loc.user_name.clone(),
                             ));
-                            self.route_plan.open = true;
+                            self.route_plan.show();
                             self.route_plan.error = None;
                         }
                         if ui.button(i18n::t(lang, key::OSM_MAP)).clicked() {
@@ -1023,7 +1023,7 @@ impl PinpointAppUI {
             self.mobile_nav_open = !self.mobile_nav_open;
         }
         if open_route {
-            self.route_plan.open = true;
+            self.route_plan.show();
             if self.route_plan.origin.is_none() {
                 let (lat, lon, name) = {
                     let d = self.app.data();

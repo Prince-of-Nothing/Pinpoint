@@ -123,7 +123,7 @@ pub fn validate_latitude(lat: f64) -> ValidationResult {
         return ValidationResult::invalid("Latitude must be a valid number".to_string());
     }
 
-    if lat < limits::MIN_LATITUDE || lat > limits::MAX_LATITUDE {
+    if !(limits::MIN_LATITUDE..=limits::MAX_LATITUDE).contains(&lat) {
         return ValidationResult::invalid(format!(
             "Latitude must be between {} and {}",
             limits::MIN_LATITUDE,
@@ -140,7 +140,7 @@ pub fn validate_longitude(lon: f64) -> ValidationResult {
         return ValidationResult::invalid("Longitude must be a valid number".to_string());
     }
 
-    if lon < limits::MIN_LONGITUDE || lon > limits::MAX_LONGITUDE {
+    if !(limits::MIN_LONGITUDE..=limits::MAX_LONGITUDE).contains(&lon) {
         return ValidationResult::invalid(format!(
             "Longitude must be between {} and {}",
             limits::MIN_LONGITUDE,

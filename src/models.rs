@@ -652,7 +652,10 @@ mod geo_tests {
     fn bearing_and_compass() {
         // Due north.
         let b = bearing_deg(41.0, -87.0, 42.0, -87.0);
-        assert!(b < 1.0 || b > 359.0, "bearing was {b}");
+        assert!(
+            !(1.0..=359.0).contains(&b) && !b.is_nan(),
+            "bearing was {b}"
+        );
         assert_eq!(compass_label(b), "N");
         assert_eq!(compass_label(90.0), "E");
         assert_eq!(compass_label(180.0), "S");

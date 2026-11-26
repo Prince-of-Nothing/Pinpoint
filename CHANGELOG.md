@@ -87,6 +87,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Build: `src/server/web_handlers.rs` and `tests/router_probe.rs` no longer fail to parse (a missing brace and a merged test body from #607), and the lat/lon range checks and two test-only lints pass `clippy -D warnings` on current stable, so CI builds again.
 - [FIX] Native navigation: the turn-by-turn banner advances through route maneuvers instead of reusing the stop counter, and OSRM maneuver coordinates are carried into the route steps.
 - [FIX] Android: `scripts/android-smoke.ps1` waits for a focused, non-blank rendered screen and fails on ANR, instead of passing a black or hung app.
 - [FIX] Native: the publish sheet's latitude/longitude fields use stable ids, so focus and IME state survive layout changes; a focus test covers both ids. An API 37 arm64 emulator run launched the app, signed in anonymously and opened the publish sheet.

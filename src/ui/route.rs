@@ -319,6 +319,12 @@ pub(crate) struct RouteSheetOutcome {
     pub add_stop: bool,
     pub remove_stop: Option<usize>,
     pub close_id: Option<egui::Id>,
+    pub plan_id: Option<egui::Id>,
+    pub navigate_id: Option<egui::Id>,
+    pub share_id: Option<egui::Id>,
+    pub kml_id: Option<egui::Id>,
+    pub geojson_id: Option<egui::Id>,
+    pub clear_id: Option<egui::Id>,
 }
 
 #[derive(Clone, Copy)]
@@ -601,6 +607,12 @@ impl super::PinpointAppUI {
         let mut external: Option<String> = None;
         let mut add_stop = false;
         let mut remove_stop: Option<usize> = None;
+        let mut plan_id = None;
+        let mut navigate_id = None;
+        let mut share_id = None;
+        let mut kml_id = None;
+        let mut geojson_id = None;
+        let mut clear_id = None;
 
         let area = if compact {
             egui::Area::new(egui::Id::new("route_sheet"))
@@ -745,9 +757,11 @@ impl super::PinpointAppUI {
                                         plan.mode = mode.to_string();
                                     }
                                 }
-                                if ui.button("Route").clicked() {
+                                let plan_button = ui.button("Route");
+                                if plan_button.clicked() {
                                     plan_requested = true;
                                 }
+                                plan_id = Some(plan_button.id);
                             });
 
                             if let Some(error) = &plan.error {
@@ -799,24 +813,36 @@ impl super::PinpointAppUI {
                                         if ui.button("Exit navigation").clicked() {
                                             plan.following = false;
                                         }
-                                    } else if ui.button("Navigate").clicked() {
-                                        navigate = true;
+                                    } else {
+                                        let navigate_button = ui.button("Navigate");
+                                        if navigate_button.clicked() {
+                                            navigate = true;
+                                        }
+                                        navigate_id = Some(navigate_button.id);
                                     }
-                                    if ui.button("Share").clicked() {
+                                    let share_button = ui.button("Share");
+                                    if share_button.clicked() {
                                         copy_share = true;
                                     }
+                                    share_id = Some(share_button.id);
                                     if ui.button("GPX").clicked() {
                                         copy_share = true;
                                     }
-                                    if ui.button("KML").clicked() {
+                                    let kml_button = ui.button("KML");
+                                    if kml_button.clicked() {
                                         copy_kml = true;
                                     }
-                                    if ui.button("GeoJSON").clicked() {
+                                    kml_id = Some(kml_button.id);
+                                    let geojson_button = ui.button("GeoJSON");
+                                    if geojson_button.clicked() {
                                         copy_geojson = true;
                                     }
-                                    if ui.button("Clear").clicked() {
+                                    geojson_id = Some(geojson_button.id);
+                                    let clear_button = ui.button("Clear");
+                                    if clear_button.clicked() {
                                         clear = true;
                                     }
+                                    clear_id = Some(clear_button.id);
                                 });
                                 ui.horizontal_wrapped(|ui| {
                                     if ui.button("Google Maps").clicked() {
@@ -852,6 +878,12 @@ impl super::PinpointAppUI {
             add_stop,
             remove_stop,
             close_id,
+            plan_id,
+            navigate_id,
+            share_id,
+            kml_id,
+            geojson_id,
+            clear_id,
         }
     }
     /// Spawn a backend route request for the current plan.

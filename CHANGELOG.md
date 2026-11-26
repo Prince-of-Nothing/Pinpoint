@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] Native tests: an egui interaction test clicks the real route sheet's Route, Navigate, Share, KML, GeoJSON and Clear controls and asserts each action.
 - [INFRA] Native tests: an egui interaction test clicks the real share sheet's Save and Stop controls and asserts their actions, with Stop enabled by an existing share.
 - [INFRA] Native tests: an egui interaction test opens the real compact publish sheet through the modal gate, asserts background click/scroll isolation and focus on its close control; the publish body is the testable `draw_publish_sheet_view` and the close focus is one-shot.
 - [INFRA] Native tests: an egui interaction test opens the real compact place sheet through the modal gate, asserts background click/scroll isolation and focus on its close control; the place body is the testable `draw_place_sheet_view`.

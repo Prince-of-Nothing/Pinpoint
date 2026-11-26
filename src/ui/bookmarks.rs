@@ -3,6 +3,23 @@ use super::theme;
 use super::PinpointAppUI;
 use eframe::egui::{self, RichText};
 
+/// Parse and range-check the coordinates typed for a saved place. Returns the
+/// `(lat, lon)` pair, or the message the screen shows.
+pub(crate) fn parse_bookmark_location(lat: &str, lon: &str) -> Result<(f64, f64), String> {
+    let (Ok(lat), Ok(lon)) = (lat.trim().parse::<f64>(), lon.trim().parse::<f64>()) else {
+        return Err("Enter valid latitude/longitude".to_string());
+    };
+    let check = crate::security::validation::validate_location(lat, lon, None);
+    if check.is_valid() {
+        return Ok((lat, lon));
+    }
+    Err(check
+        .errors
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "Enter valid latitude/longitude".to_string()))
+}
+
 impl PinpointAppUI {
     pub fn draw_bookmarks_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         egui::ScrollArea::vertical()
@@ -75,25 +92,22 @@ impl PinpointAppUI {
                     .desired_width(120.0),
             );
             if theme::primary_button(ui, "Save").clicked() {
-                if let (Ok(lat), Ok(lon)) = (
-                    self.bookmark_lat.trim().parse::<f64>(),
-                    self.bookmark_lon.trim().parse::<f64>(),
-                ) {
-                    let name = if self.bookmark_name.trim().is_empty() {
-                        "Saved place".to_string()
-                    } else {
-                        self.bookmark_name.clone()
-                    };
-                    store.add(&name, lat, lon);
-                    self.app.refresh_bookmarks();
-                    self.bookmark_name.clear();
-                    self.bookmark_lat.clear();
-                    self.bookmark_lon.clear();
-                    self.app
-                        .set_notice(Some("Place saved on-device.".to_string()));
-                } else {
-                    self.app
-                        .set_error(Some("Enter valid latitude/longitude".to_string()));
+                match parse_bookmark_location(&self.bookmark_lat, &self.bookmark_lon) {
+                    Ok((lat, lon)) => {
+                        let name = if self.bookmark_name.trim().is_empty() {
+                            "Saved place".to_string()
+                        } else {
+                            self.bookmark_name.clone()
+                        };
+                        store.add(&name, lat, lon);
+                        self.app.refresh_bookmarks();
+                        self.bookmark_name.clear();
+                        self.bookmark_lat.clear();
+                        self.bookmark_lon.clear();
+                        self.app
+                            .set_notice(Some("Place saved on-device.".to_string()));
+                    }
+                    Err(message) => self.app.set_error(Some(message)),
                 }
                 let _ = ctx;
             }
@@ -137,5 +151,42 @@ impl PinpointAppUI {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_bookmark_location;
+
+    #[test]
+    fn a_valid_pair_is_parsed_and_trimmed() {
+        assert_eq!(
+            parse_bookmark_location(" 47.01 ", "28.86\t"),
+            Ok((47.01, 28.86))
+        );
+    }
+
+    #[test]
+    fn an_out_of_range_latitude_is_refused() {
+        let error = parse_bookmark_location("200", "200").expect_err("latitude");
+        assert!(error.contains("Latitude"), "{error}");
+    }
+
+    #[test]
+    fn an_out_of_range_longitude_is_refused() {
+        let error = parse_bookmark_location("47.01", "-200").expect_err("longitude");
+        assert!(error.contains("Longitude"), "{error}");
+    }
+
+    #[test]
+    fn non_numeric_input_is_refused_with_the_form_message() {
+        assert_eq!(
+            parse_bookmark_location("north", "28.86"),
+            Err("Enter valid latitude/longitude".to_string())
+        );
+        assert_eq!(
+            parse_bookmark_location("47.01", ""),
+            Err("Enter valid latitude/longitude".to_string())
+        );
     }
 }

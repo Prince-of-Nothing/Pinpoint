@@ -3057,6 +3057,85 @@ mod tests {
     }
 
     #[test]
+    fn real_share_sheet_save_and_stop_return_their_actions() {
+        use std::cell::{Cell, RefCell};
+        use std::rc::Rc;
+
+        let friendship = crate::models::Friendship {
+            id: 7,
+            requester_id: 1,
+            receiver_id: 2,
+            requester_name: "Alice".into(),
+            receiver_name: "Bob".into(),
+            status: "accepted".into(),
+            created_at: None,
+            responded_at: None,
+        };
+        let existing = crate::models::LocationShare {
+            id: 9,
+            friendship_id: 7,
+            owner_id: 1,
+            direction: "to_friend".into(),
+            precision_level: "approximate".into(),
+            is_active: true,
+            last_location_update_at: None,
+            expires_at: None,
+            label: None,
+        };
+        let mut sheet = ShareSheet::for_friendship(&friendship, Some(1), &[existing]);
+        assert_eq!(sheet.share_id, Some(9), "the stop control must be enabled");
+        let ctx = egui::Context::default();
+        let save_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let stop_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let outcome = Rc::new(Cell::new(None::<ShareSheetOutcome>));
+        let focus_guard = Rc::new(RefCell::new(None::<egui::Id>));
+
+        let mut frame = |ctx: &egui::Context, events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(500.0, 700.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                draw_sheet_input_gate(ctx);
+                let drawn = PinpointAppUI::draw_share_sheet_view(ctx, &mut sheet, true);
+                if let Some(response) = drawn.save_id.and_then(|id| ctx.read_response(id)) {
+                    save_rect.set(Some(response.rect));
+                }
+                if let Some(response) = drawn.stop_id.and_then(|id| ctx.read_response(id)) {
+                    stop_rect.set(Some(response.rect));
+                }
+                outcome.set(Some(drawn));
+                sheet_focus_guard(ctx, true, &mut focus_guard.borrow_mut());
+            });
+        };
+
+        frame(&ctx, Vec::new());
+        frame(&ctx, Vec::new());
+        let save = save_rect.get().expect("share save rect");
+        let stop = stop_rect.get().expect("share stop rect");
+
+        frame(&ctx, vec![egui::Event::PointerMoved(save.center())]);
+        frame(&ctx, pointer_press(save.center()));
+        frame(&ctx, pointer_release(save.center()));
+        assert_eq!(
+            outcome.get().map(|outcome| outcome.action),
+            Some(ShareSheetAction::Save)
+        );
+
+        frame(&ctx, vec![egui::Event::PointerMoved(stop.center())]);
+        frame(&ctx, pointer_press(stop.center()));
+        frame(&ctx, pointer_release(stop.center()));
+        assert_eq!(
+            outcome.get().map(|outcome| outcome.action),
+            Some(ShareSheetAction::Stop)
+        );
+    }
+
+    #[test]
     fn real_route_sheet_blocks_the_page_and_focuses_close() {
         use std::cell::{Cell, RefCell};
         use std::rc::Rc;

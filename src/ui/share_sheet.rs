@@ -102,6 +102,8 @@ pub(crate) enum ShareSheetAction {
 pub(crate) struct ShareSheetOutcome {
     pub action: ShareSheetAction,
     pub close_id: Option<egui::Id>,
+    pub save_id: Option<egui::Id>,
+    pub stop_id: Option<egui::Id>,
 }
 
 impl super::PinpointAppUI {
@@ -169,6 +171,8 @@ impl super::PinpointAppUI {
         let mut stop = false;
         let mut close = false;
         let mut close_id = None;
+        let mut save_id = None;
+        let mut stop_id = None;
 
         egui::Area::new(egui::Id::new("share_sheet"))
             .order(egui::Order::Foreground)
@@ -282,18 +286,19 @@ impl super::PinpointAppUI {
                         ui.label(RichText::new(&sheet.incoming).size(11.0).color(muted));
                         ui.add_space(6.0);
                         ui.horizontal_wrapped(|ui| {
-                            if ui.button("Save sharing").clicked() {
+                            let save_button = ui.button("Save sharing");
+                            if save_button.clicked() {
                                 save = true;
                             }
-                            if ui
-                                .add_enabled(
-                                    sheet.share_id.is_some(),
-                                    egui::Button::new("Stop sharing"),
-                                )
-                                .clicked()
-                            {
+                            save_id = Some(save_button.id);
+                            let stop_button = ui.add_enabled(
+                                sheet.share_id.is_some(),
+                                egui::Button::new("Stop sharing"),
+                            );
+                            if stop_button.clicked() {
                                 stop = true;
                             }
+                            stop_id = Some(stop_button.id);
                             if ui.button("Close").clicked() {
                                 close = true;
                             }
@@ -320,6 +325,8 @@ impl super::PinpointAppUI {
                 ShareSheetAction::None
             },
             close_id,
+            save_id,
+            stop_id,
         }
     }
 }

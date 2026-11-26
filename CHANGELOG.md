@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [DOCS] `future/mobile-and-desktop.md`: a proposal for a mobile look based on the redesigned web UI (shared tokens, four tabs, one sheet component) and a plan for Windows and Linux desktop apps (desktop layout, installers, signing, OS location, updates).
 - [INFRA] Goal queue: `goal/` now holds ten modular agent prompts with a claim/consume protocol (`scripts/goal.ps1`), shared project context and validation; prompts are deleted after their PR merges.
 - [INFRA] Android: `scripts/android-smoke.ps1` installs, launches, focus-checks and crash-checks the debug APK and saves a screenshot; `docs/TESTING.md` documents the live publish check (`POST /api/v1/locations/me`).
 - [INFRA] Native tests: an egui interaction test types 47.01/28.86 into the real publish sheet and asserts Publish produces the 10 m manual fix; an API 37 emulator run with logged rects confirmed both fields, Publish and Use GPS (queued when offline).

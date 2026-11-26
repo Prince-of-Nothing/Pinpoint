@@ -2302,3 +2302,7 @@ body:has(.drawer:is(.open, .closing)) .map-controls {
   .map-menu { bottom: calc(5.2rem + var(--safe-bottom)); }
   .nav-banner { top: calc(8.3rem + var(--safe-top)); }
 }
+
+/* Account → Server */
+.server-error { margin: 0 0 0.5rem; color: var(--danger); font-size: 0.82rem; }
+.server-recent li { justify-content: space-between; }

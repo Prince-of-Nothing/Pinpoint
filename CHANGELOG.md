@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Web Account → Server: shows which Pinpoint server you're on and opens the app on another one (https, or plain http only for this computer, as in the native client; credentials, paths and other schemes are refused) after a confirmation, remembering the last five servers. The app keeps talking only to its own origin, so sessions and message keys never cross servers.
 - [INFRA] Native tests: a dispatch layer now maps publish/place sheet actions to pending requests, notices, errors and effect data; tests pin manual publish with 10 m accuracy, each GPS permission state, Save bookmark/notice, Copy/Share text and the origin/directions/open flags.
 - [INFRA] Native tests: publish coordinates are validated with the 10 m manual accuracy, each GPS permission state maps to its step, and the place sheet's OSM/Google/Organic/Magic Earth URLs and Set-as-origin endpoint are pinned.
 - [INFRA] Native tests: the place sheet's Save/Copy/Share effects are tested against a real bookmark store, the exact clipboard text and the exact `geo:` share URL; the app and view now use those helpers.

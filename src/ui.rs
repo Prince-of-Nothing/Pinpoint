@@ -2613,11 +2613,12 @@ impl eframe::App for PinpointAppUI {
         });
 
         let on_map = self.app.current_screen() == CurrentScreen::Map;
+        let compact = Self::is_compact(ctx);
         if sheet_input_blocked(
             self.share_sheet.is_some(),
             on_map && self.route_plan.open,
-            on_map && self.mobile_selected_place.is_some(),
-            on_map && self.mobile_publish_open,
+            on_map && compact && self.mobile_selected_place.is_some(),
+            on_map && compact && self.mobile_publish_open,
         ) {
             draw_sheet_input_gate(ctx);
         }

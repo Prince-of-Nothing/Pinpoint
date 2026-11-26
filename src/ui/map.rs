@@ -36,7 +36,7 @@ impl PinpointAppUI {
             || self.mobile_publish_open
             || self.mobile_selected_place.is_some()
             || self.recovery_code_visible()
-            || self.mobile_nav_open;
+            || (Self::is_compact(ctx) && self.mobile_nav_open);
         let slash = ctx.input(|input| input.key_pressed(egui::Key::Slash));
         if search_shortcut_fires(slash, modal_open, ctx.wants_keyboard_input()) {
             ctx.memory_mut(|memory| memory.request_focus(egui::Id::new(SEARCH_INPUT_ID)));
@@ -86,14 +86,14 @@ impl PinpointAppUI {
         let mut locate = false;
         let mut refresh = false;
 
-        let modal_open = self.crash_dialog.is_some()
+        // Place/publish sheets are compact-only; desktop keeps the map live
+        // while a search result is shown in the details column.
+        let map_blocked = self.crash_dialog.is_some()
             || self.update_dialog_open
             || self.share_sheet.is_some()
             || self.route_plan.open
-            || self.mobile_publish_open
-            || self.mobile_selected_place.is_some()
             || self.recovery_code_visible();
-        if map_shortcuts_enabled(modal_open, ctx.wants_keyboard_input()) {
+        if map_shortcuts_enabled(map_blocked, ctx.wants_keyboard_input()) {
             ctx.input(|input| {
                 for key in [
                     egui::Key::Plus,
@@ -177,7 +177,7 @@ impl PinpointAppUI {
                 Some(&backend_url),
                 online,
                 true,
-                modal_open,
+                map_blocked,
             );
             if data.measure_mode {
                 ui.add_space(4.0);

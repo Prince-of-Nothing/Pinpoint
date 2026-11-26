@@ -4,6 +4,10 @@
 // a minimal fake DOM.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+const services = await import(pathToFileURL(path.resolve("web/app/services.js")).href);
 
 const source = await readFile("web/app/nav.js", "utf8");
 
@@ -18,6 +22,7 @@ function extract(signature) {
 
 const body = [
   "async function runSearch(query)",
+  "function searchSourceNote({ source, error })",
   "function searchErrorText(err)",
   "function renderSearchNote(text",
   "function renderSearchError(text, query)",
@@ -60,7 +65,7 @@ class FakeNode {
   }
 }
 
-function harness({ online = true, fetchImpl, offline = null }) {
+function harness({ online = true, fetchImpl, pack = null, saved = [], mapFeatures = null }) {
   const results = new FakeNode("div");
   const calls = { fetch: 0, shown: [] };
   const doc = { createElement: (tag) => new FakeNode(tag) };
@@ -68,18 +73,28 @@ function harness({ online = true, fetchImpl, offline = null }) {
     calls.fetch += 1;
     return fetchImpl(url, init, calls.fetch);
   };
+  // The real provider chain from services.js; only its inputs are stubbed.
+  const placeProviders = [
+    services.offlinePackProvider(async () => pack, (r) => ({ short_name: r.name, display_name: r.name, latitude: r.lat, longitude: r.lon })),
+    services.serverSearchProvider(fetchStub),
+    services.combinedProvider("device", "On this device", [
+      services.savedPlacesProvider(() => ({ saved, recents: [] })),
+      services.mapFeaturesProvider(() => mapFeatures),
+    ]),
+  ];
   const make = new Function(
-    "MIN_QUERY", "setStatus", "mapApi", "getOfflineSearch", "toSearchPlace", "fetch",
+    "MIN_QUERY", "setStatus", "mapApi", "placeProviders", "searchPlaces",
     "navigator", "results", "showResults", "document", "formatDistance",
-    `let searchController = null; let currentResults = [];\n${body}\nreturn { runSearch, current: () => currentResults };`,
+    `let searchController = null; let currentResults = [];
+${body}
+return { runSearch, current: () => currentResults };`,
   );
   const api = make(
     3,
     () => {},
     { map: { getCenter: () => ({ lat: 46.88, lng: 29.1 }) } },
-    async () => offline,
-    (r) => ({ short_name: r.name, display_name: r.name, latitude: r.lat, longitude: r.lon }),
-    fetchStub,
+    placeProviders,
+    services.searchPlaces,
     { onLine: online },
     results,
     (open) => calls.shown.push(open),
@@ -103,7 +118,7 @@ const only = (h) => {
   assert.match(note.className, /search-error/);
   assert.equal(note.attrs.role, "alert");
   assert.match(note.text, /Can't reach the Pinpoint server/);
-  assert.doesNotMatch(note.text, /No places/);
+  assert.match(note.text, /Nothing saved or on the map matches “Albina” either/);
   const retry = note.children.find((c) => c.tag === "button");
   assert.ok(retry && /Retry/.test(retry.textContent), "missing Retry button");
   await retry.listeners.click();
@@ -144,17 +159,51 @@ const only = (h) => {
   const btn = only(h);
   assert.equal(btn.tag, "button");
   assert.equal(btn.className, "result");
-  assert.deepEqual(h.current(), [place]);
+  assert.deepEqual(h.current(), [{ ...place, source: "server" }]);
 }
 
-// Installed offline index: no network, and the empty text says where it looked.
+// Installed offline index answers on-device: no network, labelled as such.
 {
   const h = harness({
-    offline: { search: () => [] },
-    fetchImpl: () => assert.fail("offline search must not hit the network"),
+    pack: { search: () => [{ name: "Orhei", lat: 47.38, lon: 28.82 }] },
+    fetchImpl: () => assert.fail("a matching offline pack must not hit the network"),
+  });
+  await h.runSearch("Orhei");
+  const [note, btn] = h.results.children;
+  assert.equal(note.textContent, "From the offline map on this device.");
+  assert.equal(btn.tag, "button");
+}
+
+// An offline pack with no match falls through to the server.
+{
+  const h = harness({
+    pack: { search: () => [] },
+    fetchImpl: () => json(200, { results: [{ short_name: "Paris", display_name: "Paris, France" }] }),
   });
   await h.runSearch("Paris");
-  assert.equal(only(h).textContent, "No places in the offline map match “Paris”.");
+  assert.equal(h.calls.fetch, 1);
+  assert.equal(only(h).tag, "button");
+}
+
+// Server unreachable but something on the device matches: results, not an error.
+{
+  const h = harness({
+    fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
+    saved: [{ short_name: "Mall Dova", display_name: "Mall Dova, Chișinău", latitude: 47.02, longitude: 28.84 }],
+    mapFeatures: {
+      getStyle: () => ({ sources: { openmaptiles: { type: "vector" } } }),
+      querySourceFeatures: (_s, { sourceLayer }) =>
+        sourceLayer === "poi"
+          ? [{ properties: { name: "Shopping MallDova", class: "shop", subclass: "mall" }, geometry: { type: "Point", coordinates: [28.85, 47.03] } }]
+          : [],
+    },
+  });
+  await h.runSearch("mall");
+  const [note, ...rows] = h.results.children;
+  assert.match(note.textContent, /Can't reach the Pinpoint server. Showing matches from your saved places and the map on screen./);
+  assert.doesNotMatch(note.className, /search-error/);
+  assert.deepEqual(rows.map((r) => r.tag), ["button", "button"]);
+  assert.deepEqual(h.current().map((p) => p.source), ["saved", "map"]);
 }
 
 // A superseded request that fails later must not replace the newer answer.

@@ -19,6 +19,7 @@ import {
   shareSentence,
 } from "./sharing.js";
 import { initAppearance } from "./appearance.js";
+import { collectServiceStatus } from "./services.js";
 import {
   cryptoAvailable,
   deleteIdentity,
@@ -2058,7 +2059,46 @@ function setScreen(name) {
   if (title) title.textContent = meta.title;
   drawer.scrollTop = 0;
   setActiveTab(name);
+  if (name === "account") renderServices();
 }
+
+// Account → Services: what the app can reach right now (services.js).
+let servicesBusy = false;
+async function renderServices() {
+  const list = $("services-list");
+  if (!list || servicesBusy) return;
+  servicesBusy = true;
+  try {
+    const rows = await collectServiceStatus({
+      listPacks: async () => (await import("./offline.js")).listPacks(),
+      onlineMap: Boolean($("online-map-toggle")?.checked),
+      online: navigator.onLine !== false,
+    });
+    list.innerHTML = "";
+    for (const row of rows) {
+      const li = document.createElement("li");
+      li.className = `service service-${row.state}`;
+      const dot = document.createElement("span");
+      dot.className = "service-dot";
+      dot.setAttribute("aria-hidden", "true");
+      const text = document.createElement("span");
+      text.className = "service-text";
+      const name = document.createElement("strong");
+      name.textContent = row.name;
+      const detail = document.createElement("span");
+      detail.className = "muted small";
+      detail.textContent = row.detail;
+      text.append(name, detail);
+      li.append(dot, text);
+      list.appendChild(li);
+    }
+  } finally {
+    servicesBusy = false;
+  }
+}
+$("services-refresh")?.addEventListener("click", renderServices);
+window.addEventListener("online", () => drawer.dataset.screen === "account" && renderServices());
+window.addEventListener("offline", () => drawer.dataset.screen === "account" && renderServices());
 
 function setActiveTab(name) {
   for (const button of tabs) {

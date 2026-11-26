@@ -3904,6 +3904,95 @@ mod tests {
     }
 
     #[test]
+    fn real_publish_sheet_manual_entry_returns_the_fix() {
+        use std::cell::{Cell, RefCell};
+        use std::rc::Rc;
+
+        let ctx = egui::Context::default();
+        let mut lat = String::new();
+        let mut lon = String::new();
+        let lat_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let lon_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let publish_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let action = Rc::new(RefCell::new(None::<PublishSheetAction>));
+
+        let mut frame = |ctx: &egui::Context, events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(500.0, 700.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                let drawn = draw_publish_sheet_view(
+                    ctx,
+                    crate::i18n::Lang::system(),
+                    &mut lat,
+                    &mut lon,
+                    500.0,
+                    false,
+                );
+                lat_rect.set(
+                    ctx.read_response(egui::Id::new("publish_lat"))
+                        .map(|response| response.rect),
+                );
+                lon_rect.set(
+                    ctx.read_response(egui::Id::new("publish_lon"))
+                        .map(|response| response.rect),
+                );
+                publish_rect.set(
+                    drawn
+                        .publish_id
+                        .and_then(|id| ctx.read_response(id))
+                        .map(|response| response.rect),
+                );
+                action.borrow_mut().replace(drawn.action);
+            });
+        };
+
+        frame(&ctx, Vec::new());
+        frame(&ctx, Vec::new());
+        let lat_field = lat_rect.get().expect("latitude rect");
+        let lon_field = lon_rect.get().expect("longitude rect");
+        let publish_button = publish_rect.get().expect("publish rect");
+
+        frame(&ctx, vec![egui::Event::PointerMoved(lat_field.center())]);
+        frame(&ctx, pointer_press(lat_field.center()));
+        frame(&ctx, pointer_release(lat_field.center()));
+        frame(&ctx, vec![egui::Event::Text("47.01".into())]);
+
+        frame(&ctx, vec![egui::Event::PointerMoved(lon_field.center())]);
+        frame(&ctx, pointer_press(lon_field.center()));
+        frame(&ctx, pointer_release(lon_field.center()));
+        frame(&ctx, vec![egui::Event::Text("28.86".into())]);
+        frame(
+            &ctx,
+            vec![egui::Event::PointerMoved(publish_button.center())],
+        );
+        frame(&ctx, pointer_press(publish_button.center()));
+        frame(&ctx, pointer_release(publish_button.center()));
+        drop(frame);
+        assert_eq!(lat, "47.01");
+        assert_eq!(lon, "28.86");
+        assert_eq!(action.borrow().clone(), Some(PublishSheetAction::Publish));
+
+        let dispatch =
+            super::map::publish_sheet_dispatch(PublishSheetAction::Publish, &lat, &lon, || {
+                unreachable!("manual publish does not ask for GPS permission")
+            });
+        assert_eq!(
+            dispatch.pending,
+            Some(PendingAction::PublishLocation {
+                lat: 47.01,
+                lon: 28.86,
+                accuracy: 10.0,
+            })
+        );
+    }
+
+    #[test]
     fn real_publish_sheet_fields_keep_stable_focus_ids() {
         use std::cell::Cell;
         use std::rc::Rc;

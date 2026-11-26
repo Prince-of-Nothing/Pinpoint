@@ -190,6 +190,76 @@ for (const [input, label] of [
   check(threw, `parseLatLon rejects ${label}`);
 }
 
+// normalizeRoute guards the backend payload before the UI reads it.
+function throwsTypeError(fn) {
+  try {
+    fn();
+    return false;
+  } catch (error) {
+    return error instanceof TypeError;
+  }
+}
+check(
+  throwsTypeError(() => routeModule.normalizeRoute({ distance_m: -1, duration_s: 60 })),
+  "normalizeRoute rejects a negative distance_m with TypeError",
+);
+check(
+  throwsTypeError(() => routeModule.normalizeRoute({ distance_m: 100, duration_s: -1 })),
+  "normalizeRoute rejects a negative duration_s with TypeError",
+);
+check(
+  throwsTypeError(() => routeModule.normalizeRoute({ distance_m: Infinity, duration_s: 60 })),
+  "normalizeRoute rejects a non-finite distance_m with TypeError",
+);
+check(
+  throwsTypeError(() => routeModule.normalizeRoute({ distance_m: 100, duration_s: NaN })),
+  "normalizeRoute rejects a non-finite duration_s with TypeError",
+);
+const pointRoute = routeModule.normalizeRoute({
+  distance_m: 100,
+  duration_s: 60,
+  points: [
+    [47.01, 28.81],
+    [91, 28.8],
+    [47.0, 181],
+    ["north", 28.8],
+    [47.0],
+    [Number.NaN, 28.8],
+    "not a point",
+  ],
+});
+check(
+  pointRoute.points.length === 1 && pointRoute.points[0][0] === 47.01 && pointRoute.points[0][1] === 28.81,
+  "normalizeRoute keeps only in-range numeric points",
+);
+const trimmedRoute = routeModule.normalizeRoute({
+  distance_m: 100,
+  duration_s: 60,
+  maneuvers: [{ instruction: "   " }, { instruction: "  Turn left  " }],
+});
+check(
+  trimmedRoute.maneuvers.length === 1 && trimmedRoute.maneuvers[0].instruction === "Turn left",
+  "normalizeRoute drops blank maneuvers and trims valid ones",
+);
+const negativeLegRoute = routeModule.normalizeRoute({
+  distance_m: 100,
+  duration_s: 60,
+  maneuvers: [{ instruction: "Go on", distance_m: -5 }, { instruction: "Arrive", distance_m: 12 }],
+});
+check(
+  negativeLegRoute.maneuvers[0].distance_m === null && negativeLegRoute.maneuvers[1].distance_m === 12,
+  "normalizeRoute turns a negative maneuver distance into null",
+);
+const emptyManeuverRoute = routeModule.normalizeRoute({
+  distance_m: 100,
+  duration_s: 60,
+  maneuvers: [],
+});
+check(
+  Array.isArray(emptyManeuverRoute.maneuvers) && emptyManeuverRoute.maneuvers.length === 0,
+  "normalizeRoute accepts an empty maneuvers array",
+);
+
 // ---------------------------------------------------------------------------
 // HTTP + browser flow
 // ---------------------------------------------------------------------------

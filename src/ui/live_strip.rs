@@ -9,19 +9,15 @@ use crate::models::FriendLocation;
 use chrono::{DateTime, Utc};
 use eframe::egui::{self, RichText};
 
-/// Sunflower ring for a live location. It matches the `live` colour in the
-/// shared palette (#645) and moves there once that lands.
-const LIVE_RING: egui::Color32 = egui::Color32::from_rgb(0xf4, 0xc2, 0x1b);
-
 /// A location counts as live for this many minutes after its last update.
 pub(crate) const LIVE_WINDOW_MINUTES: i64 = 15;
 
 /// Zoom used when the map flies to a friend, the same as opening a place.
 pub(crate) const FLY_ZOOM: u8 = 15;
 
-/// Distance from the bottom of the phone screen to the strip: the 74 pt tab
-/// bar plus an 8 pt gap.
-pub(crate) const ABOVE_TAB_BAR: f32 = 74.0 + 8.0;
+/// Distance from the bottom of the phone screen to the strip: the tab bar
+/// plus an 8 pt gap.
+pub(crate) const ABOVE_TAB_BAR: f32 = super::phone_tabs::BAR_HEIGHT + 8.0;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct StripEntry {
@@ -173,7 +169,7 @@ pub(crate) fn draw_live_strip(
                             ui.horizontal(|ui| {
                                 for entry in entries {
                                     let (ring_width, ring) = if entry.live {
-                                        (2.0_f32, LIVE_RING)
+                                        (2.0_f32, theme::DARK.live)
                                     } else {
                                         (1.0_f32, theme::BORDER)
                                     };

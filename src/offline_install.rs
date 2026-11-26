@@ -490,6 +490,20 @@ enum Mode {
     Catalog(Arc<CatalogCache>),
 }
 
+/// Result of removing one installed region's directory.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RemoveOutcome {
+    /// The region directory is gone, or there was nothing to remove.
+    Removed,
+    /// The id is malformed or not in the catalog, or this installer keeps no
+    /// per-region directories.
+    UnknownRegion(String),
+    /// A download is running, so nothing is deleted.
+    Busy,
+    /// The filesystem refused the removal.
+    Failed(String),
+}
+
 /// Download manager bound to one `packs/` directory.
 pub struct OfflineInstaller {
     packs_dir: Option<PathBuf>,
@@ -864,6 +878,42 @@ impl OfflineInstaller {
                     artifacts,
                 })
             }
+        }
+    }
+
+    /// Remove `packs/<region>/` for one catalog region. The id is the only
+    /// input: it must pass `valid_region_id` and exist in the catalog. Only
+    /// that region's directory is deleted, never the root `packs/` files.
+    pub fn remove_region(&self, region_id: &str) -> RemoveOutcome {
+        let unknown = || RemoveOutcome::UnknownRegion(region_id.to_string());
+        if !valid_region_id(region_id) {
+            return unknown();
+        }
+        let (Some(root), Mode::Catalog(cache)) = (self.packs_dir.as_ref(), &self.mode) else {
+            return unknown();
+        };
+        if cache.current().region(region_id).is_none() {
+            return unknown();
+        }
+        // Hold the job lock for the whole removal, so a download cannot start
+        // while the directory is being deleted.
+        let job = self.job.lock().unwrap_or_else(|poison| poison.into_inner());
+        if job.running {
+            return RemoveOutcome::Busy;
+        }
+        let dir = root.join(region_id);
+        if !path_under(root, &dir) {
+            return unknown();
+        }
+        let removal = match std::fs::symlink_metadata(&dir) {
+            Ok(metadata) if metadata.is_dir() => std::fs::remove_dir_all(&dir),
+            Ok(_) => std::fs::remove_file(&dir),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+        };
+        match removal {
+            Ok(()) => RemoveOutcome::Removed,
+            Err(error) => RemoveOutcome::Failed(error.to_string()),
         }
     }
 
@@ -1948,6 +1998,32 @@ fn parse_download_region(body: &[u8]) -> Result<String, String> {
     Ok(region)
 }
 
+/// `DELETE /map/offline/<region>`: remove an installed region's pack directory.
+pub async fn remove_region(
+    Extension(installer): Extension<Arc<OfflineInstaller>>,
+    UrlPath(region): UrlPath<String>,
+) -> Response {
+    installer.ensure_catalog().await;
+    match installer.remove_region(&region) {
+        RemoveOutcome::Removed => StatusCode::NO_CONTENT.into_response(),
+        RemoveOutcome::UnknownRegion(id) => error_response(
+            StatusCode::NOT_FOUND,
+            "UNKNOWN_REGION",
+            &format!("unknown region {id:?}"),
+        ),
+        RemoveOutcome::Busy => error_response(
+            StatusCode::CONFLICT,
+            "DOWNLOAD_IN_PROGRESS",
+            "a download is running; remove the region when it finishes",
+        ),
+        RemoveOutcome::Failed(_) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "REMOVE_FAILED",
+            "the region's files could not be removed",
+        ),
+    }
+}
+
 /// `GET /map/config`
 pub async fn config(Extension(installer): Extension<Arc<OfflineInstaller>>) -> Response {
     Json(installer.config().await).into_response()
@@ -2498,6 +2574,74 @@ mod tests {
             updated: "2026-11-17T12:00:00Z".to_string(),
             regions,
         }
+    }
+
+    #[test]
+    fn removing_a_region_deletes_only_its_own_directory() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = dir.path().join("packs");
+        std::fs::create_dir_all(root.join("gone")).unwrap();
+        std::fs::write(root.join("gone/gone.pmtiles"), b"pack").unwrap();
+        std::fs::create_dir_all(root.join("keep")).unwrap();
+        std::fs::write(root.join("keep/keep.pmtiles"), b"keep").unwrap();
+        std::fs::write(root.join("legacy.pmtiles"), b"legacy").unwrap();
+        std::fs::write(dir.path().join("outside.pmtiles"), b"outside").unwrap();
+        let catalog = fixture_catalog(vec![
+            fixture_region("http://127.0.0.1:1", "gone", "Gone", b"p", b"g", b"g"),
+            fixture_region("http://127.0.0.1:1", "keep", "Keep", b"p", b"g", b"g"),
+        ]);
+        let installer = OfflineInstaller::with_catalog(Some(root.clone()), catalog, "gone");
+
+        let traversal = "../outside.pmtiles";
+        assert_eq!(
+            installer.remove_region(traversal),
+            RemoveOutcome::UnknownRegion(traversal.to_string())
+        );
+        assert_eq!(
+            installer.remove_region("nowhere"),
+            RemoveOutcome::UnknownRegion("nowhere".to_string())
+        );
+        assert_eq!(installer.remove_region("gone"), RemoveOutcome::Removed);
+        assert!(!root.join("gone").exists());
+        assert_eq!(
+            std::fs::read(root.join("keep/keep.pmtiles")).unwrap(),
+            b"keep"
+        );
+        assert_eq!(
+            std::fs::read(root.join("legacy.pmtiles")).unwrap(),
+            b"legacy"
+        );
+        assert_eq!(
+            std::fs::read(dir.path().join("outside.pmtiles")).unwrap(),
+            b"outside"
+        );
+        // Removing a region that is already gone succeeds without touching anything.
+        assert_eq!(installer.remove_region("gone"), RemoveOutcome::Removed);
+    }
+
+    #[test]
+    fn a_running_download_blocks_region_removal() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(dir.path().join("gone")).unwrap();
+        std::fs::write(dir.path().join("gone/gone.pmtiles"), b"pack").unwrap();
+        let catalog = fixture_catalog(vec![fixture_region(
+            "http://127.0.0.1:1",
+            "gone",
+            "Gone",
+            b"p",
+            b"g",
+            b"g",
+        )]);
+        let installer =
+            OfflineInstaller::with_catalog(Some(dir.path().to_path_buf()), catalog, "gone");
+
+        installer.job.lock().unwrap().running = true;
+        assert_eq!(installer.remove_region("gone"), RemoveOutcome::Busy);
+        assert!(dir.path().join("gone/gone.pmtiles").exists());
+
+        installer.job.lock().unwrap().running = false;
+        assert_eq!(installer.remove_region("gone"), RemoveOutcome::Removed);
+        assert!(!dir.path().join("gone").exists());
     }
 
     async fn wait_finished(installer: &Arc<OfflineInstaller>) -> OfflineStatus {

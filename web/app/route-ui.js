@@ -135,7 +135,7 @@ function coerceRequest(value) {
  * @returns {object}
  * @throws {TypeError} when the two required numbers are missing/invalid.
  */
-function normalizeRoute(raw) {
+export function normalizeRoute(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     throw new TypeError("route must be an object");
   }

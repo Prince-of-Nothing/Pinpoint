@@ -2,7 +2,8 @@
 #
 # Covers the validation and consent rules that are easy to regress: auth input
 # rules, friendship rejection, location accuracy, share labels, notes,
-# check-ins and the search bound. Every request is authenticated with a real
+# check-ins, the search bound and the offline region catalog. Every request is
+# authenticated with a real
 # session cookie + CSRF token, so the checks exercise the same path a client
 # uses.
 #
@@ -32,6 +33,17 @@ function Check($Name, $Actual, $Expected) {
 }
 
 function Json($Value) { $Value | ConvertTo-Json -Depth 6 -Compress }
+
+# Public read without a session: the offline region catalog needs no login.
+function Get-Public($Path) {
+    try {
+        $resp = Invoke-WebRequest -UseBasicParsing -Method Get -Uri "$Base$Path" -TimeoutSec 10
+        @{ Status = [int]$resp.StatusCode; Body = ($resp.Content | ConvertFrom-Json) }
+    } catch {
+        $r = $_.Exception.Response
+        @{ Status = $(if ($r) { [int]$r.StatusCode } else { 0 }); Body = $null }
+    }
+}
 
 function New-Client($Email, $Password, $Name) {
     $body = Json @{ email = $Email; password = $Password; full_name = $Name }
@@ -129,6 +141,12 @@ $q120 = [string]::new([char]0x61, 120)
 $q121 = [string]::new([char]0x61, 121)
 Check "120-character query accepted" (Api $alice "GET" "/map/search?q=$q120" $null).Status 200
 Check "121-character query rejected" (Api $alice "GET" "/map/search?q=$q121" $null).Status 400
+
+Write-Host "== Offline map catalog =="
+$catalogResp = Get-Public "/map/catalog"
+Check "catalog responds 200" $catalogResp.Status 200
+Check "catalog has a non-empty regions array" (@($catalogResp.Body.regions).Count -gt 0) "True"
+Check "every catalog region has id and name" (@($catalogResp.Body.regions | Where-Object { -not $_.id -or -not $_.name }).Count) 0
 
 Write-Host ""
 Write-Host "$($script:pass) passed, $($script:fail) failed"

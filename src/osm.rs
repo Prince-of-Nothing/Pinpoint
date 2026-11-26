@@ -127,6 +127,9 @@ pub struct RouteStep {
     pub text: String,
     pub distance_m: Option<f64>,
     pub duration_s: Option<f64>,
+    /// Maneuver point `(lat, lon)` when the provider supplies one.
+    #[serde(default)]
+    pub location: Option<(f64, f64)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -253,6 +256,9 @@ struct OsrmManeuver {
     modifier: Option<String>,
     #[serde(default)]
     exit: Option<i64>,
+    /// OSRM's maneuver point is `[lon, lat]`.
+    #[serde(default)]
+    location: Option<[f64; 2]>,
 }
 
 // Overpass DTOs.
@@ -545,6 +551,10 @@ fn route_from_osrm(r: OsrmRoute) -> Route {
             text: step_text(&s),
             distance_m: s.distance,
             duration_s: s.duration,
+            location: s
+                .maneuver
+                .and_then(|maneuver| maneuver.location)
+                .map(|[lon, lat]| (lat, lon)),
         })
         .collect();
     Route {
@@ -829,5 +839,33 @@ mod tests {
         let geojson = route_to_geojson(&route, "Cafe");
         assert!(geojson.contains("\"type\":\"LineString\""));
         assert!(geojson.contains("28.8638"));
+    }
+
+    #[test]
+    fn osrm_maneuver_locations_are_kept_as_lat_lon() {
+        use super::{route_from_osrm, OsrmLeg, OsrmManeuver, OsrmRoute, OsrmStep};
+        let route = route_from_osrm(OsrmRoute {
+            distance: 100.0,
+            duration: 20.0,
+            geometry: String::new(),
+            legs: vec![OsrmLeg {
+                summary: "Main".into(),
+                distance: 100.0,
+                duration: 20.0,
+                steps: vec![OsrmStep {
+                    name: "Main".into(),
+                    distance: Some(100.0),
+                    duration: Some(20.0),
+                    maneuver: Some(OsrmManeuver {
+                        type_: "turn".into(),
+                        modifier: Some("right".into()),
+                        exit: None,
+                        location: Some([28.86, 47.01]),
+                    }),
+                }],
+            }],
+        });
+        assert_eq!(route.steps.len(), 1);
+        assert_eq!(route.steps[0].location, Some((47.01, 28.86)));
     }
 }

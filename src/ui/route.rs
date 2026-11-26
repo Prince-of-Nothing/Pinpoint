@@ -55,6 +55,8 @@ pub struct RoutePlan {
     pub open: bool,
     pub following: bool,
     pub next_stop: usize,
+    /// Index of the next maneuver in the selected route's `steps`.
+    pub next_step: usize,
     pub capabilities: Option<MapCapabilities>,
     pub error: Option<String>,
     /// Ask the route sheet's close control for focus once after opening.
@@ -74,6 +76,7 @@ impl Default for RoutePlan {
             open: false,
             following: false,
             next_stop: 0,
+            next_step: 0,
             capabilities: None,
             error: None,
             focus: false,
@@ -93,6 +96,7 @@ impl RoutePlan {
         self.show();
         self.error = None;
         self.following = false;
+        self.next_step = 0;
     }
 
     pub fn open_with_origin(&mut self, place: &SearchPlace) {
@@ -100,6 +104,7 @@ impl RoutePlan {
         self.show();
         self.error = None;
         self.following = false;
+        self.next_step = 0;
     }
 
     pub fn swap(&mut self) {
@@ -107,6 +112,7 @@ impl RoutePlan {
         self.routes.clear();
         self.selected = 0;
         self.following = false;
+        self.next_step = 0;
     }
 
     pub fn clear_route(&mut self) {
@@ -114,6 +120,7 @@ impl RoutePlan {
         self.selected = 0;
         self.following = false;
         self.next_stop = 0;
+        self.next_step = 0;
         self.error = None;
     }
 
@@ -162,6 +169,24 @@ impl RoutePlan {
 
     pub fn selected_route(&self) -> Option<&Route> {
         self.routes.get(self.selected)
+    }
+
+    /// Human-readable next-step line for the following banner.
+    pub(crate) fn navigation_status(&self) -> Option<String> {
+        if !self.following {
+            return None;
+        }
+        let route = self.selected_route()?;
+        let step = route.steps.get(self.next_step);
+        let target = if self.next_stop < self.stops.len() {
+            format!("stop {}", self.next_stop + 1)
+        } else {
+            "destination".to_string()
+        };
+        Some(match step {
+            Some(step) => format!("Next: {} ({})", step.text, target),
+            None => format!("Heading to {target}"),
+        })
     }
 
     pub fn mode_label(&self) -> &'static str {
@@ -306,6 +331,30 @@ pub(crate) fn take_route_focus(plan: &mut RoutePlan) -> bool {
     std::mem::take(&mut plan.focus)
 }
 
+/// The first instruction is usually the departure point; show the next turn.
+fn initial_navigation_step(route: &Route) -> usize {
+    if route.steps.len() > 1 {
+        1
+    } else {
+        0
+    }
+}
+
+/// Advance through maneuvers the user has reached, so the banner follows turns.
+fn next_navigation_step(current: usize, route: &Route, lat: f64, lon: f64) -> usize {
+    let mut step = current.min(route.steps.len());
+    while let Some(candidate) = route.steps.get(step) {
+        let Some((step_lat, step_lon)) = candidate.location else {
+            break;
+        };
+        if haversine_m(lat, lon, step_lat, step_lon) > 40.0 {
+            break;
+        }
+        step += 1;
+    }
+    step.min(route.steps.len())
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RouteSheetOutcome {
     pub close: bool,
@@ -384,6 +433,14 @@ impl super::PinpointAppUI {
         d.map_zoom = d.map_zoom.max(15);
         drop(d);
 
+        let next = self
+            .route_plan
+            .selected_route()
+            .map(|route| next_navigation_step(self.route_plan.next_step, route, lat, lon));
+        if let Some(next) = next {
+            self.route_plan.next_step = next;
+        }
+
         if self.route_plan.next_stop < self.route_plan.stops.len() {
             if let Some(stop) = self.route_plan.stops.get(self.route_plan.next_stop) {
                 if haversine_m(lat, lon, stop.lat, stop.lon) < 60.0 {
@@ -391,24 +448,6 @@ impl super::PinpointAppUI {
                 }
             }
         }
-    }
-
-    /// Human-readable next-step line for the following banner.
-    pub(crate) fn navigation_status(&self) -> Option<String> {
-        if !self.route_plan.following {
-            return None;
-        }
-        let route = self.route_plan.selected_route()?;
-        let step = route.steps.get(self.route_plan.next_stop);
-        let target = if self.route_plan.next_stop < self.route_plan.stops.len() {
-            format!("stop {}", self.route_plan.next_stop + 1)
-        } else {
-            "destination".to_string()
-        };
-        Some(match step {
-            Some(step) => format!("Next: {} ({})", step.text, target),
-            None => format!("Heading to {target}"),
-        })
     }
 
     /// Consume one map tap: set B when the route sheet is open, otherwise
@@ -461,6 +500,11 @@ impl super::PinpointAppUI {
         self.route_plan.routes = routes;
         self.route_plan.selected = 0;
         self.route_plan.following = false;
+        self.route_plan.next_step = self
+            .route_plan
+            .selected_route()
+            .map(initial_navigation_step)
+            .unwrap_or(0);
         self.route_plan.error = error;
         let app_data = self.app.data();
         let mut data = app_data.lock().unwrap();
@@ -502,7 +546,7 @@ impl super::PinpointAppUI {
             )
         };
         let selected_place = self.selected_place();
-        let navigation_status = self.navigation_status();
+        let navigation_status = self.route_plan.navigation_status();
         let mut plan = self.route_plan.clone();
         let outcome = Self::draw_route_sheet_view(
             ctx,
@@ -781,6 +825,11 @@ impl super::PinpointAppUI {
                                             .clicked()
                                         {
                                             plan.selected = index;
+                                            plan.next_step = plan
+                                                .routes
+                                                .get(index)
+                                                .map(initial_navigation_step)
+                                                .unwrap_or(0);
                                         }
                                     }
                                 });
@@ -989,6 +1038,62 @@ mod tests {
         plan.open_with_destination(&place("B"));
         assert!(take_route_focus(&mut plan));
         assert!(!take_route_focus(&mut plan));
+    }
+
+    #[test]
+    fn navigation_banner_advances_through_maneuvers() {
+        let route = Route {
+            points: vec![(47.0, 28.8), (47.02, 28.82)],
+            distance_m: 1000.0,
+            duration_s: 600.0,
+            steps: vec![
+                crate::osm::RouteStep {
+                    text: "Depart".into(),
+                    distance_m: Some(100.0),
+                    duration_s: Some(10.0),
+                    location: Some((47.0, 28.8)),
+                },
+                crate::osm::RouteStep {
+                    text: "Turn right".into(),
+                    distance_m: Some(200.0),
+                    duration_s: Some(30.0),
+                    location: Some((47.01, 28.81)),
+                },
+                crate::osm::RouteStep {
+                    text: "Arrive".into(),
+                    distance_m: None,
+                    duration_s: None,
+                    location: Some((47.02, 28.82)),
+                },
+            ],
+            summary: "Main".into(),
+            legs: vec![],
+        };
+        let mut plan = RoutePlan {
+            routes: vec![route.clone()],
+            following: true,
+            ..Default::default()
+        };
+        plan.next_step = initial_navigation_step(&route);
+        assert_eq!(plan.next_step, 1, "the departure step is skipped");
+        assert_eq!(
+            plan.navigation_status().as_deref(),
+            Some("Next: Turn right (destination)")
+        );
+
+        plan.next_step = next_navigation_step(plan.next_step, &route, 47.01, 28.81);
+        assert_eq!(plan.next_step, 2);
+        assert_eq!(
+            plan.navigation_status().as_deref(),
+            Some("Next: Arrive (destination)")
+        );
+
+        plan.next_step = next_navigation_step(plan.next_step, &route, 47.02, 28.82);
+        assert_eq!(plan.next_step, 3);
+        assert_eq!(
+            plan.navigation_status().as_deref(),
+            Some("Heading to destination")
+        );
     }
 
     #[test]

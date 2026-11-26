@@ -19,7 +19,7 @@ function initTheme() {
     root.dataset.theme = theme;
     document.dispatchEvent(new CustomEvent("pinpoint:theme", { detail: theme }));
     if (!toggle) return;
-    toggle.textContent = theme === "dark" ? "Light" : "Dark";
+    toggle.textContent = theme === "dark" ? "Light theme" : "Dark theme";
     toggle.setAttribute(
       "aria-label",
       theme === "dark" ? "Switch to light theme" : "Switch to dark theme",

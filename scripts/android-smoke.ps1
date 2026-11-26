@@ -1,17 +1,17 @@
-# scripts/android-smoke.ps1 - install, launch and crash-check the Android APK.
+# scripts/android-smoke.ps1 - install, launch and render-check the Android APK.
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts/android-smoke.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts/android-smoke.ps1 -Serial emulator-5554
 #
 # Picks the first connected device when -Serial is omitted. Exit code 0 means
-# the APK installed, PinpointActivity is focused and its logcat has no FATAL,
-# AndroidRuntime or Rust panic.
+# the APK installed, a focused Pinpoint window rendered non-blank pixels, and
+# its logcat has no FATAL, ANR or Rust panic.
 
 param(
     [string]$Serial = "",
     [string]$Apk = "android/app/build/outputs/apk/debug/app-debug.apk",
-    [int]$WaitSeconds = 8
+    [int]$WaitSeconds = 30
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,16 +40,51 @@ if ($LASTEXITCODE -ne 0) {
 & $adb -s $Serial shell am force-stop com.pinpoint.desktop | Out-Null
 & $adb -s $Serial logcat -c | Out-Null
 & $adb -s $Serial shell am start -n com.pinpoint.desktop/.PinpointActivity | Out-Host
-Start-Sleep -Seconds $WaitSeconds
 
-$focus = (& $adb -s $Serial shell "dumpsys window | grep mCurrentFocus") -join "`n"
-if ($focus -notmatch 'com\.pinpoint\.desktop') {
-    throw "PinpointActivity is not focused: $focus"
-}
-
-$appPid = (& $adb -s $Serial shell pidof com.pinpoint.desktop).Trim()
+$appPid = ""
+$pidDeadline = (Get-Date).AddSeconds(10)
+do {
+    Start-Sleep -Seconds 1
+    $appPid = (& $adb -s $Serial shell pidof com.pinpoint.desktop).Trim()
+} while (-not $appPid -and (Get-Date) -lt $pidDeadline)
 if (-not $appPid) {
     throw "Pinpoint process is not running."
+}
+
+$shot = Join-Path $env:TEMP "pinpoint-android-smoke.png"
+Add-Type -AssemblyName System.Drawing
+$rendered = $false
+$renderDeadline = (Get-Date).AddSeconds([Math]::Max($WaitSeconds, 30))
+do {
+    Start-Sleep -Seconds 2
+    $focus = (& $adb -s $Serial shell "dumpsys window | grep mCurrentFocus") -join "`n"
+    if ($focus -match 'Not Responding') {
+        throw "Pinpoint is not responding: $focus"
+    }
+    if ($focus -notmatch 'com\.pinpoint\.desktop') {
+        continue
+    }
+    & $adb -s $Serial shell screencap -p /sdcard/pinpoint-android-smoke.png | Out-Null
+    & $adb -s $Serial pull /sdcard/pinpoint-android-smoke.png $shot | Out-Null
+    $bitmap = [System.Drawing.Bitmap]::FromFile($shot)
+    $nonBlack = 0
+    $samples = 0
+    for ($x = 0; $x -lt $bitmap.Width; $x += 24) {
+        for ($y = 0; $y -lt $bitmap.Height; $y += 24) {
+            $pixel = $bitmap.GetPixel($x, $y)
+            if (($pixel.R + $pixel.G + $pixel.B) -gt 24) {
+                $nonBlack++
+            }
+            $samples++
+        }
+    }
+    $bitmap.Dispose()
+    if ($nonBlack -ge [Math]::Max(10, $samples * 0.02)) {
+        $rendered = $true
+    }
+} while (-not $rendered -and (Get-Date) -lt $renderDeadline)
+if (-not $rendered) {
+    throw "Screenshot is blank; Pinpoint has not rendered a focused screen."
 }
 
 $logs = & $adb -s $Serial logcat -d "--pid=$appPid"
@@ -58,9 +93,9 @@ if ($crash) {
     throw "Crash in logcat: $($crash -join '; ')"
 }
 
-$shot = Join-Path $env:TEMP "pinpoint-android-smoke.png"
-& $adb -s $Serial shell screencap -p /sdcard/pinpoint-android-smoke.png | Out-Null
-& $adb -s $Serial pull /sdcard/pinpoint-android-smoke.png $shot | Out-Null
+$anr = & $adb -s $Serial logcat -d | Select-String -Pattern 'ANR in com\.pinpoint\.desktop'
+if ($anr) {
+    throw "ANR in logcat: $($anr -join '; ')"
+}
 
-Write-Host "PASS  ${Serial}: app focused (PID $appPid), no crash; screenshot $shot"
-exit 0
+Write-Host "PASS  ${Serial}: app drawn and focused (PID $appPid), no crash/ANR; screenshot $shot"

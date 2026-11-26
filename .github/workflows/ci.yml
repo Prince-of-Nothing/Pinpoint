@@ -51,6 +51,9 @@ jobs:
         run: cargo build --locked --bin pinpoint-web --bin pinpoint-weba --bin pinpoint-webk
       - name: Tests (locked) — unit + API contract
         run: cargo test --locked
+      - name: Goal queue
+        shell: pwsh
+        run: ./scripts/goal.ps1 check
       - name: Release version consistency
         shell: pwsh
         run: |

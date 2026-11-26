@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] Native tests: the place sheet's Save/Copy/Share effects are tested against a real bookmark store, the exact clipboard text and the exact `geo:` share URL; the app and view now use those helpers.
 - [INFRA] Native tests: an egui interaction test clicks the real compact publish sheet's Publish and Use GPS controls and asserts each action.
 - [INFRA] Native tests: an egui interaction test clicks the real compact place sheet's Directions, Save, Copy and Share controls and asserts each action.
 - [INFRA] Native tests: an egui interaction test clicks the real route sheet's Route, Navigate, Share, KML, GeoJSON and Clear controls and asserts each action.

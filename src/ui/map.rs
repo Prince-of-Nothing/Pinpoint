@@ -1197,16 +1197,13 @@ impl PinpointAppUI {
                 }
                 PlaceSheetAction::Save => {
                     let store = crate::bookmarks::BookmarkStore::default_location();
-                    store.add(&place.short_name, place.latitude, place.longitude);
+                    let bookmark = save_place_bookmark(&store, &place);
                     self.app.refresh_bookmarks();
                     self.app
-                        .set_notice(Some(format!("Saved {}", place.short_name)));
+                        .set_notice(Some(format!("Saved {}", bookmark.name)));
                 }
                 PlaceSheetAction::Copy => {
-                    ctx.copy_text(format!(
-                        "{} ({:.5}, {:.5})",
-                        place.short_name, place.latitude, place.longitude
-                    ));
+                    ctx.copy_text(place_copy_text(&place));
                     self.app.set_notice(Some("Place copied.".to_string()));
                 }
                 PlaceSheetAction::Share(url) => self.share_text(ctx, &url),
@@ -1395,10 +1392,7 @@ pub(crate) fn draw_place_sheet_view(
                                 copy_id = Some(copy_button.id);
                                 let share_button = ui.button("Share");
                                 if share_button.clicked() {
-                                    action = Some(PlaceSheetAction::Share(format!(
-                                        "geo:{:.6},{:.6}?q={name}",
-                                        place.latitude, place.longitude
-                                    )));
+                                    action = Some(PlaceSheetAction::Share(place_share_url(place)));
                                 }
                                 share_id = Some(share_button.id);
                                 if ui.button("OSM").clicked() {
@@ -1496,6 +1490,32 @@ pub(crate) fn encode_component(value: &str) -> String {
             }
         })
         .collect()
+}
+
+/// Clipboard text used by the place sheet's Copy action.
+pub(crate) fn place_copy_text(place: &crate::osm::SearchPlace) -> String {
+    format!(
+        "{} ({:.5}, {:.5})",
+        place.short_name, place.latitude, place.longitude
+    )
+}
+
+/// Share URL used by the place sheet's Share action.
+pub(crate) fn place_share_url(place: &crate::osm::SearchPlace) -> String {
+    format!(
+        "geo:{:.6},{:.6}?q={}",
+        place.latitude,
+        place.longitude,
+        encode_component(&place.short_name)
+    )
+}
+
+/// Save a place through the given bookmark store.
+pub(crate) fn save_place_bookmark(
+    store: &crate::bookmarks::BookmarkStore,
+    place: &crate::osm::SearchPlace,
+) -> crate::bookmarks::Bookmark {
+    store.add(&place.short_name, place.latitude, place.longitude)
 }
 
 #[cfg(test)]

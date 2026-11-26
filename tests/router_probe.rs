@@ -1927,6 +1927,7 @@ async fn map_layers_module_is_served() {
 
 #[tokio::test]
 async fn server_address_module_is_served() {
+async fn services_module_is_served() {
     use pinpoint_desktop::server::{router, AppState};
 
     let app = router(AppState::new());
@@ -1934,6 +1935,7 @@ async fn server_address_module_is_served() {
         .oneshot(
             Request::builder()
                 .uri("/server-address.js")
+                .uri("/services.js")
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -1950,4 +1952,6 @@ async fn server_address_module_is_served() {
     let body = String::from_utf8_lossy(&bytes);
     assert!(body.contains("export function normalizeServerUrl"));
     assert!(body.contains("export function rememberServer"));
+    assert!(body.contains("export async function searchPlaces"));
+    assert!(body.contains("export async function collectServiceStatus"));
 }

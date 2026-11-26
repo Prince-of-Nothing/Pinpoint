@@ -106,6 +106,8 @@ jobs:
         run: node web/app/test/search-feedback.mjs
       - name: Server address checks
         run: node web/app/test/server-address.mjs
+      - name: Map services checks
+        run: node web/app/test/services.mjs
       - name: Password length checks
         run: node web/app/test/password-length.mjs
       - name: Navigation checks

@@ -2566,3 +2566,22 @@ body:has(#app-panel:not(.hidden)) > header { display: none; }
 /* Account → Server */
 .server-error { margin: 0 0 0.5rem; color: var(--danger); font-size: 0.82rem; }
 .server-recent li { justify-content: space-between; }
+/* Account → Services: what the app can reach right now. */
+.services-list li.service {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+}
+.service-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.service-ok .service-dot { background: var(--accent); }
+.service-down .service-dot { background: var(--danger); }
+.service-text { display: grid; gap: 0.1rem; min-width: 0; overflow-wrap: anywhere; }
+.search-results .search-source { font-size: 0.78rem; }

@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] CI: validate the goal prompt queue in the rust job.
 - [INFRA] Web tests: pin route normalization edge cases.
 - [FEATURE] Offline packs: remove an installed region with `DELETE /map/offline/<region>`; it refuses while a download runs and touches only that region's folder.
 - [DOCS] Testing: add navigation, offline and goal queue rows to the test matrix in `docs/TESTING.md`.

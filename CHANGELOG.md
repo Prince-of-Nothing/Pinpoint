@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native: tapping above the compact "More" bottom sheet closes it, matching the web drawer's map-tap dismissal.
 - [FEATURE] Web: the place sheet and route panel take focus when they open and return it to the map when they close.
 - [FEATURE] Web messages: opening a chat focuses the composer; below 981 px the drawer closes and hands off to the message sheet.
 - [FEATURE] Web sharing: the share sheet takes focus when it opens; below 981 px the drawer closes and hands off to it.

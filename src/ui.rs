@@ -60,6 +60,16 @@ fn overlay_click_dismisses(click: Option<egui::Pos2>, panel_left: f32) -> bool {
     matches!(click, Some(pos) if pos.x < panel_left)
 }
 
+/// Bottom-sheet height used by the compact "More" drawer.
+fn compact_nav_height(screen_height: f32) -> f32 {
+    (screen_height * 0.82).clamp(320.0, 520.0)
+}
+
+/// A tap above the compact bottom sheet dismisses it; taps on the sheet do not.
+fn sheet_click_dismisses(click: Option<egui::Pos2>, panel_top: f32) -> bool {
+    matches!(click, Some(pos) if pos.y < panel_top)
+}
+
 /// Plain state changes requested by one frame of the "More" drawer.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct DrawerChanges {
@@ -2048,18 +2058,25 @@ impl PinpointAppUI {
             return;
         }
         let screen_width = ctx.screen_rect().width();
-        if !compact && drawer_overlays_map(screen_width) {
-            let click = ctx.input(|i| {
-                if i.pointer.any_click() {
-                    i.pointer.interact_pos()
-                } else {
-                    None
-                }
-            });
-            if overlay_click_dismisses(click, screen_width - 380.0) {
+        let screen_height = ctx.screen_rect().height();
+        let compact_height = compact_nav_height(screen_height);
+        let click = ctx.input(|i| {
+            if i.pointer.any_click() {
+                i.pointer.interact_pos()
+            } else {
+                None
+            }
+        });
+        if compact {
+            if !modal_open && sheet_click_dismisses(click, screen_height - compact_height) {
                 self.mobile_nav_open = false;
                 return;
             }
+        } else if drawer_overlays_map(screen_width)
+            && overlay_click_dismisses(click, screen_width - 380.0)
+        {
+            self.mobile_nav_open = false;
+            return;
         }
         let lang = self.lang;
         let current = self.app.current_screen();
@@ -2238,7 +2255,7 @@ impl PinpointAppUI {
         if compact {
             egui::TopBottomPanel::bottom("mobile_nav")
                 .resizable(false)
-                .exact_height((ctx.screen_rect().height() * 0.82).clamp(320.0, 520.0))
+                .exact_height(compact_height)
                 .frame(frame)
                 .show(ctx, &mut draw);
         } else if drawer_overlays_map(screen_width) {
@@ -2574,9 +2591,9 @@ impl eframe::App for PinpointAppUI {
 #[cfg(test)]
 mod tests {
     use super::{
-        drawer_changes, drawer_overlays_map, egui, escape_dismisses, is_wide_width,
-        overlay_click_dismisses, CurrentScreen, DrawerChanges, Lang, DRAWER_OVERLAY_MAX_WIDTH,
-        WIDE_LAYOUT_MIN_WIDTH,
+        compact_nav_height, drawer_changes, drawer_overlays_map, egui, escape_dismisses,
+        is_wide_width, overlay_click_dismisses, sheet_click_dismisses, CurrentScreen,
+        DrawerChanges, Lang, DRAWER_OVERLAY_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH,
     };
 
     #[test]
@@ -2637,6 +2654,27 @@ mod tests {
             panel_left
         ));
         assert!(!overlay_click_dismisses(None, panel_left));
+    }
+
+    #[test]
+    fn sheet_click_dismisses_only_above_the_bottom_sheet() {
+        assert_eq!(compact_nav_height(300.0), 320.0);
+        assert_eq!(compact_nav_height(1000.0), 520.0);
+        let panel_top = 720.0 - compact_nav_height(720.0);
+        assert_eq!(panel_top, 200.0);
+        assert!(sheet_click_dismisses(
+            Some(egui::pos2(10.0, panel_top - 1.0)),
+            panel_top
+        ));
+        assert!(!sheet_click_dismisses(
+            Some(egui::pos2(10.0, panel_top)),
+            panel_top
+        ));
+        assert!(!sheet_click_dismisses(
+            Some(egui::pos2(10.0, 700.0)),
+            panel_top
+        ));
+        assert!(!sheet_click_dismisses(None, panel_top));
     }
 
     #[test]

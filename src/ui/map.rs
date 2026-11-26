@@ -1035,52 +1035,58 @@ impl PinpointAppUI {
                 .fixed_pos(egui::pos2(width - 56.0, top + 120.0))
                 .show(ctx, |ui| {
                     ui.vertical(|ui| {
-                        if ui.add(round_button("+")).clicked() {
+                        if map_icon_button(ui, MapIcon::ZoomIn, "Zoom in").clicked() {
                             zoom_delta = 1;
                         }
-                        if ui.add(round_button("−")).clicked() {
+                        if map_icon_button(ui, MapIcon::ZoomOut, "Zoom out").clicked() {
                             zoom_delta = -1;
                         }
-                        if ui.add(round_button("◎")).clicked() {
+                        if map_icon_button(ui, MapIcon::Locate, "Locate me").clicked() {
                             locate = true;
                         }
-                        if ui
-                            .add(round_button(if map_dark { "L" } else { "D" }))
-                            .on_hover_text(if map_dark {
+                        if map_icon_button(
+                            ui,
+                            MapIcon::Style,
+                            if map_dark {
                                 "Use light map"
                             } else {
                                 "Use dark map"
-                            })
-                            .clicked()
+                            },
+                        )
+                        .clicked()
                         {
                             toggle_style = true;
                         }
-                        if ui.add(round_button("↗")).on_hover_text("Route").clicked() {
+                        if map_icon_button(ui, MapIcon::Route, "Route").clicked() {
                             open_route = true;
                         }
                         if crate::platform::map_webview_supported() {
-                            if ui
-                                .add(round_button(if webview_visible { "▣" } else { "▦" }))
-                                .on_hover_text("Offline MapLibre map")
-                                .clicked()
+                            if map_icon_button(
+                                ui,
+                                MapIcon::WebView {
+                                    shown: webview_visible,
+                                },
+                                "Offline MapLibre map",
+                            )
+                            .clicked()
                             {
                                 toggle_webview = true;
                             }
                             if !webview_visible {
                                 if let Some((lat, lon)) = self.webview_map_click {
-                                    if ui
-                                        .add(round_button("⌖"))
-                                        .on_hover_text(format!(
-                                            "Share WebView point ({lat:.4}, {lon:.4})"
-                                        ))
-                                        .clicked()
+                                    if map_icon_button(
+                                        ui,
+                                        MapIcon::Share,
+                                        &format!("Share WebView point ({lat:.4}, {lon:.4})"),
+                                    )
+                                    .clicked()
                                     {
                                         share_webview = true;
                                     }
                                 }
                             }
                         }
-                        if ui.add(round_button("☰")).clicked() {
+                        if map_icon_button(ui, MapIcon::Menu, "Menu").clicked() {
                             menu = true;
                         }
                     });
@@ -1437,11 +1443,88 @@ impl PinpointAppUI {
 
 /// Floating map control: solid panel fill so the glyph stays readable over
 /// the light basemap.
-fn round_button(text: &str) -> egui::Button<'_> {
-    egui::Button::new(text)
-        .min_size(egui::vec2(44.0, 44.0))
-        .corner_radius(egui::CornerRadius::same(20))
-        .fill(theme::PANEL)
+/// The phone map's floating control icons. Each one is painted with line
+/// strokes, so the controls need no icon font. The action behind each button
+/// is unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MapIcon {
+    ZoomIn,
+    ZoomOut,
+    Locate,
+    Style,
+    Route,
+    WebView { shown: bool },
+    Share,
+    Menu,
+}
+
+/// A 44 pt round control with a painted icon and a hover tooltip.
+fn map_icon_button(ui: &mut egui::Ui, icon: MapIcon, tip: &str) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(44.0, 44.0), egui::Sense::click());
+    let fill = if response.hovered() {
+        theme::PANEL_2
+    } else {
+        theme::PANEL
+    };
+    let painter = ui.painter();
+    painter.circle(
+        rect.center(),
+        21.0,
+        fill,
+        egui::Stroke::new(1.0_f32, theme::BORDER),
+    );
+    paint_map_icon(painter, icon, rect.center(), theme::TEXT);
+    response.on_hover_text(tip)
+}
+
+fn paint_map_icon(painter: &egui::Painter, icon: MapIcon, center: egui::Pos2, ink: egui::Color32) {
+    let stroke = egui::Stroke::new(1.6_f32, ink);
+    let at = |x: f32, y: f32| center + egui::vec2(x, y);
+    match icon {
+        MapIcon::ZoomIn => {
+            painter.line_segment([at(-6.0, 0.0), at(6.0, 0.0)], stroke);
+            painter.line_segment([at(0.0, -6.0), at(0.0, 6.0)], stroke);
+        }
+        MapIcon::ZoomOut => {
+            painter.line_segment([at(-6.0, 0.0), at(6.0, 0.0)], stroke);
+        }
+        MapIcon::Locate => {
+            painter.circle_stroke(center, 7.0, stroke);
+            painter.circle_filled(center, 2.0, ink);
+            for (dx, dy) in [(0.0, -1.0), (0.0, 1.0), (-1.0, 0.0), (1.0, 0.0)] {
+                painter.line_segment([at(dx * 7.0, dy * 7.0), at(dx * 10.5, dy * 10.5)], stroke);
+            }
+        }
+        MapIcon::Style => {
+            painter.circle_stroke(center, 7.0, stroke);
+            painter.circle_filled(center, 3.5, ink);
+        }
+        MapIcon::Route => {
+            painter.line_segment([at(-6.0, 6.0), at(4.0, -4.0)], stroke);
+            painter.line_segment([at(4.0, -4.0), at(-1.0, -4.0)], stroke);
+            painter.line_segment([at(4.0, -4.0), at(4.0, 1.0)], stroke);
+        }
+        MapIcon::WebView { shown } => {
+            let square = egui::Rect::from_center_size(center, egui::vec2(13.0, 13.0));
+            let rounding = egui::CornerRadius::same(2);
+            if shown {
+                painter.rect_filled(square, rounding, ink);
+            } else {
+                painter.rect_stroke(square, rounding, stroke, egui::StrokeKind::Inside);
+            }
+        }
+        MapIcon::Share => {
+            painter.circle_stroke(center, 6.0, stroke);
+            for (dx, dy) in [(0.0, -1.0), (0.0, 1.0), (-1.0, 0.0), (1.0, 0.0)] {
+                painter.line_segment([at(dx * 4.0, dy * 4.0), at(dx * 9.0, dy * 9.0)], stroke);
+            }
+        }
+        MapIcon::Menu => {
+            for dy in [-5.0, 0.0, 5.0] {
+                painter.line_segment([at(-6.0, dy), at(6.0, dy)], stroke);
+            }
+        }
+    }
 }
 
 /// Percent-encode a URL path/query component (UTF-8 bytes, unreserved kept).

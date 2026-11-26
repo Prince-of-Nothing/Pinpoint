@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native navigation: show the distance to the next maneuver in the route banner.
 - [FEATURE] Native: the dark palette now matches the web shell (green accent, Sunflower for live), and a test reads `web/app/app.css` for both light and dark themes.
 - [INFRA] Smoke: check the offline map catalog shape against a running server.
 - [INFRA] CI: validate the goal prompt queue in the rust job.

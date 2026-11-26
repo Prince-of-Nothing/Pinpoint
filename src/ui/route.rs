@@ -57,6 +57,8 @@ pub struct RoutePlan {
     pub next_stop: usize,
     /// Index of the next maneuver in the selected route's `steps`.
     pub next_step: usize,
+    /// Metres from the last fix to the next maneuver, when that maneuver has a location.
+    pub nav_distance_m: Option<f64>,
     pub capabilities: Option<MapCapabilities>,
     pub error: Option<String>,
     /// Ask the route sheet's close control for focus once after opening.
@@ -77,6 +79,7 @@ impl Default for RoutePlan {
             following: false,
             next_stop: 0,
             next_step: 0,
+            nav_distance_m: None,
             capabilities: None,
             error: None,
             focus: false,
@@ -97,6 +100,7 @@ impl RoutePlan {
         self.error = None;
         self.following = false;
         self.next_step = 0;
+        self.nav_distance_m = None;
     }
 
     pub fn open_with_origin(&mut self, place: &SearchPlace) {
@@ -105,6 +109,7 @@ impl RoutePlan {
         self.error = None;
         self.following = false;
         self.next_step = 0;
+        self.nav_distance_m = None;
     }
 
     pub fn swap(&mut self) {
@@ -113,6 +118,7 @@ impl RoutePlan {
         self.selected = 0;
         self.following = false;
         self.next_step = 0;
+        self.nav_distance_m = None;
     }
 
     pub fn clear_route(&mut self) {
@@ -121,6 +127,7 @@ impl RoutePlan {
         self.following = false;
         self.next_stop = 0;
         self.next_step = 0;
+        self.nav_distance_m = None;
         self.error = None;
     }
 
@@ -184,7 +191,13 @@ impl RoutePlan {
             "destination".to_string()
         };
         Some(match step {
-            Some(step) => format!("Next: {} ({})", step.text, target),
+            Some(step) => {
+                let distance = self
+                    .nav_distance_m
+                    .map(|metres| format!(", {}", format_distance(metres)))
+                    .unwrap_or_default();
+                format!("Next: {} ({target}{distance})", step.text)
+            }
             None => format!("Heading to {target}"),
         })
     }
@@ -355,6 +368,13 @@ fn next_navigation_step(current: usize, route: &Route, lat: f64, lon: f64) -> us
     step.min(route.steps.len())
 }
 
+/// Metres from the fix to the maneuver at `step`, or `None` when the maneuver
+/// is finished or has no location.
+fn next_navigation_distance(route: &Route, step: usize, lat: f64, lon: f64) -> Option<f64> {
+    let (step_lat, step_lon) = route.steps.get(step)?.location?;
+    Some(haversine_m(lat, lon, step_lat, step_lon))
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RouteSheetOutcome {
     pub close: bool,
@@ -391,6 +411,7 @@ impl super::PinpointAppUI {
     /// can replace it without touching this loop.
     pub(crate) fn tick_navigation(&mut self) {
         if !self.route_plan.following {
+            self.route_plan.nav_distance_m = None;
             return;
         }
         let now = std::time::Instant::now();
@@ -440,6 +461,10 @@ impl super::PinpointAppUI {
         if let Some(next) = next {
             self.route_plan.next_step = next;
         }
+        self.route_plan.nav_distance_m = self
+            .route_plan
+            .selected_route()
+            .and_then(|route| next_navigation_distance(route, self.route_plan.next_step, lat, lon));
 
         if self.route_plan.next_stop < self.route_plan.stops.len() {
             if let Some(stop) = self.route_plan.stops.get(self.route_plan.next_stop) {
@@ -505,6 +530,7 @@ impl super::PinpointAppUI {
             .selected_route()
             .map(initial_navigation_step)
             .unwrap_or(0);
+        self.route_plan.nav_distance_m = None;
         self.route_plan.error = error;
         let app_data = self.app.data();
         let mut data = app_data.lock().unwrap();
@@ -830,6 +856,7 @@ impl super::PinpointAppUI {
                                                 .get(index)
                                                 .map(initial_navigation_step)
                                                 .unwrap_or(0);
+                                            plan.nav_distance_m = None;
                                         }
                                     }
                                 });
@@ -1093,6 +1120,76 @@ mod tests {
         assert_eq!(
             plan.navigation_status().as_deref(),
             Some("Heading to destination")
+        );
+    }
+
+    fn departure_and_turn(turn_location: Option<(f64, f64)>) -> Route {
+        Route {
+            points: vec![(47.0, 28.8), (47.02, 28.82)],
+            distance_m: 1000.0,
+            duration_s: 600.0,
+            steps: vec![
+                crate::osm::RouteStep {
+                    text: "Depart".into(),
+                    distance_m: None,
+                    duration_s: None,
+                    location: Some((47.0, 28.8)),
+                },
+                crate::osm::RouteStep {
+                    text: "Turn right".into(),
+                    distance_m: Some(120.0),
+                    duration_s: None,
+                    location: turn_location,
+                },
+            ],
+            summary: "Main".into(),
+            legs: vec![],
+        }
+    }
+
+    #[test]
+    fn navigation_banner_shows_the_distance_to_a_located_maneuver() {
+        let route = departure_and_turn(Some((47.01, 28.81)));
+        // Ten thousandths of a degree of latitude is about 1.1 km.
+        let metres = next_navigation_distance(&route, 1, 47.0, 28.81).expect("located step");
+        assert!((metres - 1112.0).abs() < 5.0, "distance was {metres}");
+
+        let mut plan = RoutePlan {
+            routes: vec![route.clone()],
+            following: true,
+            next_step: 1,
+            nav_distance_m: Some(250.0),
+            ..Default::default()
+        };
+        assert_eq!(
+            plan.navigation_status().as_deref(),
+            Some("Next: Turn right (destination, 250 m)")
+        );
+
+        plan.nav_distance_m = None;
+        assert_eq!(
+            plan.navigation_status().as_deref(),
+            Some("Next: Turn right (destination)")
+        );
+    }
+
+    #[test]
+    fn navigation_banner_has_no_distance_without_a_maneuver_location() {
+        let route = departure_and_turn(None);
+        assert_eq!(next_navigation_distance(&route, 1, 47.0, 28.81), None);
+        // Past the last maneuver there is no next step to measure.
+        assert_eq!(next_navigation_distance(&route, 2, 47.0, 28.81), None);
+
+        let plan = RoutePlan {
+            routes: vec![route.clone()],
+            following: true,
+            next_step: 1,
+            nav_distance_m: next_navigation_distance(&route, 1, 47.0, 28.81),
+            ..Default::default()
+        };
+        assert_eq!(
+            plan.navigation_status().as_deref(),
+            Some("Next: Turn right (destination)")
         );
     }
 

@@ -3565,6 +3565,76 @@ mod tests {
     }
 
     #[test]
+    fn publish_effect_data_and_gps_steps_are_validated() {
+        use super::map::{gps_publish_step, parse_publish_fix, GpsPublishStep, PublishFix};
+
+        assert_eq!(
+            parse_publish_fix("47.01", "28.86"),
+            Some(PublishFix {
+                lat: 47.01,
+                lon: 28.86,
+                accuracy: 10.0,
+            })
+        );
+        assert!(parse_publish_fix(" 90 ", "-180 ").is_some());
+        assert!(parse_publish_fix("91", "0").is_none());
+        assert!(parse_publish_fix("0", "181").is_none());
+        assert!(parse_publish_fix("north", "28.86").is_none());
+
+        use crate::platform::LocationPermission;
+        assert_eq!(
+            gps_publish_step(LocationPermission::Granted),
+            GpsPublishStep::Request
+        );
+        assert_eq!(
+            gps_publish_step(LocationPermission::Requested),
+            GpsPublishStep::Waiting
+        );
+        assert_eq!(
+            gps_publish_step(LocationPermission::Unsupported),
+            GpsPublishStep::Unavailable
+        );
+    }
+
+    #[test]
+    fn place_external_urls_are_exact() {
+        use super::map::place_external_urls;
+
+        let place = crate::osm::SearchPlace {
+            display_name: "Test place, Chișinău".into(),
+            short_name: "Test place".into(),
+            latitude: 47.01,
+            longitude: 28.86,
+            category: "test".into(),
+            place_type: "test".into(),
+            distance_m: None,
+        };
+        assert_eq!(
+            place_external_urls(&place),
+            [
+                (
+                    "OSM",
+                    "https://www.openstreetmap.org/?mlat=47.0100&mlon=28.8600#map=15/47.0100/28.8600"
+                        .to_string()
+                ),
+                (
+                    "Google",
+                    "https://www.google.com/maps/search/?api=1&query=47.0100,28.8600".to_string()
+                ),
+                (
+                    "Organic",
+                    "https://omaps.app/map?v=1&ll=47.0100,28.8600&n=Test%20place".to_string()
+                ),
+                (
+                    "Magic Earth",
+                    "magicearth://?show_on_map&lat=47.0100&lon=28.8600&name=Test%20place"
+                        .to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
     fn real_publish_sheet_blocks_the_page_and_focuses_close() {
         use std::cell::{Cell, RefCell};
         use std::rc::Rc;

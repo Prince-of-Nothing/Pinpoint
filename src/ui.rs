@@ -184,9 +184,9 @@ fn drawer_changes(
     changes
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 #[allow(dead_code)]
-enum PendingAction {
+pub(crate) enum PendingAction {
     Login {
         email: String,
         password: String,
@@ -2702,7 +2702,8 @@ mod tests {
         compact_nav_height, draw_sheet_input_gate, drawer_changes, drawer_overlays_map, egui,
         escape_dismisses, gate_consumes_scroll, is_wide_width, overlay_click_dismisses,
         sheet_click_dismisses, sheet_focus_guard, sheet_input_blocked, CurrentScreen,
-        DrawerChanges, Lang, PinpointAppUI, DRAWER_OVERLAY_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH,
+        DrawerChanges, Lang, PendingAction, PinpointAppUI, DRAWER_OVERLAY_MAX_WIDTH,
+        WIDE_LAYOUT_MIN_WIDTH,
     };
 
     #[test]
@@ -3632,6 +3633,122 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn publish_sheet_dispatch_produces_pending_actions_and_notices() {
+        use super::map::publish_sheet_dispatch;
+        use crate::platform::LocationPermission;
+
+        let publish = publish_sheet_dispatch(PublishSheetAction::Publish, "47.01", "28.86", || {
+            LocationPermission::Granted
+        });
+        assert_eq!(
+            publish.pending,
+            Some(PendingAction::PublishLocation {
+                lat: 47.01,
+                lon: 28.86,
+                accuracy: 10.0,
+            })
+        );
+        assert!(publish.close);
+        assert!(publish.error.is_none());
+
+        let invalid =
+            publish_sheet_dispatch(PublishSheetAction::Publish, "91", "0", || unreachable!());
+        assert!(invalid.pending.is_none());
+        assert_eq!(
+            invalid.error.as_deref(),
+            Some("Enter a valid latitude (-90..90) and longitude (-180..180)")
+        );
+        assert!(!invalid.close);
+
+        let gps = publish_sheet_dispatch(PublishSheetAction::Gps, "", "", || {
+            LocationPermission::Granted
+        });
+        assert_eq!(gps.pending, Some(PendingAction::PublishGpsLocation));
+        assert!(!gps.close);
+
+        let waiting = publish_sheet_dispatch(PublishSheetAction::Gps, "", "", || {
+            LocationPermission::Requested
+        });
+        assert!(waiting.pending.is_none());
+        assert!(waiting.notice.is_some());
+
+        let unavailable = publish_sheet_dispatch(PublishSheetAction::Gps, "", "", || {
+            LocationPermission::Unsupported
+        });
+        assert!(unavailable.error.is_some());
+
+        let close = publish_sheet_dispatch(PublishSheetAction::Close, "", "", || unreachable!());
+        assert!(close.close);
+    }
+
+    #[test]
+    fn place_sheet_dispatch_produces_effects_and_notices() {
+        use super::map::{place_sheet_dispatch, PlaceDispatch};
+
+        let place = crate::osm::SearchPlace {
+            display_name: "Test place, Chișinău".into(),
+            short_name: "Test place".into(),
+            latitude: 47.01,
+            longitude: 28.86,
+            category: "test".into(),
+            place_type: "test".into(),
+            distance_m: None,
+        };
+        let dir =
+            std::env::temp_dir().join(format!("pinpoint-place-dispatch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let store = crate::bookmarks::BookmarkStore::new(Some(dir.clone()));
+
+        let none = place_sheet_dispatch(PlaceSheetAction::None, &place, &store);
+        assert_eq!(none, PlaceDispatch::default());
+
+        let save = place_sheet_dispatch(PlaceSheetAction::Save, &place, &store);
+        let bookmark = save.save_bookmark.as_ref().expect("saved bookmark");
+        assert_eq!(bookmark.name, "Test place");
+        assert_eq!(save.notice.as_deref(), Some("Saved Test place"));
+        assert!(save.copy_text.is_none() && save.share_text.is_none());
+        assert_eq!(store.list().len(), 1);
+
+        let copy = place_sheet_dispatch(PlaceSheetAction::Copy, &place, &store);
+        assert_eq!(
+            copy.copy_text.as_deref(),
+            Some("Test place (47.01000, 28.86000)")
+        );
+        assert_eq!(copy.notice.as_deref(), Some("Place copied."));
+        assert!(copy.save_bookmark.is_none() && copy.share_text.is_none());
+
+        let share = place_sheet_dispatch(
+            PlaceSheetAction::Share("geo:47.010000,28.860000?q=Test%20place".into()),
+            &place,
+            &store,
+        );
+        assert_eq!(
+            share.share_text.as_deref(),
+            Some("geo:47.010000,28.860000?q=Test%20place")
+        );
+        assert!(share.save_bookmark.is_none() && share.copy_text.is_none());
+
+        let origin = place_sheet_dispatch(PlaceSheetAction::SetOrigin, &place, &store);
+        assert!(origin.set_origin && !origin.directions);
+        assert!(!origin.close && origin.open_url.is_none());
+
+        let directions = place_sheet_dispatch(PlaceSheetAction::Directions, &place, &store);
+        assert!(directions.directions && !directions.set_origin);
+
+        let open = place_sheet_dispatch(
+            PlaceSheetAction::OpenUrl("https://example.test".into()),
+            &place,
+            &store,
+        );
+        assert_eq!(open.open_url.as_deref(), Some("https://example.test"));
+
+        let close = place_sheet_dispatch(PlaceSheetAction::Close, &place, &store);
+        assert!(close.close);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -66,6 +66,64 @@ export function freshnessText(iso, now = Date.now()) {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/** One or two initials for an avatar: "Bogdan Friend" → "BF", "bright-badger-2" → "BB". */
+export function initials(name) {
+  const words = String(name || "")
+    .replace(/^@/, "")
+    .split(/[\s._-]+/)
+    .filter((word) => /\p{L}/u.test(word));
+  if (!words.length) return "?";
+  const first = Array.from(words[0])[0];
+  const last = words.length > 1 ? Array.from(words[words.length - 1])[0] : "";
+  return (first + last).toLocaleUpperCase();
+}
+
+/** A stable avatar hue (0-359) per user id, so a friend keeps one colour. */
+export function avatarHue(seed) {
+  let hash = 0;
+  for (const char of String(seed ?? "")) hash = (hash * 31 + char.codePointAt(0)) >>> 0;
+  return hash % 360;
+}
+
+/**
+ * What a friends-list row shows: a person with a status, not a raw
+ * "requester → receiver" pair. Friendships carry usernames only; a visible
+ * location adds the display name and how fresh it is.
+ */
+export function friendRowModel(friendship, me, locations = [], now = Date.now()) {
+  const friendId =
+    friendship.requester_id === me ? friendship.receiver_id : friendship.requester_id;
+  const handle = friendName(friendship, me);
+  const location = locations.find((loc) => loc.user_id === friendId) || null;
+  const kind =
+    friendship.status === "accepted"
+      ? "friend"
+      : friendship.status === "rejected"
+        ? "rejected"
+        : friendship.receiver_id === me
+          ? "incoming"
+          : "outgoing";
+  const status = {
+    incoming: "Wants to be friends",
+    outgoing: "Request sent",
+    rejected: "Declined",
+    friend: location
+      ? `Sharing location · updated ${freshnessText(location.updated_at, now)}`
+      : "Friends",
+  }[kind];
+  const name = location?.user_name || handle;
+  return {
+    friendId,
+    kind,
+    name,
+    handle: name === handle ? "" : `@${handle}`,
+    status,
+    location,
+    initials: initials(name),
+    hue: avatarHue(friendId),
+  };
+}
+
 /** True when the requested form grants more than the stored share. */
 export function shareWidens(current, form, now = Date.now()) {
   if (!current) return false;

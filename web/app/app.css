@@ -225,6 +225,97 @@ button:hover { filter: brightness(1.05); }
   font-size: 0.9rem;
 }
 
+/* People rows: avatar, name over a one-line status, actions on the right. */
+.list li.person {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0;
+}
+.avatar {
+  --avatar-hue: 30;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  background: hsl(var(--avatar-hue) 55% 88%);
+  color: hsl(var(--avatar-hue) 45% 26%);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+[data-theme="dark"] .avatar {
+  background: hsl(var(--avatar-hue) 35% 26%);
+  color: hsl(var(--avatar-hue) 70% 86%);
+}
+.person-text { display: grid; min-width: 0; }
+/* Wrap rather than cut off: the status is the useful part of the row. */
+.person-name,
+.person-status { overflow-wrap: anywhere; }
+.person-name { font-weight: 600; line-height: 1.25; }
+.person-handle { color: var(--muted); font-size: 0.8rem; font-weight: 400; }
+.person-status { color: var(--muted); font-size: 0.78rem; }
+.person-actions { display: flex; align-items: center; gap: 0.35rem; }
+.person-actions button { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+.list li.person.incoming {
+  padding-inline: 0.5rem;
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+.list li.person.share-expired .person-status { color: var(--danger); }
+
+/* "⋯" overflow menu for secondary row actions. */
+.row-menu { position: relative; }
+.row-menu summary {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  color: var(--text);
+  font-size: 1.1rem;
+  line-height: 1;
+  list-style: none;
+  cursor: pointer;
+}
+.row-menu summary::-webkit-details-marker { display: none; }
+.row-menu[open] summary { background: var(--panel-2); }
+.row-menu-list {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 11rem;
+  padding: 0.3rem;
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.row-menu-list .row-menu-item {
+  padding: 0.5rem 0.6rem;
+  border: 0;
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--text);
+  font-weight: 500;
+  text-align: left;
+}
+.row-menu-list .row-menu-item:hover,
+.row-menu-list .row-menu-item:focus-visible { background: var(--panel-2); }
+.row-menu-list .row-menu-item.danger-text { color: var(--danger); }
+
+/* Share my location: one GPS button, coordinates folded away. */
+.publish-gps { width: 100%; padding: 0.7rem 1rem; font-size: 0.95rem; }
+.publish-manual { margin-top: 0.5rem; }
+.publish-manual summary { color: var(--muted); font-size: 0.82rem; cursor: pointer; }
+.publish-manual[open] summary { margin-bottom: 0.5rem; }
+
 .badge {
   font-size: 0.7rem;
   padding: 1px 6px;

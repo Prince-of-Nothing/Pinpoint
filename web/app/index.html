@@ -400,13 +400,22 @@
               Download map (220 MB)
             </button>
           </div>
-          <div class="card" data-sections="sharing">
-            <h2>Publish my location</h2>
-            <form id="publish-form">
-              <label>Latitude <input id="publish-lat" type="number" step="any" min="-90" max="90" required /></label>
-              <label>Longitude <input id="publish-lon" type="number" step="any" min="-180" max="180" required /></label>
-              <button type="submit">Publish</button>
-            </form>
+          <div class="card publish-card" data-sections="sharing">
+            <h2>Share my location</h2>
+            <p class="muted small">
+              Sends where you are now to the friends you share with. Nobody
+              else can see it.
+            </p>
+            <button type="button" id="publish-gps" class="publish-gps">Share my current location</button>
+            <p id="publish-status" class="muted small" role="status" aria-live="polite"></p>
+            <details class="publish-manual">
+              <summary>Enter coordinates instead</summary>
+              <form id="publish-form">
+                <label>Latitude <input id="publish-lat" type="number" step="any" min="-90" max="90" required /></label>
+                <label>Longitude <input id="publish-lon" type="number" step="any" min="-180" max="180" required /></label>
+                <button type="submit" class="secondary">Publish these coordinates</button>
+              </form>
+            </details>
           </div>
 
           <div class="card" id="today-card" data-sections="today">

@@ -3230,6 +3230,113 @@ mod tests {
     }
 
     #[test]
+    fn real_route_sheet_actions_return_their_actions() {
+        use std::cell::{Cell, RefCell};
+        use std::rc::Rc;
+
+        let mut plan = RoutePlan {
+            origin: Some(RoutePoint::new(47.0, 28.8, "A")),
+            destination: Some(RoutePoint::new(47.1, 28.9, "B")),
+            routes: vec![crate::osm::Route {
+                points: vec![(47.0, 28.8), (47.1, 28.9)],
+                distance_m: 1200.0,
+                duration_s: 300.0,
+                steps: Vec::new(),
+                summary: "Test route".into(),
+                legs: Vec::new(),
+            }],
+            ..Default::default()
+        };
+        plan.show();
+        let ctx = egui::Context::default();
+        let route_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let navigate_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let share_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let kml_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let geojson_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let clear_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let outcome = Rc::new(RefCell::new(None::<super::route::RouteSheetOutcome>));
+
+        let rect_of = |ctx: &egui::Context, id: Option<egui::Id>| {
+            id.and_then(|id| ctx.read_response(id))
+                .map(|response| response.rect)
+        };
+
+        let mut frame = |ctx: &egui::Context, events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(500.0, 700.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                draw_sheet_input_gate(ctx);
+                let data = RouteSheetData {
+                    map_center: (47.0, 28.8),
+                    my_location: None,
+                    selected_place: None,
+                    navigation_status: None,
+                };
+                let drawn = PinpointAppUI::draw_route_sheet_view(ctx, &mut plan, false, 0.0, data);
+                route_rect.set(rect_of(ctx, drawn.plan_id));
+                navigate_rect.set(rect_of(ctx, drawn.navigate_id));
+                share_rect.set(rect_of(ctx, drawn.share_id));
+                kml_rect.set(rect_of(ctx, drawn.kml_id));
+                geojson_rect.set(rect_of(ctx, drawn.geojson_id));
+                clear_rect.set(rect_of(ctx, drawn.clear_id));
+                outcome.borrow_mut().replace(drawn);
+            });
+        };
+
+        frame(&ctx, Vec::new());
+        frame(&ctx, Vec::new());
+        let route = route_rect.get().expect("route button rect");
+        let navigate = navigate_rect.get().expect("navigate button rect");
+        let share = share_rect.get().expect("share button rect");
+        let kml = kml_rect.get().expect("kml button rect");
+        let geojson = geojson_rect.get().expect("geojson button rect");
+        let clear = clear_rect.get().expect("clear button rect");
+
+        let mut click = |pos: egui::Pos2| {
+            frame(&ctx, vec![egui::Event::PointerMoved(pos)]);
+            frame(&ctx, pointer_press(pos));
+            frame(&ctx, pointer_release(pos));
+        };
+
+        click(route.center());
+        assert!(outcome.borrow().as_ref().expect("route outcome").plan);
+
+        click(navigate.center());
+        assert!(
+            outcome
+                .borrow()
+                .as_ref()
+                .expect("navigate outcome")
+                .navigate
+        );
+
+        click(share.center());
+        assert!(outcome.borrow().as_ref().expect("share outcome").copy_share);
+
+        click(kml.center());
+        assert!(outcome.borrow().as_ref().expect("kml outcome").copy_kml);
+
+        click(geojson.center());
+        assert!(
+            outcome
+                .borrow()
+                .as_ref()
+                .expect("geojson outcome")
+                .copy_geojson
+        );
+
+        click(clear.center());
+        assert!(outcome.borrow().as_ref().expect("clear outcome").clear);
+    }
+
+    #[test]
     fn real_place_sheet_blocks_the_page_and_focuses_close() {
         use std::cell::{Cell, RefCell};
         use std::rc::Rc;

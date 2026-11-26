@@ -21,6 +21,18 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   await page.waitForSelector("#app-panel:not(.hidden)", { timeout: 15000 });
 
   const expanded = () => page.getAttribute("#drawer-toggle", "aria-expanded");
+  const atDrawerEdge = (edge) =>
+    page.evaluate((which) => {
+      const selector =
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+      const drawer = document.getElementById("social-drawer");
+      const items = [...drawer.querySelectorAll(selector)].filter(
+        (el) => el.getClientRects().length > 0,
+      );
+      if (!items.length) return false;
+      const target = which === "first" ? items[0] : items[items.length - 1];
+      return document.activeElement === target;
+    }, edge);
 
   if ((await expanded()) !== "true") await page.click("#drawer-toggle");
   assert.equal(await expanded(), "true", "drawer should open");
@@ -42,6 +54,14 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
     await page.evaluate(() => document.activeElement?.id),
     "drawer-toggle",
     "the wide drawer leaves focus on the toggle",
+  );
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(
+    await page.evaluate(() =>
+      document.getElementById("social-drawer").contains(document.activeElement),
+    ),
+    false,
+    "the wide drawer does not trap Tab",
   );
 
   await page.mouse.click(120, 500);
@@ -100,6 +120,11 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
     "drawer-close",
     "narrow open moves focus into the drawer",
   );
+  assert.equal(await atDrawerEdge("first"), true, "focus starts on the first drawer control");
+  await page.keyboard.press("Shift+Tab");
+  assert.equal(await atDrawerEdge("last"), true, "Shift+Tab wraps to the last drawer control");
+  await page.keyboard.press("Tab");
+  assert.equal(await atDrawerEdge("first"), true, "Tab wraps to the first drawer control");
 
   await page.setViewportSize({ width: 700, height: 720 });
   await page.waitForTimeout(300);
@@ -122,7 +147,7 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   );
 
   await browser.close();
-  console.log("PASS  live web drawer open/inside/escape/map-click/focus/layout-1280-900-700");
+  console.log("PASS  live web drawer open/inside/escape/map-click/focus/trap/layout-1280-900-700");
 })().catch((error) => {
   console.error(error);
   process.exit(1);

@@ -1790,6 +1790,8 @@ document.addEventListener("pointerdown", (event) => {
 const drawer = $("social-drawer");
 const drawerToggle = $("drawer-toggle");
 const drawerHead = drawer.querySelector(".drawer-head");
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const tabs = [...document.querySelectorAll(".tab-bar [data-tab]")];
 const TAB_META = {
   friends: { eyebrow: "People", title: "Friends" },
@@ -1859,6 +1861,33 @@ function setDrawer(open, animate = true) {
 setDrawer(false);
 drawerToggle.addEventListener("click", () => {
   setDrawer(drawerToggle.getAttribute("aria-expanded") !== "true");
+});
+
+function drawerFocusables() {
+  return [...drawer.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+    (el) => el.getClientRects().length > 0,
+  );
+}
+// Below 981 px the drawer covers the page like a modal sheet; keep Tab inside.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Tab") return;
+  if (drawerToggle.getAttribute("aria-expanded") !== "true") return;
+  if (window.matchMedia("(min-width: 981px)").matches) return;
+  const items = drawerFocusables();
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  if (!drawer.contains(active)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  } else if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
 });
 document.addEventListener("pointerdown", (event) => {
   const target = event.target;

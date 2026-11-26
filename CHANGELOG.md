@@ -13,6 +13,7 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [FEATURE] Offline packs: remove an installed region with `DELETE /map/offline/<region>`; it refuses while a download runs and touches only that region's folder.
+- [DOCS] Testing: add navigation, offline and goal queue rows to the test matrix in `docs/TESTING.md`.
 - [FEATURE] Web Account → Server: shows which Pinpoint server you're on and opens the app on another one (https, or plain http only for this computer, as in the native client; credentials, paths and other schemes are refused) after a confirmation, remembering the last five servers. The app keeps talking only to its own origin, so sessions and message keys never cross servers.
 - [FEATURE] Web map services: place search runs through interchangeable providers (`web/app/services.js`): the installed offline map, then the Pinpoint server, then data already on the device (saved and recent places, and names in the map tiles already loaded, accent-insensitive, nearest first). When the server is unreachable, search still answers from the device and says so; a new Account → Services card shows what is reachable right now (server version and storage, the search and routing services it uses, the map source) from same-origin data only.
 - [DOCS] `future/mobile-and-desktop.md`: a proposal for a mobile look based on the redesigned web UI (shared tokens, four tabs, one sheet component) and a plan for Windows and Linux desktop apps (desktop layout, installers, signing, OS location, updates).
@@ -38,6 +39,7 @@ The per-item flagged list for this release is in
 - [FEATURE] Native route: opening the route sheet focuses its close control once.
 - [FEATURE] Native map: opening the compact place sheet focuses its close control once.
 - [FEATURE] Native sharing: opening the per-friend share sheet focuses the sharing toggle once.
+- [FIX] Native messages: test the send-draft rules.
 - [FEATURE] Native messages: opening a chat focuses the composer so the soft keyboard is ready.
 - [FEATURE] Native: tapping above the compact "More" bottom sheet closes it, matching the web drawer's map-tap dismissal.
 - [FEATURE] Web: the place sheet and route panel take focus when they open and return it to the map when they close.
@@ -73,6 +75,7 @@ The per-item flagged list for this release is in
 - [INFRA] Release `verify-linux` and `verify-macos` jobs run the downloaded bundles: Linux under Xvfb with a screenshot, macOS by opening `Pinpoint.app` and requiring it to stay alive.
 
 ### Changed
+- [FEATURE] Native phone shell: four bottom tabs (Map, People, Today, Chats) with 14 pt labels and 48 pt targets, matching the web. People holds Friends and Sharing behind a switch, so Sharing moves off the bottom bar; Account opens from the avatar in the header, and the menu no longer repeats Messages.
 - [FEATURE] Web navigation: four tabs instead of six: Map, People (friends, their locations, Share my location and Who can see me on one screen, people first), Today and Chats. Account moves to the avatar menu, and a forced password change now opens the Account screen instead of only highlighting a tab.
 - [FEATURE] Web "Sharing with you" strip: the map shows everyone whose location you can see as avatars at the bottom-left, freshest first, with a Sunflower ring when updated in the last 15 minutes and a compact age ("now", "5 min", "3 h"); tapping one flies to them, a ring pulses once when that friend moves (off with reduced motion), and on phones the strip makes way for the drawer, sheets and the measure tool.
 - [FEATURE] Web command bar: signed in, the header disappears and the map gets one bar at the top: the Pinpoint mark inside search, locate, panels, layers and an avatar menu with your @handle, Account and privacy, the theme switch and Sign out (closes on Escape or an outside click without also closing the drawer). The desktop column runs full height, dropdowns open right under the bar, and phones drop the duplicate panels button so the search field stays readable.
@@ -89,6 +92,7 @@ The per-item flagged list for this release is in
 
 ### Fixed
 - [FIX] Build: `src/server/web_handlers.rs` and `tests/router_probe.rs` no longer fail to parse (a missing brace and a merged test body from #607), and the lat/lon range checks and two test-only lints pass `clippy -D warnings` on current stable, so CI builds again.
+- [FIX] Native share: test the SaveShare payload fields; Save and Stop build the same request from the sheet.
 - [FIX] Native navigation: the turn-by-turn banner advances through route maneuvers instead of reusing the stop counter, and OSRM maneuver coordinates are carried into the route steps.
 - [FIX] Android: `scripts/android-smoke.ps1` waits for a focused, non-blank rendered screen and fails on ANR, instead of passing a black or hung app.
 - [FIX] Native: the publish sheet's latitude/longitude fields use stable ids, so focus and IME state survive layout changes; a focus test covers both ids. An API 37 arm64 emulator run launched the app, signed in anonymously and opened the publish sheet.

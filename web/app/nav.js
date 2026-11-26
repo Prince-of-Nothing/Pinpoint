@@ -2,6 +2,14 @@
 // All requests are same-origin; no user identity or friend data is sent to OSM.
 
 import { getOfflineSearch, toSearchPlace } from "./offline-search.js";
+import {
+  combinedProvider,
+  mapFeaturesProvider,
+  offlinePackProvider,
+  savedPlacesProvider,
+  searchPlaces,
+  serverSearchProvider,
+} from "./services.js";
 
 const $ = (id) => document.getElementById(id);
 const MIN_QUERY = 3;
@@ -88,6 +96,17 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       Math.abs(Number(a.longitude) - Number(b.longitude)) < 1e-6
     );
   }
+
+  // Place search asks these in order and falls through (services.js): the
+  // offline pack, the Pinpoint server, then data already on this device.
+  const placeProviders = [
+    offlinePackProvider(getOfflineSearch, toSearchPlace),
+    serverSearchProvider(),
+    combinedProvider("device", "On this device", [
+      savedPlacesProvider(() => ({ saved: loadList("savedPlaces"), recents: loadList("recents") })),
+      mapFeaturesProvider(() => mapApi.getMap?.()),
+    ]),
+  ];
 
   function addRecent(place) {
     const record = placeRecord(place);
@@ -314,26 +333,34 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     if (searchController) searchController.abort();
     const controller = new AbortController();
     searchController = controller;
-    const center = mapApi.map.getCenter();
+    const live = mapApi.map.getCenter();
+    const center = { lat: live.lat, lon: live.lng };
     renderSearchNote("Searching…");
     try {
-      const offline = await getOfflineSearch();
-      if (offline) {
-        const items = offline
-          .search(q, 8)
-          .map((result) => toSearchPlace(result, { lat: center.lat, lon: center.lng }));
-        renderResults(items, `No places in the offline map match “${q}”.`);
+      const found = await searchPlaces(placeProviders, q, { center, limit: 8, signal: controller.signal });
+      if (controller !== searchController) return;
+      if (found.results.length) {
+        renderResults(found.results, "", searchSourceNote(found));
         return;
       }
-      const url = `/map/search?q=${encodeURIComponent(q)}&lat=${center.lat.toFixed(5)}&lon=${center.lng.toFixed(5)}&limit=8`;
-      const res = await fetch(url, { signal: controller.signal, credentials: "include" });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body?.error?.message || `Search failed (HTTP ${res.status}).`);
-      renderResults(Array.isArray(body.results) ? body.results : [], `No places match “${q}”.`);
+      if (found.error) {
+        renderSearchError(`${searchErrorText(found.error)} Nothing saved or on the map matches “${q}” either.`, q);
+        return;
+      }
+      renderResults([], `No places match “${q}”.`);
     } catch (err) {
       if (err.name === "AbortError" || controller !== searchController) return;
       renderSearchError(searchErrorText(err), q);
     }
+  }
+
+  // Say where results came from when it was not the usual source.
+  function searchSourceNote({ source, error }) {
+    if (source === "offline") return "From the offline map on this device.";
+    if (source !== "device") return "";
+    return error
+      ? "Can't reach the Pinpoint server. Showing matches from your saved places and the map on screen."
+      : "Matches from your saved places and the map on screen.";
   }
 
   // A failed request is not an empty result: say why, and offer a retry.
@@ -369,13 +396,19 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     note.appendChild(retry);
   }
 
-  function renderResults(items, emptyText = "No places found.") {
+  function renderResults(items, emptyText = "No places found.", note = "") {
     if (!items.length) {
       renderSearchNote(emptyText);
       return;
     }
     currentResults = items;
     results.innerHTML = "";
+    if (note) {
+      const row = document.createElement("div");
+      row.className = "result muted search-source";
+      row.textContent = note;
+      results.appendChild(row);
+    }
     for (const place of items) {
       const btn = document.createElement("button");
       btn.type = "button";

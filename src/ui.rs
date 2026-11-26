@@ -3976,7 +3976,6 @@ mod tests {
         );
         frame(&ctx, pointer_press(publish_button.center()));
         frame(&ctx, pointer_release(publish_button.center()));
-        drop(frame);
         assert_eq!(lat, "47.01");
         assert_eq!(lon, "28.86");
         assert_eq!(action.borrow().clone(), Some(PublishSheetAction::Publish));

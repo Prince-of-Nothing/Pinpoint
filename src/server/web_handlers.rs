@@ -217,6 +217,8 @@ pub async fn measure_js() -> Response {
 
 pub async fn server_address_js() -> Response {
     module_js(SERVER_ADDRESS_JS)
+}
+
 pub async fn services_js() -> Response {
     module_js(SERVICES_JS)
 }

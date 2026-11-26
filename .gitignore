@@ -75,3 +75,6 @@ audit_out.txt
 
 # Local agent plan/ledger scratch
 .superpowers/
+
+# Local /goal claim locks (prompts themselves are tracked until consumed)
+goal/claimed/

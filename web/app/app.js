@@ -9,13 +9,14 @@ import { lineLengthMeters } from "./measure.js";
 import { createAdminConsole } from "./admin.js";
 import {
   avatarHue,
-  freshnessText,
   friendName,
   friendRowModel,
   initials,
   initSharing,
-  precisionLabel,
+  liveStripModel,
+  locationSentence,
   shareRowModel,
+  shareSentence,
 } from "./sharing.js";
 import { initAppearance } from "./appearance.js";
 import { collectServiceStatus } from "./services.js";
@@ -140,6 +141,8 @@ async function register(email, password, fullName) {
 
 function resetToLogin() {
   state.user = null;
+  liveSeen.clear();
+  show($("live-strip"), false);
   state.csrf = null;
   state.locations = [];
   state.history = [];
@@ -214,8 +217,8 @@ async function enterApp() {
   // A temporary password blocks the API until it is rotated. Take the user
   // straight to the Account panel instead of letting every tab fail.
   if (state.user?.must_change_password) {
+    setScreen("account");
     setDrawer(true, false);
-    setActiveTab("account");
     $("account-card")?.scrollIntoView({ block: "start" });
     setStatus("Change the temporary password before using the app.", true);
   }
@@ -237,6 +240,11 @@ function renderIdentity() {
   $("user-email").textContent = state.user?.email || "";
   const handle = state.user?.username;
   $("user-handle").textContent = handle ? `@${handle}` : "";
+  const avatar = $("account-avatar");
+  if (avatar) {
+    avatar.textContent = state.user ? initials(state.user.full_name || handle || "") : "?";
+    avatar.style.setProperty("--avatar-hue", String(avatarHue(state.user?.id ?? "")));
+  }
   renderAccount();
 }
 
@@ -564,7 +572,6 @@ function renderShares(items, friendships = []) {
     ul.innerHTML = '<li class="muted">You are not sharing your location.</li>';
     return;
   }
-  const STATUS = { active: "Sharing", paused: "Paused", expired: "Expired" };
   for (const { share: s, model } of rows) {
     const friendship =
       friendships.find((f) => f.id === s.friendship_id) || { id: s.friendship_id };
@@ -574,8 +581,6 @@ function renderShares(items, friendships = []) {
     const name =
       state.locations.find((loc) => loc.user_id === friendId)?.user_name ||
       friendName(friendship, state.user?.id);
-    const status = [STATUS[model.status] || model.status, model.precision, model.expiry];
-    if (model.label) status.unshift(model.label);
     const actions = [];
     if (model.canShareAgain) {
       actions.push(rowButton("Share again", () => sharing?.open(friendship), true));
@@ -596,14 +601,47 @@ function renderShares(items, friendships = []) {
       personRow(
         `share-${model.status}`,
         personAvatar(name, avatarHue(friendId ?? s.friendship_id)),
-        personText(name, status.join(" · ")),
+        personText(name, shareSentence(s)),
         actions,
       ),
     );
   }
 }
 
+// "Sharing with you": the people whose location I can see right now, on the
+// map itself. Sunflower ring = updated in the last 15 minutes. A ring pulses
+// once when that friend's location changes (not on first render).
+const liveSeen = new Map();
+function renderLiveStrip(items) {
+  const strip = $("live-strip");
+  const list = $("live-strip-list");
+  if (!strip || !list) return;
+  const entries = liveStripModel(items, liveSeen);
+  liveSeen.clear();
+  for (const loc of items) liveSeen.set(loc.user_id, loc.updated_at);
+  show(strip, entries.length > 0);
+  list.innerHTML = "";
+  for (const entry of entries) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = ["live-person", entry.live ? "is-live" : "", entry.pulse ? "pulse" : ""]
+      .filter(Boolean)
+      .join(" ");
+    button.setAttribute("aria-label", `Show ${entry.name} on the map, updated ${entry.age}`);
+    const avatar = personAvatar(entry.name, entry.hue);
+    const age = document.createElement("span");
+    age.className = "live-age";
+    age.textContent = entry.age;
+    button.append(avatar, age);
+    button.addEventListener("click", () => showFriendOnMap(entry.location));
+    item.appendChild(button);
+    list.appendChild(item);
+  }
+}
+
 function renderLocations(items) {
+  renderLiveStrip(items);
   const ul = $("locations-list");
   ul.innerHTML = "";
   if (!items.length) {
@@ -615,7 +653,7 @@ function renderLocations(items) {
     const row = personRow(
       "",
       personAvatar(name, avatarHue(loc.user_id)),
-      personText(name, `Updated ${freshnessText(loc.updated_at)} · ${precisionLabel(loc.precision_level)}`),
+      personText(name, locationSentence(loc)),
       [rowButton("Show on map", () => showFriendOnMap(loc))],
     );
     // Coordinates stay one hover away instead of being the headline.
@@ -1828,6 +1866,31 @@ $("recovery-dismiss").addEventListener("click", () => {
 });
 
 $("logout").addEventListener("click", logout);
+
+// Account menu (avatar at the end of the command bar). A <details> element:
+// it closes after any choice, on Escape and on a click anywhere else.
+const accountMenu = $("session-bar");
+function closeAccountMenu() {
+  if (accountMenu?.open) accountMenu.open = false;
+}
+accountMenu?.querySelector(".account-menu-panel")?.addEventListener("click", (event) => {
+  if (event.target.closest("button")) closeAccountMenu();
+});
+document.addEventListener("click", (event) => {
+  if (accountMenu?.open && !accountMenu.contains(event.target)) closeAccountMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && accountMenu?.open) {
+    closeAccountMenu();
+    accountMenu.querySelector("summary")?.focus();
+    // The open menu is the topmost surface: don't also close the drawer.
+    event.preventDefault();
+  }
+});
+$("account-open")?.addEventListener("click", () => {
+  setScreen("account");
+  setDrawer(true);
+});
 $("logout-all").addEventListener("click", logoutAll);
 
 $("admin-tab").addEventListener("click", () => ensureAdminConsole().open("overview"));
@@ -1851,6 +1914,14 @@ $("publish-form").addEventListener("submit", async (e) => {
 });
 
 $("publish-gps")?.addEventListener("click", publishCurrentLocation);
+// "Enter coordinates instead": a real button (reachable inside the narrow
+// drawer's focus trap) that shows the latitude/longitude form.
+$("publish-manual-toggle")?.addEventListener("click", (event) => {
+  const open = event.currentTarget.getAttribute("aria-expanded") !== "true";
+  event.currentTarget.setAttribute("aria-expanded", String(open));
+  show($("publish-form"), open);
+  if (open) $("publish-lat")?.focus();
+});
 
 $("friend-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -1943,7 +2014,7 @@ const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const tabs = [...document.querySelectorAll(".tab-bar [data-tab]")];
 const TAB_META = {
-  friends: { eyebrow: "People", title: "Friends" },
+  friends: { eyebrow: "People", title: "People" },
   chats: { eyebrow: "Messages", title: "Chats" },
   sharing: { eyebrow: "Consent", title: "Sharing" },
   today: { eyebrow: "Your trail", title: "Today" },
@@ -2144,7 +2215,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
+  if (event.key !== "Escape" || event.defaultPrevented) return;
   // The admin overlay owns Escape while it is open.
   if (!$("admin-panel").classList.contains("hidden")) return;
   if (!$("map-menu").classList.contains("hidden")) {

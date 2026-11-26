@@ -894,11 +894,15 @@ impl PinpointAppUI {
 
         // Floating search pill (web `.search-form`).
         let mut submit = false;
+        // The account avatar (or Sign in) sits right of the search pill.
+        let signed_in = self.app.is_signed_in();
+        let account_width = if signed_in { 44.0 } else { 88.0 };
+        let lang = self.lang;
         egui::Area::new(egui::Id::new("mobile_map_search"))
             .order(egui::Order::Foreground)
             .fixed_pos(egui::pos2(12.0, top + 10.0))
             .show(ctx, |ui| {
-                ui.set_width(width - 24.0);
+                ui.set_width(width - 24.0 - account_width - 8.0);
                 egui::Frame::new()
                     .fill(panel)
                     .stroke(egui::Stroke::new(1.0_f32, border))
@@ -914,7 +918,7 @@ impl PinpointAppUI {
                                     .char_limit(120)
                                     .desired_width((ui.available_width() - 78.0).max(120.0)),
                             );
-                            submit = ui.button("Search").clicked()
+                            submit = search_icon_button(ui).clicked()
                                 || (edit.lost_focus()
                                     && ui.input(|i| i.key_pressed(egui::Key::Enter)));
                         });
@@ -945,6 +949,26 @@ impl PinpointAppUI {
                 data.map_zoom = target.zoom;
             }
         }
+        egui::Area::new(egui::Id::new("mobile_map_account"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(egui::pos2(width - 12.0 - account_width, top + 10.0))
+            .show(ctx, |ui| {
+                if signed_in {
+                    let name = self
+                        .app
+                        .data()
+                        .lock()
+                        .unwrap()
+                        .user
+                        .as_ref()
+                        .map(|user| user.full_name.clone());
+                    if super::phone_tabs::avatar_button(ui, name.as_deref()).clicked() {
+                        self.mobile_nav_open = !self.mobile_nav_open;
+                    }
+                } else if theme::primary_button(ui, i18n::t(lang, key::SIGN_IN)).clicked() {
+                    self.app.set_screen(CurrentScreen::Login);
+                }
+            });
 
         // Category chips when there are no results (web `.category-chips`).
         let results = self.app.data().lock().unwrap().search_results.clone();
@@ -1547,6 +1571,21 @@ fn paint_map_icon(painter: &egui::Painter, icon: MapIcon, center: egui::Pos2, in
             }
         }
     }
+}
+
+/// The search pill's magnifier: a 36 x 28 pt button with a painted glass.
+fn search_icon_button(ui: &mut egui::Ui) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(36.0, 28.0), egui::Sense::click());
+    let stroke = egui::Stroke::new(1.8_f32, theme::TEXT);
+    let center = rect.center() + egui::vec2(-2.0, -2.0);
+    let painter = ui.painter();
+    painter.circle_stroke(center, 5.5, stroke);
+    painter.line_segment(
+        [center + egui::vec2(4.0, 4.0), center + egui::vec2(8.5, 8.5)],
+        stroke,
+    );
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Search"));
+    response.on_hover_text("Search")
 }
 
 /// Percent-encode a URL path/query component (UTF-8 bytes, unreserved kept).

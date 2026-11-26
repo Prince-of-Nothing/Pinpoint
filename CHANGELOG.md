@@ -12,9 +12,10 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Web sharing: the share sheet takes focus when it opens; below 981 px the drawer closes and hands off to it.
 - [FEATURE] Web: below 981 px the drawer moves focus to its close button when it opens, Tab and Shift+Tab wrap inside the sheet, the page behind is inert so it cannot take focus, and closing (Escape, map click or the close button) returns focus to the toggle; the wide side column leaves focus and Tab alone.
 - [FEATURE] Web search: ArrowDown moves from the search box into the results, ArrowUp/ArrowDown cycle them, Enter opens the focused place, and Escape returns focus to the search box.
-- [INFRA] CI: a `web-live` job builds and starts the server, then runs headless-Chromium checks for the `/` shortcut (bare focus, in-field typing, modifier and open-drawer blocking), the drawer (opening, inside clicks, Escape at 1280 and 700, focus into the narrow sheet, Tab wrap-around, inert background, map-click dismissal, 1280/900/700 layout), the route sheet (opens from the map menu, Escape closes) and the place sheet (map click opens, Escape closes, reverse geocode stubbed so no tiles or Nominatim).
+- [INFRA] CI: a `web-live` job builds and starts the server, then runs headless-Chromium checks for the `/` shortcut (bare focus, in-field typing, modifier and open-drawer blocking), the drawer (opening, inside clicks, Escape at 1280 and 700, focus into the narrow sheet, Tab wrap-around, inert background, map-click dismissal, 1280/900/700 layout), the route sheet (opens from the map menu, Escape closes), the place sheet (map click opens, Escape closes, reverse geocode stubbed so no tiles or Nominatim), search result keyboard access (ArrowDown, Enter, Escape) and the share handoff (drawer closes, sheet takes focus, isolation lifted).
 - [FEATURE] Web: pressing `/` focuses the place search box when not typing and no drawer, sheet or dialog is open; the predicate is a tested module served at `/search-shortcut.js`.
 - [FEATURE] Native map: `+`/`=`/`-` zoom, `0` resets the view, `F` fits pins, `L` locates and `R` refreshes when no dialog or text field owns the keyboard; the map buttons show the shortcuts on hover.
 - [FEATURE] Web: clicking the visible map closes the open drawer; the outside-click predicate is a tested module served at `/drawer-dismiss.js`.

@@ -142,6 +142,7 @@ impl PinpointAppUI {
         ui.horizontal_wrapped(|ui| {
             if compact && ui.button("Back").clicked() {
                 self.message_selected = None;
+                self.message_focus_composer = false;
             }
             match peer {
                 Some(peer) => {
@@ -275,6 +276,10 @@ impl PinpointAppUI {
                     .char_limit(2000),
             );
             let enter = input.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+            if composer_should_focus(self.message_focus_composer, peer.is_some()) {
+                input.request_focus();
+                self.message_focus_composer = false;
+            }
             if theme::primary_button(ui, "Send").clicked() || enter {
                 let text = self.message_draft.trim().to_string();
                 if !text.is_empty() && text.chars().count() <= 2000 {
@@ -288,6 +293,7 @@ impl PinpointAppUI {
     pub(crate) fn select_message_friend(&mut self, friend_id: i64, ctx: &egui::Context) {
         self.message_selected = Some(friend_id);
         self.message_draft.clear();
+        self.message_focus_composer = true;
         {
             let data = self.app.data();
             let mut data = data.lock().unwrap();
@@ -308,9 +314,21 @@ pub(crate) fn restore_message_draft(current: &mut String, pending: Option<String
     }
 }
 
+/// The composer asks for focus once, after the opened chat's peer has loaded.
+pub(crate) fn composer_should_focus(requested: bool, peer_ready: bool) -> bool {
+    requested && peer_ready
+}
+
 #[cfg(test)]
 mod tests {
-    use super::restore_message_draft;
+    use super::{composer_should_focus, restore_message_draft};
+
+    #[test]
+    fn composer_focus_waits_for_the_peer_and_runs_once() {
+        assert!(!composer_should_focus(false, true));
+        assert!(!composer_should_focus(true, false));
+        assert!(composer_should_focus(true, true));
+    }
 
     #[test]
     fn failed_send_restores_only_an_empty_composer() {

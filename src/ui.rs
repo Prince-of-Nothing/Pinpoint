@@ -429,6 +429,8 @@ pub struct PinpointAppUI {
     // E2E messages
     message_selected: Option<i64>,
     message_draft: String,
+    /// Ask the composer for focus once after a chat is opened and loaded.
+    message_focus_composer: bool,
     /// Text restored after a failed send; the newer draft wins if the user
     /// typed something else in the meantime.
     message_draft_restore: Arc<Mutex<Option<String>>>,
@@ -563,6 +565,7 @@ impl PinpointAppUI {
             mobile_selected_place: None,
             message_selected: None,
             message_draft: String::new(),
+            message_focus_composer: false,
             message_draft_restore: Arc::new(Mutex::new(None)),
             message_loaded: false,
             message_poll_at: None,

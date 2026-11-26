@@ -19,6 +19,7 @@ requirement → implementation → test).
 | SAST | CodeQL (Rust) + `cargo clippy -D warnings` | `.github/workflows/codeql.yml` | CodeQL |
 | Dependency updates | Dependabot (Cargo, GitHub Actions) | `.github/dependabot.yml` | Dependabot |
 | End-to-end smoke | `scripts/smoke.ps1` against a running server | `scripts/` | manual |
+| Android device smoke | `scripts/android-smoke.ps1` (install, launch, focus + crash check) | `scripts/` | manual (device/emulator) |
 | DAST | OWASP ZAP baseline against the running server | `.github/workflows/dast.yml`, reports in the run artifacts | DAST (weekly) |
 | Backup crypto | `scripts/backup-db.ps1 -SelfTest` (encrypt/decrypt roundtrip), `restore-db.ps1 -SelfTest` (header + hash) | `scripts/` | manual |
 | Release consistency | Cargo, Gradle, iOS plist, web cache marker, live `/health` + `/privacy`, and APK versionName/versionCode | `scripts/check-release.ps1` | `rust` (metadata + live server) + release workflow (APK) |
@@ -81,6 +82,28 @@ and the search bound; its exit code is the number of failed checks.
 
 `scripts/e2e.ps1` drives the Docker compose stack and predates the session-cookie
 auth, so most of its checks are unauthenticated today; see the note in its header.
+
+Android emulator/device smoke:
+
+```powershell
+cd android
+.\gradlew.bat assembleDebug -Pabi=arm64-v8a
+cd ..
+powershell -ExecutionPolicy Bypass -File scripts/android-smoke.ps1
+```
+
+`scripts/android-smoke.ps1` installs the debug APK, launches
+`PinpointActivity`, requires the app to be focused, checks its PID's logcat for
+`FATAL EXCEPTION`/`AndroidRuntime`/Rust panic, and saves a screenshot to
+`%TEMP%\pinpoint-android-smoke.png`. Omit `-Serial` to use the first connected
+device.
+
+For a live publish check, start the host server on `0.0.0.0:8080` (the emulator
+reaches it at `10.0.2.2:8080`), sign in anonymously, open **More → Publish**,
+fill the coordinates and tap **Publish**. The server log must show
+`POST /api/v1/locations/me` followed by `persisted`, and the app must show
+"Location published.". **Use GPS** exercises the same endpoint through the
+platform fix.
 
 ## Evidence for the thesis
 

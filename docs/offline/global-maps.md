@@ -92,8 +92,8 @@ weekly; others are built on demand. Measured sizes:
 
 Files land at `packs/<region>/<installed_name>` from the catalog. One job runs
 at a time (in-process lock plus `packs/.lock`). An update replaces files only
-after verification, and a failed update leaves the old pack usable. With no
-delete route in v1, removing a region means deleting its directory by hand.
+after verification, and a failed update leaves the old pack usable. `DELETE /map/offline/<region>` removes an installed region's
+directory; it returns 409 while a download is running.
 
 Version 2.3.0 and earlier keep the Moldova files at the root of `packs/`. On the
 first status or config request they are moved into `packs/moldova/` after

@@ -281,8 +281,7 @@ impl PinpointAppUI {
                 self.message_focus_composer = false;
             }
             if theme::primary_button(ui, "Send").clicked() || enter {
-                let text = self.message_draft.trim().to_string();
-                if !text.is_empty() && text.chars().count() <= 2000 {
+                if let Some(text) = message_to_send(&self.message_draft) {
                     self.message_draft.clear();
                     self.spawn_action(PendingAction::SendMessage { friend_id, text }, ctx);
                 }
@@ -314,6 +313,12 @@ pub(crate) fn restore_message_draft(current: &mut String, pending: Option<String
     }
 }
 
+/// The text the composer may send: trimmed, not empty and at most 2000 characters.
+pub(crate) fn message_to_send(draft: &str) -> Option<String> {
+    let text = draft.trim();
+    (!text.is_empty() && text.chars().count() <= 2000).then(|| text.to_string())
+}
+
 /// The composer asks for focus once, after the opened chat's peer has loaded.
 pub(crate) fn composer_should_focus(requested: bool, peer_ready: bool) -> bool {
     requested && peer_ready
@@ -321,7 +326,30 @@ pub(crate) fn composer_should_focus(requested: bool, peer_ready: bool) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{composer_should_focus, restore_message_draft};
+    use super::{composer_should_focus, message_to_send, restore_message_draft};
+
+    #[test]
+    fn empty_and_whitespace_drafts_are_not_sent() {
+        assert_eq!(message_to_send(""), None);
+        assert_eq!(message_to_send("  \n\t "), None);
+    }
+
+    #[test]
+    fn a_normal_draft_is_trimmed_before_sending() {
+        assert_eq!(
+            message_to_send("  see you at 18:00 \n"),
+            Some("see you at 18:00".to_string())
+        );
+    }
+
+    #[test]
+    fn the_2000_character_limit_is_inclusive() {
+        let at_limit = "a".repeat(2000);
+        assert_eq!(message_to_send(&at_limit), Some(at_limit.clone()));
+
+        let over_limit = "a".repeat(2001);
+        assert_eq!(message_to_send(&over_limit), None);
+    }
 
     #[test]
     fn composer_focus_waits_for_the_peer_and_runs_once() {

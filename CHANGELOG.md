@@ -37,6 +37,7 @@ The per-item flagged list for this release is in
 - [FEATURE] Native route: opening the route sheet focuses its close control once.
 - [FEATURE] Native map: opening the compact place sheet focuses its close control once.
 - [FEATURE] Native sharing: opening the per-friend share sheet focuses the sharing toggle once.
+- [FIX] Native messages: test the send-draft rules.
 - [FEATURE] Native messages: opening a chat focuses the composer so the soft keyboard is ready.
 - [FEATURE] Native: tapping above the compact "More" bottom sheet closes it, matching the web drawer's map-tap dismissal.
 - [FEATURE] Web: the place sheet and route panel take focus when they open and return it to the map when they close.

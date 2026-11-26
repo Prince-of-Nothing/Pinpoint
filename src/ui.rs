@@ -70,6 +70,22 @@ fn sheet_click_dismisses(click: Option<egui::Pos2>, panel_top: f32) -> bool {
     matches!(click, Some(pos) if pos.y < panel_top)
 }
 
+/// Any modal sheet blocks pointer input to the page behind it.
+fn sheet_input_blocked(share: bool, route: bool, place: bool, publish: bool) -> bool {
+    share || route || place || publish
+}
+
+/// Transparent full-screen gate below the foreground sheets; it consumes map
+/// clicks and drags without dimming the page.
+fn draw_sheet_input_gate(ctx: &egui::Context) {
+    egui::Area::new(egui::Id::new("sheet_input_gate"))
+        .order(egui::Order::Middle)
+        .fixed_pos(ctx.screen_rect().min)
+        .show(ctx, |ui| {
+            let _ = ui.allocate_exact_size(ctx.screen_rect().size(), egui::Sense::click_and_drag());
+        });
+}
+
 /// Plain state changes requested by one frame of the "More" drawer.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct DrawerChanges {
@@ -2582,6 +2598,15 @@ impl eframe::App for PinpointAppUI {
             }
         });
 
+        let on_map = self.app.current_screen() == CurrentScreen::Map;
+        if sheet_input_blocked(
+            self.share_sheet.is_some(),
+            on_map && self.route_plan.open,
+            on_map && self.mobile_selected_place.is_some(),
+            on_map && self.mobile_publish_open,
+        ) {
+            draw_sheet_input_gate(ctx);
+        }
         self.draw_share_sheet(ctx);
         self.draw_recovery_code(ctx);
         self.draw_crash_dialog(ctx);
@@ -2598,8 +2623,8 @@ impl eframe::App for PinpointAppUI {
 mod tests {
     use super::{
         compact_nav_height, drawer_changes, drawer_overlays_map, egui, escape_dismisses,
-        is_wide_width, overlay_click_dismisses, sheet_click_dismisses, CurrentScreen,
-        DrawerChanges, Lang, DRAWER_OVERLAY_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH,
+        is_wide_width, overlay_click_dismisses, sheet_click_dismisses, sheet_input_blocked,
+        CurrentScreen, DrawerChanges, Lang, DRAWER_OVERLAY_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH,
     };
 
     #[test]
@@ -2681,6 +2706,15 @@ mod tests {
             panel_top
         ));
         assert!(!sheet_click_dismisses(None, panel_top));
+    }
+
+    #[test]
+    fn sheet_input_gate_blocks_any_open_sheet() {
+        assert!(!sheet_input_blocked(false, false, false, false));
+        assert!(sheet_input_blocked(true, false, false, false));
+        assert!(sheet_input_blocked(false, true, false, false));
+        assert!(sheet_input_blocked(false, false, true, false));
+        assert!(sheet_input_blocked(false, false, false, true));
     }
 
     #[test]

@@ -82,6 +82,7 @@ The per-item flagged list for this release is in
 - [INFRA] Release `verify-linux` and `verify-macos` jobs run the downloaded bundles: Linux under Xvfb with a screenshot, macOS by opening `Pinpoint.app` and requiring it to stay alive.
 
 ### Changed
+- [FEATURE] Native phone map: no header row on the map. The account avatar floats beside the search pill (Sign in when signed out), the search has a magnifier icon, and Sign out moves into the menu. Other screens keep their header.
 - [FEATURE] Native phone shell: four bottom tabs (Map, People, Today, Chats) with 14 pt labels and 48 pt targets, matching the web. People holds Friends and Sharing behind a switch, so Sharing moves off the bottom bar; Account opens from the avatar in the header, and the menu no longer repeats Messages.
 - [FEATURE] Web navigation: four tabs instead of six: Map, People (friends, their locations, Share my location and Who can see me on one screen, people first), Today and Chats. Account moves to the avatar menu, and a forced password change now opens the Account screen instead of only highlighting a tab.
 - [FEATURE] Web "Sharing with you" strip: the map shows everyone whose location you can see as avatars at the bottom-left, freshest first, with a Sunflower ring when updated in the last 15 minutes and a compact age ("now", "5 min", "3 h"); tapping one flies to them, a ring pulses once when that friend moves (off with reduced motion), and on phones the strip makes way for the drawer, sheets and the measure tool.

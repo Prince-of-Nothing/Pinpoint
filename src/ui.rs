@@ -1675,44 +1675,51 @@ impl PinpointAppUI {
                 .user
                 .as_ref()
                 .map(|user| user.full_name.clone());
-            ui.horizontal(|ui| {
-                // Signed in, the lead is the avatar that opens the menu with
-                // Account; signed out, it stays the plain menu button.
-                let lead_clicked = if auth_screen {
-                    ui.add(egui::Button::new("←").min_size(egui::vec2(44.0, 44.0)))
-                        .clicked()
-                } else if signed_in {
-                    phone_tabs::avatar_button(ui, avatar_name.as_deref()).clicked()
-                } else {
-                    ui.add(egui::Button::new("☰").min_size(egui::vec2(44.0, 44.0)))
-                        .clicked()
-                };
-                if lead_clicked {
-                    if auth_screen {
-                        back = true;
+            // On the map the account avatar floats in the search row, so the
+            // header row is skipped there.
+            let on_map = self.app.current_screen() == CurrentScreen::Map;
+            if !on_map {
+                ui.horizontal(|ui| {
+                    // Signed in, the lead is the avatar that opens the menu with
+                    // Account; signed out, it stays the plain menu button.
+                    let lead_clicked = if auth_screen {
+                        ui.add(egui::Button::new("←").min_size(egui::vec2(44.0, 44.0)))
+                            .clicked()
+                    } else if signed_in {
+                        phone_tabs::avatar_button(ui, avatar_name.as_deref()).clicked()
                     } else {
-                        nav_open = !nav_open;
-                    }
-                }
-                // Compact wordmark: the desktop one is too tall for a phone row.
-                ui.label(
-                    RichText::new("Pinpoint")
-                        .size(18.0)
-                        .strong()
-                        .color(theme::TEXT),
-                );
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    if !auth_screen {
-                        if signed_in {
-                            if ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
-                                sign_out = true;
-                            }
-                        } else if theme::primary_button(ui, i18n::t(lang, key::SIGN_IN)).clicked() {
-                            sign_in = true;
+                        ui.add(egui::Button::new("☰").min_size(egui::vec2(44.0, 44.0)))
+                            .clicked()
+                    };
+                    if lead_clicked {
+                        if auth_screen {
+                            back = true;
+                        } else {
+                            nav_open = !nav_open;
                         }
                     }
+                    // Compact wordmark: the desktop one is too tall for a phone row.
+                    ui.label(
+                        RichText::new("Pinpoint")
+                            .size(18.0)
+                            .strong()
+                            .color(theme::TEXT),
+                    );
+                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        if !auth_screen {
+                            if signed_in {
+                                if ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
+                                    sign_out = true;
+                                }
+                            } else if theme::primary_button(ui, i18n::t(lang, key::SIGN_IN))
+                                .clicked()
+                            {
+                                sign_in = true;
+                            }
+                        }
+                    });
                 });
-            });
+            }
             self.mobile_nav_open = nav_open;
             if back {
                 self.app.set_screen(CurrentScreen::Map);
@@ -2186,6 +2193,7 @@ impl PinpointAppUI {
         let mut chosen_lang: Option<Lang> = None;
         let mut publish_requested = false;
         let mut refresh_requested = false;
+        let mut sign_out_requested = false;
         let (is_admin, update_available, unread_messages) = {
             let data = self.app.data();
             let data = data.lock().unwrap();
@@ -2204,6 +2212,15 @@ impl PinpointAppUI {
                 data.unread_messages,
             )
         };
+        let signed_in = self.app.is_signed_in();
+        let account_name = self
+            .app
+            .data()
+            .lock()
+            .unwrap()
+            .user
+            .as_ref()
+            .map(|user| user.full_name.clone());
         let frame = egui::Frame::NONE
             .fill(theme::PANEL)
             .inner_margin(egui::Margin::symmetric(12, 6));
@@ -2230,6 +2247,18 @@ impl PinpointAppUI {
                     "Places, saved pins and settings."
                 },
             );
+            if compact && signed_in {
+                // The map's header row is gone, so Sign out lives here.
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(account_name.as_deref().unwrap_or("Account")).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
+                            sign_out_requested = true;
+                        }
+                    });
+                });
+                ui.add_space(8.0);
+            }
             ui.add_space(8.0);
             egui::ScrollArea::vertical().show(ui, |ui| {
                 let tile_width = (ui.available_width() - 8.0) / 2.0;
@@ -2402,6 +2431,10 @@ impl PinpointAppUI {
         }
         if changes.refresh {
             self.spawn_action(PendingAction::RefreshAll, ctx);
+        }
+        if sign_out_requested {
+            self.mobile_nav_open = false;
+            self.spawn_action(PendingAction::Logout, ctx);
         }
     }
 }

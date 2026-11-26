@@ -1139,34 +1139,29 @@ impl PinpointAppUI {
                 width,
                 focus_close,
             );
-            match outcome.action {
-                PublishSheetAction::None => {}
-                PublishSheetAction::Close => self.mobile_publish_open = false,
-                PublishSheetAction::Gps => self.request_gps_publish(ctx),
-                PublishSheetAction::Publish => {
-                    if let Some(fix) = parse_publish_fix(&self.publish_lat, &self.publish_lon) {
-                        self.spawn_action(
-                            PendingAction::PublishLocation {
-                                lat: fix.lat,
-                                lon: fix.lon,
-                                accuracy: fix.accuracy,
-                            },
-                            ctx,
-                        );
-                        self.mobile_publish_open = false;
-                    } else {
-                        self.app.set_error(Some(
-                            "Enter a valid latitude (-90..90) and longitude (-180..180)"
-                                .to_string(),
-                        ));
-                    }
-                }
-                #[cfg(target_os = "android")]
-                PublishSheetAction::Settings => {
-                    if let Err(error) = crate::platform::open_app_settings() {
-                        self.app
-                            .set_error(Some(format!("Could not open app settings: {error}")));
-                    }
+            let dispatch = publish_sheet_dispatch(
+                outcome.action,
+                &self.publish_lat,
+                &self.publish_lon,
+                crate::platform::ensure_location_permission,
+            );
+            if let Some(pending) = dispatch.pending {
+                self.spawn_action(pending, ctx);
+            }
+            if dispatch.close {
+                self.mobile_publish_open = false;
+            }
+            if let Some(error) = dispatch.error {
+                self.app.set_error(Some(error));
+            }
+            if let Some(notice) = dispatch.notice {
+                self.app.set_notice(Some(notice));
+            }
+            #[cfg(target_os = "android")]
+            if dispatch.settings {
+                if let Err(error) = crate::platform::open_app_settings() {
+                    self.app
+                        .set_error(Some(format!("Could not open app settings: {error}")));
                 }
             }
         } else if let Some(place) = self.mobile_selected_place.clone() {
@@ -1182,40 +1177,33 @@ impl PinpointAppUI {
             };
             let focus_close = take_place_focus(&mut self.place_focus);
             let outcome = draw_place_sheet_view(ctx, &place, distance_m, width, focus_close);
-            match outcome.action {
-                PlaceSheetAction::None => {}
-                PlaceSheetAction::Close => {
-                    self.mobile_selected_place = None;
-                    self.place_focus = false;
-                    self.app.data().lock().unwrap().selected_place = None;
-                }
-                PlaceSheetAction::Save => {
-                    let store = crate::bookmarks::BookmarkStore::default_location();
-                    let bookmark = save_place_bookmark(&store, &place);
-                    self.app.refresh_bookmarks();
-                    self.app
-                        .set_notice(Some(format!("Saved {}", bookmark.name)));
-                }
-                PlaceSheetAction::Copy => {
-                    ctx.copy_text(place_copy_text(&place));
-                    self.app.set_notice(Some("Place copied.".to_string()));
-                }
-                PlaceSheetAction::Share(url) => self.share_text(ctx, &url),
-                PlaceSheetAction::Directions => {
-                    self.route_plan.open_with_destination(&place);
-                    self.mobile_selected_place = None;
-                    self.place_focus = false;
-                    self.app.data().lock().unwrap().selected_place = None;
-                }
-                PlaceSheetAction::SetOrigin => {
-                    self.route_plan.open_with_origin(&place);
-                    self.mobile_selected_place = None;
-                    self.place_focus = false;
-                    self.app.data().lock().unwrap().selected_place = None;
-                }
-                PlaceSheetAction::OpenUrl(url) => {
-                    let _ = webbrowser::open(&url);
-                }
+            let store = crate::bookmarks::BookmarkStore::default_location();
+            let dispatch = place_sheet_dispatch(outcome.action, &place, &store);
+            if dispatch.close || dispatch.directions || dispatch.set_origin {
+                self.mobile_selected_place = None;
+                self.place_focus = false;
+                self.app.data().lock().unwrap().selected_place = None;
+            }
+            if dispatch.save_bookmark.is_some() {
+                self.app.refresh_bookmarks();
+            }
+            if let Some(text) = dispatch.copy_text {
+                ctx.copy_text(text);
+            }
+            if let Some(url) = dispatch.share_text {
+                self.share_text(ctx, &url);
+            }
+            if dispatch.directions {
+                self.route_plan.open_with_destination(&place);
+            }
+            if dispatch.set_origin {
+                self.route_plan.open_with_origin(&place);
+            }
+            if let Some(url) = dispatch.open_url {
+                let _ = webbrowser::open(&url);
+            }
+            if let Some(notice) = dispatch.notice {
+                self.app.set_notice(Some(notice));
             }
         }
         self.draw_route_sheet(ui, ctx, true, top);
@@ -1414,21 +1402,20 @@ impl PinpointAppUI {
     }
 
     fn request_gps_publish(&mut self, ctx: &egui::Context) {
-        match gps_publish_step(crate::platform::ensure_location_permission()) {
-            GpsPublishStep::Request => {
-                self.spawn_action(PendingAction::PublishGpsLocation, ctx);
-            }
-            GpsPublishStep::Waiting => {
-                self.app.set_notice(Some(
-                    "Location permission requested. Allow it, then tap Use GPS again. \
-                     If no dialog appears, open Settings → Permissions."
-                        .to_string(),
-                ));
-            }
-            GpsPublishStep::Unavailable => {
-                self.app
-                    .set_error(Some("Location is unavailable on this device.".to_string()));
-            }
+        let dispatch = publish_sheet_dispatch(
+            PublishSheetAction::Gps,
+            "",
+            "",
+            crate::platform::ensure_location_permission,
+        );
+        if let Some(pending) = dispatch.pending {
+            self.spawn_action(pending, ctx);
+        }
+        if let Some(notice) = dispatch.notice {
+            self.app.set_notice(Some(notice));
+        }
+        if let Some(error) = dispatch.error {
+            self.app.set_error(Some(error));
         }
     }
 }
@@ -1553,6 +1540,101 @@ pub(crate) fn place_external_urls(place: &crate::osm::SearchPlace) -> [(&'static
             ),
         ),
     ]
+}
+
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct PublishDispatch {
+    pub pending: Option<super::PendingAction>,
+    pub notice: Option<String>,
+    pub error: Option<String>,
+    pub close: bool,
+    #[cfg(target_os = "android")]
+    pub settings: bool,
+}
+
+/// Map a publish-sheet action to the pending request and notices the app shows.
+pub(crate) fn publish_sheet_dispatch(
+    action: PublishSheetAction,
+    lat: &str,
+    lon: &str,
+    permission: impl FnOnce() -> crate::platform::LocationPermission,
+) -> PublishDispatch {
+    let mut dispatch = PublishDispatch::default();
+    match action {
+        PublishSheetAction::None => {}
+        PublishSheetAction::Close => dispatch.close = true,
+        PublishSheetAction::Publish => match parse_publish_fix(lat, lon) {
+            Some(fix) => {
+                dispatch.pending = Some(super::PendingAction::PublishLocation {
+                    lat: fix.lat,
+                    lon: fix.lon,
+                    accuracy: fix.accuracy,
+                });
+                dispatch.close = true;
+            }
+            None => {
+                dispatch.error =
+                    Some("Enter a valid latitude (-90..90) and longitude (-180..180)".to_string())
+            }
+        },
+        PublishSheetAction::Gps => match gps_publish_step(permission()) {
+            GpsPublishStep::Request => {
+                dispatch.pending = Some(super::PendingAction::PublishGpsLocation)
+            }
+            GpsPublishStep::Waiting => {
+                dispatch.notice = Some(
+                    "Location permission requested. Allow it, then tap Use GPS again. \
+                     If no dialog appears, open Settings → Permissions."
+                        .to_string(),
+                )
+            }
+            GpsPublishStep::Unavailable => {
+                dispatch.error = Some("Location is unavailable on this device.".to_string())
+            }
+        },
+        #[cfg(target_os = "android")]
+        PublishSheetAction::Settings => dispatch.settings = true,
+    }
+    dispatch
+}
+
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct PlaceDispatch {
+    pub close: bool,
+    pub save_bookmark: Option<crate::bookmarks::Bookmark>,
+    pub copy_text: Option<String>,
+    pub share_text: Option<String>,
+    pub set_origin: bool,
+    pub directions: bool,
+    pub open_url: Option<String>,
+    pub notice: Option<String>,
+}
+
+/// Map a place-sheet action to its bookmark, clipboard, share and route effects.
+pub(crate) fn place_sheet_dispatch(
+    action: PlaceSheetAction,
+    place: &crate::osm::SearchPlace,
+    store: &crate::bookmarks::BookmarkStore,
+) -> PlaceDispatch {
+    let mut dispatch = PlaceDispatch::default();
+    match action {
+        PlaceSheetAction::None => {}
+        PlaceSheetAction::Close => dispatch.close = true,
+        PlaceSheetAction::Save => {
+            let bookmark = save_place_bookmark(store, place);
+            dispatch.notice = Some(format!("Saved {}", bookmark.name));
+            dispatch.save_bookmark = Some(bookmark);
+        }
+        PlaceSheetAction::Copy => {
+            dispatch.copy_text = Some(place_copy_text(place));
+            dispatch.notice = Some("Place copied.".to_string());
+        }
+        PlaceSheetAction::Share(url) => dispatch.share_text = Some(url),
+        PlaceSheetAction::Directions => dispatch.directions = true,
+        PlaceSheetAction::SetOrigin => dispatch.set_origin = true,
+        PlaceSheetAction::OpenUrl(url) => dispatch.open_url = Some(url),
+    }
+    dispatch
 }
 
 #[cfg(test)]

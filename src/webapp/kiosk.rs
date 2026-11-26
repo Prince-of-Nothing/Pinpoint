@@ -22,7 +22,7 @@ pub struct KioskShareView {
 }
 
 /// Check-in payload for kiosk flows (backend-adapter-specific mapping).
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct KioskCheckInRequest {
     pub token: String,
     pub note: Option<String>,

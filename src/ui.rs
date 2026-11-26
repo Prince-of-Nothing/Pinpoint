@@ -3904,6 +3904,59 @@ mod tests {
     }
 
     #[test]
+    fn real_publish_sheet_fields_keep_stable_focus_ids() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        let ctx = egui::Context::default();
+        let mut lat = String::new();
+        let mut lon = String::new();
+        let lat_id = egui::Id::new("publish_lat");
+        let lon_id = egui::Id::new("publish_lon");
+        let both_seen = Rc::new(Cell::new(false));
+
+        let mut frame = |ctx: &egui::Context| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(500.0, 700.0),
+                )),
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                draw_publish_sheet_view(
+                    ctx,
+                    crate::i18n::Lang::system(),
+                    &mut lat,
+                    &mut lon,
+                    500.0,
+                    false,
+                );
+                both_seen.set(
+                    both_seen.get()
+                        || (ctx.read_response(lat_id).is_some()
+                            && ctx.read_response(lon_id).is_some()),
+                );
+            });
+        };
+
+        frame(&ctx);
+        frame(&ctx);
+        assert!(
+            both_seen.get(),
+            "both publish fields are addressable by their stable ids"
+        );
+
+        ctx.memory_mut(|memory| memory.request_focus(lat_id));
+        frame(&ctx);
+        assert_eq!(ctx.memory(|memory| memory.focused()), Some(lat_id));
+
+        ctx.memory_mut(|memory| memory.request_focus(lon_id));
+        frame(&ctx);
+        assert_eq!(ctx.memory(|memory| memory.focused()), Some(lon_id));
+    }
+
+    #[test]
     fn escape_dismisses_only_without_a_blocking_modal() {
         for (escape, blocked, expected) in [
             (true, false, true),

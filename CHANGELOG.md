@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] Smoke: check the offline map catalog shape against a running server.
 - [INFRA] CI: validate the goal prompt queue in the rust job.
 - [INFRA] Web tests: pin route normalization edge cases.
 - [FEATURE] Offline packs: remove an installed region with `DELETE /map/offline/<region>`; it refuses while a download runs and touches only that region's folder.

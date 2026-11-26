@@ -3520,6 +3520,51 @@ mod tests {
     }
 
     #[test]
+    fn place_sheet_effects_write_the_bookmark_copy_and_share_text() {
+        use super::map::{place_copy_text, place_share_url, save_place_bookmark};
+
+        let place = crate::osm::SearchPlace {
+            display_name: "Test place, Chișinău".into(),
+            short_name: "Test place".into(),
+            latitude: 47.01,
+            longitude: 28.86,
+            category: "test".into(),
+            place_type: "test".into(),
+            distance_m: None,
+        };
+        assert_eq!(place_copy_text(&place), "Test place (47.01000, 28.86000)");
+        assert_eq!(
+            place_share_url(&place),
+            "geo:47.010000,28.860000?q=Test%20place"
+        );
+
+        let dir =
+            std::env::temp_dir().join(format!("pinpoint-place-effects-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let store = crate::bookmarks::BookmarkStore::new(Some(dir.clone()));
+        let bookmark = save_place_bookmark(&store, &place);
+        assert_eq!(bookmark.name, "Test place");
+        assert_eq!(bookmark.latitude, 47.01);
+        assert_eq!(bookmark.longitude, 28.86);
+        let saved = store.list();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].name, "Test place");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let ctx = egui::Context::default();
+        super::crash_dialog::copy_to_clipboard(&ctx, &place_copy_text(&place))
+            .expect("copy to clipboard");
+        let copied = ctx.output(|output| {
+            output.commands.iter().find_map(|command| match command {
+                egui::OutputCommand::CopyText(text) => Some(text.clone()),
+                _ => None,
+            })
+        });
+        assert_eq!(copied.as_deref(), Some("Test place (47.01000, 28.86000)"));
+    }
+
+    #[test]
     fn real_publish_sheet_blocks_the_page_and_focuses_close() {
         use std::cell::{Cell, RefCell};
         use std::rc::Rc;

@@ -262,6 +262,8 @@ export function initSharing({ api, setStatus, getUser, onChanged }) {
       $("place-sheet").classList.add("hidden");
       $("route-panel").classList.add("hidden");
       refreshSummary();
+      // The sheet replaced the drawer on narrow screens; take focus with it.
+      $("share-enabled")?.focus();
     } catch (err) {
       setStatus(err.message, true);
     }

@@ -175,4 +175,37 @@ for (const id of ["basemap-streets", "basemap-satellite", "basemap-offline", "la
 assert.match(page, /Sentinel-2 cloudless/, "EOX credit missing");
 assert.match(page, /Copernicus Sentinel data 2016/, "EOX credit must name the data year");
 
+// Mid basemap switch MapLibre throws "Style is not done loading". Those calls
+// are skipped (style.load re-applies them); any other error still surfaces.
+{
+  const { whenStyleReady } = layers;
+  let ran = false;
+  assert.equal(whenStyleReady(() => (ran = true)), true);
+  assert.equal(ran, true);
+  assert.equal(
+    whenStyleReady(() => {
+      throw new Error("Style is not done loading.");
+    }),
+    false,
+  );
+  assert.throws(
+    () =>
+      whenStyleReady(() => {
+        throw new TypeError("real bug");
+      }),
+    /real bug/,
+  );
+
+  const mapSource = await readFile("web/app/map.js", "utf8");
+  for (const name of ["applySelfLocation", "applyTrail", "applyMeasure", "applyRoute"]) {
+    assert.match(
+      mapSource,
+      new RegExp(`function ${name}\\(\\) \\{\\s*whenStyleReady\\(${name}Now\\);`),
+      `${name} must skip quietly while a style is loading`,
+    );
+  }
+  const onStyleLoad = mapSource.slice(mapSource.indexOf('map.on("style.load"'), mapSource.indexOf('map.on("style.load"') + 400);
+  assert.match(onStyleLoad, /applyRoute\(\)/, "a basemap switch must redraw the route");
+}
+
 console.log("PASS  satellite, terrain and 3D buildings apply to both styles and stay within the CSP");

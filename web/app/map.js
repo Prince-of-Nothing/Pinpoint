@@ -10,7 +10,7 @@
 
 import { createMap as createFoundationMap } from "/map-assets/map.js";
 import * as maplibregl from "/vendor/maplibre-gl.js";
-import { applyLayers, targetPitch } from "./map-layers.js";
+import { applyLayers, targetPitch, whenStyleReady } from "./map-layers.js";
 
 const DEFAULT_STYLE_URL = "/map-assets/style.json";
 const DEFAULT_PMTILES_URL = "/map-assets/fixtures/monaco.pmtiles";
@@ -158,6 +158,7 @@ export function createMap({
           if (!destroyed) applySelfLocation();
           if (!destroyed) applyTrail();
           if (!destroyed) applyMeasure();
+          if (!destroyed) applyRoute();
           if (!destroyed) applyFriendLabels();
         });
       }
@@ -414,7 +415,12 @@ export function createMap({
     applySelfLocation();
   }
 
+  // Skipped mid basemap switch; the style.load handler re-applies it.
   function applySelfLocation() {
+    whenStyleReady(applySelfLocationNow);
+  }
+
+  function applySelfLocationNow() {
     if (!mapReady) return;
     const live = base.getMap();
     if (!live) return;
@@ -566,7 +572,12 @@ export function createMap({
     applyTrail();
   }
 
+  // Skipped mid basemap switch; the style.load handler re-applies it.
   function applyTrail() {
+    whenStyleReady(applyTrailNow);
+  }
+
+  function applyTrailNow() {
     if (!mapReady) return;
     const live = base.getMap();
     if (!live) return;
@@ -652,7 +663,12 @@ export function createMap({
     if (live.getSource(MEASURE_SOURCE)) live.removeSource(MEASURE_SOURCE);
   }
 
+  // Skipped mid basemap switch; the style.load handler re-applies it.
   function applyMeasure() {
+    whenStyleReady(applyMeasureNow);
+  }
+
+  function applyMeasureNow() {
     if (!mapReady) return;
     const live = base.getMap();
     if (!live) return;
@@ -702,7 +718,12 @@ export function createMap({
     });
   }
 
+  // Skipped mid basemap switch; the style.load handler re-applies it.
   function applyRoute() {
+    whenStyleReady(applyRouteNow);
+  }
+
+  function applyRouteNow() {
     if (!mapReady) return;
     const live = base.getMap();
     if (!live) return;
@@ -804,11 +825,9 @@ export function createMap({
     // skip the re-apply on `style.load`. Mid-switch, MapLibre throws "Style is
     // not done loading"; the next `style.load` applies the layers instead.
     try {
-      applyLayers(live, extraLayers);
+      whenStyleReady(() => applyLayers(live, extraLayers));
     } catch (error) {
-      if (!/not done loading/i.test(String(error?.message))) {
-        console.warn("[pinpoint-map] could not apply map layers", error);
-      }
+      console.warn("[pinpoint-map] could not apply map layers", error);
     }
   }
 

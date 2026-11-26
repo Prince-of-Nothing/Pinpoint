@@ -29,6 +29,18 @@ impl PinpointAppUI {
             self.location_pending = false;
             self.spawn_action(PendingAction::Locate, ctx);
         }
+        let modal_open = self.crash_dialog.is_some()
+            || self.update_dialog_open
+            || self.share_sheet.is_some()
+            || self.route_plan.open
+            || self.mobile_publish_open
+            || self.mobile_selected_place.is_some()
+            || self.recovery_code_visible()
+            || self.mobile_nav_open;
+        let slash = ctx.input(|input| input.key_pressed(egui::Key::Slash));
+        if search_shortcut_fires(slash, modal_open, ctx.wants_keyboard_input()) {
+            ctx.memory_mut(|memory| memory.request_focus(egui::Id::new(SEARCH_INPUT_ID)));
+        }
         if Self::is_compact(ctx) {
             self.draw_mobile_map_screen(ui, ctx);
             return;
@@ -429,6 +441,7 @@ impl PinpointAppUI {
             };
             ui.add(
                 egui::TextEdit::singleline(&mut self.search_query)
+                    .id(egui::Id::new(SEARCH_INPUT_ID))
                     .hint_text(i18n::t(lang, key::SEARCH_PLACES))
                     .char_limit(120)
                     .desired_width((ui.available_width() - 16.0).max(120.0)),
@@ -736,6 +749,15 @@ fn map_shortcuts_enabled(modal_open: bool, wants_keyboard_input: bool) -> bool {
     !modal_open && !wants_keyboard_input
 }
 
+/// Stable id for the map search field in the desktop and mobile layouts.
+pub(crate) const SEARCH_INPUT_ID: &str = "pinpoint_search";
+
+/// "/" focuses search only when nothing modal is open and no field already
+/// owns the keyboard.
+fn search_shortcut_fires(pressed: bool, modal_open: bool, wants_keyboard_input: bool) -> bool {
+    pressed && map_shortcuts_enabled(modal_open, wants_keyboard_input)
+}
+
 /// The map bottom sheet Escape should close, if any.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EscapableSheet {
@@ -827,6 +849,7 @@ impl PinpointAppUI {
                         ui.horizontal(|ui| {
                             let edit = ui.add(
                                 egui::TextEdit::singleline(&mut self.search_query)
+                                    .id(egui::Id::new(SEARCH_INPUT_ID))
                                     .hint_text("Search places…")
                                     .frame(false)
                                     .char_limit(120)
@@ -1356,8 +1379,8 @@ pub(crate) fn encode_component(value: &str) -> String {
 mod tests {
     use super::egui;
     use super::{
-        map_key_action, map_shortcut_rows, map_shortcuts_enabled, sheet_escape_target,
-        take_place_focus, EscapableSheet, MapKeyAction, MAP_SHORTCUTS,
+        map_key_action, map_shortcut_rows, map_shortcuts_enabled, search_shortcut_fires,
+        sheet_escape_target, take_place_focus, EscapableSheet, MapKeyAction, MAP_SHORTCUTS,
     };
 
     #[test]
@@ -1366,6 +1389,14 @@ mod tests {
         assert!(!map_shortcuts_enabled(true, false));
         assert!(!map_shortcuts_enabled(false, true));
         assert!(!map_shortcuts_enabled(true, true));
+    }
+
+    #[test]
+    fn slash_focuses_search_only_without_a_modal_or_typing() {
+        assert!(search_shortcut_fires(true, false, false));
+        assert!(!search_shortcut_fires(false, false, false));
+        assert!(!search_shortcut_fires(true, true, false));
+        assert!(!search_shortcut_fires(true, false, true));
     }
 
     #[test]

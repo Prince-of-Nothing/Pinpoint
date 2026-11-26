@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native map: `/` focuses the search field when no sheet is open and no field has focus.
 - [FEATURE] Native route: opening the route sheet focuses its close control once.
 - [FEATURE] Native map: opening the compact place sheet focuses its close control once.
 - [FEATURE] Native sharing: opening the per-friend share sheet focuses the sharing toggle once.

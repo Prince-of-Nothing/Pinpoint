@@ -52,6 +52,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Web map: opening or closing the drawer (or anything else that re-adds the location, trail, measure or route layers) while a basemap switch is still loading no longer throws "Style is not done loading" and shows the crash banner; those calls wait for the new style, and a basemap switch now redraws an active route instead of dropping it.
 - [FIX] Web search: pressing Enter now cancels the pending autocomplete run, so a late rebuild cannot replace the results under a keyboard user.
 - [FIX] Tests: the `app_lock` lockout-remaining test sets its deadline after the Argon2 hash and also checks an expired deadline, so slow CI hashing no longer flakes it.
 - [FIX] Web: removed the duplicate ungated `/` listener in `nav.js`; search focus now respects modifiers, text fields and open drawers/sheets, and the input advertises the shortcut via `title` and `aria-keyshortcuts`.

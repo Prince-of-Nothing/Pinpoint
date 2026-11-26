@@ -174,6 +174,25 @@ export function applyLayers(map, { satellite = false, terrain = false, buildings
   applyBuildings(map, buildings);
 }
 
+/**
+ * Run a change that adds sources or layers. While a basemap switch is still
+ * loading, MapLibre throws "Style is not done loading"; that call is skipped
+ * (returns false) because the next `style.load` re-applies everything. Any
+ * other error is a real bug and is rethrown.
+ *
+ * @param {() => void} run
+ * @returns {boolean} whether the change ran
+ */
+export function whenStyleReady(run) {
+  try {
+    run();
+    return true;
+  } catch (error) {
+    if (/not done loading/i.test(String(error?.message))) return false;
+    throw error;
+  }
+}
+
 /** Pitch the camera for 3D content, flatten it when nothing is raised. */
 export function targetPitch({ terrain = false, buildings = false } = {}, current = 0) {
   if (terrain || buildings) return current > 0 ? current : TILT_PITCH;

@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [DOCS] `future/mobile-and-desktop.md`: a proposal for a mobile look based on the redesigned web UI (shared tokens, four tabs, one sheet component) and a plan for Windows and Linux desktop apps (desktop layout, installers, signing, OS location, updates).
 - [INFRA] Android: `scripts/android-smoke.ps1` installs, launches, focus-checks and crash-checks the debug APK and saves a screenshot; `docs/TESTING.md` documents the live publish check (`POST /api/v1/locations/me`).
 - [INFRA] Native tests: an egui interaction test types 47.01/28.86 into the real publish sheet and asserts Publish produces the 10 m manual fix; an API 37 emulator run with logged rects confirmed both fields, Publish and Use GPS (queued when offline).
 - [INFRA] Native tests: a dispatch layer now maps publish/place sheet actions to pending requests, notices, errors and effect data; tests pin manual publish with 10 m accuracy, each GPS permission state, Save bookmark/notice, Copy/Share text and the origin/directions/open flags.

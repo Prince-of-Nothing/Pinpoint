@@ -80,6 +80,20 @@ multiplatform section); they share `src/` via `cfg(target_os)`.
 - When the user says "push", push the **current branch** and open/update its PR;
   do not push `main`.
 
+## Agent prompt queue (`goal/`)
+
+- Every delegated task starts from a Markdown prompt in `goal/prompts/`; do
+  not paste ad-hoc prompts outside this folder.
+- Read `goal/README.md` and `goal/CONTEXT.md` first. Claim exactly one prompt:
+  `scripts/goal.ps1 claim -Id NN -Agent <name>` (moves it to
+  `goal/claimed/<name>/`, which is gitignored).
+- After the prompt's PR merges, delete it with
+  `scripts/goal.ps1 done -Id NN -Agent <name>`. Release an abandoned claim
+  with `release`.
+- `scripts/goal.ps1 check` validates the queue (10-prompt cap, required
+  sections, size, location). Keep the prompts small, independent and within
+  one deliverable each.
+
 ## Commits
 
 Every commit is authored by the repository owner only. No `Co-authored-by:`

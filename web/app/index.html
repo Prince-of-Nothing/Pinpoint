@@ -16,13 +16,6 @@
   <body>
     <header>
       <h1>Pinpoint</h1>
-      <div id="session-bar" class="hidden">
-        <span id="user-email" class="muted"></span>
-        <span id="user-handle" class="muted" title="Your public username — share it so friends can find you"></span>
-        <button id="admin-tab" type="button" class="hidden">Admin</button>
-        <button id="theme-toggle" type="button" aria-label="Switch to dark theme">Dark</button>
-        <button id="logout" type="button">Sign out</button>
-      </div>
     </header>
 
     <main>
@@ -140,8 +133,14 @@
           </span>
         </div>
 
+        <section id="live-strip" class="live-strip hidden" aria-labelledby="live-strip-title">
+          <h2 id="live-strip-title" class="live-strip-title">Sharing with you</h2>
+          <ul id="live-strip-list" class="live-strip-list"></ul>
+        </section>
+
         <div class="map-topbar">
           <form id="search-form" class="search-form" role="search">
+            <span class="search-mark" aria-hidden="true"></span>
             <input
               id="search-input"
               type="search"
@@ -190,6 +189,21 @@
               <path d="m3 13 9 5 9-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
             </svg>
           </button>
+          <details id="session-bar" class="account-menu hidden">
+            <summary class="icon-btn account-button" aria-label="Account and settings">
+              <span class="avatar" id="account-avatar" aria-hidden="true">?</span>
+            </summary>
+            <div class="account-menu-panel">
+              <p class="account-menu-who">
+                <span id="user-handle" title="Your public username — share it so friends can find you"></span>
+                <span id="user-email" class="muted"></span>
+              </p>
+              <button id="account-open" type="button" class="account-menu-item">Account and privacy</button>
+              <button id="admin-tab" type="button" class="account-menu-item hidden">Admin console</button>
+              <button id="theme-toggle" type="button" class="account-menu-item" aria-label="Switch to dark theme">Dark theme</button>
+              <button id="logout" type="button" class="account-menu-item danger-text">Sign out</button>
+            </div>
+          </details>
         </div>
 
         <div id="map-controls" class="map-controls hidden" role="group" aria-label="Map options">
@@ -400,24 +414,6 @@
               Download map (220 MB)
             </button>
           </div>
-          <div class="card publish-card" data-sections="sharing">
-            <h2>Share my location</h2>
-            <p class="muted small">
-              Sends where you are now to the friends you share with. Nobody
-              else can see it.
-            </p>
-            <button type="button" id="publish-gps" class="publish-gps">Share my current location</button>
-            <p id="publish-status" class="muted small" role="status" aria-live="polite"></p>
-            <details class="publish-manual">
-              <summary>Enter coordinates instead</summary>
-              <form id="publish-form">
-                <label>Latitude <input id="publish-lat" type="number" step="any" min="-90" max="90" required /></label>
-                <label>Longitude <input id="publish-lon" type="number" step="any" min="-180" max="180" required /></label>
-                <button type="submit" class="secondary">Publish these coordinates</button>
-              </form>
-            </details>
-          </div>
-
           <div class="card" id="today-card" data-sections="today">
             <div class="card-head">
               <h2>Today</h2>
@@ -459,15 +455,31 @@
             </form>
           </div>
 
-          <div class="card" id="shares-card" data-sections="sharing">
-            <h2>Who can see me</h2>
-            <ul id="shares-list" class="list"></ul>
-            <p class="muted">Only friends you enable can see your location; pause or revoke any time.</p>
-          </div>
-
           <div class="card" data-sections="friends">
             <h2>Friend locations</h2>
             <ul id="locations-list" class="list"></ul>
+          </div>
+
+          <div class="card publish-card" data-sections="sharing friends">
+            <h2>Share my location</h2>
+            <p class="muted small">
+              Sends where you are now to the friends you share with. Nobody
+              else can see it.
+            </p>
+            <button type="button" id="publish-gps" class="publish-gps">Share my current location</button>
+            <p id="publish-status" class="muted small" role="status" aria-live="polite"></p>
+            <button type="button" id="publish-manual-toggle" class="publish-manual-toggle" aria-expanded="false" aria-controls="publish-form">Enter coordinates instead</button>
+            <form id="publish-form" class="publish-manual hidden">
+              <label>Latitude <input id="publish-lat" type="number" step="any" min="-90" max="90" required /></label>
+              <label>Longitude <input id="publish-lon" type="number" step="any" min="-180" max="180" required /></label>
+              <button type="submit" class="secondary">Publish these coordinates</button>
+            </form>
+          </div>
+
+          <div class="card" id="shares-card" data-sections="sharing friends">
+            <h2>Who can see me</h2>
+            <ul id="shares-list" class="list"></ul>
+            <p class="muted">Only friends you enable can see your location; pause or revoke any time.</p>
           </div>
 
           <div class="card" id="notes-card" data-sections="today">
@@ -642,16 +654,7 @@
               <path d="M3.6 19.2c0-3 2.4-5.2 5.4-5.2s5.4 2.2 5.4 5.2" />
               <path d="M15.7 5.2a3.2 3.2 0 0 1 0 5.9M17.6 14.6c1.9.7 3.1 2.4 3.1 4.6" />
             </svg>
-            Friends
-          </button>
-          <button type="button" class="tab" data-tab="sharing">
-            <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-              <circle cx="17.5" cy="5.5" r="2.5" />
-              <circle cx="6.5" cy="12" r="2.5" />
-              <circle cx="17.5" cy="18.5" r="2.5" />
-              <path d="m8.8 10.7 6.4-3.9M8.8 13.3l6.4 3.9" />
-            </svg>
-            Sharing
+            People
           </button>
           <button type="button" class="tab" data-tab="today">
             <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
@@ -666,13 +669,6 @@
               <path d="M8 9h8M8 12.5h5" />
             </svg>
             <span id="chats-label">Chats</span>
-          </button>
-          <button type="button" class="tab" data-tab="account">
-            <svg class="tab-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
-              <circle cx="12" cy="8.3" r="3.5" />
-              <path d="M4.8 20c0-3.7 3.2-6.4 7.2-6.4s7.2 2.7 7.2 6.4" />
-            </svg>
-            Account
           </button>
         </nav>
       </section>

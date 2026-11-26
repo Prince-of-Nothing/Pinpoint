@@ -22,10 +22,13 @@ production-hardened. See the functional-state matrix and per-item
   web and native. ECIES, not the Signal Protocol; see
   [`docs/messaging.md`](docs/messaging.md).
 - **Web UI at `/`** — map-first MapLibre GL JS + PMTiles UI (locally
-  vendored), place search,
-  A→B routing with alternatives/steps (drive; walk/bike when self-hosted),
-  saved/recent places per account, locate-me, plus the auth, publish, friends,
-  shares and sessions surfaces in a drawer.
+  vendored) with one command bar (search, locate, opt-in Streets/Satellite/
+  Offline basemaps with 3D buildings and terrain, and an avatar menu for
+  account, theme and sign-out), a "Sharing with you" strip of the friends whose
+  location you can see, A→B routing with alternatives/steps (drive; walk/bike
+  when self-hosted), saved/recent places per account, and four tabs: Map,
+  People (friends, their locations, one-tap GPS sharing and who can see you),
+  Today and Chats.
 - **Identity & privacy** — every account has a generated public handle
   (`calm-otter-42`); friends add by exact username, pending requests show
   handles only, and real names/emails are revealed to accepted friends.

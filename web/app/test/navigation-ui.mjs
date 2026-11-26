@@ -15,17 +15,38 @@ const { lineLengthMeters } = await import(
 
 const screens = ["friends", "sharing", "today", "chats", "account"];
 
+// Four tabs: Map, People (Friends + Sharing), Today, Chats. Account lives in
+// the avatar menu; the Sharing and Account screens stay reachable by name.
 const tabs = [...page.matchAll(/data-tab="([a-z]+)"/g)].map((m) => m[1]);
 assert.deepEqual(
   [...new Set(tabs)].sort(),
-  ["account", "chats", "friends", "map", "sharing", "today"],
-  "the tab bar must offer map plus the five sections",
+  ["chats", "friends", "map", "today"],
+  "the tab bar must offer Map, People, Today and Chats",
 );
+assert.match(page, /data-tab="friends">[\s\S]*?People\s*<\/button>/, "the friends tab is labelled People");
+assert.match(app, /friends: \{ eyebrow: "People", title: "People" \}/);
+for (const id of ["publish-card", "shares-card"]) {
+  const card = page.match(new RegExp(`<div class="card[^"]*"(?: id="${id}")?[^>]*data-sections="([^"]+)"[^>]*>`, "g")) || [];
+  assert.ok(card.some((tag) => tag.includes(id) && /data-sections="sharing friends"/.test(tag)), `${id} must show on People`);
+}
+assert.match(app, /setScreen\("account"\);\s*setDrawer\(true, false\);\s*\$\("account-card"\)/, "a forced password change opens the Account screen");
+// People: people first, then what you share. DOM order, not CSS order, so Tab
+// follows what is on screen.
+const peopleOrder = ['id="friends-card"', "<h2>Friend locations</h2>", 'class="card publish-card"', 'id="shares-card"'].map((m) =>
+  page.indexOf(m),
+);
+assert.ok(peopleOrder.every((i) => i > 0), "missing a People card");
+assert.deepEqual([...peopleOrder].sort((a, b) => a - b), peopleOrder, "People cards must be in reading order in the DOM");
+assert.doesNotMatch(css, /\.drawer\[data-screen="friends"\][^{]*\{ order:/, "no CSS reordering of People cards");
 
 assert.match(page, /id="social-drawer"[^>]*data-screen="friends"/);
 const sections = [...page.matchAll(/data-sections="([^"]+)"/g)].map((m) => m[1]);
 for (const name of screens) {
-  assert.ok(sections.includes(name), `no card is assigned to ${name}`);
+  // data-sections is a space-separated list, matched in CSS with ~=.
+  assert.ok(
+    sections.some((list) => list.split(/\s+/).includes(name)),
+    `no card is assigned to ${name}`,
+  );
   assert.ok(
     css.includes(
       `.drawer[data-screen="${name}"] .card:not([data-sections~="${name}"])`,
@@ -91,7 +112,7 @@ assert.match(
   "desktop sign-in must open the section column",
 );
 
-// Narrow windows and phones: search sits under the header (as on desktop),
+// Narrow windows and phones: search sits at the top edge (as on desktop),
 // and its results, chips and the layers menu open below it, not upwards.
 const topSearchStart = css.indexOf("Search at the top on every width");
 assert.ok(topSearchStart > 0, "missing the top-search block");
@@ -99,17 +120,17 @@ const topSearch = css.slice(topSearchStart);
 assert.match(topSearch, /@media \(max-width: 980px\)/);
 assert.match(
   topSearch,
-  /\.map-topbar \{\s*top: calc\(4\.5rem \+ var\(--safe-top\)\);\s*bottom: auto;/,
+  /\.map-topbar \{\s*top: calc\(0\.75rem \+ var\(--safe-top\)\);\s*bottom: auto;/,
   "the narrow search bar must be top-anchored",
 );
 assert.match(
   topSearch,
-  /\.search-results,\s*\.category-chips,\s*\.map-controls \{\s*top: calc\(8\.3rem \+ var\(--safe-top\)\);\s*bottom: auto;/,
+  /\.search-results,\s*\.category-chips,\s*\.map-controls \{\s*top: calc\(4\.6rem \+ var\(--safe-top\)\);\s*bottom: auto;/,
   "results, chips and the layers menu must open under the search bar",
 );
 assert.match(
   topSearch,
-  /\.nav-banner \{ top: calc\(8\.3rem \+ var\(--safe-top\)\); \}/,
+  /\.nav-banner \{ top: calc\(4\.6rem \+ var\(--safe-top\)\); \}/,
   "the navigation banner must not cover the search bar",
 );
 assert.match(css, /^#user-email \{ display: none; \}/m, "the header must not show the account email");
@@ -160,8 +181,28 @@ for (const overlay of ["\\.nav-banner", "#status"]) {
 }
 assert.match(
   wideCss,
-  /\.nav-banner \{ top: 8rem; \}/,
+  /\.nav-banner \{ top: 4\.6rem; \}/,
   "the desktop navigation banner must sit below the top search bar",
+);
+// Command bar: one row at the top; the header only shows on the sign-in screen,
+// and account, theme and sign-out live in the avatar menu at the end of the bar.
+assert.match(css, /body:has\(#app-panel:not\(\.hidden\)\) > header \{ display: none; \}/);
+const topbarHtml = page.slice(page.indexOf('<div class="map-topbar">'), page.indexOf('<div id="map-controls"'));
+for (const id of ["session-bar", "account-avatar", "user-handle", "account-open", "theme-toggle", "logout", "admin-tab"]) {
+  assert.ok(topbarHtml.includes(`id="${id}"`), `#${id} must be in the command bar's account menu`);
+}
+assert.ok(!page.slice(0, page.indexOf("<main")).includes('id="logout"'), "the header must not hold session controls");
+assert.match(app, /\$\("account-open"\)\?\.addEventListener\("click", \(\) => \{\s*setScreen\("account"\);\s*setDrawer\(true\);/);
+assert.match(app, /event\.key === "Escape" && accountMenu\?\.open/);
+assert.match(
+  css,
+  /@media \(max-width: 600px\) \{[^}]*\}\s*\.map-topbar #drawer-toggle \{ display: none; \}|@media \(max-width: 600px\) \{\s*\.map-topbar \{ gap: 0\.35rem; \}\s*\.map-topbar #drawer-toggle \{ display: none; \}/,
+  "phones drop the panels button (the tab bar opens panels) so search stays readable",
+);
+assert.match(
+  app,
+  /if \(event\.key !== "Escape" \|\| event\.defaultPrevented\) return;\s*\/\/ The admin overlay owns Escape/,
+  "the drawer must not close on an Escape another surface already handled",
 );
 assert.match(map, /showCompass: true/);
 assert.match(map, /visualizePitch: true/);

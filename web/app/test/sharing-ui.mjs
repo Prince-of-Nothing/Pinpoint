@@ -13,8 +13,13 @@ const {
   freshnessText,
   friendName,
   friendRowModel,
+  compactAge,
   initials,
   initSharing,
+  isLive,
+  liveStripModel,
+  locationSentence,
+  shareSentence,
   precisionLabel,
   shareRequestBody,
   shareRowModel,
@@ -379,7 +384,9 @@ await check("a share label is sent, shown in the row and editable", () => {
   assert.equal(shareRowModel(share({ label: "Work trip" }), now).label, "Work trip");
   assert.match(pageSource, /id="share-label"/);
   assert.match(sharingSource, /share-label"\)\.value = current\?\.label/);
-  assert.match(appSource, /model\.label/);
+  // The row shows the label through shareSentence ("Work trip: sharing …").
+  assert.match(appSource, /personText\(name, shareSentence\(s\)\)/);
+  assert.match(shareSentence(share({ label: "Work trip", expires_at: future }), now), /^Work trip: /);
 });
 
 await check("clearing a label removes it only for an existing labeled share", () => {
@@ -423,7 +430,7 @@ await check("friend rows show a person and a status, not requester → receiver"
   assert.equal(friend.kind, "friend");
   assert.equal(friend.name, "Bogdan Friend");
   assert.equal(friend.handle, "@bright-badger-2");
-  assert.equal(friend.status, "Sharing location · updated 5m ago");
+  assert.equal(friend.status, "Sharing their location, updated 5m ago");
   assert.equal(friend.initials, "BF");
   assert.equal(friend.location, location);
 
@@ -437,8 +444,69 @@ await check("people lists are built without raw coordinates or the arrow pair", 
   assert.doesNotMatch(appSource, /li\.textContent = `\$\{loc\.user_name\} · \$\{Number\(loc\.latitude\)/);
   assert.match(appSource, /rowButton\("Show on map", \(\) => showFriendOnMap\(loc\)\)/);
   assert.match(pageSource, /id="publish-gps"/, "missing the GPS share button");
-  assert.match(pageSource, /<details class="publish-manual">[\s\S]*id="publish-form"/, "coordinates must fold under details");
+  // A real button (not <summary>) so the narrow drawer's focus trap reaches it.
+  assert.match(
+    pageSource,
+    /<button type="button" id="publish-manual-toggle"[^>]*aria-expanded="false" aria-controls="publish-form">Enter coordinates instead<\/button>\s*<form id="publish-form" class="publish-manual hidden">/,
+    "coordinates must fold behind a toggle button",
+  );
+  assert.match(appSource, /\$\("publish-manual-toggle"\)\?\.addEventListener\("click"/);
   assert.match(appSource, /publish\(fix\.lat, fix\.lon, publishAccuracy\(fix\.accuracy\)\)/);
+});
+
+await check("shares and locations read as sentences, not dot-joined fields", () => {
+  const now = Date.parse("2026-11-26T12:00:00Z");
+  const until = "2026-11-27T01:40:00Z";
+  const when = new Date(until).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const active = { is_active: true, precision_level: "exact", expires_at: until };
+  assert.equal(shareSentence(active, now), `Sharing your exact location until ${when}`);
+  assert.equal(shareSentence({ ...active, label: "Weekend" }, now), `Weekend: sharing your exact location until ${when}`);
+  assert.equal(
+    shareSentence({ ...active, is_active: false, precision_level: "city_only" }, now),
+    `Paused, would share your city until ${when}`,
+  );
+  assert.equal(shareSentence({ is_active: true, precision_level: "approximate", expires_at: null }, now), "Sharing your approximate location with no end time");
+  assert.equal(shareSentence({ ...active, expires_at: "2026-11-25T10:00:00Z" }, now).startsWith("Ended "), true);
+  assert.equal(
+    locationSentence({ precision_level: "approximate", updated_at: "2026-11-26T11:58:00Z" }, now),
+    "Approximate location, updated 2m ago",
+  );
+  assert.doesNotMatch(appSource, /status\.join\(" · "\)/, "no dot-joined status strings");
+});
+
+await check("the Sharing with you strip lists live friends first and pulses only on change", async () => {
+  const now = Date.parse("2026-11-26T12:00:00Z");
+  const at = (min) => new Date(now - min * 60_000).toISOString();
+  assert.equal(isLive(at(14), now), true);
+  assert.equal(isLive(at(16), now), false);
+  assert.equal(isLive("bad", now), false);
+  assert.equal(compactAge(at(0.2), now), "now");
+  assert.equal(compactAge(at(5), now), "5 min");
+  assert.equal(compactAge(at(180), now), "3 h");
+  assert.equal(compactAge(at(2 * 1440), now), "2 d");
+
+  const bogdan = { user_id: 5, user_name: "Bogdan Friend", updated_at: at(2) };
+  const carla = { user_id: 6, user_name: "Carla Popescu", updated_at: at(200) };
+  const first = liveStripModel([carla, bogdan], new Map(), now);
+  assert.deepEqual(first.map((e) => e.name), ["Bogdan Friend", "Carla Popescu"], "freshest first");
+  assert.deepEqual(first.map((e) => e.live), [true, false]);
+  assert.deepEqual(first.map((e) => e.initials), ["BF", "CP"]);
+  assert.ok(first.every((e) => !e.pulse), "no pulse on first render");
+
+  const seen = new Map([[5, bogdan.updated_at], [6, carla.updated_at]]);
+  const moved = { ...bogdan, updated_at: at(0) };
+  const next = liveStripModel([moved, carla], seen, now);
+  assert.equal(next.find((e) => e.userId === 5).pulse, true, "a changed location pulses once");
+  assert.equal(next.find((e) => e.userId === 6).pulse, false);
+  assert.deepEqual(liveStripModel([], seen, now), []);
+
+  const css = await readFile(path.join(root, "web/app/app.css"), "utf8");
+  assert.match(pageSource, /<section id="live-strip" class="live-strip hidden"/);
+  assert.match(appSource, /function renderLocations\(items\) \{\s*renderLiveStrip\(items\);/);
+  assert.match(appSource, /button\.addEventListener\("click", \(\) => showFriendOnMap\(entry\.location\)\);/);
+  assert.match(appSource, /liveSeen\.clear\(\);\s*show\(\$\("live-strip"\), false\);/, "sign-out forgets the strip");
+  assert.match(css, /\.live-person\.is-live \.avatar \{ box-shadow: [^}]*var\(--live\)/, "live ring uses the Sunflower token");
+  assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.live-person\.pulse \.avatar \{ animation: none; \}/);
 });
 
 console.log(`sharing UI checks passed: ${passed}`);

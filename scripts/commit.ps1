@@ -3,8 +3,9 @@
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File scripts/commit.ps1 -Message "[FEATURE] area: ..." -Body "details"
 #
-# Runs fmt/clippy/build/test, prepends a CHANGELOG entry stub, commits.
-# Refuses to run on main. Does NOT push; open a PR from the feature branch.
+# Runs fmt/clippy/build/test and the /goal queue check, prepends a CHANGELOG
+# entry stub, commits. Refuses to run on main. Does NOT push; open a PR from
+# the feature branch.
 
 param(
     [Parameter(Mandatory = $true)][string]$Message,
@@ -26,6 +27,7 @@ Gate "cargo fmt --all -- --check"
 Gate "cargo clippy --all-targets -- -D warnings"
 Gate "cargo build --locked"
 Gate "cargo test --locked"
+Gate "powershell -ExecutionPolicy Bypass -File scripts/goal.ps1 check"
 
 # Append a one-line stub to CHANGELOG [Unreleased] if not already present.
 $cl = "CHANGELOG.md"

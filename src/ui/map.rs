@@ -28,6 +28,9 @@ pub(crate) struct PlaceSheetOutcome {
     pub save_id: Option<egui::Id>,
     pub copy_id: Option<egui::Id>,
     pub share_id: Option<egui::Id>,
+    pub set_origin_id: Option<egui::Id>,
+    /// Button ids for the external maps, in `place_external_urls` order.
+    pub external_ids: [Option<egui::Id>; 4],
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PublishSheetAction {
@@ -1306,6 +1309,8 @@ pub(crate) fn draw_place_sheet_view(
     let mut save_id = None;
     let mut copy_id = None;
     let mut share_id = None;
+    let mut set_origin_id = None;
+    let mut external_ids: [Option<egui::Id>; 4] = [None; 4];
     egui::Area::new(egui::Id::new("mobile_place_sheet"))
         .order(egui::Order::Foreground)
         .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
@@ -1353,9 +1358,11 @@ pub(crate) fn draw_place_sheet_view(
                             action = Some(PlaceSheetAction::Directions);
                         }
                         directions_id = Some(directions_button.id);
-                        if ui.button("Set as origin").clicked() {
+                        let origin_button = ui.button("Set as origin");
+                        if origin_button.clicked() {
                             action = Some(PlaceSheetAction::SetOrigin);
                         }
+                        set_origin_id = Some(origin_button.id);
                         let save_button = ui.button("Save");
                         if save_button.clicked() {
                             action = Some(PlaceSheetAction::Save);
@@ -1371,10 +1378,14 @@ pub(crate) fn draw_place_sheet_view(
                             action = Some(PlaceSheetAction::Share(place_share_url(place)));
                         }
                         share_id = Some(share_button.id);
-                        for (label, url) in place_external_urls(place) {
-                            if ui.button(label).clicked() {
+                        for (index, (label, url)) in
+                            place_external_urls(place).into_iter().enumerate()
+                        {
+                            let external_button = ui.button(label);
+                            if external_button.clicked() {
                                 action = Some(PlaceSheetAction::OpenUrl(url));
                             }
+                            external_ids[index] = Some(external_button.id);
                         }
                     });
                 });
@@ -1386,6 +1397,8 @@ pub(crate) fn draw_place_sheet_view(
         save_id,
         copy_id,
         share_id,
+        set_origin_id,
+        external_ids,
     }
 }
 

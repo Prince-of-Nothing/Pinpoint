@@ -322,8 +322,18 @@ button:hover { filter: brightness(1.05); }
 /* Share my location: one GPS button, coordinates folded away. */
 .publish-gps { width: 100%; padding: 0.7rem 1rem; font-size: 0.95rem; }
 .publish-manual { margin-top: 0.5rem; }
-.publish-manual summary { color: var(--muted); font-size: 0.82rem; cursor: pointer; }
-.publish-manual[open] summary { margin-bottom: 0.5rem; }
+.publish-card .publish-manual-toggle {
+  padding: 0.2rem 0;
+  border: 0;
+  border-radius: 0.3rem;
+  background: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.publish-card .publish-manual-toggle[aria-expanded="true"] { color: var(--text); }
 
 .badge {
   font-size: 0.7rem;

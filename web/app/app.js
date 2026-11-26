@@ -216,8 +216,8 @@ async function enterApp() {
   // A temporary password blocks the API until it is rotated. Take the user
   // straight to the Account panel instead of letting every tab fail.
   if (state.user?.must_change_password) {
+    setScreen("account");
     setDrawer(true, false);
-    setActiveTab("account");
     $("account-card")?.scrollIntoView({ block: "start" });
     setStatus("Change the temporary password before using the app.", true);
   }
@@ -1913,6 +1913,14 @@ $("publish-form").addEventListener("submit", async (e) => {
 });
 
 $("publish-gps")?.addEventListener("click", publishCurrentLocation);
+// "Enter coordinates instead": a real button (reachable inside the narrow
+// drawer's focus trap) that shows the latitude/longitude form.
+$("publish-manual-toggle")?.addEventListener("click", (event) => {
+  const open = event.currentTarget.getAttribute("aria-expanded") !== "true";
+  event.currentTarget.setAttribute("aria-expanded", String(open));
+  show($("publish-form"), open);
+  if (open) $("publish-lat")?.focus();
+});
 
 $("friend-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -2005,7 +2013,7 @@ const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const tabs = [...document.querySelectorAll(".tab-bar [data-tab]")];
 const TAB_META = {
-  friends: { eyebrow: "People", title: "Friends" },
+  friends: { eyebrow: "People", title: "People" },
   chats: { eyebrow: "Messages", title: "Chats" },
   sharing: { eyebrow: "Consent", title: "Sharing" },
   today: { eyebrow: "Your trail", title: "Today" },

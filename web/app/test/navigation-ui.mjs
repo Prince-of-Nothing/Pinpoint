@@ -15,17 +15,38 @@ const { lineLengthMeters } = await import(
 
 const screens = ["friends", "sharing", "today", "chats", "account"];
 
+// Four tabs: Map, People (Friends + Sharing), Today, Chats. Account lives in
+// the avatar menu; the Sharing and Account screens stay reachable by name.
 const tabs = [...page.matchAll(/data-tab="([a-z]+)"/g)].map((m) => m[1]);
 assert.deepEqual(
   [...new Set(tabs)].sort(),
-  ["account", "chats", "friends", "map", "sharing", "today"],
-  "the tab bar must offer map plus the five sections",
+  ["chats", "friends", "map", "today"],
+  "the tab bar must offer Map, People, Today and Chats",
 );
+assert.match(page, /data-tab="friends">[\s\S]*?People\s*<\/button>/, "the friends tab is labelled People");
+assert.match(app, /friends: \{ eyebrow: "People", title: "People" \}/);
+for (const id of ["publish-card", "shares-card"]) {
+  const card = page.match(new RegExp(`<div class="card[^"]*"(?: id="${id}")?[^>]*data-sections="([^"]+)"[^>]*>`, "g")) || [];
+  assert.ok(card.some((tag) => tag.includes(id) && /data-sections="sharing friends"/.test(tag)), `${id} must show on People`);
+}
+assert.match(app, /setScreen\("account"\);\s*setDrawer\(true, false\);\s*\$\("account-card"\)/, "a forced password change opens the Account screen");
+// People: people first, then what you share. DOM order, not CSS order, so Tab
+// follows what is on screen.
+const peopleOrder = ['id="friends-card"', "<h2>Friend locations</h2>", 'class="card publish-card"', 'id="shares-card"'].map((m) =>
+  page.indexOf(m),
+);
+assert.ok(peopleOrder.every((i) => i > 0), "missing a People card");
+assert.deepEqual([...peopleOrder].sort((a, b) => a - b), peopleOrder, "People cards must be in reading order in the DOM");
+assert.doesNotMatch(css, /\.drawer\[data-screen="friends"\][^{]*\{ order:/, "no CSS reordering of People cards");
 
 assert.match(page, /id="social-drawer"[^>]*data-screen="friends"/);
 const sections = [...page.matchAll(/data-sections="([^"]+)"/g)].map((m) => m[1]);
 for (const name of screens) {
-  assert.ok(sections.includes(name), `no card is assigned to ${name}`);
+  // data-sections is a space-separated list, matched in CSS with ~=.
+  assert.ok(
+    sections.some((list) => list.split(/\s+/).includes(name)),
+    `no card is assigned to ${name}`,
+  );
   assert.ok(
     css.includes(
       `.drawer[data-screen="${name}"] .card:not([data-sections~="${name}"])`,

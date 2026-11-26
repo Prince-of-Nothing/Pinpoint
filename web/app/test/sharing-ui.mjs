@@ -444,7 +444,13 @@ await check("people lists are built without raw coordinates or the arrow pair", 
   assert.doesNotMatch(appSource, /li\.textContent = `\$\{loc\.user_name\} · \$\{Number\(loc\.latitude\)/);
   assert.match(appSource, /rowButton\("Show on map", \(\) => showFriendOnMap\(loc\)\)/);
   assert.match(pageSource, /id="publish-gps"/, "missing the GPS share button");
-  assert.match(pageSource, /<details class="publish-manual">[\s\S]*id="publish-form"/, "coordinates must fold under details");
+  // A real button (not <summary>) so the narrow drawer's focus trap reaches it.
+  assert.match(
+    pageSource,
+    /<button type="button" id="publish-manual-toggle"[^>]*aria-expanded="false" aria-controls="publish-form">Enter coordinates instead<\/button>\s*<form id="publish-form" class="publish-manual hidden">/,
+    "coordinates must fold behind a toggle button",
+  );
+  assert.match(appSource, /\$\("publish-manual-toggle"\)\?\.addEventListener\("click"/);
   assert.match(appSource, /publish\(fix\.lat, fix\.lon, publishAccuracy\(fix\.accuracy\)\)/);
 });
 

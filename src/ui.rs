@@ -426,6 +426,8 @@ pub struct PinpointAppUI {
     mobile_nav_open: bool,
     mobile_publish_open: bool,
     mobile_selected_place: Option<crate::osm::SearchPlace>,
+    /// Ask the compact place sheet's close control for focus once.
+    place_focus: bool,
     // E2E messages
     message_selected: Option<i64>,
     message_draft: String,
@@ -563,6 +565,7 @@ impl PinpointAppUI {
             mobile_nav_open: false,
             mobile_publish_open: false,
             mobile_selected_place: None,
+            place_focus: false,
             message_selected: None,
             message_draft: String::new(),
             message_focus_composer: false,

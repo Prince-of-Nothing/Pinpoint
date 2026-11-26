@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native map: opening the compact place sheet focuses its close control once.
 - [FEATURE] Native sharing: opening the per-friend share sheet focuses the sharing toggle once.
 - [FEATURE] Native messages: opening a chat focuses the composer so the soft keyboard is ready.
 - [FEATURE] Native: tapping above the compact "More" bottom sheet closes it, matching the web drawer's map-tap dismissal.

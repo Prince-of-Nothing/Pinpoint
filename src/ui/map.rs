@@ -24,6 +24,10 @@ pub(crate) enum PlaceSheetAction {
 pub(crate) struct PlaceSheetOutcome {
     pub action: PlaceSheetAction,
     pub close_id: Option<egui::Id>,
+    pub directions_id: Option<egui::Id>,
+    pub save_id: Option<egui::Id>,
+    pub copy_id: Option<egui::Id>,
+    pub share_id: Option<egui::Id>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PublishSheetAction {
@@ -1307,6 +1311,10 @@ pub(crate) fn draw_place_sheet_view(
 ) -> PlaceSheetOutcome {
     let mut action: Option<PlaceSheetAction> = None;
     let mut close_id = None;
+    let mut directions_id = None;
+    let mut save_id = None;
+    let mut copy_id = None;
+    let mut share_id = None;
     let name = encode_component(&place.short_name);
     egui::Area::new(egui::Id::new("mobile_place_sheet"))
                 .order(egui::Order::Foreground)
@@ -1357,24 +1365,32 @@ pub(crate) fn draw_place_sheet_view(
                             );
                             ui.add_space(6.0);
                             ui.horizontal_wrapped(|ui| {
-                                if ui.button("Directions").clicked() {
+                                let directions_button = ui.button("Directions");
+                                if directions_button.clicked() {
                                     action = Some(PlaceSheetAction::Directions);
                                 }
+                                directions_id = Some(directions_button.id);
                                 if ui.button("Set as origin").clicked() {
                                     action = Some(PlaceSheetAction::SetOrigin);
                                 }
-                                if ui.button("Save").clicked() {
+                                let save_button = ui.button("Save");
+                                if save_button.clicked() {
                                     action = Some(PlaceSheetAction::Save);
                                 }
-                                if ui.button("Copy").clicked() {
+                                save_id = Some(save_button.id);
+                                let copy_button = ui.button("Copy");
+                                if copy_button.clicked() {
                                     action = Some(PlaceSheetAction::Copy);
                                 }
-                                if ui.button("Share").clicked() {
+                                copy_id = Some(copy_button.id);
+                                let share_button = ui.button("Share");
+                                if share_button.clicked() {
                                     action = Some(PlaceSheetAction::Share(format!(
                                         "geo:{:.6},{:.6}?q={name}",
                                         place.latitude, place.longitude
                                     )));
                                 }
+                                share_id = Some(share_button.id);
                                 if ui.button("OSM").clicked() {
                                     action = Some(PlaceSheetAction::OpenUrl(format!(
                                         "https://www.openstreetmap.org/?mlat={:.4}&mlon={:.4}#map=15/{:.4}/{:.4}",
@@ -1408,6 +1424,10 @@ pub(crate) fn draw_place_sheet_view(
     PlaceSheetOutcome {
         action: action.unwrap_or(PlaceSheetAction::None),
         close_id,
+        directions_id,
+        save_id,
+        copy_id,
+        share_id,
     }
 }
 

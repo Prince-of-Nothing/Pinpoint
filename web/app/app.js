@@ -909,6 +909,8 @@ async function openMessageThread(friendId, name) {
   $("message-thread").textContent = "Loading…";
   $("message-status").textContent = "";
   show($("message-sheet"), true);
+  // The sheet replaced the drawer on narrow screens; start in the composer.
+  $("message-input")?.focus();
   await loadMessageThread(friendId);
 }
 

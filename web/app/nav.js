@@ -244,7 +244,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     document.querySelectorAll(".mode").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.mode === route.mode);
     });
-    routePanel.classList.remove("hidden");
+    showRoutePanel();
     planRoute();
   }
 
@@ -281,10 +281,16 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     chips.classList.toggle("hidden", !open || input.value.trim().length > 0);
   }
 
+  function focusMap() {
+    document.querySelector("#map .maplibregl-canvas")?.focus({ preventScroll: true });
+  }
+
   function hidePlace() {
+    const wasOpen = !placeSheet.classList.contains("hidden");
     placeSheet.classList.add("hidden");
     mapApi.setSelectedPlace(null);
     selected = null;
+    if (wasOpen) focusMap();
   }
 
   function showPlace(place) {
@@ -296,6 +302,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
       : "";
     placeSheet.classList.remove("hidden");
     mapApi.setSelectedPlace(place);
+    $("place-close")?.focus({ preventScroll: true });
   }
 
   async function runSearch(query) {
@@ -415,6 +422,12 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     }
   }
 
+  function showRoutePanel() {
+    routePanel.classList.remove("hidden");
+    placeSheet.classList.add("hidden");
+    $("route-close")?.focus({ preventScroll: true });
+  }
+
   function openRouteFor(place) {
     route.origin = route.origin || centerOrigin();
     route.destination = {
@@ -426,8 +439,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     route.addingStop = false;
     route.stopIndex = 0;
     renderRouteFields();
-    routePanel.classList.remove("hidden");
-    placeSheet.classList.add("hidden");
+    showRoutePanel();
     planRoute();
   }
 
@@ -445,8 +457,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     route.addingStop = false;
     route.stopIndex = 0;
     renderRouteFields();
-    routePanel.classList.remove("hidden");
-    placeSheet.classList.add("hidden");
+    showRoutePanel();
     if (route.destination) planRoute();
     else setStatus("Origin set. Choose a destination.");
   }
@@ -923,6 +934,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   }
 
   function clearRoutePanel() {
+    const wasOpen = !routePanel.classList.contains("hidden");
     exitNavigation();
     route.routes = [];
     route.destination = null;
@@ -940,6 +952,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     $("route-steps").innerHTML = "";
     $("route-alternatives").innerHTML = "";
     $("route-summary").textContent = "";
+    if (wasOpen) focusMap();
   }
 
   function geolocationErrorMessage(err) {
@@ -1112,7 +1125,7 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
     };
     renderRouteFields();
     if (route.destination) {
-      routePanel.classList.remove("hidden");
+      showRoutePanel();
       planRoute();
     } else {
       setStatus("Origin set — choose a destination from search or the map.");
@@ -1217,11 +1230,10 @@ export function initNavigation({ mapApi, setStatus, getUserId }) {
   });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      if (results.contains(document.activeElement)) input.focus();
-      showResults(false);
-      hidePlace();
-    }
+    if (e.key !== "Escape" || e.defaultPrevented) return;
+    if (results.contains(document.activeElement)) input.focus();
+    showResults(false);
+    hidePlace();
   });
 
   renderStorage();

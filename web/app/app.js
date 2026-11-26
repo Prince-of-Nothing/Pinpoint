@@ -417,7 +417,10 @@ function renderFriends(items) {
       const manage = document.createElement("button");
       manage.textContent = "Sharing";
       manage.className = "secondary";
-      manage.onclick = () => sharing?.open(f);
+      manage.onclick = () => {
+        releaseDrawerForSheet();
+        sharing?.open(f);
+      };
       li.appendChild(manage);
       const remove = document.createElement("button");
       remove.textContent = "Remove";
@@ -486,7 +489,10 @@ function renderShares(items, friendships = []) {
       const again = document.createElement("button");
       again.textContent = "Share again";
       again.className = "secondary";
-      again.onclick = () => sharing?.open(friendship);
+      again.onclick = () => {
+        releaseDrawerForSheet();
+        sharing?.open(friendship);
+      };
       li.appendChild(again);
     } else if (model.canPauseResume) {
       const toggle = document.createElement("button");
@@ -903,6 +909,8 @@ async function openMessageThread(friendId, name) {
   $("message-thread").textContent = "Loading…";
   $("message-status").textContent = "";
   show($("message-sheet"), true);
+  // The sheet replaced the drawer on narrow screens; start in the composer.
+  $("message-input")?.focus();
   await loadMessageThread(friendId);
 }
 
@@ -1790,6 +1798,8 @@ document.addEventListener("pointerdown", (event) => {
 const drawer = $("social-drawer");
 const drawerToggle = $("drawer-toggle");
 const drawerHead = drawer.querySelector(".drawer-head");
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const tabs = [...document.querySelectorAll(".tab-bar [data-tab]")];
 const TAB_META = {
   friends: { eyebrow: "People", title: "Friends" },
@@ -1800,6 +1810,31 @@ const TAB_META = {
 };
 const SHEET_IDS = ["place-sheet", "share-sheet", "route-panel", "message-sheet"];
 let drawerCloseTimer = null;
+let drawerInerted = [];
+
+/** Inert the page around the narrow sheet, but keep overlays above it usable. */
+function setDrawerIsolation(on) {
+  for (const el of drawerInerted) el.inert = false;
+  drawerInerted = [];
+  if (!on) return;
+  const isolate = (el) => {
+    if (!el.inert) {
+      el.inert = true;
+      drawerInerted.push(el);
+    }
+  };
+  for (let node = drawer; node !== document.body && node.parentElement; node = node.parentElement) {
+    for (const sibling of node.parentElement.children) {
+      if (sibling === node || sibling.matches(".side-panel")) continue;
+      if (sibling.id === "map") {
+        // Keep the map surface clickable to dismiss; its controls are behind.
+        for (const child of sibling.children) isolate(child);
+      } else {
+        isolate(sibling);
+      }
+    }
+  }
+}
 
 /** Each tab is its own screen; only its cards are rendered. */
 function setScreen(name) {
@@ -1823,8 +1858,14 @@ function setActiveTab(name) {
   }
 }
 
+// A sheet above the narrow drawer replaces it; the drawer owns focus there.
+function releaseDrawerForSheet() {
+  if (!window.matchMedia("(min-width: 981px)").matches) setDrawer(false);
+}
+
 function setDrawer(open, animate = true) {
   const wasOpen = drawer.classList.contains("open");
+  const narrow = !window.matchMedia("(min-width: 981px)").matches;
   clearTimeout(drawerCloseTimer);
   drawer.classList.remove("closing");
   if (open) {
@@ -1841,6 +1882,8 @@ function setDrawer(open, animate = true) {
     drawer.classList.remove("open");
     drawer.classList.add("closed");
   }
+  // Lift the isolation before returning focus; the toggle is inert until then.
+  setDrawerIsolation(open && narrow);
   // Keep the closed drawer out of the accessibility tree, and never leave
   // focus on a control that is about to become hidden.
   if (!open && drawer.contains(document.activeElement)) drawerToggle.focus();
@@ -1848,7 +1891,7 @@ function setDrawer(open, animate = true) {
   drawerToggle.setAttribute("aria-expanded", String(open));
   // The bottom sheet takes focus so keyboard users land inside it; the wide
   // side column must not steal focus from the toggle.
-  if (open && !wasOpen && !window.matchMedia("(min-width: 981px)").matches) {
+  if (open && !wasOpen && narrow) {
     $("drawer-close")?.focus();
   }
   if (!open) setActiveTab("map");
@@ -1859,6 +1902,33 @@ function setDrawer(open, animate = true) {
 setDrawer(false);
 drawerToggle.addEventListener("click", () => {
   setDrawer(drawerToggle.getAttribute("aria-expanded") !== "true");
+});
+
+function drawerFocusables() {
+  return [...drawer.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+    (el) => el.getClientRects().length > 0,
+  );
+}
+// Below 981 px the drawer covers the page like a modal sheet; keep Tab inside.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Tab") return;
+  if (drawerToggle.getAttribute("aria-expanded") !== "true") return;
+  if (window.matchMedia("(min-width: 981px)").matches) return;
+  const items = drawerFocusables();
+  if (!items.length) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  const active = document.activeElement;
+  if (!drawer.contains(active)) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  } else if (event.shiftKey && active === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault();
+    first.focus();
+  }
 });
 document.addEventListener("pointerdown", (event) => {
   const target = event.target;

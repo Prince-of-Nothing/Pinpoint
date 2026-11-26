@@ -170,6 +170,10 @@ jobs:
         run: node web/app/test/live-place-escape.cjs
       - name: Search keyboard live check
         run: node web/app/test/live-search-keyboard.cjs
+      - name: Share handoff live check
+        run: node web/app/test/live-share-handoff.cjs
+      - name: Message handoff live check
+        run: node web/app/test/live-message-handoff.cjs
       - name: Stop server
         if: always()
         run: kill "$(cat "$RUNNER_TEMP/pinpoint-server.pid")" 2>/dev/null || true

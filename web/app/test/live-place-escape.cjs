@@ -52,6 +52,11 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
     "Test place",
     "the reverse-geocode stub supplied the place",
   );
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "place-close",
+    "the place sheet takes focus",
+  );
 
   await page.keyboard.press("Escape");
   await page.waitForFunction(
@@ -59,9 +64,14 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
     { timeout: 5000 },
   );
   assert.ok(await page.isHidden("#place-sheet"), "Escape closes the place sheet");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.classList.contains("maplibregl-canvas")),
+    true,
+    "Escape returns focus to the map",
+  );
 
   await browser.close();
-  console.log("PASS  live place sheet opens and Escape closes it");
+  console.log("PASS  live place sheet opens, takes focus and Escape closes it");
 })().catch((error) => {
   console.error(error);
   process.exit(1);

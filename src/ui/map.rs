@@ -36,7 +36,7 @@ impl PinpointAppUI {
             || self.mobile_publish_open
             || self.mobile_selected_place.is_some()
             || self.recovery_code_visible()
-            || self.mobile_nav_open;
+            || (Self::is_compact(ctx) && self.mobile_nav_open);
         let slash = ctx.input(|input| input.key_pressed(egui::Key::Slash));
         if search_shortcut_fires(slash, modal_open, ctx.wants_keyboard_input()) {
             ctx.memory_mut(|memory| memory.request_focus(egui::Id::new(SEARCH_INPUT_ID)));
@@ -86,14 +86,14 @@ impl PinpointAppUI {
         let mut locate = false;
         let mut refresh = false;
 
-        let modal_open = self.crash_dialog.is_some()
+        // Place/publish sheets are compact-only; desktop keeps the map live
+        // while a search result is shown in the details column.
+        let map_blocked = self.crash_dialog.is_some()
             || self.update_dialog_open
             || self.share_sheet.is_some()
             || self.route_plan.open
-            || self.mobile_publish_open
-            || self.mobile_selected_place.is_some()
             || self.recovery_code_visible();
-        if map_shortcuts_enabled(modal_open, ctx.wants_keyboard_input()) {
+        if map_shortcuts_enabled(map_blocked, ctx.wants_keyboard_input()) {
             ctx.input(|input| {
                 for key in [
                     egui::Key::Plus,
@@ -170,7 +170,15 @@ impl PinpointAppUI {
             let map_height = (ui.available_height() - 34.0).max(170.0);
             let binding = self.app.data();
             let mut data = binding.lock().unwrap();
-            map::render_map_with(ui, &mut data, map_height, Some(&backend_url), online, true);
+            map::render_map_with(
+                ui,
+                &mut data,
+                map_height,
+                Some(&backend_url),
+                online,
+                true,
+                map_blocked,
+            );
             if data.measure_mode {
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
@@ -796,6 +804,8 @@ impl PinpointAppUI {
             || self.share_sheet.is_some()
             || self.route_plan.open
             || self.recovery_code_visible();
+        let map_blocked =
+            blocked || self.mobile_selected_place.is_some() || self.mobile_publish_open;
         if super::escape_dismisses(ctx.input(|i| i.key_pressed(egui::Key::Escape)), blocked) {
             match sheet_escape_target(
                 self.mobile_publish_open,
@@ -823,7 +833,15 @@ impl PinpointAppUI {
         {
             let binding = self.app.data();
             let mut data = binding.lock().unwrap();
-            crate::map::render_map_with(ui, &mut data, height, Some(&backend_url), online, true);
+            crate::map::render_map_with(
+                ui,
+                &mut data,
+                height,
+                Some(&backend_url),
+                online,
+                true,
+                map_blocked,
+            );
         }
         self.handle_map_click(ctx);
         self.handle_map_menu(ctx);

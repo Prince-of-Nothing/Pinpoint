@@ -236,7 +236,7 @@ pub fn render_map(ui: &mut Ui, state: &mut AppData) {
 /// Same as [`render_map`] but with an explicit canvas height (mobile layout)
 /// and optional live tile prefetch through the Pinpoint backend.
 pub fn render_map_sized(ui: &mut Ui, state: &mut AppData, height: f32) {
-    render_map_with(ui, state, height, None, false, false);
+    render_map_with(ui, state, height, None, false, false, false);
 }
 
 pub fn render_map_with(
@@ -246,6 +246,7 @@ pub fn render_map_with(
     backend_url: Option<&str>,
     online: bool,
     minimal: bool,
+    blocked: bool,
 ) {
     ensure_viewport(state);
     let compact = ui.available_width() < 520.0;
@@ -304,7 +305,12 @@ pub fn render_map_with(
             (ui.available_width() - 8.0).max(240.0)
         };
         let canvas_size = Vec2::new(avail_width, height.max(160.0));
-        let (map_rect, response) = ui.allocate_exact_size(canvas_size, Sense::click_and_drag());
+        let sense = if blocked {
+            Sense::hover()
+        } else {
+            Sense::click_and_drag()
+        };
+        let (map_rect, response) = ui.allocate_exact_size(canvas_size, sense);
 
         if response.clicked() && ui.input(|i| i.multi_touch()).is_none() {
             if let Some(pos) = response.interact_pointer_pos() {
@@ -387,7 +393,7 @@ pub fn render_map_with(
         }
 
         // Scroll wheel zoom when hovered
-        if response.hovered() {
+        if !blocked && response.hovered() {
             let scroll_y = ui.input(|i| i.smooth_scroll_delta.y);
             if scroll_y > 12.0 && state.map_zoom < 18 {
                 state.map_zoom += 1;
@@ -398,14 +404,18 @@ pub fn render_map_with(
 
         // Pinch-to-zoom on touch screens. egui reports the per-frame pinch
         // factor; accumulate it so a pinch crosses zoom levels smoothly.
-        match ui.input(|i| i.multi_touch()) {
-            Some(touch) if map_rect.contains(touch.center_pos) => {
-                let (next, accum) =
-                    apply_pinch_zoom(state.map_zoom, state.map_pinch_accum, touch.zoom_delta);
-                state.map_zoom = next;
-                state.map_pinch_accum = accum;
+        if blocked {
+            state.map_pinch_accum = 0.0;
+        } else {
+            match ui.input(|i| i.multi_touch()) {
+                Some(touch) if map_rect.contains(touch.center_pos) => {
+                    let (next, accum) =
+                        apply_pinch_zoom(state.map_zoom, state.map_pinch_accum, touch.zoom_delta);
+                    state.map_zoom = next;
+                    state.map_pinch_accum = accum;
+                }
+                _ => state.map_pinch_accum = 0.0,
             }
-            _ => state.map_pinch_accum = 0.0,
         }
 
         let painter = ui.painter_at(map_rect);

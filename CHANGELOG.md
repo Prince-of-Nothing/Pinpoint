@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native: open sheets also block map scroll/pinch, and the gate swallows wheel scroll over the background while leaving the sheet's own scroll alone.
 - [FEATURE] Native: open share, route, place or publish sheets consume pointer input so the map and page behind them cannot be clicked or dragged.
 - [FEATURE] Native map: `/` focuses the search field when no sheet is open and no field has focus.
 - [FEATURE] Native route: opening the route sheet focuses its close control once.
@@ -63,6 +64,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Native desktop: selecting a search result no longer blocks map interaction or shortcuts; only visible sheets gate the map, since place/publish sheets are compact-only.
 - [FIX] Web friends: restored the person rows after the #543 merge left the old requester → receiver loop in place; Sharing settings now lives in the row menu and closes the narrow drawer first.
 - [FIX] Web map: opening or closing the drawer (or anything else that re-adds the location, trail, measure or route layers) while a basemap switch is still loading no longer throws "Style is not done loading" and shows the crash banner; those calls wait for the new style, and a basemap switch now redraws an active route instead of dropping it.
 - [FIX] Web: Escape now stops at the top surface; a closed drawer no longer also hides the place sheet and steals focus from the toggle.

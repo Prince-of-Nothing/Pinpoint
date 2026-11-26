@@ -24,6 +24,8 @@ pub struct ShareSheet {
     pub keep_current: bool,
     pub incoming: String,
     pub open: bool,
+    /// The sheet asks for focus on the sharing toggle once after opening.
+    pub focus_enabled: bool,
 }
 
 impl ShareSheet {
@@ -83,6 +85,7 @@ impl ShareSheet {
             keep_current,
             incoming: incoming_text,
             open: true,
+            focus_enabled: true,
         }
     }
 }
@@ -150,7 +153,11 @@ impl super::PinpointAppUI {
                                 .color(muted),
                         );
                         ui.add_space(6.0);
-                        ui.checkbox(&mut sheet.enabled, "Share my location with this friend");
+                        let enabled =
+                            ui.checkbox(&mut sheet.enabled, "Share my location with this friend");
+                        if take_sheet_focus(&mut sheet) {
+                            enabled.request_focus();
+                        }
                         ui.add_space(4.0);
                         ui.label(RichText::new("Precision").strong());
                         ui.horizontal_wrapped(|ui| {
@@ -277,6 +284,11 @@ impl super::PinpointAppUI {
     }
 }
 
+/// Consume the share sheet's one-shot focus request.
+pub(crate) fn take_sheet_focus(sheet: &mut ShareSheet) -> bool {
+    std::mem::take(&mut sheet.focus_enabled)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,5 +373,12 @@ mod tests {
         let shares = vec![share(10, 7, "from_friend", true)];
         let sheet = ShareSheet::for_friendship(&friendship(7), Some(1), &shares);
         assert!(sheet.incoming.contains("approximate"));
+    }
+
+    #[test]
+    fn a_new_share_sheet_requests_focus_once() {
+        let mut sheet = ShareSheet::for_friendship(&friendship(7), Some(1), &[]);
+        assert!(take_sheet_focus(&mut sheet));
+        assert!(!take_sheet_focus(&mut sheet));
     }
 }

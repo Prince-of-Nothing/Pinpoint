@@ -76,6 +76,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Native: the publish sheet's latitude/longitude fields use stable ids, so focus and IME state survive layout changes; a focus test covers both ids. An API 37 arm64 emulator run launched the app, signed in anonymously and opened the publish sheet.
 - [FIX] Native: keyboard focus stays inside the open sheet; Tab reaches the share close control and wraps instead of sticking on the invisible input gate or the last button, and the share close is registered for focus.
 - [FIX] Native desktop: selecting a search result no longer blocks map interaction or shortcuts; only visible sheets gate the map, since place/publish sheets are compact-only.
 - [FIX] Web friends: restored the person rows after the #543 merge left the old requester → receiver loop in place; Sharing settings now lives in the row menu and closes the narrow drawer first.

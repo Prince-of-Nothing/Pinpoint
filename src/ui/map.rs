@@ -1256,11 +1256,13 @@ pub(crate) fn draw_publish_sheet_view(
                     ui.horizontal(|ui| {
                         ui.add(
                             egui::TextEdit::singleline(lat)
+                                .id(egui::Id::new("publish_lat"))
                                 .hint_text(i18n::t(lang, key::LATITUDE))
                                 .desired_width(120.0),
                         );
                         ui.add(
                             egui::TextEdit::singleline(lon)
+                                .id(egui::Id::new("publish_lon"))
                                 .hint_text(i18n::t(lang, key::LONGITUDE))
                                 .desired_width(120.0),
                         );

@@ -1,6 +1,7 @@
 // Live check for the web drawer: opening it, clicking inside it, Escape
-// closing it (with focus back on the toggle), clicking the visible map
-// (which should dismiss it), and the 1280/900/700 layouts.
+// closing it (with focus back on the toggle), focus entering the narrow
+// sheet, clicking the visible map (which should dismiss it), and the
+// 1280/900/700 layouts.
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
 
@@ -37,6 +38,11 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
 
   await page.click("#drawer-toggle");
   assert.equal(await expanded(), "true", "drawer reopens for the map click");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "drawer-toggle",
+    "the wide drawer leaves focus on the toggle",
+  );
 
   await page.mouse.click(120, 500);
   assert.equal(await expanded(), "false", "a click on the map closes the drawer");
@@ -78,6 +84,23 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   assert.notEqual(band.bottom, "auto", "900 px drawer is bottom-anchored");
   assert.equal(band.mapWidth, "900px", "the map keeps the full width under the drawer");
 
+  await page.keyboard.press("Escape");
+  assert.equal(await expanded(), "false", "Escape closes the 900 px drawer");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "drawer-toggle",
+    "900 px Escape returns focus to the toggle",
+  );
+  // Focus is on the toggle, so Enter reopens without relying on the topbar
+  // being pointer-clickable while a sheet may be open.
+  await page.keyboard.press("Enter");
+  assert.equal(await expanded(), "true", "drawer reopens at 900 px");
+  assert.equal(
+    await page.evaluate(() => document.activeElement?.id),
+    "drawer-close",
+    "narrow open moves focus into the drawer",
+  );
+
   await page.setViewportSize({ width: 700, height: 720 });
   await page.waitForTimeout(300);
   const narrow = await page.evaluate(() => {
@@ -99,7 +122,7 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   );
 
   await browser.close();
-  console.log("PASS  live web drawer open/inside/escape/map-click/layout-1280-900-700");
+  console.log("PASS  live web drawer open/inside/escape/map-click/focus/layout-1280-900-700");
 })().catch((error) => {
   console.error(error);
   process.exit(1);

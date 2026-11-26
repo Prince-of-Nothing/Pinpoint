@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] Native tests: an egui interaction test opens the real share sheet with the modal gate, asserts background click/scroll isolation, and focuses its label field; the sheet body is extracted as the testable `draw_share_sheet_view`.
 - [FEATURE] Native: modal sheets contain keyboard focus to the sheet/gate layer, so Tab cannot focus the page behind them; an egui interaction test covers background click, scroll and focus.
 - [FEATURE] Native: open sheets also block map scroll/pinch, and the gate swallows wheel scroll over the background while leaving the sheet's own scroll alone.
 - [FEATURE] Native: open share, route, place or publish sheets consume pointer input so the map and page behind them cannot be clicked or dragged.

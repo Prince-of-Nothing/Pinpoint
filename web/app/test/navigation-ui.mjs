@@ -91,7 +91,7 @@ assert.match(
   "desktop sign-in must open the section column",
 );
 
-// Narrow windows and phones: search sits under the header (as on desktop),
+// Narrow windows and phones: search sits at the top edge (as on desktop),
 // and its results, chips and the layers menu open below it, not upwards.
 const topSearchStart = css.indexOf("Search at the top on every width");
 assert.ok(topSearchStart > 0, "missing the top-search block");
@@ -99,17 +99,17 @@ const topSearch = css.slice(topSearchStart);
 assert.match(topSearch, /@media \(max-width: 980px\)/);
 assert.match(
   topSearch,
-  /\.map-topbar \{\s*top: calc\(4\.5rem \+ var\(--safe-top\)\);\s*bottom: auto;/,
+  /\.map-topbar \{\s*top: calc\(0\.75rem \+ var\(--safe-top\)\);\s*bottom: auto;/,
   "the narrow search bar must be top-anchored",
 );
 assert.match(
   topSearch,
-  /\.search-results,\s*\.category-chips,\s*\.map-controls \{\s*top: calc\(8\.3rem \+ var\(--safe-top\)\);\s*bottom: auto;/,
+  /\.search-results,\s*\.category-chips,\s*\.map-controls \{\s*top: calc\(4\.6rem \+ var\(--safe-top\)\);\s*bottom: auto;/,
   "results, chips and the layers menu must open under the search bar",
 );
 assert.match(
   topSearch,
-  /\.nav-banner \{ top: calc\(8\.3rem \+ var\(--safe-top\)\); \}/,
+  /\.nav-banner \{ top: calc\(4\.6rem \+ var\(--safe-top\)\); \}/,
   "the navigation banner must not cover the search bar",
 );
 assert.match(css, /^#user-email \{ display: none; \}/m, "the header must not show the account email");
@@ -160,8 +160,28 @@ for (const overlay of ["\\.nav-banner", "#status"]) {
 }
 assert.match(
   wideCss,
-  /\.nav-banner \{ top: 8rem; \}/,
+  /\.nav-banner \{ top: 4\.6rem; \}/,
   "the desktop navigation banner must sit below the top search bar",
+);
+// Command bar: one row at the top; the header only shows on the sign-in screen,
+// and account, theme and sign-out live in the avatar menu at the end of the bar.
+assert.match(css, /body:has\(#app-panel:not\(\.hidden\)\) > header \{ display: none; \}/);
+const topbarHtml = page.slice(page.indexOf('<div class="map-topbar">'), page.indexOf('<div id="map-controls"'));
+for (const id of ["session-bar", "account-avatar", "user-handle", "account-open", "theme-toggle", "logout", "admin-tab"]) {
+  assert.ok(topbarHtml.includes(`id="${id}"`), `#${id} must be in the command bar's account menu`);
+}
+assert.ok(!page.slice(0, page.indexOf("<main")).includes('id="logout"'), "the header must not hold session controls");
+assert.match(app, /\$\("account-open"\)\?\.addEventListener\("click", \(\) => \{\s*setScreen\("account"\);\s*setDrawer\(true\);/);
+assert.match(app, /event\.key === "Escape" && accountMenu\?\.open/);
+assert.match(
+  css,
+  /@media \(max-width: 600px\) \{[^}]*\}\s*\.map-topbar #drawer-toggle \{ display: none; \}|@media \(max-width: 600px\) \{\s*\.map-topbar \{ gap: 0\.35rem; \}\s*\.map-topbar #drawer-toggle \{ display: none; \}/,
+  "phones drop the panels button (the tab bar opens panels) so search stays readable",
+);
+assert.match(
+  app,
+  /if \(event\.key !== "Escape" \|\| event\.defaultPrevented\) return;\s*\/\/ The admin overlay owns Escape/,
+  "the drawer must not close on an Escape another surface already handled",
 );
 assert.match(map, /showCompass: true/);
 assert.match(map, /visualizePitch: true/);

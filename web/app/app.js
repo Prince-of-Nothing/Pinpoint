@@ -236,6 +236,11 @@ function renderIdentity() {
   $("user-email").textContent = state.user?.email || "";
   const handle = state.user?.username;
   $("user-handle").textContent = handle ? `@${handle}` : "";
+  const avatar = $("account-avatar");
+  if (avatar) {
+    avatar.textContent = state.user ? initials(state.user.full_name || handle || "") : "?";
+    avatar.style.setProperty("--avatar-hue", String(avatarHue(state.user?.id ?? "")));
+  }
   renderAccount();
 }
 
@@ -1824,6 +1829,31 @@ $("recovery-dismiss").addEventListener("click", () => {
 });
 
 $("logout").addEventListener("click", logout);
+
+// Account menu (avatar at the end of the command bar). A <details> element:
+// it closes after any choice, on Escape and on a click anywhere else.
+const accountMenu = $("session-bar");
+function closeAccountMenu() {
+  if (accountMenu?.open) accountMenu.open = false;
+}
+accountMenu?.querySelector(".account-menu-panel")?.addEventListener("click", (event) => {
+  if (event.target.closest("button")) closeAccountMenu();
+});
+document.addEventListener("click", (event) => {
+  if (accountMenu?.open && !accountMenu.contains(event.target)) closeAccountMenu();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && accountMenu?.open) {
+    closeAccountMenu();
+    accountMenu.querySelector("summary")?.focus();
+    // The open menu is the topmost surface: don't also close the drawer.
+    event.preventDefault();
+  }
+});
+$("account-open")?.addEventListener("click", () => {
+  setScreen("account");
+  setDrawer(true);
+});
 $("logout-all").addEventListener("click", logoutAll);
 
 $("admin-tab").addEventListener("click", () => ensureAdminConsole().open("overview"));
@@ -2101,7 +2131,7 @@ document.addEventListener("keydown", (event) => {
   }
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
+  if (event.key !== "Escape" || event.defaultPrevented) return;
   // The admin overlay owns Escape while it is open.
   if (!$("admin-panel").classList.contains("hidden")) return;
   if (!$("map-menu").classList.contains("hidden")) {

@@ -2475,3 +2475,80 @@ body:has(#app-panel:not(.hidden)) > header { display: none; }
   .account-button .avatar { width: 1.9rem; height: 1.9rem; }
   .search-form .icon-btn { width: 36px; height: 36px; box-shadow: none; }
 }
+
+/* ---------------------------------------------------------------------------
+   Sharing with you
+   The people whose location you can see, on the map itself. A Sunflower ring
+   means updated in the last 15 minutes; Lichen means older. The one motion:
+   a single ring pulse when a friend's location changes.
+   --------------------------------------------------------------------------- */
+.live-strip {
+  position: absolute;
+  bottom: calc(6.4rem + var(--safe-bottom));
+  left: 0.75rem;
+  z-index: 850;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: calc(100% - 5.75rem);
+  padding: 0.35rem 0.5rem 0.35rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--glass-strong);
+  box-shadow: var(--shadow);
+}
+.live-strip-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.live-strip-list {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0.15rem 0.1rem;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.live-strip-list::-webkit-scrollbar { display: none; }
+.live-strip .live-person {
+  display: grid;
+  justify-items: center;
+  gap: 0.15rem;
+  padding: 0.15rem 0.2rem;
+  border: 0;
+  border-radius: 0.6rem;
+  background: none;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1;
+}
+.live-strip .live-person:hover { background: var(--panel-2); }
+.live-person .avatar {
+  width: 2.1rem;
+  height: 2.1rem;
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--muted);
+}
+.live-person.is-live { color: var(--text); }
+.live-person.is-live .avatar { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--live); }
+.live-person.pulse .avatar { animation: live-pulse 1.4s ease-out 1; }
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--live), 0 0 0 4px rgba(244, 194, 27, 0.55); }
+  100% { box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--live), 0 0 0 18px rgba(244, 194, 27, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-person.pulse .avatar { animation: none; }
+}
+@media (min-width: 981px) {
+  .live-strip { bottom: 6.6rem; }
+  body:has(.drawer.open) .live-strip { max-width: calc(100% - 380px - 5.75rem); }
+}
+/* Phones: give way to the drawer, sheets and the measure tool. */
+@media (max-width: 980px) {
+  body:has(.drawer:is(.open, .closing)) .live-strip,
+  body:has(.side-panel .sheet:not(.hidden)) .live-strip,
+  body:has(#measure-hud:not(.hidden)) .live-strip { display: none; }
+}

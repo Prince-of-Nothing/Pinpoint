@@ -13,8 +13,11 @@ const {
   freshnessText,
   friendName,
   friendRowModel,
+  compactAge,
   initials,
   initSharing,
+  isLive,
+  liveStripModel,
   locationSentence,
   shareSentence,
   precisionLabel,
@@ -463,6 +466,41 @@ await check("shares and locations read as sentences, not dot-joined fields", () 
     "Approximate location, updated 2m ago",
   );
   assert.doesNotMatch(appSource, /status\.join\(" · "\)/, "no dot-joined status strings");
+});
+
+await check("the Sharing with you strip lists live friends first and pulses only on change", async () => {
+  const now = Date.parse("2026-11-26T12:00:00Z");
+  const at = (min) => new Date(now - min * 60_000).toISOString();
+  assert.equal(isLive(at(14), now), true);
+  assert.equal(isLive(at(16), now), false);
+  assert.equal(isLive("bad", now), false);
+  assert.equal(compactAge(at(0.2), now), "now");
+  assert.equal(compactAge(at(5), now), "5 min");
+  assert.equal(compactAge(at(180), now), "3 h");
+  assert.equal(compactAge(at(2 * 1440), now), "2 d");
+
+  const bogdan = { user_id: 5, user_name: "Bogdan Friend", updated_at: at(2) };
+  const carla = { user_id: 6, user_name: "Carla Popescu", updated_at: at(200) };
+  const first = liveStripModel([carla, bogdan], new Map(), now);
+  assert.deepEqual(first.map((e) => e.name), ["Bogdan Friend", "Carla Popescu"], "freshest first");
+  assert.deepEqual(first.map((e) => e.live), [true, false]);
+  assert.deepEqual(first.map((e) => e.initials), ["BF", "CP"]);
+  assert.ok(first.every((e) => !e.pulse), "no pulse on first render");
+
+  const seen = new Map([[5, bogdan.updated_at], [6, carla.updated_at]]);
+  const moved = { ...bogdan, updated_at: at(0) };
+  const next = liveStripModel([moved, carla], seen, now);
+  assert.equal(next.find((e) => e.userId === 5).pulse, true, "a changed location pulses once");
+  assert.equal(next.find((e) => e.userId === 6).pulse, false);
+  assert.deepEqual(liveStripModel([], seen, now), []);
+
+  const css = await readFile(path.join(root, "web/app/app.css"), "utf8");
+  assert.match(pageSource, /<section id="live-strip" class="live-strip hidden"/);
+  assert.match(appSource, /function renderLocations\(items\) \{\s*renderLiveStrip\(items\);/);
+  assert.match(appSource, /button\.addEventListener\("click", \(\) => showFriendOnMap\(entry\.location\)\);/);
+  assert.match(appSource, /liveSeen\.clear\(\);\s*show\(\$\("live-strip"\), false\);/, "sign-out forgets the strip");
+  assert.match(css, /\.live-person\.is-live \.avatar \{ box-shadow: [^}]*var\(--live\)/, "live ring uses the Sunflower token");
+  assert.match(css, /prefers-reduced-motion: reduce\) \{\s*\.live-person\.pulse \.avatar \{ animation: none; \}/);
 });
 
 console.log(`sharing UI checks passed: ${passed}`);

@@ -124,6 +124,54 @@ export function friendRowModel(friendship, me, locations = [], now = Date.now())
   };
 }
 
+/** A location counts as live for 15 minutes after its last update. */
+export const LIVE_WINDOW_MS = 15 * 60_000;
+
+export function isLive(iso, now = Date.now()) {
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) return false;
+  const current = now instanceof Date ? now.getTime() : Number(now);
+  return current - at <= LIVE_WINDOW_MS;
+}
+
+/** Short age for the live strip: "now", "5 min", "3 h", "2 d". */
+export function compactAge(iso, now = Date.now()) {
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) return "";
+  const current = now instanceof Date ? now.getTime() : Number(now);
+  const minutes = Math.max(0, Math.round((current - at) / 60_000));
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} h`;
+  return `${Math.round(hours / 24)} d`;
+}
+
+/**
+ * The "Sharing with you" strip: one entry per friend whose location I can
+ * see, freshest first. `pulse` marks an entry whose location changed since
+ * the last render, so its ring can draw attention once.
+ */
+export function liveStripModel(locations = [], previous = new Map(), now = Date.now()) {
+  return [...locations]
+    .filter((loc) => loc && loc.user_id != null)
+    .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    .map((loc) => {
+      const name = loc.user_name || "Friend";
+      const seen = previous.get(loc.user_id);
+      return {
+        userId: loc.user_id,
+        name,
+        initials: initials(name),
+        hue: avatarHue(loc.user_id),
+        live: isLive(loc.updated_at, now),
+        age: compactAge(loc.updated_at, now),
+        pulse: seen !== undefined && seen !== loc.updated_at,
+        location: loc,
+      };
+    });
+}
+
 /** True when the requested form grants more than the stored share. */
 export function shareWidens(current, form, now = Date.now()) {
   if (!current) return false;

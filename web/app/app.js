@@ -13,6 +13,7 @@ import {
   friendRowModel,
   initials,
   initSharing,
+  liveStripModel,
   locationSentence,
   shareRowModel,
   shareSentence,
@@ -139,6 +140,8 @@ async function register(email, password, fullName) {
 
 function resetToLogin() {
   state.user = null;
+  liveSeen.clear();
+  show($("live-strip"), false);
   state.csrf = null;
   state.locations = [];
   state.history = [];
@@ -604,7 +607,40 @@ function renderShares(items, friendships = []) {
   }
 }
 
+// "Sharing with you": the people whose location I can see right now, on the
+// map itself. Sunflower ring = updated in the last 15 minutes. A ring pulses
+// once when that friend's location changes (not on first render).
+const liveSeen = new Map();
+function renderLiveStrip(items) {
+  const strip = $("live-strip");
+  const list = $("live-strip-list");
+  if (!strip || !list) return;
+  const entries = liveStripModel(items, liveSeen);
+  liveSeen.clear();
+  for (const loc of items) liveSeen.set(loc.user_id, loc.updated_at);
+  show(strip, entries.length > 0);
+  list.innerHTML = "";
+  for (const entry of entries) {
+    const item = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = ["live-person", entry.live ? "is-live" : "", entry.pulse ? "pulse" : ""]
+      .filter(Boolean)
+      .join(" ");
+    button.setAttribute("aria-label", `Show ${entry.name} on the map, updated ${entry.age}`);
+    const avatar = personAvatar(entry.name, entry.hue);
+    const age = document.createElement("span");
+    age.className = "live-age";
+    age.textContent = entry.age;
+    button.append(avatar, age);
+    button.addEventListener("click", () => showFriendOnMap(entry.location));
+    item.appendChild(button);
+    list.appendChild(item);
+  }
+}
+
 function renderLocations(items) {
+  renderLiveStrip(items);
   const ul = $("locations-list");
   ul.innerHTML = "";
   if (!items.length) {

@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native route: opening the route sheet focuses its close control once.
 - [FEATURE] Native map: opening the compact place sheet focuses its close control once.
 - [FEATURE] Native sharing: opening the per-friend share sheet focuses the sharing toggle once.
 - [FEATURE] Native messages: opening a chat focuses the composer so the soft keyboard is ready.

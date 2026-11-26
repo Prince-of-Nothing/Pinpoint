@@ -57,6 +57,8 @@ pub struct RoutePlan {
     pub next_stop: usize,
     pub capabilities: Option<MapCapabilities>,
     pub error: Option<String>,
+    /// Ask the route sheet's close control for focus once after opening.
+    pub focus: bool,
 }
 
 impl Default for RoutePlan {
@@ -74,21 +76,28 @@ impl Default for RoutePlan {
             next_stop: 0,
             capabilities: None,
             error: None,
+            focus: false,
         }
     }
 }
 
 impl RoutePlan {
+    /// Open the sheet and ask its close control for focus on the next frame.
+    pub fn show(&mut self) {
+        self.open = true;
+        self.focus = true;
+    }
+
     pub fn open_with_destination(&mut self, place: &SearchPlace) {
         self.destination = Some(RoutePoint::from_place(place));
-        self.open = true;
+        self.show();
         self.error = None;
         self.following = false;
     }
 
     pub fn open_with_origin(&mut self, place: &SearchPlace) {
         self.origin = Some(RoutePoint::from_place(place));
-        self.open = true;
+        self.show();
         self.error = None;
         self.following = false;
     }
@@ -292,6 +301,11 @@ pub fn magic_route_url(plan: &RoutePlan) -> Option<String> {
     ))
 }
 
+/// Consume the route sheet's one-shot focus request.
+pub(crate) fn take_route_focus(plan: &mut RoutePlan) -> bool {
+    std::mem::take(&mut plan.focus)
+}
+
 impl super::PinpointAppUI {
     /// Poll the platform fix once per second while navigation is active and
     /// advance the next-stop counter when close enough. The env/file provider
@@ -422,7 +436,7 @@ impl super::PinpointAppUI {
         let app_data = self.app.data();
         let mut data = app_data.lock().unwrap();
         self.route_plan.apply_selected(&mut data);
-        self.route_plan.open = true;
+        self.route_plan.show();
     }
 
     /// Draw the route planner as a floating sheet. `top` is the map's top
@@ -445,6 +459,7 @@ impl super::PinpointAppUI {
             || self.recovery_code_visible();
         if super::escape_dismisses(ctx.input(|i| i.key_pressed(egui::Key::Escape)), blocked) {
             self.route_plan.open = false;
+            self.route_plan.focus = false;
             return;
         }
         let width = ctx.screen_rect().width();
@@ -452,6 +467,7 @@ impl super::PinpointAppUI {
         let border = theme::BORDER;
         let muted = theme::MUTED;
         let accent = theme::ACCENT;
+        let focus_close = take_route_focus(&mut self.route_plan);
         let mut plan = self.route_plan.clone();
         let mut plan_requested = false;
         let mut close = false;
@@ -488,8 +504,12 @@ impl super::PinpointAppUI {
                         ui.label(RichText::new("Route").size(18.0).strong());
                         ui.label(RichText::new(plan.mode_label()).size(12.0).color(accent));
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button("×").clicked() {
+                            let close_button = ui.button("×");
+                            if close_button.clicked() {
                                 close = true;
+                            }
+                            if focus_close {
+                                close_button.request_focus();
                             }
                         });
                     });
@@ -707,6 +727,7 @@ impl super::PinpointAppUI {
 
         if close {
             plan.open = false;
+            plan.focus = false;
             plan.following = false;
         }
         if clear {
@@ -848,5 +869,25 @@ mod tests {
         plan.clear_route();
         assert!(plan.routes.is_empty());
         assert!(plan.has_endpoints());
+    }
+
+    fn place(name: &str) -> SearchPlace {
+        SearchPlace {
+            display_name: name.into(),
+            short_name: name.into(),
+            latitude: 47.0,
+            longitude: 28.8,
+            category: "test".into(),
+            place_type: "test".into(),
+            distance_m: None,
+        }
+    }
+
+    #[test]
+    fn a_new_route_sheet_requests_focus_once() {
+        let mut plan = RoutePlan::default();
+        plan.open_with_destination(&place("B"));
+        assert!(take_route_focus(&mut plan));
+        assert!(!take_route_focus(&mut plan));
     }
 }

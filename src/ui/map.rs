@@ -43,6 +43,8 @@ pub(crate) enum PublishSheetAction {
 pub(crate) struct PublishSheetOutcome {
     pub action: PublishSheetAction,
     pub close_id: Option<egui::Id>,
+    pub publish_id: Option<egui::Id>,
+    pub gps_id: Option<egui::Id>,
 }
 impl PinpointAppUI {
     pub fn draw_map_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -1239,6 +1241,8 @@ pub(crate) fn draw_publish_sheet_view(
 ) -> PublishSheetOutcome {
     let mut action: Option<PublishSheetAction> = None;
     let mut close_id = None;
+    let mut publish_id = None;
+    let mut gps_id = None;
     egui::Area::new(egui::Id::new("mobile_publish_sheet"))
         .order(egui::Order::Foreground)
         .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
@@ -1283,12 +1287,16 @@ pub(crate) fn draw_publish_sheet_view(
                         );
                     });
                     ui.horizontal_wrapped(|ui| {
-                        if ui.button(i18n::t(lang, key::PUBLISH)).clicked() {
+                        let publish_button = ui.button(i18n::t(lang, key::PUBLISH));
+                        if publish_button.clicked() {
                             action = Some(PublishSheetAction::Publish);
                         }
-                        if ui.button("◎ Use GPS").clicked() {
+                        publish_id = Some(publish_button.id);
+                        let gps_button = ui.button("◎ Use GPS");
+                        if gps_button.clicked() {
                             action = Some(PublishSheetAction::Gps);
                         }
+                        gps_id = Some(gps_button.id);
                         #[cfg(target_os = "android")]
                         if ui.button("Settings").clicked() {
                             action = Some(PublishSheetAction::Settings);
@@ -1299,6 +1307,8 @@ pub(crate) fn draw_publish_sheet_view(
     PublishSheetOutcome {
         action: action.unwrap_or(PublishSheetAction::None),
         close_id,
+        publish_id,
+        gps_id,
     }
 }
 

@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] Native tests: an egui interaction test clicks the real compact publish sheet's Publish and Use GPS controls and asserts each action.
 - [INFRA] Native tests: an egui interaction test clicks the real compact place sheet's Directions, Save, Copy and Share controls and asserts each action.
 - [INFRA] Native tests: an egui interaction test clicks the real route sheet's Route, Navigate, Share, KML, GeoJSON and Clear controls and asserts each action.
 - [INFRA] Native tests: an egui interaction test clicks the real share sheet's Save and Stop controls and asserts their actions, with Stop enabled by an existing share.

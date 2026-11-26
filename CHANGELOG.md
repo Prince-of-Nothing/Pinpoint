@@ -85,6 +85,7 @@ The per-item flagged list for this release is in
 ### Changed
 - [FEATURE] Native phone tab bar: a floating rounded pill with a line icon and label on each tab, as on the web. Labels stay 14 pt and tap targets 48 pt.
 - [FEATURE] Native phone map: the floating zoom, locate, style, route and menu controls use painted line icons instead of letters and symbols. The actions are unchanged.
+- [FEATURE] Native phone map (mock, pending sign-off): floating search, map controls, category chips, sharing strip and tab bar use one translucent surface with a soft shadow; the controls are one card with hairline dividers and a fading hover; the chips sit 12 pt under the search pill and the account avatar is centred on it.
 - [FEATURE] Native phone map: no header row on the map. The account avatar floats beside the search pill (Sign in when signed out), the search has a magnifier icon, and Sign out moves into the menu. Other screens keep their header.
 - [FEATURE] Native phone shell: four bottom tabs (Map, People, Today, Chats) with 14 pt labels and 48 pt targets, matching the web. People holds Friends and Sharing behind a switch, so Sharing moves off the bottom bar; Account opens from the avatar in the header, and the menu no longer repeats Messages.
 - [FEATURE] Web navigation: four tabs instead of six: Map, People (friends, their locations, Share my location and Who can see me on one screen, people first), Today and Chats. Account moves to the avatar menu, and a forced password change now opens the Account screen instead of only highlighting a tab.

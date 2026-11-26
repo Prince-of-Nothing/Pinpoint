@@ -105,8 +105,9 @@ pub(crate) fn draw_tab_bar(ctx: &egui::Context, current: &CurrentScreen) -> Opti
         )
         .show(ctx, |ui| {
             egui::Frame::NONE
-                .fill(theme::PANEL)
+                .fill(theme::float_fill())
                 .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
+                .shadow(theme::float_shadow())
                 .corner_radius(egui::CornerRadius::same(22))
                 .inner_margin(egui::Margin::same(PILL_PADDING))
                 .show(ui, |ui| {

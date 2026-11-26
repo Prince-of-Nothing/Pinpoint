@@ -157,10 +157,11 @@ pub(crate) fn draw_live_strip(
         .show(ctx, |ui| {
             ui.set_max_width(width);
             egui::Frame::new()
-                .fill(theme::PANEL.gamma_multiply(0.98))
+                .fill(theme::float_fill())
                 .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
-                .corner_radius(egui::CornerRadius::same(16))
-                .inner_margin(egui::Margin::symmetric(8, 6))
+                .shadow(theme::float_shadow())
+                .corner_radius(egui::CornerRadius::same(20))
+                .inner_margin(egui::Margin::symmetric(12, 10))
                 .show(ui, |ui| {
                     theme::caption(ui, "Sharing with you");
                     egui::ScrollArea::horizontal()

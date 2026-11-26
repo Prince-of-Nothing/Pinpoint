@@ -106,6 +106,41 @@ pub(crate) struct ShareSheetOutcome {
     pub stop_id: Option<egui::Id>,
 }
 
+/// The fields a Save or Stop action sends for one friendship's share.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ShareSaveRequest {
+    pub friendship_id: i64,
+    pub share_id: Option<i64>,
+    pub enabled: bool,
+    pub precision: String,
+    pub duration_hours: Option<i64>,
+    pub label: String,
+}
+
+/// Build the save request for the sheet; Save passes `sheet.enabled` and Stop
+/// passes `false`, so both carry the same fields.
+pub(crate) fn share_save_request(sheet: &ShareSheet, enabled: bool) -> ShareSaveRequest {
+    ShareSaveRequest {
+        friendship_id: sheet.friendship_id,
+        share_id: sheet.share_id,
+        enabled,
+        precision: sheet.precision.clone(),
+        duration_hours: sheet.duration_hours,
+        label: sheet.label.clone(),
+    }
+}
+
+fn save_share_action(request: ShareSaveRequest) -> super::PendingAction {
+    super::PendingAction::SaveShare {
+        friendship_id: request.friendship_id,
+        share_id: request.share_id,
+        enabled: request.enabled,
+        precision: request.precision,
+        duration_hours: request.duration_hours,
+        label: request.label,
+    }
+}
+
 impl super::PinpointAppUI {
     pub(crate) fn draw_share_sheet(&mut self, ctx: &egui::Context) {
         let Some(mut sheet) = self.share_sheet.clone() else {
@@ -126,32 +161,14 @@ impl super::PinpointAppUI {
             ShareSheetAction::None => self.share_sheet = Some(sheet),
             ShareSheetAction::Close => self.share_sheet = None,
             ShareSheetAction::Save => {
-                self.spawn_action(
-                    super::PendingAction::SaveShare {
-                        friendship_id: sheet.friendship_id,
-                        share_id: sheet.share_id,
-                        enabled: sheet.enabled,
-                        precision: sheet.precision.clone(),
-                        duration_hours: sheet.duration_hours,
-                        label: sheet.label.clone(),
-                    },
-                    ctx,
-                );
+                let request = share_save_request(&sheet, sheet.enabled);
+                self.spawn_action(save_share_action(request), ctx);
                 self.share_sheet = None;
             }
             ShareSheetAction::Stop => {
-                if let Some(share_id) = sheet.share_id {
-                    self.spawn_action(
-                        super::PendingAction::SaveShare {
-                            friendship_id: sheet.friendship_id,
-                            share_id: Some(share_id),
-                            enabled: false,
-                            precision: sheet.precision.clone(),
-                            duration_hours: sheet.duration_hours,
-                            label: sheet.label.clone(),
-                        },
-                        ctx,
-                    );
+                if sheet.share_id.is_some() {
+                    let request = share_save_request(&sheet, false);
+                    self.spawn_action(save_share_action(request), ctx);
                 }
                 self.share_sheet = None;
             }
@@ -365,6 +382,66 @@ mod tests {
             expires_at: Some("2099-01-01T00:00:00Z".into()),
             label: None,
         }
+    }
+
+    fn sheet(share_id: Option<i64>, label: &str) -> ShareSheet {
+        ShareSheet {
+            friendship_id: 7,
+            friend_name: "Bob".into(),
+            share_id,
+            enabled: true,
+            precision: "approximate".into(),
+            label: label.into(),
+            duration_hours: Some(24),
+            keep_current: false,
+            incoming: String::new(),
+            open: true,
+            focus_enabled: true,
+        }
+    }
+
+    #[test]
+    fn save_request_carries_every_sheet_field() {
+        let sheet = sheet(Some(9), "Home");
+        assert_eq!(
+            share_save_request(&sheet, sheet.enabled),
+            ShareSaveRequest {
+                friendship_id: 7,
+                share_id: Some(9),
+                enabled: true,
+                precision: "approximate".into(),
+                duration_hours: Some(24),
+                label: "Home".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn stop_request_only_turns_the_same_share_off() {
+        let sheet = sheet(Some(9), "Home");
+        let stop = share_save_request(&sheet, false);
+        assert!(!stop.enabled);
+        assert_eq!(
+            ShareSaveRequest {
+                enabled: true,
+                ..stop
+            },
+            share_save_request(&sheet, true)
+        );
+    }
+
+    #[test]
+    fn new_share_saves_without_an_id_or_label() {
+        let sheet = sheet(None, "");
+        let save = share_save_request(&sheet, sheet.enabled);
+        assert_eq!(save.share_id, None);
+        assert_eq!(save.label, "");
+        assert!(save.enabled);
+        // The app only sends Stop when a share id exists; the request itself
+        // still carries no id for a new share.
+        let stop = share_save_request(&sheet, false);
+        assert_eq!(stop.share_id, None);
+        assert!(!stop.enabled);
     }
 
     #[test]

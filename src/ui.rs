@@ -3435,6 +3435,8 @@ mod tests {
         let save_rect = Rc::new(Cell::new(None::<egui::Rect>));
         let copy_rect = Rc::new(Cell::new(None::<egui::Rect>));
         let share_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let set_origin_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let external_rects = Rc::new(RefCell::new([None::<egui::Rect>; 4]));
         let outcome = Rc::new(RefCell::new(None::<super::map::PlaceSheetOutcome>));
 
         let rect_of = |ctx: &egui::Context, id: Option<egui::Id>| {
@@ -3458,6 +3460,14 @@ mod tests {
                 save_rect.set(rect_of(ctx, drawn.save_id));
                 copy_rect.set(rect_of(ctx, drawn.copy_id));
                 share_rect.set(rect_of(ctx, drawn.share_id));
+                set_origin_rect.set(rect_of(ctx, drawn.set_origin_id));
+                for (slot, id) in external_rects
+                    .borrow_mut()
+                    .iter_mut()
+                    .zip(drawn.external_ids)
+                {
+                    *slot = rect_of(ctx, id);
+                }
                 outcome.borrow_mut().replace(drawn);
             });
         };
@@ -3468,6 +3478,8 @@ mod tests {
         let save = save_rect.get().expect("save button rect");
         let copy = copy_rect.get().expect("copy button rect");
         let share = share_rect.get().expect("share button rect");
+        let set_origin = set_origin_rect.get().expect("set origin button rect");
+        let external = *external_rects.borrow();
 
         let click = |pos: egui::Pos2| {
             frame(&ctx, vec![egui::Event::PointerMoved(pos)]);
@@ -3496,6 +3508,29 @@ mod tests {
             outcome.borrow().as_ref().expect("copy outcome").action,
             PlaceSheetAction::Copy
         );
+
+        click(set_origin.center());
+        assert_eq!(
+            outcome
+                .borrow()
+                .as_ref()
+                .expect("set origin outcome")
+                .action,
+            PlaceSheetAction::SetOrigin
+        );
+
+        for ((label, url), rect) in super::map::place_external_urls(&place)
+            .into_iter()
+            .zip(external)
+        {
+            let rect = rect.unwrap_or_else(|| panic!("{label} button rect"));
+            click(rect.center());
+            assert_eq!(
+                outcome.borrow().as_ref().expect("external outcome").action,
+                PlaceSheetAction::OpenUrl(url),
+                "{label} button"
+            );
+        }
 
         click(share.center());
         let outcome = outcome.borrow();

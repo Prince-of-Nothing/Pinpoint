@@ -31,7 +31,7 @@ use axum::body::{Body, Bytes};
 use axum::extract::{Extension, Path as UrlPath};
 use axum::http::{header, HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use axum::Router;
 use tokio::sync::oneshot;
 
@@ -264,6 +264,10 @@ fn router(
         .route(
             "/map/offline/download",
             post(crate::offline_install::download),
+        )
+        .route(
+            "/map/offline/:region",
+            delete(crate::offline_install::remove_region),
         )
         .route(
             "/packs/:region/:name",
@@ -751,6 +755,34 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn offline_region_delete_refuses_unknown_and_traversal_ids() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(dir.path().join("keep.pmtiles"), b"keep").unwrap();
+        let server =
+            MapServer::start_with_plan(Some(dir.path().to_path_buf()), DownloadPlan::default())
+                .expect("server starts");
+
+        let unknown = client()
+            .delete(format!("{}/map/offline/atlantis", server.origin()))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
+
+        // The id arrives percent-encoded, so it is one path segment, not a path.
+        let traversal = client()
+            .delete(format!("{}/map/offline/..%2Fkeep.pmtiles", server.origin()))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(traversal.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            std::fs::read(dir.path().join("keep.pmtiles")).unwrap(),
+            b"keep"
+        );
     }
 
     #[tokio::test]

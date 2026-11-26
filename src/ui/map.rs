@@ -8,6 +8,23 @@ use crate::map;
 use crate::models::{FriendLocation, MapMenuAction};
 use eframe::egui::{self, RichText};
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PlaceSheetAction {
+    None,
+    Close,
+    Directions,
+    SetOrigin,
+    Save,
+    Copy,
+    Share(String),
+    OpenUrl(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PlaceSheetOutcome {
+    pub action: PlaceSheetAction,
+    pub close_id: Option<egui::Id>,
+}
 impl PinpointAppUI {
     pub fn draw_map_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         // Android asks once on the first map view, then centres on the fix
@@ -849,7 +866,6 @@ impl PinpointAppUI {
         let panel = theme::PANEL.gamma_multiply(0.98);
         let panel_solid = theme::PANEL;
         let border = theme::BORDER;
-        let muted = theme::MUTED;
 
         // Floating search pill (web `.search-form`).
         let mut submit = false;
@@ -1182,15 +1198,6 @@ impl PinpointAppUI {
                 }
             }
         } else if let Some(place) = self.mobile_selected_place.clone() {
-            let focus_close = take_place_focus(&mut self.place_focus);
-            let mut close = false;
-            let mut save = false;
-            let mut directions = false;
-            let mut set_origin = false;
-            let mut copy = false;
-            let mut share = false;
-            let mut open_url: Option<String> = None;
-            let name = encode_component(&place.short_name);
             let distance_m = {
                 let d = self.app.data();
                 let d = d.lock().unwrap();
@@ -1201,14 +1208,69 @@ impl PinpointAppUI {
                     place.longitude,
                 )
             };
-            egui::Area::new(egui::Id::new("mobile_place_sheet"))
+            let focus_close = take_place_focus(&mut self.place_focus);
+            let outcome = draw_place_sheet_view(ctx, &place, distance_m, width, focus_close);
+            match outcome.action {
+                PlaceSheetAction::None => {}
+                PlaceSheetAction::Close => {
+                    self.mobile_selected_place = None;
+                    self.place_focus = false;
+                    self.app.data().lock().unwrap().selected_place = None;
+                }
+                PlaceSheetAction::Save => {
+                    let store = crate::bookmarks::BookmarkStore::default_location();
+                    store.add(&place.short_name, place.latitude, place.longitude);
+                    self.app.refresh_bookmarks();
+                    self.app
+                        .set_notice(Some(format!("Saved {}", place.short_name)));
+                }
+                PlaceSheetAction::Copy => {
+                    ctx.copy_text(format!(
+                        "{} ({:.5}, {:.5})",
+                        place.short_name, place.latitude, place.longitude
+                    ));
+                    self.app.set_notice(Some("Place copied.".to_string()));
+                }
+                PlaceSheetAction::Share(url) => self.share_text(ctx, &url),
+                PlaceSheetAction::Directions => {
+                    self.route_plan.open_with_destination(&place);
+                    self.mobile_selected_place = None;
+                    self.place_focus = false;
+                    self.app.data().lock().unwrap().selected_place = None;
+                }
+                PlaceSheetAction::SetOrigin => {
+                    self.route_plan.open_with_origin(&place);
+                    self.mobile_selected_place = None;
+                    self.place_focus = false;
+                    self.app.data().lock().unwrap().selected_place = None;
+                }
+                PlaceSheetAction::OpenUrl(url) => {
+                    let _ = webbrowser::open(&url);
+                }
+            }
+        }
+        self.draw_route_sheet(ui, ctx, true, top);
+    }
+}
+
+pub(crate) fn draw_place_sheet_view(
+    ctx: &egui::Context,
+    place: &crate::osm::SearchPlace,
+    distance_m: f64,
+    width: f32,
+    focus_close: bool,
+) -> PlaceSheetOutcome {
+    let mut action: Option<PlaceSheetAction> = None;
+    let mut close_id = None;
+    let name = encode_component(&place.short_name);
+    egui::Area::new(egui::Id::new("mobile_place_sheet"))
                 .order(egui::Order::Foreground)
                 .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
                 .show(ctx, |ui| {
                     ui.set_width(width - 24.0);
                     egui::Frame::new()
-                        .fill(panel_solid)
-                        .stroke(egui::Stroke::new(1.0_f32, border))
+                        .fill(theme::PANEL)
+                        .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
                         .corner_radius(egui::CornerRadius::same(12))
                         .inner_margin(egui::Margin::same(12))
                         .show(ui, |ui| {
@@ -1223,8 +1285,12 @@ impl PinpointAppUI {
                                     |ui| {
                                         let close_button = ui.button("×");
                                         if close_button.clicked() {
-                                            close = true;
+                                            action = Some(PlaceSheetAction::Close);
                                         }
+                                        close_id = Some(close_button.id);
+                                        ui.memory_mut(|memory| {
+                                            memory.interested_in_focus(close_button.id, close_button.layer_id);
+                                        });
                                         if focus_close {
                                             close_button.request_focus();
                                         }
@@ -1234,7 +1300,7 @@ impl PinpointAppUI {
                             ui.label(
                                 RichText::new(&place.display_name)
                                     .size(12.0)
-                                    .color(muted),
+                                    .color(theme::MUTED),
                             );
                             ui.label(
                                 RichText::new(format!(
@@ -1242,97 +1308,61 @@ impl PinpointAppUI {
                                     crate::ui::route::format_distance(distance_m)
                                 ))
                                 .size(11.0)
-                                .color(muted),
+                                .color(theme::MUTED),
                             );
                             ui.add_space(6.0);
                             ui.horizontal_wrapped(|ui| {
                                 if ui.button("Directions").clicked() {
-                                    directions = true;
+                                    action = Some(PlaceSheetAction::Directions);
                                 }
                                 if ui.button("Set as origin").clicked() {
-                                    set_origin = true;
+                                    action = Some(PlaceSheetAction::SetOrigin);
                                 }
                                 if ui.button("Save").clicked() {
-                                    save = true;
+                                    action = Some(PlaceSheetAction::Save);
                                 }
                                 if ui.button("Copy").clicked() {
-                                    copy = true;
+                                    action = Some(PlaceSheetAction::Copy);
                                 }
                                 if ui.button("Share").clicked() {
-                                    share = true;
+                                    action = Some(PlaceSheetAction::Share(format!(
+                                        "geo:{:.6},{:.6}?q={name}",
+                                        place.latitude, place.longitude
+                                    )));
                                 }
                                 if ui.button("OSM").clicked() {
-                                    open_url = Some(format!(
+                                    action = Some(PlaceSheetAction::OpenUrl(format!(
                                         "https://www.openstreetmap.org/?mlat={:.4}&mlon={:.4}#map=15/{:.4}/{:.4}",
                                         place.latitude,
                                         place.longitude,
                                         place.latitude,
                                         place.longitude
-                                    ));
+                                    )));
                                 }
                                 if ui.button("Google").clicked() {
-                                    open_url = Some(format!(
+                                    action = Some(PlaceSheetAction::OpenUrl(format!(
                                         "https://www.google.com/maps/search/?api=1&query={:.4},{:.4}",
                                         place.latitude, place.longitude
-                                    ));
+                                    )));
                                 }
                                 if ui.button("Organic").clicked() {
-                                    open_url = Some(format!(
+                                    action = Some(PlaceSheetAction::OpenUrl(format!(
                                         "https://omaps.app/map?v=1&ll={:.4},{:.4}&n={name}",
                                         place.latitude, place.longitude
-                                    ));
+                                    )));
                                 }
                                 if ui.button("Magic Earth").clicked() {
-                                    open_url = Some(format!(
+                                    action = Some(PlaceSheetAction::OpenUrl(format!(
                                         "magicearth://?show_on_map&lat={:.4}&lon={:.4}&name={name}",
                                         place.latitude, place.longitude
-                                    ));
+                                    )));
                                 }
                             });
                         });
                 });
-            if close {
-                self.mobile_selected_place = None;
-                self.place_focus = false;
-                self.app.data().lock().unwrap().selected_place = None;
-            }
-            if save {
-                let store = crate::bookmarks::BookmarkStore::default_location();
-                store.add(&place.short_name, place.latitude, place.longitude);
-                self.app.refresh_bookmarks();
-                self.app
-                    .set_notice(Some(format!("Saved {}", place.short_name)));
-            }
-            if copy {
-                ctx.copy_text(format!(
-                    "{} ({:.5}, {:.5})",
-                    place.short_name, place.latitude, place.longitude
-                ));
-                self.app.set_notice(Some("Place copied.".to_string()));
-            }
-            if share {
-                self.share_text(
-                    ctx,
-                    &format!("geo:{:.6},{:.6}?q={name}", place.latitude, place.longitude),
-                );
-            }
-            if directions {
-                self.route_plan.open_with_destination(&place);
-                self.mobile_selected_place = None;
-                self.place_focus = false;
-                self.app.data().lock().unwrap().selected_place = None;
-            }
-            if set_origin {
-                self.route_plan.open_with_origin(&place);
-                self.mobile_selected_place = None;
-                self.place_focus = false;
-                self.app.data().lock().unwrap().selected_place = None;
-            }
-            if let Some(url) = open_url {
-                let _ = webbrowser::open(&url);
-            }
-        }
-        self.draw_route_sheet(ui, ctx, true, top);
+    PlaceSheetOutcome {
+        action: action.unwrap_or(PlaceSheetAction::None),
+        close_id,
     }
 }
 

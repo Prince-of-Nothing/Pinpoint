@@ -82,8 +82,7 @@ fn gate_consumes_scroll(modal_open: bool, gate_hovered: bool) -> bool {
 }
 
 /// Transparent full-screen gate below the foreground sheets; it consumes map
-/// clicks, drags and wheel scroll without dimming the page. Keyboard focus is
-/// not trapped (egui has no modal focus lock); each sheet takes focus on open.
+/// clicks, drags and wheel scroll without dimming the page.
 fn draw_sheet_input_gate(ctx: &egui::Context) {
     egui::Area::new(egui::Id::new("sheet_input_gate"))
         .order(egui::Order::Middle)
@@ -98,6 +97,30 @@ fn draw_sheet_input_gate(ctx: &egui::Context) {
                 });
             }
         });
+}
+
+/// Keep keyboard focus on the foreground sheet while the gate is active.
+/// egui has no modal focus lock, so focus that lands on the background is
+/// returned to the last control that had focus inside a Foreground sheet.
+fn sheet_focus_guard(ctx: &egui::Context, active: bool, last: &mut Option<egui::Id>) {
+    if !active {
+        *last = None;
+        return;
+    }
+    let focused = ctx.memory(|memory| memory.focused());
+    let on_modal = focused.is_some_and(|id| {
+        ctx.read_response(id).is_some_and(|response| {
+            matches!(
+                response.layer_id.order,
+                egui::Order::Middle | egui::Order::Foreground
+            )
+        })
+    });
+    if on_modal {
+        *last = focused;
+    } else if let Some(target) = *last {
+        ctx.memory_mut(|memory| memory.request_focus(target));
+    }
 }
 
 /// Plain state changes requested by one frame of the "More" drawer.
@@ -452,6 +475,8 @@ pub struct PinpointAppUI {
     theme_installed: bool,
     // Per-friend sharing sheet
     share_sheet: Option<share_sheet::ShareSheet>,
+    /// Last keyboard focus inside a modal sheet; restored if focus escapes.
+    sheet_focus_guard: Option<egui::Id>,
     // Mobile shell
     mobile_nav_open: bool,
     mobile_publish_open: bool,
@@ -592,6 +617,7 @@ impl PinpointAppUI {
             session_restore_attempted: false,
             theme_installed: false,
             share_sheet: None,
+            sheet_focus_guard: None,
             mobile_nav_open: false,
             mobile_publish_open: false,
             mobile_selected_place: None,
@@ -2335,6 +2361,20 @@ impl PinpointAppUI {
     }
 }
 
+impl PinpointAppUI {
+    /// Any visible modal sheet that should isolate the page behind it.
+    fn sheet_gate_active(&self, ctx: &egui::Context) -> bool {
+        let on_map = self.app.current_screen() == CurrentScreen::Map;
+        let compact = Self::is_compact(ctx);
+        sheet_input_blocked(
+            self.share_sheet.is_some(),
+            on_map && self.route_plan.open,
+            on_map && compact && self.mobile_selected_place.is_some(),
+            on_map && compact && self.mobile_publish_open,
+        )
+    }
+}
+
 impl eframe::App for PinpointAppUI {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         if !self.theme_installed {
@@ -2516,6 +2556,9 @@ impl eframe::App for PinpointAppUI {
             }
         }
 
+        if self.sheet_gate_active(ctx) {
+            draw_sheet_input_gate(ctx);
+        }
         let panel = if compact {
             egui::CentralPanel::default().frame(egui::Frame::NONE.fill(theme::BG))
         } else {
@@ -2612,20 +2655,12 @@ impl eframe::App for PinpointAppUI {
             }
         });
 
-        let on_map = self.app.current_screen() == CurrentScreen::Map;
-        let compact = Self::is_compact(ctx);
-        if sheet_input_blocked(
-            self.share_sheet.is_some(),
-            on_map && self.route_plan.open,
-            on_map && compact && self.mobile_selected_place.is_some(),
-            on_map && compact && self.mobile_publish_open,
-        ) {
-            draw_sheet_input_gate(ctx);
-        }
         self.draw_share_sheet(ctx);
         self.draw_recovery_code(ctx);
         self.draw_crash_dialog(ctx);
         self.draw_update_dialog(ctx);
+        let gate_active = self.sheet_gate_active(ctx);
+        sheet_focus_guard(ctx, gate_active, &mut self.sheet_focus_guard);
 
         // Request repaint for animation/screenshot
         if self.app.screenshot_mode() && !self.app.screenshot_taken() {
@@ -2637,10 +2672,10 @@ impl eframe::App for PinpointAppUI {
 #[cfg(test)]
 mod tests {
     use super::{
-        compact_nav_height, drawer_changes, drawer_overlays_map, egui, escape_dismisses,
-        gate_consumes_scroll, is_wide_width, overlay_click_dismisses, sheet_click_dismisses,
-        sheet_input_blocked, CurrentScreen, DrawerChanges, Lang, DRAWER_OVERLAY_MAX_WIDTH,
-        WIDE_LAYOUT_MIN_WIDTH,
+        compact_nav_height, draw_sheet_input_gate, drawer_changes, drawer_overlays_map, egui,
+        escape_dismisses, gate_consumes_scroll, is_wide_width, overlay_click_dismisses,
+        sheet_click_dismisses, sheet_focus_guard, sheet_input_blocked, CurrentScreen,
+        DrawerChanges, Lang, DRAWER_OVERLAY_MAX_WIDTH, WIDE_LAYOUT_MIN_WIDTH,
     };
 
     #[test]
@@ -2740,6 +2775,133 @@ mod tests {
         assert!(gate_consumes_scroll(true, true));
     }
 
+    fn pointer_press(pos: egui::Pos2) -> Vec<egui::Event> {
+        vec![
+            egui::Event::PointerMoved(pos),
+            egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]
+    }
+
+    fn pointer_release(pos: egui::Pos2) -> Vec<egui::Event> {
+        vec![egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        }]
+    }
+
+    fn pointer_wheel(pos: egui::Pos2, delta_y: f32) -> Vec<egui::Event> {
+        vec![
+            egui::Event::PointerMoved(pos),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, delta_y),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ]
+    }
+
+    #[test]
+    fn modal_gate_blocks_background_click_scroll_and_tab() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        let ctx = egui::Context::default();
+        let background_clicks = Rc::new(Cell::new(0));
+        let sheet_clicks = Rc::new(Cell::new(0));
+        let background_scroll = Rc::new(Cell::new(0.0_f32));
+        let sheet_scroll = Rc::new(Cell::new(0.0_f32));
+        let background_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let background_id = Rc::new(Cell::new(None::<egui::Id>));
+        let sheet_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let sheet_hovered = Rc::new(Cell::new(false));
+        let focus_guard = Rc::new(std::cell::RefCell::new(None::<egui::Id>));
+
+        let frame = |ctx: &egui::Context, events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(400.0, 400.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                draw_sheet_input_gate(ctx);
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let response = ui.add(egui::Button::new("background"));
+                    background_rect.set(Some(response.rect));
+                    background_id.set(Some(response.id));
+                    if response.clicked() {
+                        background_clicks.set(background_clicks.get() + 1);
+                    }
+                    background_scroll.set(ui.input(|input| input.raw_scroll_delta.y));
+                });
+                egui::Area::new(egui::Id::new("test_sheet"))
+                    .order(egui::Order::Foreground)
+                    .fixed_pos(egui::pos2(0.0, 250.0))
+                    .show(ctx, |ui| {
+                        ui.set_width(400.0);
+                        let response = ui.add(egui::Button::new("sheet"));
+                        sheet_rect.set(Some(response.rect));
+                        sheet_hovered.set(response.hovered());
+                        if response.clicked() {
+                            sheet_clicks.set(sheet_clicks.get() + 1);
+                        }
+                        sheet_scroll.set(ui.input(|input| input.raw_scroll_delta.y));
+                    });
+                sheet_focus_guard(ctx, true, &mut focus_guard.borrow_mut());
+            });
+        };
+
+        frame(&ctx, Vec::new());
+        frame(&ctx, Vec::new());
+        let bg = background_rect.get().expect("background rect");
+        let sheet = sheet_rect.get().expect("sheet rect");
+        let background_id = background_id.get().expect("background id");
+
+        frame(&ctx, pointer_press(bg.center()));
+        frame(&ctx, pointer_release(bg.center()));
+        assert_eq!(background_clicks.get(), 0, "background click is blocked");
+        assert_eq!(sheet_clicks.get(), 0);
+
+        frame(&ctx, vec![egui::Event::PointerMoved(sheet.center())]);
+        assert!(sheet_hovered.get(), "sheet hover");
+        frame(&ctx, pointer_press(sheet.center()));
+        frame(&ctx, pointer_release(sheet.center()));
+        assert_eq!(sheet_clicks.get(), 1, "sheet click still works");
+
+        frame(&ctx, pointer_wheel(bg.center(), 20.0));
+        assert_eq!(background_scroll.get(), 0.0, "background scroll is blocked");
+
+        frame(&ctx, pointer_wheel(sheet.center(), 20.0));
+        assert_ne!(sheet_scroll.get(), 0.0, "sheet scroll still works");
+
+        for _ in 0..2 {
+            frame(
+                &ctx,
+                vec![egui::Event::Key {
+                    key: egui::Key::Tab,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+        frame(&ctx, Vec::new());
+        assert_ne!(
+            ctx.memory(|memory| memory.focused()),
+            Some(background_id),
+            "Tab does not focus the page behind the sheet"
+        );
+    }
     #[test]
     fn escape_dismisses_only_without_a_blocking_modal() {
         for (escape, blocked, expected) in [

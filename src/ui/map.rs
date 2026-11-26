@@ -25,6 +25,21 @@ pub(crate) struct PlaceSheetOutcome {
     pub action: PlaceSheetAction,
     pub close_id: Option<egui::Id>,
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum PublishSheetAction {
+    None,
+    Close,
+    Publish,
+    Gps,
+    #[cfg(target_os = "android")]
+    Settings,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PublishSheetOutcome {
+    pub action: PublishSheetAction,
+    pub close_id: Option<egui::Id>,
+}
 impl PinpointAppUI {
     pub fn draw_map_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         // Android asks once on the first map view, then centres on the fix
@@ -1109,92 +1124,49 @@ impl PinpointAppUI {
 
         // Bottom sheet: publish form or selected place.
         if self.mobile_publish_open {
-            let mut publish = false;
-            let mut gps = false;
-            let mut close = false;
-            egui::Area::new(egui::Id::new("mobile_publish_sheet"))
-                .order(egui::Order::Foreground)
-                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
-                .show(ctx, |ui| {
-                    ui.set_width(width - 24.0);
-                    egui::Frame::new()
-                        .fill(panel_solid)
-                        .stroke(egui::Stroke::new(1.0_f32, border))
-                        .corner_radius(egui::CornerRadius::same(12))
-                        .inner_margin(egui::Margin::same(12))
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new(i18n::t(self.lang, key::PUBLISH_MY_LOCATION))
-                                        .size(16.0)
-                                        .strong(),
-                                );
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        if ui.button("×").clicked() {
-                                            close = true;
-                                        }
-                                    },
-                                );
-                            });
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    egui::TextEdit::singleline(&mut self.publish_lat)
-                                        .hint_text(i18n::t(self.lang, key::LATITUDE))
-                                        .desired_width(120.0),
-                                );
-                                ui.add(
-                                    egui::TextEdit::singleline(&mut self.publish_lon)
-                                        .hint_text(i18n::t(self.lang, key::LONGITUDE))
-                                        .desired_width(120.0),
-                                );
-                            });
-                            ui.horizontal_wrapped(|ui| {
-                                if ui.button(i18n::t(self.lang, key::PUBLISH)).clicked() {
-                                    publish = true;
-                                }
-                                if ui.button("◎ Use GPS").clicked() {
-                                    gps = true;
-                                }
-                                #[cfg(target_os = "android")]
-                                if ui.button("Settings").clicked() {
-                                    if let Err(error) = crate::platform::open_app_settings() {
-                                        self.app.set_error(Some(format!(
-                                            "Could not open app settings: {error}"
-                                        )));
-                                    }
-                                }
-                            });
-                        });
-                });
-            if close {
-                self.mobile_publish_open = false;
-            }
-            if gps {
-                self.request_gps_publish(ctx);
-            }
-            if publish {
-                match (
-                    self.publish_lat.trim().parse::<f64>(),
-                    self.publish_lon.trim().parse::<f64>(),
-                ) {
-                    (Ok(lat), Ok(lon))
-                        if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) =>
-                    {
-                        self.spawn_action(
-                            PendingAction::PublishLocation {
-                                lat,
-                                lon,
-                                accuracy: 10.0,
-                            },
-                            ctx,
-                        );
-                        self.mobile_publish_open = false;
+            let focus_close = std::mem::take(&mut self.publish_focus);
+            let outcome = draw_publish_sheet_view(
+                ctx,
+                self.lang,
+                &mut self.publish_lat,
+                &mut self.publish_lon,
+                width,
+                focus_close,
+            );
+            match outcome.action {
+                PublishSheetAction::None => {}
+                PublishSheetAction::Close => self.mobile_publish_open = false,
+                PublishSheetAction::Gps => self.request_gps_publish(ctx),
+                PublishSheetAction::Publish => {
+                    match (
+                        self.publish_lat.trim().parse::<f64>(),
+                        self.publish_lon.trim().parse::<f64>(),
+                    ) {
+                        (Ok(lat), Ok(lon))
+                            if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) =>
+                        {
+                            self.spawn_action(
+                                PendingAction::PublishLocation {
+                                    lat,
+                                    lon,
+                                    accuracy: 10.0,
+                                },
+                                ctx,
+                            );
+                            self.mobile_publish_open = false;
+                        }
+                        _ => self.app.set_error(Some(
+                            "Enter a valid latitude (-90..90) and longitude (-180..180)"
+                                .to_string(),
+                        )),
                     }
-                    _ => self.app.set_error(Some(
-                        "Enter a valid latitude (-90..90) and longitude (-180..180)".to_string(),
-                    )),
+                }
+                #[cfg(target_os = "android")]
+                PublishSheetAction::Settings => {
+                    if let Err(error) = crate::platform::open_app_settings() {
+                        self.app
+                            .set_error(Some(format!("Could not open app settings: {error}")));
+                    }
                 }
             }
         } else if let Some(place) = self.mobile_selected_place.clone() {
@@ -1250,6 +1222,79 @@ impl PinpointAppUI {
             }
         }
         self.draw_route_sheet(ui, ctx, true, top);
+    }
+}
+
+pub(crate) fn draw_publish_sheet_view(
+    ctx: &egui::Context,
+    lang: crate::i18n::Lang,
+    lat: &mut String,
+    lon: &mut String,
+    width: f32,
+    focus_close: bool,
+) -> PublishSheetOutcome {
+    let mut action: Option<PublishSheetAction> = None;
+    let mut close_id = None;
+    egui::Area::new(egui::Id::new("mobile_publish_sheet"))
+        .order(egui::Order::Foreground)
+        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
+        .show(ctx, |ui| {
+            ui.set_width(width - 24.0);
+            egui::Frame::new()
+                .fill(theme::PANEL)
+                .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
+                .corner_radius(egui::CornerRadius::same(12))
+                .inner_margin(egui::Margin::same(12))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(i18n::t(lang, key::PUBLISH_MY_LOCATION))
+                                .size(16.0)
+                                .strong(),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let close_button = ui.button("×");
+                            if close_button.clicked() {
+                                action = Some(PublishSheetAction::Close);
+                            }
+                            close_id = Some(close_button.id);
+                            ui.memory_mut(|memory| {
+                                memory.interested_in_focus(close_button.id, close_button.layer_id);
+                            });
+                            if focus_close {
+                                close_button.request_focus();
+                            }
+                        });
+                    });
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            egui::TextEdit::singleline(lat)
+                                .hint_text(i18n::t(lang, key::LATITUDE))
+                                .desired_width(120.0),
+                        );
+                        ui.add(
+                            egui::TextEdit::singleline(lon)
+                                .hint_text(i18n::t(lang, key::LONGITUDE))
+                                .desired_width(120.0),
+                        );
+                    });
+                    ui.horizontal_wrapped(|ui| {
+                        if ui.button(i18n::t(lang, key::PUBLISH)).clicked() {
+                            action = Some(PublishSheetAction::Publish);
+                        }
+                        if ui.button("◎ Use GPS").clicked() {
+                            action = Some(PublishSheetAction::Gps);
+                        }
+                        #[cfg(target_os = "android")]
+                        if ui.button("Settings").clicked() {
+                            action = Some(PublishSheetAction::Settings);
+                        }
+                    });
+                });
+        });
+    PublishSheetOutcome {
+        action: action.unwrap_or(PublishSheetAction::None),
+        close_id,
     }
 }
 

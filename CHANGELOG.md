@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native: the dark palette now matches the web shell (green accent, Sunflower for live), and a test reads `web/app/app.css` for both light and dark themes.
 - [FEATURE] Web Account → Server: shows which Pinpoint server you're on and opens the app on another one (https, or plain http only for this computer, as in the native client; credentials, paths and other schemes are refused) after a confirmation, remembering the last five servers. The app keeps talking only to its own origin, so sessions and message keys never cross servers.
 - [FEATURE] Web map services: place search runs through interchangeable providers (`web/app/services.js`): the installed offline map, then the Pinpoint server, then data already on the device (saved and recent places, and names in the map tiles already loaded, accent-insensitive, nearest first). When the server is unreachable, search still answers from the device and says so; a new Account → Services card shows what is reachable right now (server version and storage, the search and routing services it uses, the map source) from same-origin data only.
 - [DOCS] `future/mobile-and-desktop.md`: a proposal for a mobile look based on the redesigned web UI (shared tokens, four tabs, one sheet component) and a plan for Windows and Linux desktop apps (desktop layout, installers, signing, OS location, updates).

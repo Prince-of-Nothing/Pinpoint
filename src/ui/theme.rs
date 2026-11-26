@@ -8,15 +8,63 @@ use eframe::egui::{
     self, Color32, CornerRadius, FontId, Margin, RichText, Stroke, TextStyle, Vec2,
 };
 
-pub const BG: Color32 = Color32::from_rgb(0x0c, 0x15, 0x12);
-pub const PANEL: Color32 = Color32::from_rgb(0x12, 0x20, 0x1b);
-pub const PANEL_2: Color32 = Color32::from_rgb(0x17, 0x2a, 0x22);
-pub const BORDER: Color32 = Color32::from_rgb(0x2a, 0x3c, 0x33);
-pub const TEXT: Color32 = Color32::from_rgb(0xf0, 0xea, 0xdc);
-pub const MUTED: Color32 = Color32::from_rgb(0xa5, 0xb2, 0xa6);
-pub const ACCENT: Color32 = Color32::from_rgb(0xe3, 0xa4, 0x58);
-pub const ACCENT_INK: Color32 = Color32::from_rgb(0x24, 0x17, 0x08);
-pub const DANGER: Color32 = Color32::from_rgb(0xe0, 0x6c, 0x5a);
+/// The semantic colours of one theme. The values mirror the custom properties
+/// in `web/app/app.css`; a test fails when either side changes alone.
+#[allow(dead_code)] // The light palette is read by the parity test until the theme switch lands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Palette {
+    pub bg: Color32,
+    pub panel: Color32,
+    pub panel_2: Color32,
+    pub border: Color32,
+    pub text: Color32,
+    pub muted: Color32,
+    pub accent: Color32,
+    pub accent_ink: Color32,
+    /// Sunflower: the colour for "shared right now", never a button or link.
+    pub live: Color32,
+    pub danger: Color32,
+}
+
+/// Forest-night theme, the palette the native client draws with
+/// (`[data-theme="dark"]` in the web shell).
+pub(crate) const DARK: Palette = Palette {
+    bg: Color32::from_rgb(0x0e, 0x1f, 0x17),
+    panel: Color32::from_rgb(0x15, 0x29, 0x1f),
+    panel_2: Color32::from_rgb(0x1b, 0x33, 0x27),
+    border: Color32::from_rgb(0x2a, 0x43, 0x34),
+    text: Color32::from_rgb(0xe6, 0xee, 0xe6),
+    muted: Color32::from_rgb(0x9f, 0xb2, 0xa5),
+    accent: Color32::from_rgb(0xa7, 0xd8, 0xb6),
+    accent_ink: Color32::from_rgb(0x0e, 0x1f, 0x17),
+    live: Color32::from_rgb(0xf4, 0xc2, 0x1b),
+    danger: Color32::from_rgb(0xf0, 0x85, 0x7a),
+};
+
+/// Limestone theme (`:root` in the web shell). Not applied yet.
+#[allow(dead_code)] // Read by the parity test until the theme switch lands.
+pub(crate) const LIGHT: Palette = Palette {
+    bg: Color32::from_rgb(0xe9, 0xec, 0xe6),
+    panel: Color32::from_rgb(0xf8, 0xfa, 0xf6),
+    panel_2: Color32::from_rgb(0xee, 0xf1, 0xeb),
+    border: Color32::from_rgb(0xd3, 0xda, 0xcf),
+    text: Color32::from_rgb(0x16, 0x26, 0x1d),
+    muted: Color32::from_rgb(0x5e, 0x72, 0x66),
+    accent: Color32::from_rgb(0x18, 0x38, 0x2a),
+    accent_ink: Color32::from_rgb(0xf8, 0xfa, 0xf6),
+    live: Color32::from_rgb(0xf4, 0xc2, 0x1b),
+    danger: Color32::from_rgb(0xb4, 0x23, 0x18),
+};
+
+pub const BG: Color32 = DARK.bg;
+pub const PANEL: Color32 = DARK.panel;
+pub const PANEL_2: Color32 = DARK.panel_2;
+pub const BORDER: Color32 = DARK.border;
+pub const TEXT: Color32 = DARK.text;
+pub const MUTED: Color32 = DARK.muted;
+pub const ACCENT: Color32 = DARK.accent;
+pub const ACCENT_INK: Color32 = DARK.accent_ink;
+pub const DANGER: Color32 = DARK.danger;
 pub const SUCCESS: Color32 = Color32::from_rgb(0x8f, 0xc9, 0x9f);
 
 /// Card radius in points; used by [`card`] and matching custom frames.
@@ -176,14 +224,86 @@ pub fn wordmark(ui: &mut egui::Ui) {
 mod tests {
     use super::*;
 
+    /// The web shell stylesheet, the source both palettes must match.
+    const WEB_CSS: &str = include_str!("../../web/app/app.css");
+
+    fn strip_css_comments(css: &str) -> String {
+        let mut out = String::new();
+        let mut rest = css;
+        while let Some(open) = rest.find("/*") {
+            out.push_str(&rest[..open]);
+            rest = match rest[open..].find("*/") {
+                Some(close) => &rest[open + close + 2..],
+                None => "",
+            };
+        }
+        out.push_str(rest);
+        out
+    }
+
+    /// The `--name: value` declarations in the block that opens with `selector`.
+    fn web_tokens(selector: &str) -> Vec<(String, String)> {
+        let css = strip_css_comments(WEB_CSS);
+        let start = css
+            .find(selector)
+            .unwrap_or_else(|| panic!("app.css has no `{selector}` block"));
+        let body_start = start + css[start..].find('{').expect("block opening") + 1;
+        let body_end = body_start + css[body_start..].find('}').expect("block closing");
+        css[body_start..body_end]
+            .split(';')
+            .filter_map(|declaration| {
+                let (name, value) = declaration.split_once(':')?;
+                let name = name.trim().strip_prefix("--")?;
+                Some((name.to_string(), value.trim().to_string()))
+            })
+            .collect()
+    }
+
+    fn hex_colour(value: &str) -> Color32 {
+        let hex = value
+            .strip_prefix('#')
+            .filter(|hex| hex.len() == 6)
+            .unwrap_or_else(|| panic!("not a #rrggbb colour: {value}"));
+        let channel = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).expect("hex channel");
+        Color32::from_rgb(channel(0), channel(2), channel(4))
+    }
+
+    fn assert_palette_matches_web(selector: &str, palette: Palette) {
+        let tokens = web_tokens(selector);
+        let pairs = [
+            ("bg", palette.bg),
+            ("panel", palette.panel),
+            ("panel-2", palette.panel_2),
+            ("border", palette.border),
+            ("text", palette.text),
+            ("muted", palette.muted),
+            ("accent", palette.accent),
+            ("accent-ink", palette.accent_ink),
+            ("live", palette.live),
+            ("danger", palette.danger),
+        ];
+        for (name, expected) in pairs {
+            let value = tokens
+                .iter()
+                .find(|(token, _)| token == name)
+                .map(|(_, value)| value.as_str())
+                .unwrap_or_else(|| panic!("`{selector}` in app.css has no --{name}"));
+            assert_eq!(
+                hex_colour(value),
+                expected,
+                "--{name} in `{selector}` differs from theme.rs"
+            );
+        }
+    }
+
     #[test]
-    fn palette_matches_the_web_shell() {
-        assert_eq!(BG.to_array(), [0x0c, 0x15, 0x12, 255]);
-        assert_eq!(PANEL_2.to_array(), [0x17, 0x2a, 0x22, 255]);
-        assert_eq!(TEXT.to_array(), [0xf0, 0xea, 0xdc, 255]);
-        assert_eq!(ACCENT.to_array(), [0xe3, 0xa4, 0x58, 255]);
-        assert_eq!(ACCENT_INK.to_array(), [0x24, 0x17, 0x08, 255]);
-        assert_eq!(DANGER.to_array(), [0xe0, 0x6c, 0x5a, 255]);
+    fn dark_palette_matches_the_web_dark_theme() {
+        assert_palette_matches_web("[data-theme=\"dark\"] {", DARK);
+    }
+
+    #[test]
+    fn light_palette_matches_the_web_light_theme() {
+        assert_palette_matches_web(":root {", LIGHT);
     }
 
     #[test]

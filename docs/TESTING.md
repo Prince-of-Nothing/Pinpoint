@@ -8,6 +8,8 @@ requirement → implementation → test).
 | Layer | Tooling | Where | CI job |
 |---|---|---|---|
 | Unit | `cargo test --lib` | `#[cfg(test)]` modules in `src/**` | `rust` |
+| Native navigation | `cargo test --lib` (`navigation_banner_advances_through_maneuvers`, route sheet tests) | `src/ui/route.rs` (`next_step`, maneuver locations) | `rust` |
+| Offline packs | `cargo test --lib` (region catalog, install and loopback pack serving tests) | `src/region_catalog.rs`, `src/offline_install.rs`, `src/mobile/map_server.rs` | `rust` |
 | Integration | `cargo test --test <name>` | `tests/*.rs` — contract, router_probe, location_consent, today, auth_password, account_delete, assets, map_* | `rust` |
 | Contract | recorded HTTP/1.1 mock (`tests/common`) | `tests/contract.rs` | `rust` |
 | Web client | pure Node checks | `web/app/test/*.mjs` (sharing, admin, search, offline, map) | `web-tests` |
@@ -20,6 +22,7 @@ requirement → implementation → test).
 | Dependency updates | Dependabot (Cargo, GitHub Actions) | `.github/dependabot.yml` | Dependabot |
 | End-to-end smoke | `scripts/smoke.ps1` against a running server | `scripts/` | manual |
 | Android device smoke | `scripts/android-smoke.ps1` (install, launch, render/focus + crash/ANR check) | `scripts/` | manual (device/emulator) |
+| Goal prompt queue | `scripts/goal.ps1 check` (prompt location, sections, size, queue cap) | `scripts/goal.ps1`, `goal/` | manual |
 | DAST | OWASP ZAP baseline against the running server | `.github/workflows/dast.yml`, reports in the run artifacts | DAST (weekly) |
 | Backup crypto | `scripts/backup-db.ps1 -SelfTest` (encrypt/decrypt roundtrip), `restore-db.ps1 -SelfTest` (header + hash) | `scripts/` | manual |
 | Release consistency | Cargo, Gradle, iOS plist, web cache marker, live `/health` + `/privacy`, and APK versionName/versionCode | `scripts/check-release.ps1` | `rust` (metadata + live server) + release workflow (APK) |

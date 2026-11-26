@@ -90,6 +90,14 @@ impl ShareSheet {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ShareSheetOutcome {
+    None,
+    Close,
+    Save,
+    Stop,
+}
+
 impl super::PinpointAppUI {
     pub(crate) fn draw_share_sheet(&mut self, ctx: &egui::Context) {
         let Some(mut sheet) = self.share_sheet.clone() else {
@@ -106,6 +114,47 @@ impl super::PinpointAppUI {
             return;
         }
         let compact = Self::is_compact(ctx);
+        match Self::draw_share_sheet_view(ctx, &mut sheet, compact) {
+            ShareSheetOutcome::None => self.share_sheet = Some(sheet),
+            ShareSheetOutcome::Close => self.share_sheet = None,
+            ShareSheetOutcome::Save => {
+                self.spawn_action(
+                    super::PendingAction::SaveShare {
+                        friendship_id: sheet.friendship_id,
+                        share_id: sheet.share_id,
+                        enabled: sheet.enabled,
+                        precision: sheet.precision.clone(),
+                        duration_hours: sheet.duration_hours,
+                        label: sheet.label.clone(),
+                    },
+                    ctx,
+                );
+                self.share_sheet = None;
+            }
+            ShareSheetOutcome::Stop => {
+                if let Some(share_id) = sheet.share_id {
+                    self.spawn_action(
+                        super::PendingAction::SaveShare {
+                            friendship_id: sheet.friendship_id,
+                            share_id: Some(share_id),
+                            enabled: false,
+                            precision: sheet.precision.clone(),
+                            duration_hours: sheet.duration_hours,
+                            label: sheet.label.clone(),
+                        },
+                        ctx,
+                    );
+                }
+                self.share_sheet = None;
+            }
+        }
+    }
+
+    pub(crate) fn draw_share_sheet_view(
+        ctx: &egui::Context,
+        sheet: &mut ShareSheet,
+        compact: bool,
+    ) -> ShareSheetOutcome {
         let panel = theme::PANEL.gamma_multiply(0.98);
         let border = theme::BORDER;
         let muted = theme::MUTED;
@@ -155,7 +204,7 @@ impl super::PinpointAppUI {
                         ui.add_space(6.0);
                         let enabled =
                             ui.checkbox(&mut sheet.enabled, "Share my location with this friend");
-                        if take_sheet_focus(&mut sheet) {
+                        if take_sheet_focus(sheet) {
                             enabled.request_focus();
                         }
                         ui.add_space(4.0);
@@ -178,6 +227,7 @@ impl super::PinpointAppUI {
                         ui.label(RichText::new("Label (optional)").strong());
                         ui.add(
                             egui::TextEdit::singleline(&mut sheet.label)
+                                .id(egui::Id::new("share_label"))
                                 .hint_text("e.g. Work trip")
                                 .char_limit(120)
                                 .desired_width(260.0),
@@ -245,42 +295,14 @@ impl super::PinpointAppUI {
             });
 
         if close {
-            self.share_sheet = None;
-            return;
+            ShareSheetOutcome::Close
+        } else if save {
+            ShareSheetOutcome::Save
+        } else if stop {
+            ShareSheetOutcome::Stop
+        } else {
+            ShareSheetOutcome::None
         }
-        if save {
-            self.spawn_action(
-                super::PendingAction::SaveShare {
-                    friendship_id: sheet.friendship_id,
-                    share_id: sheet.share_id,
-                    enabled: sheet.enabled,
-                    precision: sheet.precision.clone(),
-                    duration_hours: sheet.duration_hours,
-                    label: sheet.label.clone(),
-                },
-                ctx,
-            );
-            self.share_sheet = None;
-            return;
-        }
-        if stop {
-            if let Some(share_id) = sheet.share_id {
-                self.spawn_action(
-                    super::PendingAction::SaveShare {
-                        friendship_id: sheet.friendship_id,
-                        share_id: Some(share_id),
-                        enabled: false,
-                        precision: sheet.precision.clone(),
-                        duration_hours: sheet.duration_hours,
-                        label: sheet.label.clone(),
-                    },
-                    ctx,
-                );
-            }
-            self.share_sheet = None;
-            return;
-        }
-        self.share_sheet = Some(sheet);
     }
 }
 

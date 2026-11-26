@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native: open share, route, place or publish sheets consume pointer input so the map and page behind them cannot be clicked or dragged.
 - [FEATURE] Native map: `/` focuses the search field when no sheet is open and no field has focus.
 - [FEATURE] Native route: opening the route sheet focuses its close control once.
 - [FEATURE] Native map: opening the compact place sheet focuses its close control once.

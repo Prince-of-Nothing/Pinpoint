@@ -81,15 +81,22 @@ fn gate_consumes_scroll(modal_open: bool, gate_hovered: bool) -> bool {
     modal_open && gate_hovered
 }
 
+fn sheet_gate_sense() -> egui::Sense {
+    egui::Sense::click_and_drag().difference(egui::Sense::focusable_noninteractive())
+}
+
 /// Transparent full-screen gate below the foreground sheets; it consumes map
 /// clicks, drags and wheel scroll without dimming the page.
 fn draw_sheet_input_gate(ctx: &egui::Context) {
     egui::Area::new(egui::Id::new("sheet_input_gate"))
         .order(egui::Order::Middle)
         .fixed_pos(ctx.screen_rect().min)
+        // Click and drag without FOCUSABLE: the gate blocks the page behind it
+        // but stays out of the Tab chain.
+        .sense(sheet_gate_sense())
         .show(ctx, |ui| {
             let (_, response) =
-                ui.allocate_exact_size(ctx.screen_rect().size(), egui::Sense::click_and_drag());
+                ui.allocate_exact_size(ctx.screen_rect().size(), sheet_gate_sense());
             if gate_consumes_scroll(true, response.hovered()) {
                 ui.input_mut(|input| {
                     input.raw_scroll_delta = egui::Vec2::ZERO;
@@ -99,27 +106,38 @@ fn draw_sheet_input_gate(ctx: &egui::Context) {
         });
 }
 
-/// Keep keyboard focus on the foreground sheet while the gate is active.
-/// egui has no modal focus lock, so focus that lands on the background is
-/// returned to the last control that had focus inside a Foreground sheet.
+fn is_sheet_layer(layer: egui::LayerId) -> bool {
+    matches!(layer.order, egui::Order::Middle | egui::Order::Foreground)
+}
+
+/// Keep keyboard focus on the open sheet while the gate is active. egui has no
+/// modal focus lock, so the sheet's layer is registered as modal and focus that
+/// escapes to the page is sent back to the last control inside the sheet.
 fn sheet_focus_guard(ctx: &egui::Context, active: bool, last: &mut Option<egui::Id>) {
     if !active {
         *last = None;
         return;
     }
     let focused = ctx.memory(|memory| memory.focused());
-    let on_modal = focused.is_some_and(|id| {
-        ctx.read_response(id).is_some_and(|response| {
-            matches!(
-                response.layer_id.order,
-                egui::Order::Middle | egui::Order::Foreground
-            )
-        })
-    });
-    if on_modal {
-        *last = focused;
-    } else if let Some(target) = *last {
-        ctx.memory_mut(|memory| memory.request_focus(target));
+    let layer_of = |id| ctx.read_response(id).map(|response| response.layer_id);
+    let focused_layer = focused.and_then(layer_of);
+    let last_layer = last.and_then(layer_of);
+    let modal_layer = focused_layer
+        .filter(|layer| is_sheet_layer(*layer))
+        .or_else(|| last_layer.filter(|layer| is_sheet_layer(*layer)));
+    if let Some(layer) = modal_layer {
+        ctx.memory_mut(|memory| memory.set_modal_layer(layer));
+    }
+    match focused_layer {
+        Some(layer) if is_sheet_layer(layer) => *last = focused,
+        // Tab past the last control clears focus so it can wrap within the
+        // modal layer; none must not be restored or the last control traps it.
+        None => {}
+        _ => {
+            if let Some(target) = *last {
+                ctx.memory_mut(|memory| memory.request_focus(target));
+            }
+        }
     }
 }
 
@@ -2679,7 +2697,7 @@ mod tests {
         draw_place_sheet_view, draw_publish_sheet_view, PlaceSheetAction, PublishSheetAction,
     };
     use super::route::{RoutePlan, RoutePoint, RouteSheetData};
-    use super::share_sheet::{ShareSheet, ShareSheetOutcome};
+    use super::share_sheet::{ShareSheet, ShareSheetAction, ShareSheetOutcome};
     use super::{
         compact_nav_height, draw_sheet_input_gate, drawer_changes, drawer_overlays_map, egui,
         escape_dismisses, gate_consumes_scroll, is_wide_width, overlay_click_dismisses,
@@ -2935,6 +2953,7 @@ mod tests {
         let background_id = Rc::new(Cell::new(None::<egui::Id>));
         let label_rect = Rc::new(Cell::new(None::<egui::Rect>));
         let label_id = egui::Id::new("share_label");
+        let close_id = Rc::new(Cell::new(None::<egui::Id>));
         let outcome = Rc::new(Cell::new(None::<ShareSheetOutcome>));
         let focus_guard = Rc::new(RefCell::new(None::<egui::Id>));
 
@@ -2958,9 +2977,9 @@ mod tests {
                     }
                     background_scroll.set(ui.input(|input| input.raw_scroll_delta.y));
                 });
-                outcome.set(Some(PinpointAppUI::draw_share_sheet_view(
-                    ctx, &mut sheet, true,
-                )));
+                let drawn = PinpointAppUI::draw_share_sheet_view(ctx, &mut sheet, true);
+                close_id.set(drawn.close_id);
+                outcome.set(Some(drawn));
                 if let Some(response) = ctx.read_response(label_id) {
                     label_rect.set(Some(response.rect));
                 }
@@ -2973,6 +2992,7 @@ mod tests {
         let bg = background_rect.get().expect("background rect");
         let label = label_rect.get().expect("share label rect");
         let background_id = background_id.get().expect("background id");
+        let close_id = close_id.get().expect("share close id");
 
         frame(&ctx, pointer_press(bg.center()));
         frame(&ctx, pointer_release(bg.center()));
@@ -3005,9 +3025,35 @@ mod tests {
             Some(background_id),
             "Tab does not focus the page behind the sheet"
         );
-        assert_eq!(outcome.get(), Some(ShareSheetOutcome::None));
+        assert_eq!(
+            outcome.get().map(|outcome| outcome.action),
+            Some(ShareSheetAction::None)
+        );
         frame(&ctx, pointer_wheel(bg.center(), 20.0));
         assert_eq!(background_scroll.get(), 0.0, "background scroll is blocked");
+
+        let mut focus_reached_close = ctx.memory(|memory| memory.focused()) == Some(close_id);
+        for _ in 0..24 {
+            if focus_reached_close {
+                break;
+            }
+            frame(
+                &ctx,
+                vec![egui::Event::Key {
+                    key: egui::Key::Tab,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+            focus_reached_close = ctx.memory(|memory| memory.focused()) == Some(close_id);
+        }
+        assert!(focus_reached_close, "Tab reaches the share close control");
+        assert_eq!(
+            outcome.get().map(|outcome| outcome.action),
+            Some(ShareSheetAction::None)
+        );
     }
 
     #[test]

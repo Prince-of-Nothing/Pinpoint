@@ -69,6 +69,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Native: keyboard focus stays inside the open sheet; Tab reaches the share close control and wraps instead of sticking on the invisible input gate or the last button, and the share close is registered for focus.
 - [FIX] Native desktop: selecting a search result no longer blocks map interaction or shortcuts; only visible sheets gate the map, since place/publish sheets are compact-only.
 - [FIX] Web friends: restored the person rows after the #543 merge left the old requester → receiver loop in place; Sharing settings now lives in the row menu and closes the narrow drawer first.
 - [FIX] Web map: opening or closing the drawer (or anything else that re-adds the location, trail, measure or route layers) while a basemap switch is still loading no longer throws "Style is not done loading" and shows the crash banner; those calls wait for the new style, and a basemap switch now redraws an active route instead of dropping it.

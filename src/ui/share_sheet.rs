@@ -91,11 +91,17 @@ impl ShareSheet {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ShareSheetOutcome {
+pub(crate) enum ShareSheetAction {
     None,
     Close,
     Save,
     Stop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ShareSheetOutcome {
+    pub action: ShareSheetAction,
+    pub close_id: Option<egui::Id>,
 }
 
 impl super::PinpointAppUI {
@@ -114,10 +120,10 @@ impl super::PinpointAppUI {
             return;
         }
         let compact = Self::is_compact(ctx);
-        match Self::draw_share_sheet_view(ctx, &mut sheet, compact) {
-            ShareSheetOutcome::None => self.share_sheet = Some(sheet),
-            ShareSheetOutcome::Close => self.share_sheet = None,
-            ShareSheetOutcome::Save => {
+        match Self::draw_share_sheet_view(ctx, &mut sheet, compact).action {
+            ShareSheetAction::None => self.share_sheet = Some(sheet),
+            ShareSheetAction::Close => self.share_sheet = None,
+            ShareSheetAction::Save => {
                 self.spawn_action(
                     super::PendingAction::SaveShare {
                         friendship_id: sheet.friendship_id,
@@ -131,7 +137,7 @@ impl super::PinpointAppUI {
                 );
                 self.share_sheet = None;
             }
-            ShareSheetOutcome::Stop => {
+            ShareSheetAction::Stop => {
                 if let Some(share_id) = sheet.share_id {
                     self.spawn_action(
                         super::PendingAction::SaveShare {
@@ -162,6 +168,7 @@ impl super::PinpointAppUI {
         let mut save = false;
         let mut stop = false;
         let mut close = false;
+        let mut close_id = None;
 
         egui::Area::new(egui::Id::new("share_sheet"))
             .order(egui::Order::Foreground)
@@ -190,9 +197,17 @@ impl super::PinpointAppUI {
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
                                 |ui| {
-                                    if ui.button("×").clicked() {
+                                    let close_button = ui.button("×");
+                                    if close_button.clicked() {
                                         close = true;
                                     }
+                                    close_id = Some(close_button.id);
+                                    ui.memory_mut(|memory| {
+                                        memory.interested_in_focus(
+                                            close_button.id,
+                                            close_button.layer_id,
+                                        );
+                                    });
                                 },
                             );
                         });
@@ -294,14 +309,17 @@ impl super::PinpointAppUI {
                     });
             });
 
-        if close {
-            ShareSheetOutcome::Close
-        } else if save {
-            ShareSheetOutcome::Save
-        } else if stop {
-            ShareSheetOutcome::Stop
-        } else {
-            ShareSheetOutcome::None
+        ShareSheetOutcome {
+            action: if close {
+                ShareSheetAction::Close
+            } else if save {
+                ShareSheetAction::Save
+            } else if stop {
+                ShareSheetAction::Stop
+            } else {
+                ShareSheetAction::None
+            },
+            close_id,
         }
     }
 }

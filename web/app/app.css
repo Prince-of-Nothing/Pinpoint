@@ -1,40 +1,49 @@
+/* Pinpoint palette: Chișinău limestone, Codri forest green, and one live
+   colour. Sunflower means "shared right now" and is never used for text on a
+   light surface or for decoration. */
 :root {
   color-scheme: light;
-  --bg: #f6f4ee;
-  --panel: #ffffff;
-  --panel-2: #f1eee5;
-  --border: #ddd6c8;
-  --text: #1c241f;
-  --muted: #5f6b62;
-  --accent: #a8620f;
-  --accent-ink: #ffffff;
-  --danger: #b23b2c;
-  --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
-  --glass: #fffdf9;
-  --glass-strong: #fffdf9;
-  --shadow: 0 10px 30px rgba(24, 16, 44, 0.14), 0 2px 8px rgba(24, 16, 44, 0.08);
-  --pin-friend: #0f9d76;
-  --pin-self: #2563eb;
+  --bg: #e9ece6; /* Limestone */
+  --panel: #f8faf6; /* Chalk */
+  --panel-2: #eef1eb;
+  --border: #d3dacf;
+  --text: #16261d;
+  --muted: #5e7266; /* Lichen */
+  --accent: #18382a; /* Codru */
+  --accent-ink: #f8faf6;
+  --live: #f4c21b; /* Sunflower */
+  --live-ink: #18382a;
+  --danger: #b42318; /* Brick */
+  /* Display face: a heavy sans, not a serif (kept as --serif for existing rules). */
+  --serif: "Segoe UI Variable Display", "SF Pro Display", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --glass: #f8faf6;
+  --glass-strong: #f8faf6;
+  --shadow: 0 8px 24px rgba(16, 40, 28, 0.12), 0 1px 3px rgba(16, 40, 28, 0.1);
+  --radius-sheet: 14px;
+  --pin-friend: #f4c21b;
+  --pin-self: #18382a;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #0c1512;
-  --panel: #12201b;
-  --panel-2: #172a22;
-  --border: #2a3c33;
-  --text: #f0eadc;
-  --muted: #a5b2a6;
-  --accent: #e3a458;
-  --accent-ink: #241708;
-  --danger: #e06c5a;
-  --glass: #12201b;
-  --glass-strong: #12201b;
-  --shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
-  --pin-friend: #34d399;
-  --pin-self: #38bdf8;
+  --bg: #0e1f17; /* forest night */
+  --panel: #15291f;
+  --panel-2: #1b3327;
+  --border: #2a4334;
+  --text: #e6eee6;
+  --muted: #9fb2a5;
+  --accent: #a7d8b6;
+  --accent-ink: #0e1f17;
+  --live: #f4c21b;
+  --live-ink: #18382a;
+  --danger: #f0857a;
+  --glass: #15291f;
+  --glass-strong: #15291f;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  --pin-friend: #f4c21b;
+  --pin-self: #a7d8b6;
 }
 
 * { box-sizing: border-box; }
@@ -159,7 +168,7 @@ button:hover { filter: brightness(1.05); }
   overflow: hidden;
   border-radius: 0.5rem;
   border: 1px solid var(--border);
-  background: #0a0f1c;
+  background: var(--panel-2);
   cursor: grab;
   touch-action: none;
 }
@@ -762,7 +771,7 @@ body:has(#app-panel:not(.hidden)) #session-bar {
   background: var(--glass-strong);
   border: 1px solid var(--border);
   border-radius: 1.25rem;
-  box-shadow: 0 -18px 44px rgba(24, 16, 44, 0.18);
+  box-shadow: 0 -18px 44px rgba(16, 40, 28, 0.18);
   z-index: 900;
   overscroll-behavior: contain;
   touch-action: pan-y;
@@ -1673,10 +1682,10 @@ body:has(#app-panel:not(.hidden)) #status { bottom: calc(4.8rem + var(--safe-bot
   place-items: center;
   padding: 1.5rem;
   pointer-events: none;
-  background: radial-gradient(circle at 50% 40%, rgba(246, 244, 238, 0.9), rgba(246, 244, 238, 0.99));
+  background: radial-gradient(circle at 50% 40%, rgba(233, 236, 230, 0.9), rgba(233, 236, 230, 0.99));
 }
 [data-theme="dark"] .map-empty-state {
-  background: radial-gradient(circle at 50% 40%, rgba(18, 32, 27, 0.35), rgba(10, 15, 28, 0.86));
+  background: radial-gradient(circle at 50% 40%, rgba(21, 41, 31, 0.4), rgba(14, 31, 23, 0.9));
 }
 .map-empty-card {
   pointer-events: auto;
@@ -2302,3 +2311,99 @@ body:has(.drawer:is(.open, .closing)) .map-controls {
   .map-menu { bottom: calc(5.2rem + var(--safe-bottom)); }
   .nav-banner { top: calc(8.3rem + var(--safe-top)); }
 }
+
+/* ---------------------------------------------------------------------------
+   Visual identity
+   Limestone surfaces, Codru ink, Sunflower for "shared right now" only.
+   Two shapes: pills for anything you press, 14 px for sheets and cards.
+   Sentence case throughout: no tracked-out capitals, no eyebrow labels.
+   --------------------------------------------------------------------------- */
+button,
+.icon-btn { border-radius: 999px; }
+button { padding: 0.5rem 1rem; font-weight: 600; }
+button.secondary { background: var(--panel); }
+button:focus-visible,
+.icon-btn:focus-visible,
+summary:focus-visible,
+.tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+input,
+select,
+textarea { border-radius: 0.7rem; }
+
+.card,
+.sheet,
+.map-empty-card,
+.search-results,
+.map-controls,
+.row-menu-list { border-radius: var(--radius-sheet); }
+
+/* Headings: one heavy sans, slightly tight, no serif. */
+header h1,
+.drawer-head h2,
+.map-empty-card h2 {
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+header h1 {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1.15rem;
+}
+/* The mark: a pin seen from above, in Codru. */
+header h1::before {
+  content: "";
+  width: 0.62rem;
+  height: 0.62rem;
+  border: 0.2rem solid var(--accent);
+  border-radius: 50%;
+}
+.drawer-head h2 { font-size: 1.4rem; }
+.drawer .card h2 { font-size: 1.02rem; font-weight: 700; }
+
+/* No eyebrow labels: the screen title says where you are. */
+.eyebrow { display: none; }
+
+/* Labels stay in sentence case. */
+.badge,
+.admin-label,
+.admin-table th,
+.map-control-label {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.map-control-label { font-size: 0.78rem; font-weight: 700; color: var(--text); }
+.badge { font-size: 0.72rem; }
+
+/* The active tab is ink on a pale ground; Sunflower stays reserved. */
+.tab.active { color: var(--accent); background: var(--panel-2); }
+.tab.active::after { background: var(--accent); }
+
+/* Sign-in brand panel: the one bold surface. Codru green with the grid and
+   rings redrawn as faint limestone contours. */
+.auth-brand {
+  color: #e9ece6;
+  background: linear-gradient(160deg, #1f4636 0%, #18382a 58%, #112a1f 100%);
+}
+.auth-brand::before {
+  background-image:
+    linear-gradient(rgba(233, 236, 230, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(233, 236, 230, 0.07) 1px, transparent 1px);
+}
+.auth-brand::after {
+  border-color: rgba(233, 236, 230, 0.24);
+  box-shadow:
+    0 0 0 40px rgba(233, 236, 230, 0.05),
+    0 0 0 88px rgba(233, 236, 230, 0.03);
+}
+.auth-mark { color: #e9ece6; }
+.auth-tagline {
+  color: #f8faf6;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.auth-coords,
+.auth-place { color: rgba(233, 236, 230, 0.78); }

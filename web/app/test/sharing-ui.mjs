@@ -15,6 +15,8 @@ const {
   friendRowModel,
   initials,
   initSharing,
+  locationSentence,
+  shareSentence,
   precisionLabel,
   shareRequestBody,
   shareRowModel,
@@ -379,7 +381,9 @@ await check("a share label is sent, shown in the row and editable", () => {
   assert.equal(shareRowModel(share({ label: "Work trip" }), now).label, "Work trip");
   assert.match(pageSource, /id="share-label"/);
   assert.match(sharingSource, /share-label"\)\.value = current\?\.label/);
-  assert.match(appSource, /model\.label/);
+  // The row shows the label through shareSentence ("Work trip: sharing …").
+  assert.match(appSource, /personText\(name, shareSentence\(s\)\)/);
+  assert.match(shareSentence(share({ label: "Work trip", expires_at: future }), now), /^Work trip: /);
 });
 
 await check("clearing a label removes it only for an existing labeled share", () => {
@@ -423,7 +427,7 @@ await check("friend rows show a person and a status, not requester → receiver"
   assert.equal(friend.kind, "friend");
   assert.equal(friend.name, "Bogdan Friend");
   assert.equal(friend.handle, "@bright-badger-2");
-  assert.equal(friend.status, "Sharing location · updated 5m ago");
+  assert.equal(friend.status, "Sharing their location, updated 5m ago");
   assert.equal(friend.initials, "BF");
   assert.equal(friend.location, location);
 
@@ -439,6 +443,26 @@ await check("people lists are built without raw coordinates or the arrow pair", 
   assert.match(pageSource, /id="publish-gps"/, "missing the GPS share button");
   assert.match(pageSource, /<details class="publish-manual">[\s\S]*id="publish-form"/, "coordinates must fold under details");
   assert.match(appSource, /publish\(fix\.lat, fix\.lon, publishAccuracy\(fix\.accuracy\)\)/);
+});
+
+await check("shares and locations read as sentences, not dot-joined fields", () => {
+  const now = Date.parse("2026-11-26T12:00:00Z");
+  const until = "2026-11-27T01:40:00Z";
+  const when = new Date(until).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const active = { is_active: true, precision_level: "exact", expires_at: until };
+  assert.equal(shareSentence(active, now), `Sharing your exact location until ${when}`);
+  assert.equal(shareSentence({ ...active, label: "Weekend" }, now), `Weekend: sharing your exact location until ${when}`);
+  assert.equal(
+    shareSentence({ ...active, is_active: false, precision_level: "city_only" }, now),
+    `Paused, would share your city until ${when}`,
+  );
+  assert.equal(shareSentence({ is_active: true, precision_level: "approximate", expires_at: null }, now), "Sharing your approximate location with no end time");
+  assert.equal(shareSentence({ ...active, expires_at: "2026-11-25T10:00:00Z" }, now).startsWith("Ended "), true);
+  assert.equal(
+    locationSentence({ precision_level: "approximate", updated_at: "2026-11-26T11:58:00Z" }, now),
+    "Approximate location, updated 2m ago",
+  );
+  assert.doesNotMatch(appSource, /status\.join\(" · "\)/, "no dot-joined status strings");
 });
 
 console.log(`sharing UI checks passed: ${passed}`);

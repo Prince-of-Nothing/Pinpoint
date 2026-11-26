@@ -108,7 +108,7 @@ export function friendRowModel(friendship, me, locations = [], now = Date.now())
     outgoing: "Request sent",
     rejected: "Declined",
     friend: location
-      ? `Sharing location · updated ${freshnessText(location.updated_at, now)}`
+      ? `Sharing their location, updated ${freshnessText(location.updated_at, now)}`
       : "Friends",
   }[kind];
   const name = location?.user_name || handle;
@@ -177,6 +177,40 @@ export function shareRowModel(share, now = Date.now()) {
     canPauseResume: status !== "expired",
     canShareAgain: status === "expired",
   };
+}
+
+const PRECISION_PHRASE = {
+  exact: "your exact location",
+  approximate: "your approximate location",
+  city_only: "your city",
+};
+
+function shortWhen(date) {
+  return date.toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+/** One plain sentence for a share I grant, e.g. "Weekend: sharing your exact location until 27 Nov, 01:40". */
+export function shareSentence(share, now = Date.now()) {
+  const status = shareStatus(share, now);
+  const expiry = expiryDate(share);
+  const what = PRECISION_PHRASE[share?.precision_level] || "your location";
+  let text;
+  if (status === "expired") {
+    text = expiry ? `Ended ${shortWhen(expiry)}` : "Ended";
+  } else {
+    const until = expiry ? ` until ${shortWhen(expiry)}` : " with no end time";
+    text = `${status === "active" ? "Sharing" : "Paused, would share"} ${what}${until}`;
+  }
+  const label = String(share?.label ?? "").trim();
+  return label ? `${label}: ${text.charAt(0).toLowerCase()}${text.slice(1)}` : text;
+}
+
+/** A friend's visible location as a sentence, e.g. "Exact location, updated 5m ago". */
+export function locationSentence(location, now = Date.now()) {
+  const level = { exact: "Exact location", approximate: "Approximate location", city_only: "City only" }[
+    location?.precision_level
+  ];
+  return `${level || "Location"}, updated ${freshnessText(location?.updated_at, now)}`;
 }
 
 export function initSharing({ api, setStatus, getUser, onChanged }) {

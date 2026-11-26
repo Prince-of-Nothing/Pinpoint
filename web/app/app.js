@@ -9,13 +9,13 @@ import { lineLengthMeters } from "./measure.js";
 import { createAdminConsole } from "./admin.js";
 import {
   avatarHue,
-  freshnessText,
   friendName,
   friendRowModel,
   initials,
   initSharing,
-  precisionLabel,
+  locationSentence,
   shareRowModel,
+  shareSentence,
 } from "./sharing.js";
 import { initAppearance } from "./appearance.js";
 import {
@@ -563,7 +563,6 @@ function renderShares(items, friendships = []) {
     ul.innerHTML = '<li class="muted">You are not sharing your location.</li>';
     return;
   }
-  const STATUS = { active: "Sharing", paused: "Paused", expired: "Expired" };
   for (const { share: s, model } of rows) {
     const friendship =
       friendships.find((f) => f.id === s.friendship_id) || { id: s.friendship_id };
@@ -573,8 +572,6 @@ function renderShares(items, friendships = []) {
     const name =
       state.locations.find((loc) => loc.user_id === friendId)?.user_name ||
       friendName(friendship, state.user?.id);
-    const status = [STATUS[model.status] || model.status, model.precision, model.expiry];
-    if (model.label) status.unshift(model.label);
     const actions = [];
     if (model.canShareAgain) {
       actions.push(rowButton("Share again", () => sharing?.open(friendship), true));
@@ -595,7 +592,7 @@ function renderShares(items, friendships = []) {
       personRow(
         `share-${model.status}`,
         personAvatar(name, avatarHue(friendId ?? s.friendship_id)),
-        personText(name, status.join(" · ")),
+        personText(name, shareSentence(s)),
         actions,
       ),
     );
@@ -614,7 +611,7 @@ function renderLocations(items) {
     const row = personRow(
       "",
       personAvatar(name, avatarHue(loc.user_id)),
-      personText(name, `Updated ${freshnessText(loc.updated_at)} · ${precisionLabel(loc.precision_level)}`),
+      personText(name, locationSentence(loc)),
       [rowButton("Show on map", () => showFriendOnMap(loc))],
     );
     // Coordinates stay one hover away instead of being the headline.

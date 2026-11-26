@@ -3610,6 +3610,67 @@ mod tests {
         );
         assert_eq!(action.borrow().clone(), Some(PublishSheetAction::None));
     }
+
+    #[test]
+    fn real_publish_sheet_actions_return_their_actions() {
+        use std::cell::{Cell, RefCell};
+        use std::rc::Rc;
+
+        let ctx = egui::Context::default();
+        let mut lat = String::new();
+        let mut lon = String::new();
+        let publish_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let gps_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let action = Rc::new(RefCell::new(None::<PublishSheetAction>));
+
+        let rect_of = |ctx: &egui::Context, id: Option<egui::Id>| {
+            id.and_then(|id| ctx.read_response(id))
+                .map(|response| response.rect)
+        };
+
+        let mut frame = |ctx: &egui::Context, events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(500.0, 700.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                draw_sheet_input_gate(ctx);
+                let drawn = draw_publish_sheet_view(
+                    ctx,
+                    crate::i18n::Lang::system(),
+                    &mut lat,
+                    &mut lon,
+                    500.0,
+                    false,
+                );
+                publish_rect.set(rect_of(ctx, drawn.publish_id));
+                gps_rect.set(rect_of(ctx, drawn.gps_id));
+                action.borrow_mut().replace(drawn.action);
+            });
+        };
+
+        frame(&ctx, Vec::new());
+        frame(&ctx, Vec::new());
+        let publish = publish_rect.get().expect("publish button rect");
+        let gps = gps_rect.get().expect("gps button rect");
+
+        let mut click = |pos: egui::Pos2| {
+            frame(&ctx, vec![egui::Event::PointerMoved(pos)]);
+            frame(&ctx, pointer_press(pos));
+            frame(&ctx, pointer_release(pos));
+        };
+
+        click(publish.center());
+        assert_eq!(action.borrow().clone(), Some(PublishSheetAction::Publish));
+
+        click(gps.center());
+        assert_eq!(action.borrow().clone(), Some(PublishSheetAction::Gps));
+    }
+
     #[test]
     fn escape_dismisses_only_without_a_blocking_modal() {
         for (escape, blocked, expected) in [

@@ -54,8 +54,10 @@ const base = process.env.PINPOINT_BASE_URL || "http://127.0.0.1:8080";
   await page.click("#drawer-toggle");
   assert.equal(await page.getAttribute("#drawer-toggle", "aria-expanded"), "true");
 
-  const sharing = page.locator("#friends-list").getByRole("button", { name: "Sharing" });
-  await sharing.waitFor({ timeout: 5000 });
+  const menu = page.locator("#friends-list summary[aria-label='More actions']").first();
+  await menu.waitFor({ timeout: 5000 });
+  await menu.click();
+  const sharing = page.locator("#friends-list").getByRole("button", { name: "Sharing settings" });
   await sharing.click();
 
   await page.waitForSelector("#share-sheet:not(.hidden)", { timeout: 5000 });

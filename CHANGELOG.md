@@ -56,6 +56,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Web friends: restored the person rows after the #543 merge left the old requester → receiver loop in place; Sharing settings now lives in the row menu and closes the narrow drawer first.
 - [FIX] Web map: opening or closing the drawer (or anything else that re-adds the location, trail, measure or route layers) while a basemap switch is still loading no longer throws "Style is not done loading" and shows the crash banner; those calls wait for the new style, and a basemap switch now redraws an active route instead of dropping it.
 - [FIX] Web: Escape now stops at the top surface; a closed drawer no longer also hides the place sheet and steals focus from the toggle.
 - [FIX] Web: opening a share sheet from the narrow drawer now closes the drawer first, so the sheet is not left outside the drawer's focus trap.

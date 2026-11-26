@@ -594,6 +594,20 @@
             </div>
           </div>
 
+          <div class="card" id="server-card" data-sections="account">
+            <h2>Server</h2>
+            <p class="muted small">
+              Connected to <strong id="server-current"></strong>. Your account,
+              friends and messages live on this server.
+            </p>
+            <form id="server-form" novalidate>
+              <label>Use another Pinpoint server
+                <input id="server-url" type="url" inputmode="url" autocomplete="url" maxlength="300" placeholder="pinpoint.example.org" />
+              </label>
+              <p id="server-error" class="server-error hidden" role="alert"></p>
+              <button type="submit" class="secondary">Open that server</button>
+            </form>
+            <ul id="server-recent" class="list server-recent"></ul>
           <div class="card" id="services-card" data-sections="account">
             <div class="card-head">
               <h2>Services</h2>

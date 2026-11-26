@@ -19,6 +19,7 @@ import {
   shareSentence,
 } from "./sharing.js";
 import { initAppearance } from "./appearance.js";
+import { normalizeServerUrl, rememberServer } from "./server-address.js";
 import { collectServiceStatus } from "./services.js";
 import {
   cryptoAvailable,
@@ -2571,3 +2572,60 @@ initAppearance();
     show($("session-bar"), false);
   }
 })();
+
+// Account → Server. The web app talks only to the server that served it, so
+// using another server means opening the app there and signing in; sessions
+// and message keys never cross servers (server-address.js).
+const RECENT_SERVERS_KEY = "pinpoint.recentServers";
+function loadRecentServers() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_SERVERS_KEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+function openServer(origin) {
+  const host = new URL(origin).host;
+  if (!window.confirm(`Open Pinpoint on ${host}? You'll sign in there; you stay signed in here.`)) return;
+  try {
+    localStorage.setItem(RECENT_SERVERS_KEY, JSON.stringify(rememberServer(loadRecentServers(), origin)));
+  } catch {
+    // Storage can be unavailable; switching still works.
+  }
+  window.location.assign(`${origin}/`);
+}
+function renderServerCard() {
+  const current = $("server-current");
+  if (current) current.textContent = window.location.host;
+  const list = $("server-recent");
+  if (!list) return;
+  list.innerHTML = "";
+  for (const origin of loadRecentServers().filter((o) => o !== window.location.origin)) {
+    const li = document.createElement("li");
+    const name = document.createElement("span");
+    name.textContent = new URL(origin).host;
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "secondary";
+    open.textContent = "Open";
+    open.addEventListener("click", () => openServer(origin));
+    li.append(name, open);
+    list.appendChild(li);
+  }
+}
+$("server-form")?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const error = $("server-error");
+  const result = normalizeServerUrl($("server-url").value, window.location.origin);
+  const message = !result.ok
+    ? result.error
+    : result.same
+      ? "That's the server you're using now."
+      : "";
+  error.textContent = message;
+  show(error, Boolean(message));
+  if (message) return;
+  openServer(result.origin);
+});
+renderServerCard();

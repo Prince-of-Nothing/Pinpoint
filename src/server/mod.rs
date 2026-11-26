@@ -335,6 +335,7 @@ pub fn router(state: AppState) -> Router {
         .route("/drawer-dismiss.js", get(web_handlers::drawer_dismiss_js))
         .route("/search-shortcut.js", get(web_handlers::search_shortcut_js))
         .route("/measure.js", get(web_handlers::measure_js))
+        .route("/server-address.js", get(web_handlers::server_address_js))
         .route("/services.js", get(web_handlers::services_js))
         .route("/map-layers.js", get(web_handlers::map_layers_js))
         .route("/sharing.js", get(web_handlers::sharing_js))

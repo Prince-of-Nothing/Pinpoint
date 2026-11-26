@@ -2563,6 +2563,9 @@ body:has(#app-panel:not(.hidden)) > header { display: none; }
   body:has(#measure-hud:not(.hidden)) .live-strip { display: none; }
 }
 
+/* Account → Server */
+.server-error { margin: 0 0 0.5rem; color: var(--danger); font-size: 0.82rem; }
+.server-recent li { justify-content: space-between; }
 /* Account → Services: what the app can reach right now. */
 .services-list li.service {
   display: grid;

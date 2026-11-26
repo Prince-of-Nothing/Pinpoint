@@ -17,6 +17,7 @@ const APP_JS: &str = include_str!("../../web/app/app.js");
 const MESSAGE_CRYPTO_JS: &str = include_str!("../../web/app/message-crypto.js");
 const MAP_JS: &str = include_str!("../../web/app/map.js");
 const MEASURE_JS: &str = include_str!("../../web/app/measure.js");
+const SERVER_ADDRESS_JS: &str = include_str!("../../web/app/server-address.js");
 const SERVICES_JS: &str = include_str!("../../web/app/services.js");
 const MAP_LAYERS_JS: &str = include_str!("../../web/app/map-layers.js");
 const NAV_JS: &str = include_str!("../../web/app/nav.js");
@@ -214,6 +215,8 @@ pub async fn measure_js() -> Response {
     module_js(MEASURE_JS)
 }
 
+pub async fn server_address_js() -> Response {
+    module_js(SERVER_ADDRESS_JS)
 pub async fn services_js() -> Response {
     module_js(SERVICES_JS)
 }

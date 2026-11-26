@@ -11,7 +11,7 @@ requirement → implementation → test).
 | Integration | `cargo test --test <name>` | `tests/*.rs` — contract, router_probe, location_consent, today, auth_password, account_delete, assets, map_* | `rust` |
 | Contract | recorded HTTP/1.1 mock (`tests/common`) | `tests/contract.rs` | `rust` |
 | Web client | pure Node checks | `web/app/test/*.mjs` (sharing, admin, search, offline, map) | `web-tests` |
-| Live web | headless Chromium against the served client (`/` focus and gating, drawer open/inside/Escape/map-click/focus+Tab-trap+inert/1280-900-700 layout, share and message handoffs with stubbed data, route sheet and place sheet Escape with a stubbed reverse geocode, search result keyboard access) | `web/app/test/live-*.cjs` | `web-live` |
+| Live web | headless Chromium against the served client (`/` focus and gating, drawer open/inside/Escape/map-click/focus+Tab-trap+inert/1280-900-700 layout, place/route focus handoff, share and message handoffs with stubbed data, sheet Escape with a stubbed reverse geocode, search result keyboard access) | `web/app/test/live-*.cjs` | `web-live` |
 | Wasm | wasm32 compile check of the portable core | `src/webapp`, wasm stubs | `wasm` |
 | Desktop build | release build of the native client | `src/`, `Cargo.toml` | `client-macos`, `release-windows` |
 | Map data policy | OSM compliance check | tile/search routes and attribution | Map QA |

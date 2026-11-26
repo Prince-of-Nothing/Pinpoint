@@ -1,4 +1,5 @@
 //! Map screen
+use super::live_strip;
 use super::route::RoutePoint;
 use super::theme;
 use super::{PendingAction, PinpointAppUI};
@@ -922,6 +923,27 @@ impl PinpointAppUI {
         if submit && !self.search_query.trim().is_empty() {
             let query = self.search_query.clone();
             self.spawn_action(PendingAction::SearchPlaces { query }, ctx);
+        }
+
+        // "Sharing with you" strip above the tab bar. It steps aside for the
+        // drawer, the sheets, the route planner and the measure tool.
+        let measuring = self.app.data().lock().unwrap().measure_mode;
+        let strip_hidden = map_blocked || self.mobile_nav_open || self.route_plan.open || measuring;
+        if !strip_hidden {
+            let entries = {
+                let data = self.app.data();
+                let data = data.lock().unwrap();
+                live_strip::strip_entries(&data.locations, chrono::Utc::now())
+            };
+            if let Some(target) =
+                live_strip::draw_live_strip(ctx, &entries, live_strip::ABOVE_TAB_BAR)
+            {
+                let data = self.app.data();
+                let mut data = data.lock().unwrap();
+                data.map_center_lat = target.latitude;
+                data.map_center_lon = target.longitude;
+                data.map_zoom = target.zoom;
+            }
         }
 
         // Category chips when there are no results (web `.category-chips`).

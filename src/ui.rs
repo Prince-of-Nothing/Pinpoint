@@ -16,6 +16,7 @@ pub(crate) mod crash_dialog;
 pub(crate) mod emergency;
 pub(crate) mod friends;
 pub(crate) mod kiosk;
+pub(crate) mod live_strip;
 pub(crate) mod map;
 pub(crate) mod messages;
 pub(crate) mod phone_tabs;

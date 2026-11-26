@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native map: a "Sharing with you" strip above the phone tab bar lists the friends whose location you can see now, freshest first. A sunflower ring marks a location updated in the last 15 minutes, and tapping a chip flies the map to that friend. The strip steps aside for the menu, sheets, route planner and measure tool.
 - [FEATURE] Native navigation: show the distance to the next maneuver in the route banner.
 - [FEATURE] Native: the dark palette now matches the web shell (green accent, Sunflower for live), and a test reads `web/app/app.css` for both light and dark themes.
 - [INFRA] Smoke: check the offline map catalog shape against a running server.

@@ -487,7 +487,11 @@ function renderFriends(items) {
   const me = state.user?.id;
   const rows = items
     .map((f) => ({ f, m: friendRowModel(f, me, state.locations) }))
-    .sort((a, b) => FRIEND_ORDER[a.m.kind] - FRIEND_ORDER[b.m.kind] || a.m.name.localeCompare(b.m.name));
+    .sort(
+      (a, b) =>
+        FRIEND_ORDER[a.m.kind] - FRIEND_ORDER[b.m.kind] ||
+        a.m.name.localeCompare(b.m.name),
+    );
   for (const { f, m } of rows) {
     const actions = [];
     if (m.kind === "incoming") {
@@ -496,20 +500,30 @@ function renderFriends(items) {
         rowButton("Decline", () => respond(f.id, "reject")),
       );
     } else if (m.kind === "friend") {
+      if (m.location) {
+        const loc = m.location;
+        actions.push(rowButton("Show on map", () => showFriendOnMap(loc)));
+      }
       actions.push(rowButton("Message", () => openMessageThread(m.friendId, friendName(f, me))));
-      const menu = [];
-      if (m.location) menu.push({ label: "Show on map", run: () => showFriendOnMap(m.location) });
-      menu.push({ label: "Sharing settings", run: () => sharing?.open(f) });
-      menu.push({
-        label: "Remove friend",
-        danger: true,
-        run: () =>
-          removeFriendship(
-            f.id,
-            "Remove this friend? Any location shares with them stop too.",
-            "Friend removed.",
-          ),
-      });
+      const menu = [
+        {
+          label: "Sharing settings",
+          run: () => {
+            releaseDrawerForSheet();
+            sharing?.open(f);
+          },
+        },
+        {
+          label: "Remove friend",
+          danger: true,
+          run: () =>
+            removeFriendship(
+              f.id,
+              "Remove this friend? Any location shares with them stop too.",
+              "Friend removed.",
+            ),
+        },
+      ];
       actions.push(rowMenu(menu));
     } else if (m.kind === "outgoing") {
       actions.push(
@@ -517,63 +531,17 @@ function renderFriends(items) {
           removeFriendship(f.id, "Cancel this friend request?", "Friend request cancelled."),
         ),
       );
-  for (const f of items) {
-    const li = document.createElement("li");
-    const incoming = f.receiver_id === state.user?.id && f.status === "pending";
-    li.innerHTML = `<span>${escapeHtml(f.requester_name)} → ${escapeHtml(f.receiver_name)}</span>
-      <span class="badge ${f.status}">${escapeHtml(f.status)}</span>`;
-    if (incoming) {
-      const accept = document.createElement("button");
-      accept.textContent = "Accept";
-      accept.onclick = () => respond(f.id, "accept");
-      const reject = document.createElement("button");
-      reject.textContent = "Reject";
-      reject.className = "secondary";
-      reject.onclick = () => respond(f.id, "reject");
-      li.append(accept, reject);
-    } else if (f.status === "accepted") {
-      const chat = document.createElement("button");
-      chat.textContent = "Message";
-      chat.className = "secondary";
-      const friendId =
-        f.requester_id === state.user?.id ? f.receiver_id : f.requester_id;
-      chat.onclick = () =>
-        openMessageThread(friendId, friendName(f, state.user?.id));
-      li.appendChild(chat);
-      const manage = document.createElement("button");
-      manage.textContent = "Sharing";
-      manage.className = "secondary";
-      manage.onclick = () => {
-        releaseDrawerForSheet();
-        sharing?.open(f);
-      };
-      li.appendChild(manage);
-      const remove = document.createElement("button");
-      remove.textContent = "Remove";
-      remove.className = "secondary";
-      remove.onclick = () =>
-        removeFriendship(
-          f.id,
-          "Remove this friend? Any location shares with them stop too.",
-          "Friend removed.",
-        );
-      li.appendChild(remove);
-    } else if (f.requester_id === state.user?.id) {
-      const cancel = document.createElement("button");
-      cancel.textContent = "Cancel request";
-      cancel.className = "secondary";
-      cancel.onclick = () =>
-        removeFriendship(
-          f.id,
-          "Cancel this friend request?",
-          "Friend request cancelled.",
-        );
-      li.appendChild(cancel);
     }
-    ul.appendChild(personRow(m.kind, personAvatar(m.name, m.hue), personText(m.name, m.status, m.handle), actions));
+    ul.appendChild(
+      personRow(
+        m.kind,
+        personAvatar(m.name, m.hue),
+        personText(m.name, m.status, m.handle),
+        actions,
+      ),
+    );
   }
 }
-
 async function removeFriendship(id, confirmation, message) {
   if (!window.confirm(confirmation)) return;
   try {

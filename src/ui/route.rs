@@ -306,6 +306,29 @@ pub(crate) fn take_route_focus(plan: &mut RoutePlan) -> bool {
     std::mem::take(&mut plan.focus)
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct RouteSheetOutcome {
+    pub close: bool,
+    pub clear: bool,
+    pub plan: bool,
+    pub navigate: bool,
+    pub copy_share: bool,
+    pub copy_kml: bool,
+    pub copy_geojson: bool,
+    pub external: Option<String>,
+    pub add_stop: bool,
+    pub remove_stop: Option<usize>,
+    pub close_id: Option<egui::Id>,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct RouteSheetData<'a> {
+    pub map_center: (f64, f64),
+    pub my_location: Option<(f64, f64)>,
+    pub selected_place: Option<&'a SearchPlace>,
+    pub navigation_status: Option<&'a str>,
+}
+
 impl super::PinpointAppUI {
     /// Poll the platform fix once per second while navigation is active and
     /// advance the next-stop counter when close enough. The env/file provider
@@ -462,13 +485,112 @@ impl super::PinpointAppUI {
             self.route_plan.focus = false;
             return;
         }
+        let (map_center, my_location) = {
+            let data = self.app.data();
+            let data = data.lock().unwrap();
+            (
+                (data.map_center_lat, data.map_center_lon),
+                data.my_location
+                    .as_ref()
+                    .map(|loc| (loc.latitude, loc.longitude)),
+            )
+        };
+        let selected_place = self.selected_place();
+        let navigation_status = self.navigation_status();
+        let mut plan = self.route_plan.clone();
+        let outcome = Self::draw_route_sheet_view(
+            ctx,
+            &mut plan,
+            compact,
+            top,
+            RouteSheetData {
+                map_center,
+                my_location,
+                selected_place: selected_place.as_ref(),
+                navigation_status: navigation_status.as_deref(),
+            },
+        );
+        if outcome.close {
+            plan.open = false;
+            plan.focus = false;
+            plan.following = false;
+        }
+        if outcome.clear {
+            plan.clear_route();
+            self.app.data().lock().unwrap().last_route = None;
+        }
+        if outcome.remove_stop.is_some() || outcome.add_stop {
+            if let Some(index) = outcome.remove_stop {
+                plan.remove_stop(index);
+            }
+            if outcome.add_stop {
+                if let Some(place) = self.app.data().lock().unwrap().selected_place.clone() {
+                    plan.add_stop(RoutePoint::from_place(&place));
+                } else {
+                    plan.error = Some("Select a place first to add it as a stop.".into());
+                }
+            }
+            plan.error = None;
+        }
+        if outcome.plan {
+            self.request_route(&plan, ctx);
+        }
+        if outcome.navigate {
+            plan.following = true;
+            plan.next_stop = 0;
+            self.app.set_notice(Some(
+                "Route preview started. Live GPS follows when a fix is available.".to_string(),
+            ));
+        }
+        if outcome.copy_share {
+            ctx.copy_text(plan.share_text());
+            self.app
+                .set_notice(Some("Route summary copied.".to_string()));
+        }
+        if outcome.copy_kml || outcome.copy_geojson {
+            if let Some(route) = plan.selected_route() {
+                let text = if outcome.copy_kml {
+                    crate::osm::route_to_kml(route, "Pinpoint route")
+                } else {
+                    crate::osm::route_to_geojson(route, "Pinpoint route")
+                };
+                ctx.copy_text(text);
+                self.app.set_notice(Some(if outcome.copy_kml {
+                    "KML copied to clipboard.".to_string()
+                } else {
+                    "GeoJSON copied to clipboard.".to_string()
+                }));
+            }
+        }
+        if let Some(url) = outcome.external {
+            let _ = webbrowser::open(&url);
+        }
+        self.route_plan = plan;
+        let app_data = self.app.data();
+        let mut data = app_data.lock().unwrap();
+        self.route_plan.apply_selected(&mut data);
+    }
+
+    pub(crate) fn draw_route_sheet_view(
+        ctx: &egui::Context,
+        plan: &mut RoutePlan,
+        compact: bool,
+        top: f32,
+        data: RouteSheetData<'_>,
+    ) -> RouteSheetOutcome {
+        let RouteSheetData {
+            map_center,
+            my_location,
+            selected_place,
+            navigation_status,
+        } = data;
+        let mut close_id = None;
         let width = ctx.screen_rect().width();
         let panel = theme::PANEL.gamma_multiply(0.98);
         let border = theme::BORDER;
         let muted = theme::MUTED;
         let accent = theme::ACCENT;
-        let focus_close = take_route_focus(&mut self.route_plan);
-        let mut plan = self.route_plan.clone();
+        let focus_close = take_route_focus(plan);
         let mut plan_requested = false;
         let mut close = false;
         let mut clear = false;
@@ -508,6 +630,10 @@ impl super::PinpointAppUI {
                             if close_button.clicked() {
                                 close = true;
                             }
+                            close_id = Some(close_button.id);
+                            ui.memory_mut(|memory| {
+                                memory.interested_in_focus(close_button.id, close_button.layer_id);
+                            });
                             if focus_close {
                                 close_button.request_focus();
                             }
@@ -536,22 +662,14 @@ impl super::PinpointAppUI {
                             ui.label(RichText::new(origin_label).size(12.0));
                             ui.horizontal_wrapped(|ui| {
                                 if ui.button("Use map centre").clicked() {
-                                    let (lat, lon) = {
-                                        let d = self.app.data();
-                                        let d = d.lock().unwrap();
-                                        (d.map_center_lat, d.map_center_lon)
-                                    };
-                                    plan.origin = Some(RoutePoint::new(lat, lon, "Map centre"));
+                                    plan.origin = Some(RoutePoint::new(
+                                        map_center.0,
+                                        map_center.1,
+                                        "Map centre",
+                                    ));
                                 }
                                 if ui.button("Use my location").clicked() {
-                                    let (lat, lon) = {
-                                        let d = self.app.data();
-                                        let d = d.lock().unwrap();
-                                        d.my_location
-                                            .as_ref()
-                                            .map(|l| (l.latitude, l.longitude))
-                                            .unwrap_or((47.0105, 28.8638))
-                                    };
+                                    let (lat, lon) = my_location.unwrap_or((47.0105, 28.8638));
                                     plan.origin = Some(RoutePoint::new(lat, lon, "My location"));
                                 }
                                 if ui.button("Swap").clicked() {
@@ -567,12 +685,9 @@ impl super::PinpointAppUI {
                                 .unwrap_or_else(|| "Set destination (search or map tap)".into());
                             ui.label(RichText::new("B").strong().color(accent));
                             ui.label(RichText::new(destination_label).size(12.0));
-                            if let Some(place) = self
-                                .selected_place()
-                                .or_else(|| self.app.data().lock().unwrap().selected_place.clone())
-                            {
+                            if let Some(place) = selected_place {
                                 if ui.button("Use selected place as B").clicked() {
-                                    plan.destination = Some(RoutePoint::from_place(&place));
+                                    plan.destination = Some(RoutePoint::from_place(place));
                                 }
                             }
                             ui.separator();
@@ -664,7 +779,7 @@ impl super::PinpointAppUI {
                                     if let Some(summary) = plan.summary() {
                                         ui.label(RichText::new(summary).size(14.0).strong());
                                     }
-                                    if let Some(status) = self.navigation_status() {
+                                    if let Some(status) = navigation_status {
                                         ui.colored_label(accent, RichText::new(status).size(12.0));
                                     }
                                     for step in &route.steps {
@@ -705,13 +820,13 @@ impl super::PinpointAppUI {
                                 });
                                 ui.horizontal_wrapped(|ui| {
                                     if ui.button("Google Maps").clicked() {
-                                        external = google_route_url(&plan);
+                                        external = google_route_url(plan);
                                     }
                                     if ui.button("Organic Maps").clicked() {
-                                        external = organic_route_url(&plan);
+                                        external = organic_route_url(plan);
                                     }
                                     if ui.button("Magic Earth").clicked() {
-                                        external = magic_route_url(&plan);
+                                        external = magic_route_url(plan);
                                     }
                                 });
                             }
@@ -725,67 +840,20 @@ impl super::PinpointAppUI {
                 });
         });
 
-        if close {
-            plan.open = false;
-            plan.focus = false;
-            plan.following = false;
+        RouteSheetOutcome {
+            close,
+            clear,
+            plan: plan_requested,
+            navigate,
+            copy_share,
+            copy_kml,
+            copy_geojson,
+            external,
+            add_stop,
+            remove_stop,
+            close_id,
         }
-        if clear {
-            plan.clear_route();
-            self.app.data().lock().unwrap().last_route = None;
-        }
-        if remove_stop.is_some() || add_stop {
-            if let Some(index) = remove_stop {
-                plan.remove_stop(index);
-            }
-            if add_stop {
-                if let Some(place) = self.app.data().lock().unwrap().selected_place.clone() {
-                    plan.add_stop(RoutePoint::from_place(&place));
-                } else {
-                    plan.error = Some("Select a place first to add it as a stop.".into());
-                }
-            }
-            plan.error = None;
-        }
-        if plan_requested {
-            self.request_route(&plan, ctx);
-        }
-        if navigate {
-            plan.following = true;
-            plan.next_stop = 0;
-            self.app.set_notice(Some(
-                "Route preview started. Live GPS follows when a fix is available.".to_string(),
-            ));
-        }
-        if copy_share {
-            ctx.copy_text(plan.share_text());
-            self.app
-                .set_notice(Some("Route summary copied.".to_string()));
-        }
-        if copy_kml || copy_geojson {
-            if let Some(route) = plan.selected_route() {
-                let text = if copy_kml {
-                    crate::osm::route_to_kml(route, "Pinpoint route")
-                } else {
-                    crate::osm::route_to_geojson(route, "Pinpoint route")
-                };
-                ctx.copy_text(text);
-                self.app.set_notice(Some(if copy_kml {
-                    "KML copied to clipboard.".to_string()
-                } else {
-                    "GeoJSON copied to clipboard.".to_string()
-                }));
-            }
-        }
-        if let Some(url) = external {
-            let _ = webbrowser::open(&url);
-        }
-        self.route_plan = plan;
-        let app_data = self.app.data();
-        let mut data = app_data.lock().unwrap();
-        self.route_plan.apply_selected(&mut data);
     }
-
     /// Spawn a backend route request for the current plan.
     pub(crate) fn request_route(&mut self, plan: &RoutePlan, ctx: &egui::Context) {
         if !plan.has_endpoints() {

@@ -3429,6 +3429,97 @@ mod tests {
     }
 
     #[test]
+    fn real_place_sheet_actions_return_their_actions() {
+        use std::cell::{Cell, RefCell};
+        use std::rc::Rc;
+
+        let place = crate::osm::SearchPlace {
+            display_name: "Test place, Chișinău".into(),
+            short_name: "Test place".into(),
+            latitude: 47.01,
+            longitude: 28.86,
+            category: "test".into(),
+            place_type: "test".into(),
+            distance_m: None,
+        };
+        let ctx = egui::Context::default();
+        let directions_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let save_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let copy_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let share_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let outcome = Rc::new(RefCell::new(None::<super::map::PlaceSheetOutcome>));
+
+        let rect_of = |ctx: &egui::Context, id: Option<egui::Id>| {
+            id.and_then(|id| ctx.read_response(id))
+                .map(|response| response.rect)
+        };
+
+        let frame = |ctx: &egui::Context, events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(500.0, 700.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                draw_sheet_input_gate(ctx);
+                let drawn = draw_place_sheet_view(ctx, &place, 120.0, 500.0, false);
+                directions_rect.set(rect_of(ctx, drawn.directions_id));
+                save_rect.set(rect_of(ctx, drawn.save_id));
+                copy_rect.set(rect_of(ctx, drawn.copy_id));
+                share_rect.set(rect_of(ctx, drawn.share_id));
+                outcome.borrow_mut().replace(drawn);
+            });
+        };
+
+        frame(&ctx, Vec::new());
+        frame(&ctx, Vec::new());
+        let directions = directions_rect.get().expect("directions button rect");
+        let save = save_rect.get().expect("save button rect");
+        let copy = copy_rect.get().expect("copy button rect");
+        let share = share_rect.get().expect("share button rect");
+
+        let click = |pos: egui::Pos2| {
+            frame(&ctx, vec![egui::Event::PointerMoved(pos)]);
+            frame(&ctx, pointer_press(pos));
+            frame(&ctx, pointer_release(pos));
+        };
+
+        click(directions.center());
+        assert_eq!(
+            outcome
+                .borrow()
+                .as_ref()
+                .expect("directions outcome")
+                .action,
+            PlaceSheetAction::Directions
+        );
+
+        click(save.center());
+        assert_eq!(
+            outcome.borrow().as_ref().expect("save outcome").action,
+            PlaceSheetAction::Save
+        );
+
+        click(copy.center());
+        assert_eq!(
+            outcome.borrow().as_ref().expect("copy outcome").action,
+            PlaceSheetAction::Copy
+        );
+
+        click(share.center());
+        let outcome = outcome.borrow();
+        match &outcome.as_ref().expect("share outcome").action {
+            PlaceSheetAction::Share(url) => {
+                assert!(url.starts_with("geo:47.010000,28.860000"), "{url}");
+            }
+            other => panic!("expected Share, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn real_publish_sheet_blocks_the_page_and_focuses_close() {
         use std::cell::{Cell, RefCell};
         use std::rc::Rc;

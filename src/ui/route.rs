@@ -384,6 +384,7 @@ impl super::PinpointAppUI {
             };
             self.app.data().lock().unwrap().selected_place = Some(place.clone());
             self.mobile_selected_place = Some(place);
+            self.place_focus = true;
             self.center_map_at(latitude, longitude);
             tracing::info!("bookmark tapped");
             return;

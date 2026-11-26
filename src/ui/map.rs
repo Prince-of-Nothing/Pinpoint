@@ -743,6 +743,11 @@ enum EscapableSheet {
     Place,
 }
 
+/// Consume the compact place sheet's one-shot focus request.
+pub(crate) fn take_place_focus(requested: &mut bool) -> bool {
+    std::mem::take(requested)
+}
+
 fn sheet_escape_target(publish_open: bool, place_open: bool) -> Option<EscapableSheet> {
     if publish_open {
         Some(EscapableSheet::Publish)
@@ -928,6 +933,7 @@ impl PinpointAppUI {
                 data.selected_place = Some(place.clone());
                 drop(data);
                 self.mobile_selected_place = Some(place);
+                self.place_focus = true;
                 self.mobile_publish_open = false;
             }
         }
@@ -1135,6 +1141,7 @@ impl PinpointAppUI {
                 }
             }
         } else if let Some(place) = self.mobile_selected_place.clone() {
+            let focus_close = take_place_focus(&mut self.place_focus);
             let mut close = false;
             let mut save = false;
             let mut directions = false;
@@ -1173,8 +1180,12 @@ impl PinpointAppUI {
                                 ui.with_layout(
                                     egui::Layout::right_to_left(egui::Align::Center),
                                     |ui| {
-                                        if ui.button("×").clicked() {
+                                        let close_button = ui.button("×");
+                                        if close_button.clicked() {
                                             close = true;
+                                        }
+                                        if focus_close {
+                                            close_button.request_focus();
                                         }
                                     },
                                 );
@@ -1241,6 +1252,7 @@ impl PinpointAppUI {
                 });
             if close {
                 self.mobile_selected_place = None;
+                self.place_focus = false;
                 self.app.data().lock().unwrap().selected_place = None;
             }
             if save {
@@ -1266,11 +1278,13 @@ impl PinpointAppUI {
             if directions {
                 self.route_plan.open_with_destination(&place);
                 self.mobile_selected_place = None;
+                self.place_focus = false;
                 self.app.data().lock().unwrap().selected_place = None;
             }
             if set_origin {
                 self.route_plan.open_with_origin(&place);
                 self.mobile_selected_place = None;
+                self.place_focus = false;
                 self.app.data().lock().unwrap().selected_place = None;
             }
             if let Some(url) = open_url {
@@ -1343,7 +1357,7 @@ mod tests {
     use super::egui;
     use super::{
         map_key_action, map_shortcut_rows, map_shortcuts_enabled, sheet_escape_target,
-        EscapableSheet, MapKeyAction, MAP_SHORTCUTS,
+        take_place_focus, EscapableSheet, MapKeyAction, MAP_SHORTCUTS,
     };
 
     #[test]
@@ -1410,5 +1424,14 @@ mod tests {
             Some(EscapableSheet::Publish)
         );
         assert_eq!(sheet_escape_target(false, false), None);
+    }
+
+    #[test]
+    fn place_sheet_focus_is_requested_once() {
+        let mut requested = true;
+        assert!(take_place_focus(&mut requested));
+        assert!(!take_place_focus(&mut requested));
+        let mut idle = false;
+        assert!(!take_place_focus(&mut idle));
     }
 }

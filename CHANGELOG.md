@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] Web tests: pin route normalization edge cases.
 - [FEATURE] Offline packs: remove an installed region with `DELETE /map/offline/<region>`; it refuses while a download runs and touches only that region's folder.
 - [DOCS] Testing: add navigation, offline and goal queue rows to the test matrix in `docs/TESTING.md`.
 - [FEATURE] Web Account → Server: shows which Pinpoint server you're on and opens the app on another one (https, or plain http only for this computer, as in the native client; credentials, paths and other schemes are refused) after a confirmation, remembering the last five servers. The app keeps talking only to its own origin, so sessions and message keys never cross servers.

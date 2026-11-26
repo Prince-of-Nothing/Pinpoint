@@ -1144,27 +1144,21 @@ impl PinpointAppUI {
                 PublishSheetAction::Close => self.mobile_publish_open = false,
                 PublishSheetAction::Gps => self.request_gps_publish(ctx),
                 PublishSheetAction::Publish => {
-                    match (
-                        self.publish_lat.trim().parse::<f64>(),
-                        self.publish_lon.trim().parse::<f64>(),
-                    ) {
-                        (Ok(lat), Ok(lon))
-                            if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) =>
-                        {
-                            self.spawn_action(
-                                PendingAction::PublishLocation {
-                                    lat,
-                                    lon,
-                                    accuracy: 10.0,
-                                },
-                                ctx,
-                            );
-                            self.mobile_publish_open = false;
-                        }
-                        _ => self.app.set_error(Some(
+                    if let Some(fix) = parse_publish_fix(&self.publish_lat, &self.publish_lon) {
+                        self.spawn_action(
+                            PendingAction::PublishLocation {
+                                lat: fix.lat,
+                                lon: fix.lon,
+                                accuracy: fix.accuracy,
+                            },
+                            ctx,
+                        );
+                        self.mobile_publish_open = false;
+                    } else {
+                        self.app.set_error(Some(
                             "Enter a valid latitude (-90..90) and longitude (-180..180)"
                                 .to_string(),
-                        )),
+                        ));
                     }
                 }
                 #[cfg(target_os = "android")]
@@ -1322,109 +1316,79 @@ pub(crate) fn draw_place_sheet_view(
     let mut save_id = None;
     let mut copy_id = None;
     let mut share_id = None;
-    let name = encode_component(&place.short_name);
     egui::Area::new(egui::Id::new("mobile_place_sheet"))
-                .order(egui::Order::Foreground)
-                .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
-                .show(ctx, |ui| {
-                    ui.set_width(width - 24.0);
-                    egui::Frame::new()
-                        .fill(theme::PANEL)
-                        .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
-                        .corner_radius(egui::CornerRadius::same(12))
-                        .inner_margin(egui::Margin::same(12))
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label(
-                                    RichText::new(&place.short_name)
-                                        .size(18.0)
-                                        .strong(),
-                                );
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        let close_button = ui.button("×");
-                                        if close_button.clicked() {
-                                            action = Some(PlaceSheetAction::Close);
-                                        }
-                                        close_id = Some(close_button.id);
-                                        ui.memory_mut(|memory| {
-                                            memory.interested_in_focus(close_button.id, close_button.layer_id);
-                                        });
-                                        if focus_close {
-                                            close_button.request_focus();
-                                        }
-                                    },
-                                );
+        .order(egui::Order::Foreground)
+        .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -10.0))
+        .show(ctx, |ui| {
+            ui.set_width(width - 24.0);
+            egui::Frame::new()
+                .fill(theme::PANEL)
+                .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
+                .corner_radius(egui::CornerRadius::same(12))
+                .inner_margin(egui::Margin::same(12))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(&place.short_name).size(18.0).strong());
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let close_button = ui.button("×");
+                            if close_button.clicked() {
+                                action = Some(PlaceSheetAction::Close);
+                            }
+                            close_id = Some(close_button.id);
+                            ui.memory_mut(|memory| {
+                                memory.interested_in_focus(close_button.id, close_button.layer_id);
                             });
-                            ui.label(
-                                RichText::new(&place.display_name)
-                                    .size(12.0)
-                                    .color(theme::MUTED),
-                            );
-                            ui.label(
-                                RichText::new(format!(
-                                    "{} from map centre",
-                                    crate::ui::route::format_distance(distance_m)
-                                ))
-                                .size(11.0)
-                                .color(theme::MUTED),
-                            );
-                            ui.add_space(6.0);
-                            ui.horizontal_wrapped(|ui| {
-                                let directions_button = ui.button("Directions");
-                                if directions_button.clicked() {
-                                    action = Some(PlaceSheetAction::Directions);
-                                }
-                                directions_id = Some(directions_button.id);
-                                if ui.button("Set as origin").clicked() {
-                                    action = Some(PlaceSheetAction::SetOrigin);
-                                }
-                                let save_button = ui.button("Save");
-                                if save_button.clicked() {
-                                    action = Some(PlaceSheetAction::Save);
-                                }
-                                save_id = Some(save_button.id);
-                                let copy_button = ui.button("Copy");
-                                if copy_button.clicked() {
-                                    action = Some(PlaceSheetAction::Copy);
-                                }
-                                copy_id = Some(copy_button.id);
-                                let share_button = ui.button("Share");
-                                if share_button.clicked() {
-                                    action = Some(PlaceSheetAction::Share(place_share_url(place)));
-                                }
-                                share_id = Some(share_button.id);
-                                if ui.button("OSM").clicked() {
-                                    action = Some(PlaceSheetAction::OpenUrl(format!(
-                                        "https://www.openstreetmap.org/?mlat={:.4}&mlon={:.4}#map=15/{:.4}/{:.4}",
-                                        place.latitude,
-                                        place.longitude,
-                                        place.latitude,
-                                        place.longitude
-                                    )));
-                                }
-                                if ui.button("Google").clicked() {
-                                    action = Some(PlaceSheetAction::OpenUrl(format!(
-                                        "https://www.google.com/maps/search/?api=1&query={:.4},{:.4}",
-                                        place.latitude, place.longitude
-                                    )));
-                                }
-                                if ui.button("Organic").clicked() {
-                                    action = Some(PlaceSheetAction::OpenUrl(format!(
-                                        "https://omaps.app/map?v=1&ll={:.4},{:.4}&n={name}",
-                                        place.latitude, place.longitude
-                                    )));
-                                }
-                                if ui.button("Magic Earth").clicked() {
-                                    action = Some(PlaceSheetAction::OpenUrl(format!(
-                                        "magicearth://?show_on_map&lat={:.4}&lon={:.4}&name={name}",
-                                        place.latitude, place.longitude
-                                    )));
-                                }
-                            });
+                            if focus_close {
+                                close_button.request_focus();
+                            }
                         });
+                    });
+                    ui.label(
+                        RichText::new(&place.display_name)
+                            .size(12.0)
+                            .color(theme::MUTED),
+                    );
+                    ui.label(
+                        RichText::new(format!(
+                            "{} from map centre",
+                            crate::ui::route::format_distance(distance_m)
+                        ))
+                        .size(11.0)
+                        .color(theme::MUTED),
+                    );
+                    ui.add_space(6.0);
+                    ui.horizontal_wrapped(|ui| {
+                        let directions_button = ui.button("Directions");
+                        if directions_button.clicked() {
+                            action = Some(PlaceSheetAction::Directions);
+                        }
+                        directions_id = Some(directions_button.id);
+                        if ui.button("Set as origin").clicked() {
+                            action = Some(PlaceSheetAction::SetOrigin);
+                        }
+                        let save_button = ui.button("Save");
+                        if save_button.clicked() {
+                            action = Some(PlaceSheetAction::Save);
+                        }
+                        save_id = Some(save_button.id);
+                        let copy_button = ui.button("Copy");
+                        if copy_button.clicked() {
+                            action = Some(PlaceSheetAction::Copy);
+                        }
+                        copy_id = Some(copy_button.id);
+                        let share_button = ui.button("Share");
+                        if share_button.clicked() {
+                            action = Some(PlaceSheetAction::Share(place_share_url(place)));
+                        }
+                        share_id = Some(share_button.id);
+                        for (label, url) in place_external_urls(place) {
+                            if ui.button(label).clicked() {
+                                action = Some(PlaceSheetAction::OpenUrl(url));
+                            }
+                        }
+                    });
                 });
+        });
     PlaceSheetOutcome {
         action: action.unwrap_or(PlaceSheetAction::None),
         close_id,
@@ -1450,18 +1414,18 @@ impl PinpointAppUI {
     }
 
     fn request_gps_publish(&mut self, ctx: &egui::Context) {
-        match crate::platform::ensure_location_permission() {
-            crate::platform::LocationPermission::Granted => {
+        match gps_publish_step(crate::platform::ensure_location_permission()) {
+            GpsPublishStep::Request => {
                 self.spawn_action(PendingAction::PublishGpsLocation, ctx);
             }
-            crate::platform::LocationPermission::Requested => {
+            GpsPublishStep::Waiting => {
                 self.app.set_notice(Some(
                     "Location permission requested. Allow it, then tap Use GPS again. \
                      If no dialog appears, open Settings → Permissions."
                         .to_string(),
                 ));
             }
-            crate::platform::LocationPermission::Unsupported => {
+            GpsPublishStep::Unavailable => {
                 self.app
                     .set_error(Some("Location is unavailable on this device.".to_string()));
             }
@@ -1516,6 +1480,79 @@ pub(crate) fn save_place_bookmark(
     place: &crate::osm::SearchPlace,
 ) -> crate::bookmarks::Bookmark {
     store.add(&place.short_name, place.latitude, place.longitude)
+}
+
+/// Manual publish coordinates with the accuracy the app sends.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct PublishFix {
+    pub lat: f64,
+    pub lon: f64,
+    pub accuracy: f64,
+}
+
+/// Validate the publish sheet's manual coordinates.
+pub(crate) fn parse_publish_fix(lat: &str, lon: &str) -> Option<PublishFix> {
+    match (lat.trim().parse::<f64>(), lon.trim().parse::<f64>()) {
+        (Ok(lat), Ok(lon)) if (-90.0..=90.0).contains(&lat) && (-180.0..=180.0).contains(&lon) => {
+            Some(PublishFix {
+                lat,
+                lon,
+                accuracy: 10.0,
+            })
+        }
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GpsPublishStep {
+    Request,
+    Waiting,
+    Unavailable,
+}
+
+/// Decide what Use GPS does for the current permission state.
+pub(crate) fn gps_publish_step(permission: crate::platform::LocationPermission) -> GpsPublishStep {
+    match permission {
+        crate::platform::LocationPermission::Granted => GpsPublishStep::Request,
+        crate::platform::LocationPermission::Requested => GpsPublishStep::Waiting,
+        crate::platform::LocationPermission::Unsupported => GpsPublishStep::Unavailable,
+    }
+}
+
+/// External map links offered by the place sheet.
+pub(crate) fn place_external_urls(place: &crate::osm::SearchPlace) -> [(&'static str, String); 4] {
+    let name = encode_component(&place.short_name);
+    [
+        (
+            "OSM",
+            format!(
+                "https://www.openstreetmap.org/?mlat={:.4}&mlon={:.4}#map=15/{:.4}/{:.4}",
+                place.latitude, place.longitude, place.latitude, place.longitude
+            ),
+        ),
+        (
+            "Google",
+            format!(
+                "https://www.google.com/maps/search/?api=1&query={:.4},{:.4}",
+                place.latitude, place.longitude
+            ),
+        ),
+        (
+            "Organic",
+            format!(
+                "https://omaps.app/map?v=1&ll={:.4},{:.4}&n={name}",
+                place.latitude, place.longitude
+            ),
+        ),
+        (
+            "Magic Earth",
+            format!(
+                "magicearth://?show_on_map&lat={:.4}&lon={:.4}&name={name}",
+                place.latitude, place.longitude
+            ),
+        ),
+    ]
 }
 
 #[cfg(test)]

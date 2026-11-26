@@ -990,4 +990,22 @@ mod tests {
         assert!(take_route_focus(&mut plan));
         assert!(!take_route_focus(&mut plan));
     }
+
+    #[test]
+    fn sheet_open_with_sets_the_selected_endpoint() {
+        let mut origin_plan = RoutePlan::default();
+        origin_plan.open_with_origin(&place("A"));
+        assert_eq!(origin_plan.origin, Some(RoutePoint::new(47.0, 28.8, "A")));
+        assert!(origin_plan.open && origin_plan.focus);
+        assert!(origin_plan.error.is_none());
+        assert!(!origin_plan.following);
+
+        let mut destination_plan = RoutePlan::default();
+        destination_plan.open_with_destination(&place("B"));
+        assert_eq!(
+            destination_plan.destination,
+            Some(RoutePoint::new(47.0, 28.8, "B"))
+        );
+        assert!(destination_plan.open && destination_plan.focus);
+    }
 }

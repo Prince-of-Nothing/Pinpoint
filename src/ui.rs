@@ -2671,6 +2671,7 @@ impl eframe::App for PinpointAppUI {
 
 #[cfg(test)]
 mod tests {
+    use super::map::{draw_place_sheet_view, PlaceSheetAction};
     use super::route::{RoutePlan, RoutePoint, RouteSheetData};
     use super::share_sheet::{ShareSheet, ShareSheetOutcome};
     use super::{
@@ -3095,6 +3096,98 @@ mod tests {
             Some(background_id),
             "Tab does not focus the page behind the route sheet"
         );
+    }
+
+    #[test]
+    fn real_place_sheet_blocks_the_page_and_focuses_close() {
+        use std::cell::{Cell, RefCell};
+        use std::rc::Rc;
+
+        let place = crate::osm::SearchPlace {
+            display_name: "Test place, Chișinău".into(),
+            short_name: "Test place".into(),
+            latitude: 47.01,
+            longitude: 28.86,
+            category: "test".into(),
+            place_type: "test".into(),
+            distance_m: None,
+        };
+        let ctx = egui::Context::default();
+        let background_clicks = Rc::new(Cell::new(0));
+        let background_scroll = Rc::new(Cell::new(0.0_f32));
+        let background_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let background_id = Rc::new(Cell::new(None::<egui::Id>));
+        let close_id = Rc::new(Cell::new(None::<egui::Id>));
+        let focus_once = Rc::new(Cell::new(true));
+        let action = Rc::new(RefCell::new(None::<PlaceSheetAction>));
+        let focus_guard = Rc::new(RefCell::new(None::<egui::Id>));
+
+        let frame = |ctx: &egui::Context, events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(500.0, 700.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                draw_sheet_input_gate(ctx);
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    let response = ui.add(egui::Button::new("background"));
+                    background_rect.set(Some(response.rect));
+                    background_id.set(Some(response.id));
+                    if response.clicked() {
+                        background_clicks.set(background_clicks.get() + 1);
+                    }
+                    background_scroll.set(ui.input(|input| input.raw_scroll_delta.y));
+                });
+                let focus = focus_once.get();
+                focus_once.set(false);
+                let outcome = draw_place_sheet_view(ctx, &place, 120.0, 500.0, focus);
+                close_id.set(outcome.close_id);
+                action.borrow_mut().replace(outcome.action);
+                sheet_focus_guard(ctx, true, &mut focus_guard.borrow_mut());
+            });
+        };
+
+        frame(&ctx, Vec::new());
+        frame(&ctx, Vec::new());
+        let bg = background_rect.get().expect("background rect");
+        let background_id = background_id.get().expect("background id");
+        let close_id = close_id.get().expect("place close id");
+        assert_eq!(
+            ctx.memory(|memory| memory.focused()),
+            Some(close_id),
+            "the place close control takes focus"
+        );
+
+        frame(&ctx, pointer_press(bg.center()));
+        frame(&ctx, pointer_release(bg.center()));
+        assert_eq!(background_clicks.get(), 0, "background click is blocked");
+
+        frame(&ctx, pointer_wheel(bg.center(), 20.0));
+        assert_eq!(background_scroll.get(), 0.0, "background scroll is blocked");
+
+        for _ in 0..2 {
+            frame(
+                &ctx,
+                vec![egui::Event::Key {
+                    key: egui::Key::Tab,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+        frame(&ctx, Vec::new());
+        assert_ne!(
+            ctx.memory(|memory| memory.focused()),
+            Some(background_id),
+            "Tab does not focus the page behind the place sheet"
+        );
+        assert_eq!(action.borrow().clone(), Some(PlaceSheetAction::None));
     }
     #[test]
     fn escape_dismisses_only_without_a_blocking_modal() {

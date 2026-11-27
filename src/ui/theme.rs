@@ -67,6 +67,23 @@ pub const ACCENT_INK: Color32 = DARK.accent_ink;
 pub const DANGER: Color32 = DARK.danger;
 pub const SUCCESS: Color32 = Color32::from_rgb(0x8f, 0xc9, 0x9f);
 
+/// Fill for a surface that floats over content (the map's search pill, its
+/// controls and chips, the sharing strip and the tab bar). It is the panel
+/// colour a touch see-through, so the map reads under it.
+pub fn float_fill() -> Color32 {
+    Color32::from_rgba_unmultiplied(PANEL.r(), PANEL.g(), PANEL.b(), 238)
+}
+
+/// Elevation for a floating surface: a soft, low shadow instead of a hard edge.
+pub fn float_shadow() -> egui::Shadow {
+    egui::Shadow {
+        offset: [0, 8],
+        blur: 24,
+        spread: 0,
+        color: Color32::from_black_alpha(170),
+    }
+}
+
 /// Card radius in points; used by [`card`] and matching custom frames.
 pub const CARD_RADIUS: u8 = 14;
 

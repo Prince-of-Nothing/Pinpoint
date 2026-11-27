@@ -615,6 +615,7 @@ pub fn render_map_with(
         }
 
         // Draw pins for each location
+        let now = chrono::Utc::now().timestamp();
         for loc in &all_locations {
             let pin_pos = project_to_rect(
                 loc.latitude,
@@ -633,6 +634,7 @@ pub fn render_map_with(
                 "city_only" => (theme::DANGER, pin_radius + 27.0),
                 _ => (theme::MUTED, pin_radius + 7.0),
             };
+            let pin_color = pin_color.gamma_multiply(pin_opacity(&loc.updated_at, now));
             painter.circle_stroke(
                 pin_pos,
                 ring_radius,
@@ -916,6 +918,17 @@ fn draw_location_list(
     });
 }
 
+/// How much of its colour a map pin keeps, by how old its location is. Live
+/// and fresh pins are full strength; stale pins are dimmed and dead ones more
+/// so, so the map never shows an old position as if it were current.
+pub(crate) fn pin_opacity(updated_at: &str, now_unix: i64) -> f32 {
+    match crate::models::freshness_state(updated_at, now_unix) {
+        "live" | "fresh" => 1.0,
+        "dead" => 0.3,
+        _ => 0.5,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1023,5 +1036,39 @@ mod tests {
         assert_eq!(format_scale_meters(1000.0), "1 km");
         assert_eq!(format_scale_meters(500.0), "500 m");
         assert_eq!(format_scale_meters(0.5), "0.5 m");
+    }
+}
+
+#[cfg(test)]
+mod pin_freshness_tests {
+    use super::*;
+
+    const NOW: i64 = 1_795_000_000;
+
+    fn at(age_secs: i64) -> String {
+        chrono::DateTime::from_timestamp(NOW - age_secs, 0)
+            .unwrap()
+            .to_rfc3339()
+    }
+
+    #[test]
+    fn a_live_or_fresh_pin_is_drawn_at_full_strength() {
+        assert_eq!(pin_opacity(&at(10), NOW), 1.0);
+        assert_eq!(pin_opacity(&at(5 * 60), NOW), 1.0);
+    }
+
+    #[test]
+    fn a_stale_pin_is_dimmed() {
+        assert_eq!(pin_opacity(&at(20 * 60), NOW), 0.5);
+    }
+
+    #[test]
+    fn a_dead_pin_is_dimmed_further() {
+        assert_eq!(pin_opacity(&at(3 * 3600), NOW), 0.3);
+    }
+
+    #[test]
+    fn a_pin_with_no_readable_time_is_dimmed_like_a_stale_one() {
+        assert_eq!(pin_opacity("not a time", NOW), 0.5);
     }
 }

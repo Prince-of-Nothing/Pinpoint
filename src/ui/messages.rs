@@ -176,14 +176,21 @@ impl PinpointAppUI {
                     let data = data.lock().unwrap();
                     data.safety_state(peer.user_id, &safety)
                 };
-                ui.horizontal_wrapped(|ui| {
-                    ui.collapsing("Safety number", |ui| {
-                        ui.monospace(&safety);
-                        theme::caption(
-                            ui,
-                            "Compare this with your friend in person to rule out a key swap.",
-                        );
+                // The number lives behind the "i" button, so the thread keeps
+                // its room. The status word stays visible beside it.
+                let info_id = egui::Id::new(("message_safety_info", peer.user_id));
+                let mut info_open = ui
+                    .ctx()
+                    .data(|d| d.get_temp::<bool>(info_id))
+                    .unwrap_or(false);
+                ui.horizontal(|ui| {
+                    let info = ui.add(egui::Button::new("i").min_size(egui::vec2(28.0, 28.0)));
+                    info.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Safety number")
                     });
+                    if info.on_hover_text("Safety number").clicked() {
+                        info_open = !info_open;
+                    }
                     match state {
                         SafetyState::Verified => {
                             ui.label(RichText::new("Verified").size(12.0).color(theme::SUCCESS));
@@ -193,16 +200,31 @@ impl PinpointAppUI {
                         }
                         SafetyState::Unverified => {}
                     }
-                    if state != SafetyState::Verified && ui.button("Mark as verified").clicked() {
-                        self.app.verify_message_peer(peer.user_id, &safety);
-                    }
                 });
-                if state == SafetyState::Changed {
-                    theme::caption(
-                        ui,
-                        "The safety number changed. Compare again before trusting it.",
-                    );
+                if info_open {
+                    let mut open = true;
+                    egui::Window::new("Safety number")
+                        .open(&mut open)
+                        .collapsible(false)
+                        .resizable(false)
+                        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+                        .show(ui.ctx(), |ui| {
+                            ui.monospace(&safety);
+                            theme::caption(
+                                ui,
+                                "Compare this with your friend in person to rule out a key swap.",
+                            );
+                            ui.add_space(8.0);
+                            ui.label(safety_status_text(state));
+                            if can_mark_verified(state)
+                                && theme::primary_button(ui, "Mark as verified").clicked()
+                            {
+                                self.app.verify_message_peer(peer.user_id, &safety);
+                            }
+                        });
+                    info_open = open;
                 }
+                ui.data_mut(|d| d.insert_temp(info_id, info_open));
             }
         }
         ui.separator();
@@ -324,9 +346,24 @@ pub(crate) fn composer_should_focus(requested: bool, peer_ready: bool) -> bool {
     requested && peer_ready
 }
 
+/// One line about a friend's safety number, shown in the info window.
+pub(crate) fn safety_status_text(state: SafetyState) -> &'static str {
+    match state {
+        SafetyState::Unverified => "Not compared with your friend yet.",
+        SafetyState::Verified => "You checked this number.",
+        SafetyState::Changed => "The number changed, so compare it again before you trust it.",
+    }
+}
+
+/// Only a number that is not yet checked offers "Mark as verified".
+pub(crate) fn can_mark_verified(state: SafetyState) -> bool {
+    state != SafetyState::Verified
+}
+
 #[cfg(test)]
 mod tests {
     use super::{composer_should_focus, message_to_send, restore_message_draft};
+    use crate::models::SafetyState;
 
     #[test]
     fn empty_and_whitespace_drafts_are_not_sent() {
@@ -369,5 +406,33 @@ mod tests {
         assert_eq!(newer, "typed again");
         restore_message_draft(&mut newer, None);
         assert_eq!(newer, "typed again");
+    }
+
+    #[test]
+    fn an_unchecked_number_says_it_has_not_been_compared() {
+        assert_eq!(
+            super::safety_status_text(SafetyState::Unverified),
+            "Not compared with your friend yet."
+        );
+    }
+
+    #[test]
+    fn a_checked_number_says_so() {
+        assert_eq!(
+            super::safety_status_text(SafetyState::Verified),
+            "You checked this number."
+        );
+    }
+
+    #[test]
+    fn a_changed_number_asks_for_a_new_comparison() {
+        assert!(super::safety_status_text(SafetyState::Changed).contains("compare it again"));
+    }
+
+    #[test]
+    fn only_a_number_not_yet_checked_offers_mark_as_verified() {
+        assert!(super::can_mark_verified(SafetyState::Unverified));
+        assert!(super::can_mark_verified(SafetyState::Changed));
+        assert!(!super::can_mark_verified(SafetyState::Verified));
     }
 }

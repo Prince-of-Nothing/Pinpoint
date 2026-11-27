@@ -87,7 +87,11 @@ const TAB_BOTTOM_INSET: i8 = 20;
 /// screen. Returns the screen to open when a different tab is tapped; tapping
 /// the tab that is already open does nothing, so a tap on People keeps Sharing
 /// open.
-pub(crate) fn draw_tab_bar(ctx: &egui::Context, current: &CurrentScreen) -> Option<CurrentScreen> {
+pub(crate) fn draw_tab_bar(
+    ctx: &egui::Context,
+    current: &CurrentScreen,
+    unread: i64,
+) -> Option<CurrentScreen> {
     let owner = PhoneTab::owning(current);
     let mut chosen: Option<CurrentScreen> = None;
     egui::TopBottomPanel::bottom("mobile_tabbar")
@@ -141,11 +145,23 @@ pub(crate) fn draw_tab_bar(ctx: &egui::Context, current: &CurrentScreen) -> Opti
                                 egui::FontId::proportional(14.0),
                                 ink,
                             );
+                            if let Some(badge) = unread_badge(tab, unread) {
+                                let centre = rect.center() + egui::vec2(14.0, -18.0);
+                                painter.circle_filled(centre, 9.0, theme::ACCENT);
+                                painter.text(
+                                    centre,
+                                    egui::Align2::CENTER_CENTER,
+                                    badge,
+                                    egui::FontId::proportional(11.0),
+                                    theme::ACCENT_INK,
+                                );
+                            }
+                            let accessible = tab_accessible_label(tab, unread);
                             response.widget_info(|| {
                                 egui::WidgetInfo::labeled(
                                     egui::WidgetType::Button,
                                     true,
-                                    tab.label(),
+                                    accessible.clone(),
                                 )
                             });
                             if response.clicked() && !selected {
@@ -270,6 +286,27 @@ pub(crate) fn avatar_button(ui: &mut egui::Ui, full_name: Option<&str>) -> egui:
     .on_hover_text("Account and more")
 }
 
+/// The badge on a tab, if it has one. Only Chats carries unread messages.
+/// Counts above nine read "9+" so the badge stays small.
+pub(crate) fn unread_badge(tab: PhoneTab, unread: i64) -> Option<String> {
+    if tab != PhoneTab::Chats || unread <= 0 {
+        return None;
+    }
+    Some(if unread > 9 {
+        "9+".to_string()
+    } else {
+        unread.to_string()
+    })
+}
+
+/// What a screen reader says for a tab, including its unread count.
+pub(crate) fn tab_accessible_label(tab: PhoneTab, unread: i64) -> String {
+    match unread_badge(tab, unread) {
+        Some(_) => format!("{}, {unread} unread", tab.label()),
+        None => tab.label().to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -352,7 +389,7 @@ mod tests {
         };
         let mut chosen = None;
         let _ = ctx.run(input, |ctx| {
-            chosen = draw_tab_bar(ctx, current);
+            chosen = draw_tab_bar(ctx, current, 0);
         });
         chosen
     }
@@ -422,5 +459,32 @@ mod tests {
         assert_eq!(avatar_initial(None), '?');
         assert_eq!(avatar_initial(Some("   ")), '?');
         assert_eq!(avatar_initial(Some("7 seas")), '?');
+    }
+
+    #[test]
+    fn chats_shows_the_unread_count() {
+        assert_eq!(unread_badge(PhoneTab::Chats, 3).as_deref(), Some("3"));
+    }
+
+    #[test]
+    fn chats_shows_no_badge_when_nothing_is_unread() {
+        assert_eq!(unread_badge(PhoneTab::Chats, 0), None);
+    }
+
+    #[test]
+    fn only_chats_carries_a_badge() {
+        assert_eq!(unread_badge(PhoneTab::Map, 5), None);
+        assert_eq!(unread_badge(PhoneTab::People, 5), None);
+    }
+
+    #[test]
+    fn large_counts_cap_at_nine_plus() {
+        assert_eq!(unread_badge(PhoneTab::Chats, 12).as_deref(), Some("9+"));
+    }
+
+    #[test]
+    fn screen_readers_hear_the_unread_count_on_chats() {
+        assert_eq!(tab_accessible_label(PhoneTab::Chats, 3), "Chats, 3 unread");
+        assert_eq!(tab_accessible_label(PhoneTab::Chats, 0), "Chats");
     }
 }

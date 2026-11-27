@@ -2567,7 +2567,9 @@ impl eframe::App for PinpointAppUI {
         if compact && !auth_screen && !self.mobile_nav_open {
             // Android 15 draws edge-to-edge; the bar reserves room for the
             // gesture navigation bar below its tabs.
-            if let Some(screen) = phone_tabs::draw_tab_bar(ctx, &self.app.current_screen()) {
+            let unread = self.app.data().lock().unwrap().unread_messages;
+            if let Some(screen) = phone_tabs::draw_tab_bar(ctx, &self.app.current_screen(), unread)
+            {
                 self.app.set_screen(screen);
             }
         }

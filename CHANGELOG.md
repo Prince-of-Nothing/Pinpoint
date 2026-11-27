@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Removed
+- [INFRA] Config: `.env.example` no longer lists `SECRET_KEY` and `JWT_SECRET`. Nothing read them, so setting them did nothing.
 
 ## [3.0.1] - 2026-11-27
 ### Security

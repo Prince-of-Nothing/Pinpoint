@@ -2,7 +2,7 @@
 
 ## Repo shape (active — Rust only)
 
-- **Rust multiplatform client** (root crate `pinpoint-desktop` v1.2.1):
+- **Rust multiplatform client** (root crate `pinpoint-desktop` v3.0.0):
   `src/lib.rs` (portable core) + `src/main.rs` (desktop), eframe/egui UI +
   `reqwest`. One codebase for desktop / Android (`cargo-apk` + Gradle/Java
   bridge, ADR-0017) / iOS (`cargo-xcodebuild`) / wasm stub - see

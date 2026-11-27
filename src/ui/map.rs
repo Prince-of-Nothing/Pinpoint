@@ -840,6 +840,7 @@ impl PinpointAppUI {
         let height = (ui.available_height() - 26.0).max(320.0);
         let backend_url = self.app.backend_url();
         let online = !self.app.is_offline_mode();
+        let lang = self.lang;
 
         let blocked = self.crash_dialog.is_some()
             || self.update_dialog_open
@@ -892,35 +893,38 @@ impl PinpointAppUI {
         let panel_solid = theme::PANEL;
         let border = theme::BORDER;
 
-        // Floating search pill (web `.search-form`).
-        let mut submit = false;
-        egui::Area::new(egui::Id::new("mobile_map_search"))
-            .order(egui::Order::Foreground)
-            .fixed_pos(egui::pos2(12.0, top + 10.0))
-            .show(ctx, |ui| {
-                ui.set_width(width - 24.0);
-                egui::Frame::new()
-                    .fill(panel)
-                    .stroke(egui::Stroke::new(1.0_f32, border))
-                    .corner_radius(egui::CornerRadius::same(22))
-                    .inner_margin(egui::Margin::symmetric(10, 4))
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            let edit = ui.add(
-                                egui::TextEdit::singleline(&mut self.search_query)
-                                    .id(egui::Id::new(SEARCH_INPUT_ID))
-                                    .hint_text("Search places…")
-                                    .frame(false)
-                                    .char_limit(120)
-                                    .desired_width((ui.available_width() - 78.0).max(120.0)),
-                            );
-                            submit = ui.button("Search").clicked()
-                                || (edit.lost_focus()
-                                    && ui.input(|i| i.key_pressed(egui::Key::Enter)));
-                        });
-                    });
-            });
-        if submit && !self.search_query.trim().is_empty() {
+        // Floating search pill (web `.search-form`) with the account action
+        // beside it. The phone map has no separate header row.
+        let signed_in = self.app.is_signed_in();
+        let avatar_name = self
+            .app
+            .data()
+            .lock()
+            .unwrap()
+            .user
+            .as_ref()
+            .map(|user| user.full_name.clone());
+        let search = draw_mobile_map_search(
+            ctx,
+            &mut self.search_query,
+            width,
+            top,
+            signed_in,
+            avatar_name.as_deref(),
+            lang,
+        );
+        if search.submit && !self.search_query.trim().is_empty() {
+            let query = self.search_query.clone();
+            self.spawn_action(PendingAction::SearchPlaces { query }, ctx);
+        }
+        if search.account_clicked {
+            if signed_in {
+                self.mobile_nav_open = true;
+            } else {
+                self.app.set_screen(CurrentScreen::Login);
+            }
+        }
+        if search.submit && !self.search_query.trim().is_empty() {
             let query = self.search_query.clone();
             self.spawn_action(PendingAction::SearchPlaces { query }, ctx);
         }
@@ -1241,6 +1245,80 @@ impl PinpointAppUI {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MobileMapSearchOutcome {
+    pub submit: bool,
+    pub account_clicked: bool,
+    pub search_id: Option<egui::Id>,
+    pub account_id: Option<egui::Id>,
+}
+
+/// Floating phone-map search pill and its account button. Kept as a free view
+/// so the real controls can be clicked in a headless egui test.
+pub(crate) fn draw_mobile_map_search(
+    ctx: &egui::Context,
+    query: &mut String,
+    width: f32,
+    top: f32,
+    signed_in: bool,
+    avatar_name: Option<&str>,
+    lang: crate::i18n::Lang,
+) -> MobileMapSearchOutcome {
+    let account_width = if signed_in { 44.0 } else { 92.0 };
+    let search_width = (width - 24.0 - account_width - 8.0).max(140.0);
+    let mut outcome = MobileMapSearchOutcome::default();
+    egui::Area::new(egui::Id::new("mobile_map_search"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(egui::pos2(12.0, top + 10.0))
+        .show(ctx, |ui| {
+            ui.set_width(search_width);
+            egui::Frame::new()
+                .fill(theme::PANEL.gamma_multiply(0.98))
+                .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
+                .corner_radius(egui::CornerRadius::same(22))
+                .inner_margin(egui::Margin::symmetric(10, 4))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let edit = ui.add(
+                            egui::TextEdit::singleline(query)
+                                .id(egui::Id::new(SEARCH_INPUT_ID))
+                                .hint_text("Search places…")
+                                .frame(false)
+                                .char_limit(120)
+                                .desired_width((ui.available_width() - 56.0).max(100.0)),
+                        );
+                        let search_button = map_icon_button(ui, MapIcon::Search, "Search");
+                        outcome.search_id = Some(search_button.id);
+                        outcome.submit = search_button.clicked()
+                            || (edit.lost_focus()
+                                && ui.input(|input| input.key_pressed(egui::Key::Enter)));
+                    });
+                });
+        });
+    egui::Area::new(egui::Id::new("mobile_map_account"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(egui::pos2(width - account_width - 12.0, top + 14.0))
+        .show(ctx, |ui| {
+            ui.set_width(account_width);
+            let response = if signed_in {
+                super::phone_tabs::avatar_button(ui, avatar_name)
+            } else {
+                let button = egui::Button::new(
+                    RichText::new(i18n::t(lang, key::SIGN_IN))
+                        .strong()
+                        .color(theme::ACCENT_INK),
+                )
+                .fill(theme::ACCENT)
+                .min_size(egui::vec2(account_width, 44.0))
+                .corner_radius(egui::CornerRadius::same(22));
+                ui.add(button)
+            };
+            outcome.account_id = Some(response.id);
+            outcome.account_clicked = response.clicked();
+        });
+    outcome
+}
+
 pub(crate) fn draw_publish_sheet_view(
     ctx: &egui::Context,
     lang: crate::i18n::Lang,
@@ -1475,6 +1553,7 @@ pub(crate) enum MapIcon {
     Locate,
     Style,
     Route,
+    Search,
     WebView { shown: bool },
     Share,
     Menu,
@@ -1526,6 +1605,10 @@ fn paint_map_icon(painter: &egui::Painter, icon: MapIcon, center: egui::Pos2, in
             painter.line_segment([at(-6.0, 6.0), at(4.0, -4.0)], stroke);
             painter.line_segment([at(4.0, -4.0), at(-1.0, -4.0)], stroke);
             painter.line_segment([at(4.0, -4.0), at(4.0, 1.0)], stroke);
+        }
+        MapIcon::Search => {
+            painter.circle_stroke(at(-1.0, -1.0), 5.5, stroke);
+            painter.line_segment([at(3.0, 3.0), at(7.5, 7.5)], stroke);
         }
         MapIcon::WebView { shown } => {
             let square = egui::Rect::from_center_size(center, egui::vec2(13.0, 13.0));

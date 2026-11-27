@@ -1660,6 +1660,13 @@ impl PinpointAppUI {
         if Self::is_compact(ctx) {
             // Android/iOS status bar sits over the window; leave a safe inset.
             ui.add_space(28.0);
+            if self.app.current_screen() == CurrentScreen::Map {
+                // The phone map puts account actions beside search, not in a
+                // separate header row. Keep offline/error/loading visible.
+                self.draw_compact_status(ui, lang);
+                ui.add_space(6.0);
+                return;
+            }
             let auth_screen = matches!(
                 self.app.current_screen(),
                 CurrentScreen::Login | CurrentScreen::Register
@@ -1724,32 +1731,7 @@ impl PinpointAppUI {
             if sign_out {
                 self.spawn_action(PendingAction::Logout, ctx);
             }
-            // Offline state and the spinner share the status line so the
-            // action row stays a single tap target.
-            let offline = self.app.is_offline_mode();
-            let status = self
-                .app
-                .error_message()
-                .map(|text| (text, theme::DANGER))
-                .or_else(|| self.app.notice_message().map(|text| (text, theme::SUCCESS)));
-            if offline || status.is_some() || self.app.is_loading() {
-                ui.horizontal_wrapped(|ui| {
-                    if self.app.is_loading() {
-                        ui.spinner();
-                    }
-                    if offline {
-                        ui.label(
-                            RichText::new(i18n::t(lang, key::OFFLINE_MODE))
-                                .size(11.0)
-                                .strong()
-                                .color(theme::ACCENT),
-                        );
-                    }
-                    if let Some((text, color)) = status {
-                        ui.colored_label(color, text);
-                    }
-                });
-            }
+            self.draw_compact_status(ui, lang);
             ui.add_space(6.0);
             return;
         }
@@ -1814,6 +1796,34 @@ impl PinpointAppUI {
             ui.colored_label(theme::DANGER, err);
         }
         ui.add_space(4.0);
+    }
+
+    /// Compact status line shared by the phone header and the map's search row.
+    fn draw_compact_status(&self, ui: &mut egui::Ui, lang: Lang) {
+        let offline = self.app.is_offline_mode();
+        let status = self
+            .app
+            .error_message()
+            .map(|text| (text, theme::DANGER))
+            .or_else(|| self.app.notice_message().map(|text| (text, theme::SUCCESS)));
+        if offline || status.is_some() || self.app.is_loading() {
+            ui.horizontal_wrapped(|ui| {
+                if self.app.is_loading() {
+                    ui.spinner();
+                }
+                if offline {
+                    ui.label(
+                        RichText::new(i18n::t(lang, key::OFFLINE_MODE))
+                            .size(11.0)
+                            .strong()
+                            .color(theme::ACCENT),
+                    );
+                }
+                if let Some((text, color)) = status {
+                    ui.colored_label(color, text);
+                }
+            });
+        }
     }
 
     fn draw_main_toolbar(&mut self, ui: &mut egui::Ui) {
@@ -2183,10 +2193,12 @@ impl PinpointAppUI {
         }
         let lang = self.lang;
         let current = self.app.current_screen();
+        let signed_in = self.app.is_signed_in();
         let mut chosen: Option<CurrentScreen> = None;
         let mut chosen_lang: Option<Lang> = None;
         let mut publish_requested = false;
         let mut refresh_requested = false;
+        let mut sign_out_requested = false;
         let (is_admin, update_available, unread_messages) = {
             let data = self.app.data();
             let data = data.lock().unwrap();
@@ -2344,6 +2356,9 @@ impl PinpointAppUI {
                         }
                     });
                 ui.add_space(8.0);
+                if signed_in && ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
+                    sign_out_requested = true;
+                }
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Language").size(12.0));
@@ -2403,6 +2418,10 @@ impl PinpointAppUI {
         }
         if changes.refresh {
             self.spawn_action(PendingAction::RefreshAll, ctx);
+        }
+        if sign_out_requested {
+            self.spawn_action(PendingAction::Logout, ctx);
+            self.mobile_nav_open = false;
         }
     }
 }
@@ -2682,7 +2701,8 @@ impl eframe::App for PinpointAppUI {
 #[cfg(test)]
 mod tests {
     use super::map::{
-        draw_place_sheet_view, draw_publish_sheet_view, PlaceSheetAction, PublishSheetAction,
+        draw_mobile_map_search, draw_place_sheet_view, draw_publish_sheet_view, PlaceSheetAction,
+        PublishSheetAction, SEARCH_INPUT_ID,
     };
     use super::route::{RoutePlan, RoutePoint, RouteSheetData};
     use super::share_sheet::{ShareSheet, ShareSheetAction, ShareSheetOutcome};
@@ -3415,6 +3435,78 @@ mod tests {
             "Tab does not focus the page behind the place sheet"
         );
         assert_eq!(action.borrow().clone(), Some(PlaceSheetAction::None));
+    }
+
+    #[test]
+    fn real_mobile_map_search_submits_and_opens_account() {
+        use std::cell::Cell;
+        use std::rc::Rc;
+
+        let ctx = egui::Context::default();
+        let mut query = String::new();
+        let input_rect = Rc::new(Cell::new(None::<egui::Rect>));
+        let outcome = Rc::new(Cell::new(None::<super::map::MobileMapSearchOutcome>));
+
+        let mut frame = |ctx: &egui::Context, events: Vec<egui::Event>| {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(360.0, 800.0),
+                )),
+                events,
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| {
+                let drawn = draw_mobile_map_search(
+                    ctx,
+                    &mut query,
+                    360.0,
+                    28.0,
+                    true,
+                    Some("Ada Lovelace"),
+                    Lang::En,
+                );
+                if let Some(response) = ctx.read_response(egui::Id::new(SEARCH_INPUT_ID)) {
+                    input_rect.set(Some(response.rect));
+                }
+                outcome.set(Some(drawn));
+            });
+        };
+
+        frame(&ctx, Vec::new());
+        frame(&ctx, Vec::new());
+        let input = input_rect.get().expect("map search rect");
+        frame(&ctx, vec![egui::Event::PointerMoved(input.center())]);
+        frame(&ctx, pointer_press(input.center()));
+        frame(&ctx, pointer_release(input.center()));
+        frame(&ctx, vec![egui::Event::Text("Cafe".into())]);
+
+        let search_id = outcome
+            .get()
+            .expect("search outcome")
+            .search_id
+            .expect("search id");
+        let search = ctx
+            .read_response(search_id)
+            .expect("search button rect")
+            .rect;
+        frame(&ctx, vec![egui::Event::PointerMoved(search.center())]);
+        frame(&ctx, pointer_press(search.center()));
+        frame(&ctx, pointer_release(search.center()));
+        assert!(outcome.get().expect("search outcome").submit);
+
+        let account_id = outcome
+            .get()
+            .expect("search outcome")
+            .account_id
+            .expect("account id");
+        let account = ctx.read_response(account_id).expect("account rect").rect;
+        frame(&ctx, vec![egui::Event::PointerMoved(account.center())]);
+        frame(&ctx, pointer_press(account.center()));
+        frame(&ctx, pointer_release(account.center()));
+        assert!(outcome.get().expect("search outcome").account_clicked);
+        drop(frame);
+        assert_eq!(query, "Cafe");
     }
 
     #[test]

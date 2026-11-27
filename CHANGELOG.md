@@ -83,6 +83,7 @@ The per-item flagged list for this release is in
 - [INFRA] Release `verify-linux` and `verify-macos` jobs run the downloaded bundles: Linux under Xvfb with a screenshot, macOS by opening `Pinpoint.app` and requiring it to stay alive.
 
 ### Changed
+- [FEATURE] Native phone map: remove the header row, place the account avatar (or Sign in) beside the floating search pill, use a magnifier search button, and move Sign out into the More menu. Other screens keep their header.
 - [FEATURE] Native phone tab bar: a floating rounded pill with a line icon and label on each tab, as on the web. Labels stay 14 pt and tap targets 48 pt.
 - [FEATURE] Native phone map: the floating zoom, locate, style, route and menu controls use painted line icons instead of letters and symbols. The actions are unchanged.
 - [FEATURE] Native phone shell: four bottom tabs (Map, People, Today, Chats) with 14 pt labels and 48 pt targets, matching the web. People holds Friends and Sharing behind a switch, so Sharing moves off the bottom bar; Account opens from the avatar in the header, and the menu no longer repeats Messages.

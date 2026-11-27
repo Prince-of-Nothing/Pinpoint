@@ -1474,6 +1474,7 @@ fn map_icon_button(ui: &mut egui::Ui, icon: MapIcon, tip: &str) -> egui::Respons
         egui::Stroke::new(1.0_f32, theme::BORDER),
     );
     paint_map_icon(painter, icon, rect.center(), theme::TEXT);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
     response.on_hover_text(tip)
 }
 

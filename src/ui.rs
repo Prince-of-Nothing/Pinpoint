@@ -531,8 +531,6 @@ pub struct PinpointAppUI {
     pin_setup: String,
     pin_setup_confirm: String,
     biometric_auto_prompted: bool,
-    /// Android `pinpoint://publish` requested before the first frame.
-    pending_gps_publish_at: Option<std::time::Instant>,
     /// Debounce the anonymous button so a double tap cannot create two accounts.
     anonymous_busy_until: Option<std::time::Instant>,
     // Backend server setting (empty saved value = platform default)
@@ -664,7 +662,6 @@ impl PinpointAppUI {
             pin_setup: String::new(),
             pin_setup_confirm: String::new(),
             biometric_auto_prompted: false,
-            pending_gps_publish_at: None,
             anonymous_busy_until: None,
             server_url_input: initial_server_url,
             server_error: None,
@@ -1072,10 +1069,6 @@ impl PinpointAppUI {
                 if let Some(token) = token {
                     self.kiosk_token_input = token;
                 }
-            }
-            crate::mobile::MobileDeepLink::PublishLocation => {
-                self.app.set_screen(CurrentScreen::Map);
-                self.pending_gps_publish_at = Some(std::time::Instant::now());
             }
         }
     }
@@ -2495,16 +2488,6 @@ impl eframe::App for PinpointAppUI {
             } else {
                 tracing::warn!("android: shared text had no location or kiosk link");
                 self.app.set_notice(Some(format!("Shared text: {text}")));
-            }
-        }
-        if let Some(since) = self.pending_gps_publish_at {
-            if self.app.is_signed_in() {
-                self.pending_gps_publish_at = None;
-                self.spawn_action(PendingAction::PublishGpsLocation, ctx);
-            } else if since.elapsed() > std::time::Duration::from_secs(12) {
-                self.pending_gps_publish_at = None;
-                self.app
-                    .set_error(Some("Sign in to publish your location.".to_string()));
             }
         }
         if Self::is_compact(ctx) && self.mobile_selected_place.is_none() {

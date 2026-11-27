@@ -11,6 +11,9 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Security
+- [SECURITY] Android: `pinpoint://publish` (and its aliases) opens the map and no longer publishes your location on launch, so another app cannot publish it without a tap.
+
 ### Added
 - [FEATURE] Native phone Chats tab: a badge shows the unread message count ("9+" above nine), and screen readers hear "Chats, 3 unread".
 - [FEATURE] Native map: a "Sharing with you" strip above the phone tab bar lists the friends whose location you can see now, freshest first. A sunflower ring marks a location updated in the last 15 minutes, and tapping a chip flies the map to that friend. The strip steps aside for the menu, sheets, route planner and measure tool.

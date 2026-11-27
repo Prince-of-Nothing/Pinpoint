@@ -107,3 +107,59 @@ fn backups_are_encrypted_and_need_a_passphrase() {
         "db-backup must not write plaintext .sql dumps"
     );
 }
+
+#[test]
+fn service_roles_cannot_read_credential_columns_of_users() {
+    // diag, locations and messages never check passwords or MFA, so they get only
+    // the non-credential columns of pinpoint_users, never the whole table.
+    let text = read("db/02-grants.sql");
+    assert!(
+        text.contains("REVOKE SELECT ON pinpoint_users FROM"),
+        "grants must revoke the table-level SELECT for existing deployments"
+    );
+    let secrets = [
+        "password_hash",
+        "totp_secret",
+        "recovery_code_hash",
+        "identity_subject",
+    ];
+    for role in ["pinpoint_diag", "pinpoint_locations", "pinpoint_messages"] {
+        let grants: Vec<&str> = text
+            .split(';')
+            .filter(|stmt| {
+                stmt.contains("GRANT")
+                    && stmt.contains(&format!("TO {role}"))
+                    && stmt.contains("pinpoint_users")
+            })
+            .collect();
+        assert!(
+            !grants.is_empty(),
+            "{role} should get a column-level grant on pinpoint_users"
+        );
+        for stmt in grants {
+            assert!(
+                stmt.contains("SELECT ("),
+                "{role} must be granted named columns only: {stmt}"
+            );
+            for secret in secrets {
+                assert!(
+                    !stmt.contains(secret),
+                    "{role} is granted a credential column"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn place_notes_are_granted_to_the_services_that_use_them() {
+    let text = read("db/02-grants.sql");
+    assert!(
+        text.contains("GRANT ALL ON pinpoint_place_notes TO pinpoint_locations"),
+        "the locations role needs its place-note table"
+    );
+    assert!(
+        text.contains("GRANT DELETE ON pinpoint_place_notes TO pinpoint_users"),
+        "account deletion removes place notes through the users role"
+    );
+}

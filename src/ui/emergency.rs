@@ -44,16 +44,41 @@ impl PinpointAppUI {
             )
             .fill(theme::DANGER)
             .stroke(egui::Stroke::NONE);
-            if ui.add(alert).clicked() {
-                if let (Ok(lat), Ok(lon)) = (
-                    self.emergency_lat.trim().parse::<f64>(),
-                    self.emergency_lon.trim().parse::<f64>(),
-                ) {
-                    self.spawn_action(PendingAction::TriggerEmergency { lat, lon }, ctx);
-                } else {
-                    self.app
-                        .set_error(Some("Enter valid latitude/longitude".to_string()));
+            // The first tap only asks for confirmation. An alert notifies every
+            // accepted friend and turns on every share, so it must not fire on
+            // a single accidental tap.
+            let confirm_id = egui::Id::new("emergency_confirming");
+            let confirming = ui.data(|d| d.get_temp::<bool>(confirm_id).unwrap_or(false));
+            if !confirming {
+                if ui.add(alert).clicked() {
+                    ui.data_mut(|d| d.insert_temp(confirm_id, true));
                 }
+            } else {
+                ui.label(
+                    RichText::new(
+                        "Send it now? This notifies every accepted friend and turns on every share.",
+                    )
+                    .size(13.0)
+                    .color(theme::DANGER),
+                );
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    if ui.add(alert).clicked() {
+                        ui.data_mut(|d| d.insert_temp(confirm_id, false));
+                        if let (Ok(lat), Ok(lon)) = (
+                            self.emergency_lat.trim().parse::<f64>(),
+                            self.emergency_lon.trim().parse::<f64>(),
+                        ) {
+                            self.spawn_action(PendingAction::TriggerEmergency { lat, lon }, ctx);
+                        } else {
+                            self.app
+                                .set_error(Some("Enter valid latitude/longitude".to_string()));
+                        }
+                    }
+                    if ui.button("Cancel").clicked() {
+                        ui.data_mut(|d| d.insert_temp(confirm_id, false));
+                    }
+                });
             }
         });
         ui.add_space(10.0);

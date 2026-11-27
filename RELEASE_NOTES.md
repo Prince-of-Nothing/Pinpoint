@@ -76,4 +76,3 @@ sessions, encrypted notes and ECIES message envelopes keep their formats.
   derives versionName `3.0.1` and versionCode `30001` from `Cargo.toml`; iOS
   reports `3.0.1` / `30001`; the privacy page names `3.0.1`; the service worker
   cache is `pinpoint-offline-v11`.
-- Release dry run: DRY_RUN_RESULT_PLACEHOLDER

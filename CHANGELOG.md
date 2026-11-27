@@ -107,6 +107,7 @@ The per-item flagged list for this release is in
 - [FIX] Native share: test the SaveShare payload fields; Save and Stop build the same request from the sheet.
 - [FIX] Native navigation: the turn-by-turn banner advances through route maneuvers instead of reusing the stop counter, and OSRM maneuver coordinates are carried into the route steps.
 - [FIX] Android: `scripts/android-smoke.ps1` waits for a focused, non-blank rendered screen and fails on ANR, instead of passing a black or hung app.
+- [FIX] Android: device smoke waits up to 30 s for the app process on cold starts instead of failing at 10 s.
 - [FIX] Native: the publish sheet's latitude/longitude fields use stable ids, so focus and IME state survive layout changes; a focus test covers both ids. An API 37 arm64 emulator run launched the app, signed in anonymously and opened the publish sheet.
 - [FIX] Native: keyboard focus stays inside the open sheet; Tab reaches the share close control and wraps instead of sticking on the invisible input gate or the last button, and the share close is registered for focus.
 - [FIX] Native desktop: selecting a search result no longer blocks map interaction or shortcuts; only visible sheets gate the map, since place/publish sheets are compact-only.

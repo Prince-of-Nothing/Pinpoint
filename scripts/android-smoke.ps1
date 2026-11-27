@@ -42,7 +42,7 @@ if ($LASTEXITCODE -ne 0) {
 & $adb -s $Serial shell am start -n com.pinpoint.desktop/.PinpointActivity | Out-Host
 
 $appPid = ""
-$pidDeadline = (Get-Date).AddSeconds(10)
+$pidDeadline = (Get-Date).AddSeconds([Math]::Max($WaitSeconds, 30))
 do {
     Start-Sleep -Seconds 1
     $appPid = (& $adb -s $Serial shell pidof com.pinpoint.desktop).Trim()

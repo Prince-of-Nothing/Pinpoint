@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [3.0.1] - 2026-11-27
 ### Security
 - [SECURITY] Android: `pinpoint://publish` (and its aliases) opens the map and no longer publishes your location on launch, so another app cannot publish it without a tap.
 

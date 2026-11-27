@@ -17,8 +17,9 @@ follow-up.
   reads the last known fix from every LocationManager provider. If none is
   recent, it actively requests a fix for up to 8 seconds (GPS → fused →
   network) and removes the request afterwards.
-- **Publish deep link:** `pinpoint://publish` publishes the current location on
-  launch; it waits for a restored session before firing.
+- **Publish deep link:** `pinpoint://publish` opens the map and does not publish.
+  Publishing needs a tap on Publish, so another app cannot publish your location
+  through the link.
 - **Share out:** place sheets have **Share** (`geo:lat,lon?q=name`) and the Kiosk
   QR card has **Share link** (`pinpoint://kiosk?token=...`), both opening the
   system share sheet.

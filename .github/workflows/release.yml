@@ -816,6 +816,38 @@ jobs:
           fi
           echo "APK signature valid: $(grep 'certificate DN' <<<"$certs")"
 
+      - name: Write SHA-256 sums for every asset
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          for name in \
+            "pinpoint-android-${version}.apk" \
+            "pinpoint-desktop-linux-x64-${version}.zip" \
+            "pinpoint-desktop-macos-${version}.zip" \
+            "pinpoint-desktop-windows-x64-${version}.zip" \
+            "pinpoint-server-linux-x64-${version}.zip" \
+            "pinpoint-server-macos-${version}.zip" \
+            "pinpoint-server-windows-x64-${version}.zip"; do
+            if [ ! -f "dist/$name" ]; then
+              echo "::error::dist/$name is missing, so its SHA-256 cannot be published"
+              exit 1
+            fi
+          done
+          (cd dist && find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\n' | LC_ALL=C sort | xargs sha256sum >SHA256SUMS.txt)
+          (cd dist && sha256sum -c SHA256SUMS.txt)
+          {
+            echo "### SHA-256 sums"
+            echo
+            echo '```text'
+            cat dist/SHA256SUMS.txt
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-checksums
+          path: dist/SHA256SUMS.txt
+          if-no-files-found: error
+
       - name: Draft the release
         if: github.ref_type == 'tag'
         run: |

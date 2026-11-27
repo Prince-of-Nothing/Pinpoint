@@ -889,7 +889,6 @@ impl PinpointAppUI {
         self.handle_map_click(ctx);
         self.handle_map_menu(ctx);
 
-        let panel = theme::PANEL.gamma_multiply(0.98);
         let panel_solid = theme::PANEL;
         let border = theme::BORDER;
 
@@ -913,6 +912,8 @@ impl PinpointAppUI {
             avatar_name.as_deref(),
             lang,
         );
+        // Everything below the search pill keeps a 12 pt gap from it.
+        let chips_top = search.search_bottom + 12.0;
         if search.submit && !self.search_query.trim().is_empty() {
             let query = self.search_query.clone();
             self.spawn_action(PendingAction::SearchPlaces { query }, ctx);
@@ -933,15 +934,17 @@ impl PinpointAppUI {
         // drawer, the sheets, the route planner and the measure tool.
         let measuring = self.app.data().lock().unwrap().measure_mode;
         let strip_hidden = map_blocked || self.mobile_nav_open || self.route_plan.open || measuring;
+        let mut strip_height = 0.0;
         if !strip_hidden {
             let entries = {
                 let data = self.app.data();
                 let data = data.lock().unwrap();
                 live_strip::strip_entries(&data.locations, chrono::Utc::now())
             };
-            if let Some(target) =
-                live_strip::draw_live_strip(ctx, &entries, live_strip::ABOVE_TAB_BAR)
-            {
+            let (target, height) =
+                live_strip::draw_live_strip(ctx, &entries, live_strip::ABOVE_TAB_BAR);
+            strip_height = height;
+            if let Some(target) = target {
                 let data = self.app.data();
                 let mut data = data.lock().unwrap();
                 data.map_center_lat = target.latitude;
@@ -956,9 +959,10 @@ impl PinpointAppUI {
             let mut chip_query: Option<&'static str> = None;
             egui::Area::new(egui::Id::new("mobile_map_chips"))
                 .order(egui::Order::Foreground)
-                .fixed_pos(egui::pos2(12.0, top + 64.0))
+                .fixed_pos(egui::pos2(12.0, chips_top))
                 .show(ctx, |ui| {
-                    ui.set_width(width - 24.0);
+                    // Stop short of the floating controls card on the right.
+                    ui.set_width(width - 76.0);
                     egui::ScrollArea::horizontal().show(ui, |ui| {
                         ui.set_width(width - 76.0);
                         ui.horizontal(|ui| {
@@ -973,11 +977,11 @@ impl PinpointAppUI {
                                 ("Hotel", "hotel"),
                                 ("Park", "park"),
                             ] {
-                                let button = egui::Button::new(RichText::new(label).size(12.0))
-                                    .fill(panel)
+                                let button = egui::Button::new(RichText::new(label).size(13.0))
+                                    .fill(theme::float_fill())
                                     .stroke(egui::Stroke::new(1.0_f32, border))
-                                    .corner_radius(egui::CornerRadius::same(14))
-                                    .min_size(egui::vec2(0.0, 44.0));
+                                    .corner_radius(egui::CornerRadius::same(20))
+                                    .min_size(egui::vec2(0.0, 40.0));
                                 if ui.add(button).clicked() {
                                     chip_query = Some(query);
                                 }
@@ -1001,7 +1005,7 @@ impl PinpointAppUI {
             let mut chosen = None;
             egui::Area::new(egui::Id::new("mobile_search_results"))
                 .order(egui::Order::Foreground)
-                .fixed_pos(egui::pos2(12.0, top + 64.0))
+                .fixed_pos(egui::pos2(12.0, chips_top))
                 .show(ctx, |ui| {
                     ui.set_width(width - 24.0);
                     egui::Frame::new()
@@ -1055,67 +1059,82 @@ impl PinpointAppUI {
         let mut share_webview = false;
         let map_dark = self.app.data().lock().unwrap().map_dark;
         let webview_visible = crate::platform::map_webview_visible();
-        if !self.mobile_nav_open {
+        // The controls sit bottom right, as on the web, and step aside while a
+        // sheet owns the bottom of the map.
+        if !self.mobile_nav_open && !map_blocked {
             egui::Area::new(egui::Id::new("mobile_map_controls"))
                 .order(egui::Order::Foreground)
-                .fixed_pos(egui::pos2(width - 56.0, top + 120.0))
+                .anchor(
+                    egui::Align2::RIGHT_BOTTOM,
+                    egui::vec2(-12.0, -controls_inset(strip_height)),
+                )
                 .show(ctx, |ui| {
-                    ui.vertical(|ui| {
-                        if map_icon_button(ui, MapIcon::ZoomIn, "Zoom in").clicked() {
-                            zoom_delta = 1;
-                        }
-                        if map_icon_button(ui, MapIcon::ZoomOut, "Zoom out").clicked() {
-                            zoom_delta = -1;
-                        }
-                        if map_icon_button(ui, MapIcon::Locate, "Locate me").clicked() {
-                            locate = true;
-                        }
-                        if map_icon_button(
-                            ui,
-                            MapIcon::Style,
-                            if map_dark {
-                                "Use light map"
-                            } else {
-                                "Use dark map"
-                            },
-                        )
-                        .clicked()
-                        {
-                            toggle_style = true;
-                        }
-                        if map_icon_button(ui, MapIcon::Route, "Route").clicked() {
-                            open_route = true;
-                        }
-                        if crate::platform::map_webview_supported() {
-                            if map_icon_button(
-                                ui,
-                                MapIcon::WebView {
-                                    shown: webview_visible,
-                                },
-                                "Offline MapLibre map",
-                            )
-                            .clicked()
-                            {
-                                toggle_webview = true;
-                            }
-                            if !webview_visible {
-                                if let Some((lat, lon)) = self.webview_map_click {
+                    egui::Frame::new()
+                        .fill(theme::float_fill())
+                        .stroke(egui::Stroke::new(1.0_f32, border))
+                        .shadow(theme::float_shadow())
+                        .corner_radius(egui::CornerRadius::same(22))
+                        .show(ui, |ui| {
+                            ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+                            ui.vertical(|ui| {
+                                if map_icon_button(ui, MapIcon::ZoomIn, "Zoom in").clicked() {
+                                    zoom_delta = 1;
+                                }
+                                if map_icon_button(ui, MapIcon::ZoomOut, "Zoom out").clicked() {
+                                    zoom_delta = -1;
+                                }
+                                if map_icon_button(ui, MapIcon::Locate, "Locate me").clicked() {
+                                    locate = true;
+                                }
+                                if map_icon_button(
+                                    ui,
+                                    MapIcon::Style,
+                                    if map_dark {
+                                        "Use light map"
+                                    } else {
+                                        "Use dark map"
+                                    },
+                                )
+                                .clicked()
+                                {
+                                    toggle_style = true;
+                                }
+                                if map_icon_button(ui, MapIcon::Route, "Route").clicked() {
+                                    open_route = true;
+                                }
+                                if crate::platform::map_webview_supported() {
                                     if map_icon_button(
                                         ui,
-                                        MapIcon::Share,
-                                        &format!("Share WebView point ({lat:.4}, {lon:.4})"),
+                                        MapIcon::WebView {
+                                            shown: webview_visible,
+                                        },
+                                        "Offline MapLibre map",
                                     )
                                     .clicked()
                                     {
-                                        share_webview = true;
+                                        toggle_webview = true;
+                                    }
+                                    if !webview_visible {
+                                        if let Some((lat, lon)) = self.webview_map_click {
+                                            if map_icon_button(
+                                                ui,
+                                                MapIcon::Share,
+                                                &format!(
+                                                    "Share WebView point ({lat:.4}, {lon:.4})"
+                                                ),
+                                            )
+                                            .clicked()
+                                            {
+                                                share_webview = true;
+                                            }
+                                        }
                                     }
                                 }
-                            }
-                        }
-                        if map_icon_button(ui, MapIcon::Menu, "Menu").clicked() {
-                            menu = true;
-                        }
-                    });
+                                if map_icon_button(ui, MapIcon::Menu, "Menu").clicked() {
+                                    menu = true;
+                                }
+                            });
+                        });
                 });
         }
         if zoom_delta != 0 {
@@ -1245,12 +1264,16 @@ impl PinpointAppUI {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub(crate) struct MobileMapSearchOutcome {
     pub submit: bool,
     pub account_clicked: bool,
     pub search_id: Option<egui::Id>,
     pub account_id: Option<egui::Id>,
+    /// Bottom edge of the search pill, so the rows below sit a fixed gap under it.
+    pub search_bottom: f32,
+    /// Vertical centre of the search pill, so the account button lines up with it.
+    pub search_centre_y: f32,
 }
 
 /// Floating phone-map search pill and its account button. Kept as a free view
@@ -1267,27 +1290,29 @@ pub(crate) fn draw_mobile_map_search(
     let account_width = if signed_in { 44.0 } else { 92.0 };
     let search_width = (width - 24.0 - account_width - 8.0).max(140.0);
     let mut outcome = MobileMapSearchOutcome::default();
-    egui::Area::new(egui::Id::new("mobile_map_search"))
+    let search = egui::Area::new(egui::Id::new("mobile_map_search"))
         .order(egui::Order::Foreground)
         .fixed_pos(egui::pos2(12.0, top + 10.0))
         .show(ctx, |ui| {
             ui.set_width(search_width);
             egui::Frame::new()
-                .fill(theme::PANEL.gamma_multiply(0.98))
+                .fill(theme::float_fill())
                 .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
-                .corner_radius(egui::CornerRadius::same(22))
-                .inner_margin(egui::Margin::symmetric(10, 4))
+                .shadow(theme::float_shadow())
+                .corner_radius(egui::CornerRadius::same(26))
+                .inner_margin(egui::Margin::symmetric(16, 8))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         let edit = ui.add(
                             egui::TextEdit::singleline(query)
                                 .id(egui::Id::new(SEARCH_INPUT_ID))
                                 .hint_text("Search places…")
+                                .font(egui::FontId::proportional(15.0))
                                 .frame(false)
                                 .char_limit(120)
-                                .desired_width((ui.available_width() - 56.0).max(100.0)),
+                                .desired_width((ui.available_width() - 52.0).max(100.0)),
                         );
-                        let search_button = map_icon_button(ui, MapIcon::Search, "Search");
+                        let search_button = map_icon_cell(ui, MapIcon::Search, "Search", false);
                         outcome.search_id = Some(search_button.id);
                         outcome.submit = search_button.clicked()
                             || (edit.lost_focus()
@@ -1295,9 +1320,15 @@ pub(crate) fn draw_mobile_map_search(
                     });
                 });
         });
+    let search_rect = search.response.rect;
+    outcome.search_bottom = search_rect.bottom();
+    outcome.search_centre_y = search_rect.center().y;
     egui::Area::new(egui::Id::new("mobile_map_account"))
         .order(egui::Order::Foreground)
-        .fixed_pos(egui::pos2(width - account_width - 12.0, top + 14.0))
+        .fixed_pos(egui::pos2(
+            width - account_width - 12.0,
+            search_rect.center().y - 22.0,
+        ))
         .show(ctx, |ui| {
             ui.set_width(account_width);
             let response = if signed_in {
@@ -1559,21 +1590,47 @@ pub(crate) enum MapIcon {
     Menu,
 }
 
-/// A 44 pt round control with a painted icon and a hover tooltip.
-fn map_icon_button(ui: &mut egui::Ui, icon: MapIcon, tip: &str) -> egui::Response {
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(44.0, 44.0), egui::Sense::click());
-    let fill = if response.hovered() {
-        theme::PANEL_2
+/// A 44 pt control in the floating map card: a painted icon, a hairline
+/// divider under it, and a hover tint that fades in rather than snapping.
+/// How far the bottom-right controls sit above the bottom of the screen: the
+/// tab bar's clearance, plus the sharing strip and its gap when it is shown.
+fn controls_inset(strip_height: f32) -> f32 {
+    if strip_height > 0.0 {
+        live_strip::ABOVE_TAB_BAR + strip_height + 8.0
     } else {
-        theme::PANEL
-    };
+        live_strip::ABOVE_TAB_BAR
+    }
+}
+
+fn map_icon_button(ui: &mut egui::Ui, icon: MapIcon, tip: &str) -> egui::Response {
+    map_icon_cell(ui, icon, tip, true)
+}
+
+/// A 44 pt control. `divider` draws the hairline under it, which belongs to
+/// the map card; a control on its own (the search pill's) leaves it out.
+fn map_icon_cell(ui: &mut egui::Ui, icon: MapIcon, tip: &str, divider: bool) -> egui::Response {
+    let (rect, response) = ui.allocate_exact_size(egui::vec2(44.0, 44.0), egui::Sense::click());
+    let hover =
+        ui.ctx()
+            .animate_bool_with_time(response.id.with("hover"), response.hovered(), 0.12);
     let painter = ui.painter();
-    painter.circle(
-        rect.center(),
-        21.0,
-        fill,
-        egui::Stroke::new(1.0_f32, theme::BORDER),
-    );
+    if hover > 0.0 {
+        let alpha = (255.0 * hover).round() as u8;
+        let tint = egui::Color32::from_rgba_unmultiplied(
+            theme::PANEL_2.r(),
+            theme::PANEL_2.g(),
+            theme::PANEL_2.b(),
+            alpha,
+        );
+        painter.rect_filled(rect.shrink(4.0), egui::CornerRadius::same(12), tint);
+    }
+    if divider {
+        painter.hline(
+            egui::Rangef::new(rect.left() + 8.0, rect.right() - 8.0),
+            rect.bottom(),
+            egui::Stroke::new(1.0_f32, theme::BORDER),
+        );
+    }
     paint_map_icon(painter, icon, rect.center(), theme::TEXT);
     response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
     response.on_hover_text(tip)
@@ -1845,9 +1902,21 @@ pub(crate) fn place_sheet_dispatch(
 mod tests {
     use super::egui;
     use super::{
-        map_key_action, map_shortcut_rows, map_shortcuts_enabled, search_shortcut_fires,
-        sheet_escape_target, take_place_focus, EscapableSheet, MapKeyAction, MAP_SHORTCUTS,
+        controls_inset, map_key_action, map_shortcut_rows, map_shortcuts_enabled,
+        search_shortcut_fires, sheet_escape_target, take_place_focus, EscapableSheet, MapKeyAction,
+        MAP_SHORTCUTS,
     };
+
+    #[test]
+    fn controls_stack_above_the_sharing_strip_when_it_shows() {
+        // No strip: the bottom-right controls sit just above the tab bar.
+        assert_eq!(controls_inset(0.0), super::live_strip::ABOVE_TAB_BAR);
+        // A shown strip: the controls clear its top edge by the same 8 pt gap.
+        assert_eq!(
+            controls_inset(90.0),
+            super::live_strip::ABOVE_TAB_BAR + 90.0 + 8.0
+        );
+    }
 
     #[test]
     fn map_shortcuts_need_no_modal_and_no_text_focus() {

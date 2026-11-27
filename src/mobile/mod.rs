@@ -110,8 +110,6 @@ pub enum MobileDeepLink {
     Screen(crate::app::CurrentScreen),
     /// Kiosk share-link deep link (`pinpoint://kiosk?token=XYZ` or `pinpoint://share?token=XYZ`).
     Kiosk { token: Option<String> },
-    /// Publish the current location now (`pinpoint://publish`).
-    PublishLocation,
 }
 
 impl MobileDeepLink {
@@ -157,8 +155,10 @@ impl MobileDeepLink {
                 });
                 return Some(Self::Kiosk { token });
             }
+            // Publish links only open the map. Publishing needs a tap on Publish,
+            // so any installed app that sends this link cannot publish location (F-4).
             if slug_raw == "publish" || slug_raw == "publish-gps" || slug_raw == "share-location" {
-                return Some(Self::PublishLocation);
+                return Some(Self::Screen(crate::app::CurrentScreen::Map));
             }
             let screen = match slug_raw {
                 "map" => crate::app::CurrentScreen::Map,
@@ -408,14 +408,18 @@ mod tests {
             })
         );
         assert!(MobileDeepLink::parse("pinpoint://unknown").is_none());
-        assert_eq!(
-            MobileDeepLink::parse("pinpoint://publish"),
-            Some(MobileDeepLink::PublishLocation)
-        );
-        assert_eq!(
-            MobileDeepLink::parse("pinpoint://publish-gps"),
-            Some(MobileDeepLink::PublishLocation)
-        );
+        // F-4: publish links open the map and never publish on their own.
+        for uri in [
+            "pinpoint://publish",
+            "pinpoint://publish-gps",
+            "pinpoint://share-location",
+        ] {
+            assert_eq!(
+                MobileDeepLink::parse(uri),
+                Some(MobileDeepLink::Screen(crate::app::CurrentScreen::Map)),
+                "{uri} must open the map without publishing"
+            );
+        }
     }
 }
 

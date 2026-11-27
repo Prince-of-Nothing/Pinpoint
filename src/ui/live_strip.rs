@@ -144,27 +144,29 @@ pub(crate) fn fly_to(entry: &StripEntry) -> FlyTo {
 }
 
 /// Draws the strip bottom-left, `bottom_inset` points above the bottom of the
-/// screen. Returns where the map should fly when a chip is tapped.
+/// screen. Returns where the map should fly when a chip is tapped, and the
+/// strip's height (0 when it is not drawn), so controls can stack above it.
 pub(crate) fn draw_live_strip(
     ctx: &egui::Context,
     entries: &[StripEntry],
     bottom_inset: f32,
-) -> Option<FlyTo> {
+) -> (Option<FlyTo>, f32) {
     if entries.is_empty() {
-        return None;
+        return (None, 0.0);
     }
     let width = (ctx.screen_rect().width() - 24.0).max(120.0);
     let mut chosen: Option<FlyTo> = None;
-    egui::Area::new(egui::Id::new("mobile_live_strip"))
+    let area = egui::Area::new(egui::Id::new("mobile_live_strip"))
         .order(egui::Order::Foreground)
         .anchor(egui::Align2::LEFT_BOTTOM, egui::vec2(12.0, -bottom_inset))
         .show(ctx, |ui| {
             ui.set_max_width(width);
             egui::Frame::new()
-                .fill(theme::PANEL.gamma_multiply(0.98))
+                .fill(theme::float_fill())
                 .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
-                .corner_radius(egui::CornerRadius::same(16))
-                .inner_margin(egui::Margin::symmetric(8, 6))
+                .shadow(theme::float_shadow())
+                .corner_radius(egui::CornerRadius::same(20))
+                .inner_margin(egui::Margin::symmetric(12, 10))
                 .show(ui, |ui| {
                     theme::caption(ui, "Sharing with you");
                     egui::ScrollArea::horizontal()
@@ -196,7 +198,7 @@ pub(crate) fn draw_live_strip(
                         });
                 });
         });
-    chosen
+    (chosen, area.response.rect.height())
 }
 
 #[cfg(test)]

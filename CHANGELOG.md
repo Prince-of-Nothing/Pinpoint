@@ -84,6 +84,7 @@ The per-item flagged list for this release is in
 - [INFRA] Release `verify-linux` and `verify-macos` jobs run the downloaded bundles: Linux under Xvfb with a screenshot, macOS by opening `Pinpoint.app` and requiring it to stay alive.
 
 ### Changed
+- [FEATURE] Native cards (Friends, Today and the other card screens): a soft shadow lifts each card off the page, as part of the premium direction.
 - [FEATURE] Native chat thread: the safety number moves behind an "i" button that opens a window with the number, its status and "Mark as verified", so the thread keeps its room. The Verified or Changed word stays beside the button.
 - [FEATURE] Native friends and map: each accepted friend shows what they share and how old it is ("Exact · live now", "City only · 2 h ago", or "Not sharing location with you"), and stale or dead pins are dimmed so an old position never looks current.
 - [FEATURE] Native phone map: remove the header row, place the account avatar (or Sign in) beside the floating search pill, use a magnifier search button, and move Sign out into the More menu. Other screens keep their header.

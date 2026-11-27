@@ -118,6 +118,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Native phone map: restore the category chip list that a merge dropped, so `main` compiles again, and put the map button doc back on its function.
 - [FIX] Deploy: the gateway publishes only on 127.0.0.1, public HTTPS is an opt-in `caddy` profile (`docker compose --profile public up -d`, set `PINPOINT_DOMAIN`), and the gateway trusts forwarding headers only from that proxy, so cookies get `Secure` and rate limits key on real visitors.
 - [FIX] Friends: requests are sent by username only. The server no longer accepts an email address as a friend key, and an accepted friend's card shows the real name and handle, never the email.
 - [SECURITY] Deployment: Postgres and role passwords are required from `.env` with no known defaults; Postgres, diagnostics and admin ports bind to loopback; `db-backup` writes encrypted `.dump.enc` dumps (AES-256-CBC, PBKDF2) that need `PINPOINT_BACKUP_PASSPHRASE`. Refs SEC-38.

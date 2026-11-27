@@ -961,32 +961,20 @@ impl PinpointAppUI {
                 .order(egui::Order::Foreground)
                 .fixed_pos(egui::pos2(12.0, chips_top))
                 .show(ctx, |ui| {
-                    // Stop short of the floating controls card on the right.
-                    ui.set_width(width - 76.0);
-                    egui::ScrollArea::horizontal().show(ui, |ui| {
-                        ui.set_width(width - 76.0);
-                        ui.horizontal(|ui| {
-                            for (label, query) in [
-                                ("Food", "restaurant"),
-                                ("Cafe", "cafe"),
-                                ("Fuel", "fuel"),
-                                ("Pharmacy", "pharmacy"),
-                                ("Hospital", "hospital"),
-                                ("Parking", "parking"),
-                                ("ATM", "atm"),
-                                ("Hotel", "hotel"),
-                                ("Park", "park"),
-                            ] {
-                                let button = egui::Button::new(RichText::new(label).size(13.0))
-                                    .fill(theme::float_fill())
-                                    .stroke(egui::Stroke::new(1.0_f32, border))
-                                    .corner_radius(egui::CornerRadius::same(20))
-                                    .min_size(egui::vec2(0.0, 40.0));
-                                if ui.add(button).clicked() {
-                                    chip_query = Some(query);
-                                }
+                    // All nine chips show, wrapping onto more rows as needed.
+                    ui.set_width(width - 24.0);
+                    ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
+                    ui.horizontal_wrapped(|ui| {
+                        for (label, query) in CATEGORY_CHIPS {
+                            let button = egui::Button::new(RichText::new(label).size(13.0))
+                                .fill(theme::float_fill())
+                                .stroke(egui::Stroke::new(1.0_f32, border))
+                                .corner_radius(egui::CornerRadius::same(20))
+                                .min_size(egui::vec2(0.0, 40.0));
+                            if ui.add(button).clicked() {
+                                chip_query = Some(query);
                             }
-                        });
+                        }
                     });
                 });
             if let Some(query) = chip_query {
@@ -1590,8 +1578,19 @@ pub(crate) enum MapIcon {
     Menu,
 }
 
-/// A 44 pt control in the floating map card: a painted icon, a hairline
-/// divider under it, and a hover tint that fades in rather than snapping.
+/// The category chips under the search pill: a label and the query it runs.
+const CATEGORY_CHIPS: [(&str, &str); 9] = [
+    ("Food", "restaurant"),
+    ("Cafe", "cafe"),
+    ("Fuel", "fuel"),
+    ("Pharmacy", "pharmacy"),
+    ("Hospital", "hospital"),
+    ("Parking", "parking"),
+    ("ATM", "atm"),
+    ("Hotel", "hotel"),
+    ("Park", "park"),
+];
+
 /// How far the bottom-right controls sit above the bottom of the screen: the
 /// tab bar's clearance, plus the sharing strip and its gap when it is shown.
 fn controls_inset(strip_height: f32) -> f32 {
@@ -1602,6 +1601,8 @@ fn controls_inset(strip_height: f32) -> f32 {
     }
 }
 
+/// A 44 pt control in the floating map card: a painted icon, a hairline
+/// divider under it, and a hover tint that fades in rather than snapping.
 fn map_icon_button(ui: &mut egui::Ui, icon: MapIcon, tip: &str) -> egui::Response {
     map_icon_cell(ui, icon, tip, true)
 }
@@ -1904,8 +1905,17 @@ mod tests {
     use super::{
         controls_inset, map_key_action, map_shortcut_rows, map_shortcuts_enabled,
         search_shortcut_fires, sheet_escape_target, take_place_focus, EscapableSheet, MapKeyAction,
-        MAP_SHORTCUTS,
+        CATEGORY_CHIPS, MAP_SHORTCUTS,
     };
+
+    #[test]
+    fn all_nine_category_chips_are_offered() {
+        let labels: Vec<&str> = CATEGORY_CHIPS.iter().map(|(label, _)| *label).collect();
+        assert_eq!(
+            labels,
+            ["Food", "Cafe", "Fuel", "Pharmacy", "Hospital", "Parking", "ATM", "Hotel", "Park"]
+        );
+    }
 
     #[test]
     fn controls_stack_above_the_sharing_strip_when_it_shows() {

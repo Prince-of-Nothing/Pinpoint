@@ -95,7 +95,8 @@ pub(crate) fn draw_tab_bar(ctx: &egui::Context, current: &CurrentScreen) -> Opti
         .exact_height(BAR_HEIGHT)
         .frame(
             egui::Frame::NONE
-                .fill(theme::BG)
+                // Only the pill is painted; the map stays visible around it.
+                .fill(egui::Color32::TRANSPARENT)
                 .inner_margin(egui::Margin {
                     left: PILL_SIDE_INSET,
                     right: PILL_SIDE_INSET,

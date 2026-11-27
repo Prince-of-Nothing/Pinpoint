@@ -5,7 +5,7 @@ context that keeps each prompt independent and safe to run in parallel.
 
 ## Project
 
-Pinpoint is one Rust crate, `pinpoint-desktop` (v3.0.0), serving a desktop
+Pinpoint is one Rust crate, `pinpoint-desktop` (v3.0.1), serving a desktop
 client, an Android app, an iOS build and a portable wasm core. The shared UI is
 egui/eframe; the server is Axum with an in-memory test mode and Postgres
 adapters. One codebase, platform branches only in `src/platform.rs`.

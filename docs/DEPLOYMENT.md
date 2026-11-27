@@ -1,8 +1,8 @@
 # Deployment guide — Pinpoint
 
-**Current release:** 3.0.0 · **Stack:** one Rust crate (`pinpoint-desktop`) with an Axum server, a desktop client, an Android app and a web client served by the same server.
+**Current release:** 3.0.1 · **Stack:** one Rust crate (`pinpoint-desktop`) with an Axum server, a desktop client, an Android app and a web client served by the same server.
 
-Release assets: the signed universal Android APK, `pinpoint-desktop-linux-x64-3.0.0.zip`, `pinpoint-desktop-macos-3.0.0.zip`, `pinpoint-desktop-windows-x64-3.0.0.zip`, `pinpoint-server-linux-x64-3.0.0.zip`, `pinpoint-server-macos-3.0.0.zip`, and `pinpoint-server-windows-x64-3.0.0.zip`. The macOS desktop ZIP contains an unsigned `Pinpoint.app` bundle with Info.plist/icns; the Linux desktop ZIP contains the binary, `pinpoint.desktop` and icon. All server zips include the web client; run one and open `http://127.0.0.1:8080/`. The tag workflow builds the Windows ZIPs on `windows-latest`, Linux on `ubuntu-latest` and macOS on `macos-latest`; each job runs the built server and checks `/health`, `/` and `/privacy`, Linux launches the desktop under Xvfb, and macOS opens the app bundle before packaging.
+Release assets: the signed universal Android APK, `pinpoint-desktop-linux-x64-3.0.1.zip`, `pinpoint-desktop-macos-3.0.1.zip`, `pinpoint-desktop-windows-x64-3.0.1.zip`, `pinpoint-server-linux-x64-3.0.1.zip`, `pinpoint-server-macos-3.0.1.zip`, and `pinpoint-server-windows-x64-3.0.1.zip`. The macOS desktop ZIP contains an unsigned `Pinpoint.app` bundle with Info.plist/icns; the Linux desktop ZIP contains the binary, `pinpoint.desktop` and icon. All server zips include the web client; run one and open `http://127.0.0.1:8080/`. The tag workflow builds the Windows ZIPs on `windows-latest`, Linux on `ubuntu-latest` and macOS on `macos-latest`; each job runs the built server and checks `/health`, `/` and `/privacy`, Linux launches the desktop under Xvfb, and macOS opens the app bundle before packaging.
 
 This page covers the supported paths: local in-memory, local PostgreSQL, the Docker Compose stack, a production checklist, the desktop/Android builds and the verification gate. The archived Go/Python/Kotlin prototypes are not buildable from this tree; see ADR-0007.
 
@@ -41,7 +41,7 @@ docker compose ps
 curl -fsS http://127.0.0.1:8000/health
 ```
 
-- `gateway` (nginx) is the only client entrypoint: `:8000` HTTP and `:8443` HTTPS. It routes `/api/v1/auth`, `/api/v1/users`, `/api/v1/locations`, `/api/v1/messages`, `/map` and `/` to healthy replicas.
+- `gateway` (nginx) is the only client entrypoint. It publishes only on loopback: `127.0.0.1:8000` HTTP and `127.0.0.1:8443` HTTPS. For a public host, start the `caddy` profile (`docker compose --profile public up -d`) with `PINPOINT_DOMAIN` set to your hostname; Caddy obtains the certificate and is the only container on ports 80 and 443. It routes `/api/v1/auth`, `/api/v1/users`, `/api/v1/locations`, `/api/v1/messages`, `/map` and `/` to healthy replicas.
 - Services: `auth` (:8001), `users` (:8002), `locations` (:8003), `map` (:8004), `messages` (:8007, via the gateway), `diag` (:8005), `admin` (:8006), `db` (Postgres 16) and `db-backup`.
 - Each app service runs two replicas by default; the gateway retries another healthy replica.
 - `diag` and `admin` publish their own ports for the dedicated consoles; the other services stay on the internal network.
@@ -85,7 +85,7 @@ The restore script checks the `PGDMP` archive header and runs `pg_restore --clea
 
 ## 4. Production checklist
 
-- Terminate TLS at the gateway (Caddy/nginx) and enable HSTS. HTTPS sessions use `__Host-pinpoint_session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and no `Domain`.
+- Use the `public` profile above (Caddy terminates TLS and the gateway trusts only its forwarding headers) and enable HSTS at the proxy. HTTPS sessions use `__Host-pinpoint_session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and no `Domain`.
 - Set `DATABASE_URL` to a managed Postgres instance; enable backups and monitoring. The server applies migrations.
 - Set `PINPOINT_SESSION_IDLE_MINUTES=30` for a public host; the 12 h default is demo-friendly. Keep `PINPOINT_SESSION_MAX_DAYS=30`.
 - Set `PINPOINT_TILE_URL` to a self-hosted ODbL tile source. Never use `tile.openstreetmap.org`; the bundled fallback is demo-only.
@@ -138,7 +138,7 @@ adb shell am start -n com.pinpoint.desktop/.PinpointActivity
 - The release job checks out the tag, re-runs the same APK check on the downloaded artifact and uses `RELEASE_NOTES.md` as the draft body. It also extracts both Windows ZIPs and checks their exe names and README version, and re-verifies the APK signature with `apksigner` (a tag release rejects the throwaway build key).
 - Separate verification jobs run every downloaded package: `windows-latest` runs `pinpoint-desktop.exe --help` and the server (`/health`, `/privacy`, `/`); `ubuntu-latest` runs the downloaded Linux binary under Xvfb and requires a screenshot; `macos-latest` checks the app's `Info.plist` version and opens the downloaded `Pinpoint.app`, requiring the process to stay alive. All must pass before the draft is created.
 - A manual `Release` run performs the same checkout/aapt/downloaded-APK check and skips only the draft creation, so the gate can be exercised without a tag.
-- The published demo release uses that signed universal `pinpoint-android-3.0.0.apk`; the Gradle debug arm64 APK remains the local device build.
+- The published demo release uses that signed universal `pinpoint-android-3.0.1.apk`; the Gradle debug arm64 APK remains the local device build.
 
 ## 7. iOS
 

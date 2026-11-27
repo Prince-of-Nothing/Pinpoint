@@ -91,6 +91,7 @@ The per-item flagged list for this release is in
 - [INFRA] Release `verify-linux` and `verify-macos` jobs run the downloaded bundles: Linux under Xvfb with a screenshot, macOS by opening `Pinpoint.app` and requiring it to stay alive.
 
 ### Changed
+- [DOCS] Security docs now match the code: Argon2id with PBKDF2 re-hash, migrations 1-18, TOTP MFA and message E2E implemented, GitHub OAuth listed as working, and `AGENTS.md` names crate version 3.0.0.
 - [FEATURE] Native phone map: all nine category chips show under the search, wrapping onto more rows instead of scrolling sideways.
 - [FEATURE] Native theme: floating surfaces and cards take their shadow from the theme. The dark theme keeps the shadow it has; a light theme gets the web's soft green-black tint instead of a black one.
 - [FEATURE] Native phone map: the zoom, locate, style, route and drawer controls move to the bottom right, as on the web, and stack above the "Sharing with you" strip; they step aside while a sheet is open.

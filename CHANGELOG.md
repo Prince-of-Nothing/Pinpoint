@@ -11,6 +11,9 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Security
+- [SECURITY] Android: `pinpoint://publish` (and its aliases) opens the map and no longer publishes your location on launch, so another app cannot publish it without a tap.
+
 ### Added
 - [INFRA] Release: the tag workflow writes `SHA256SUMS.txt` with the SHA-256 of every asset, checks it with `sha256sum -c`, and attaches it to the draft release. A manual run keeps it as the `release-checksums` artifact and fails if an expected asset is missing.
 - [DOCS] Security: publish-readiness threat model in `docs/security/threat-model-publish-readiness.md` (STRIDE, 17 findings, five publish blockers).

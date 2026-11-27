@@ -934,15 +934,17 @@ impl PinpointAppUI {
         // drawer, the sheets, the route planner and the measure tool.
         let measuring = self.app.data().lock().unwrap().measure_mode;
         let strip_hidden = map_blocked || self.mobile_nav_open || self.route_plan.open || measuring;
+        let mut strip_height = 0.0;
         if !strip_hidden {
             let entries = {
                 let data = self.app.data();
                 let data = data.lock().unwrap();
                 live_strip::strip_entries(&data.locations, chrono::Utc::now())
             };
-            if let Some(target) =
-                live_strip::draw_live_strip(ctx, &entries, live_strip::ABOVE_TAB_BAR)
-            {
+            let (target, height) =
+                live_strip::draw_live_strip(ctx, &entries, live_strip::ABOVE_TAB_BAR);
+            strip_height = height;
+            if let Some(target) = target {
                 let data = self.app.data();
                 let mut data = data.lock().unwrap();
                 data.map_center_lat = target.latitude;
@@ -1057,10 +1059,15 @@ impl PinpointAppUI {
         let mut share_webview = false;
         let map_dark = self.app.data().lock().unwrap().map_dark;
         let webview_visible = crate::platform::map_webview_visible();
-        if !self.mobile_nav_open {
+        // The controls sit bottom right, as on the web, and step aside while a
+        // sheet owns the bottom of the map.
+        if !self.mobile_nav_open && !map_blocked {
             egui::Area::new(egui::Id::new("mobile_map_controls"))
                 .order(egui::Order::Foreground)
-                .fixed_pos(egui::pos2(width - 56.0, chips_top))
+                .anchor(
+                    egui::Align2::RIGHT_BOTTOM,
+                    egui::vec2(-12.0, -controls_inset(strip_height)),
+                )
                 .show(ctx, |ui| {
                     egui::Frame::new()
                         .fill(theme::float_fill())
@@ -1585,6 +1592,16 @@ pub(crate) enum MapIcon {
 
 /// A 44 pt control in the floating map card: a painted icon, a hairline
 /// divider under it, and a hover tint that fades in rather than snapping.
+/// How far the bottom-right controls sit above the bottom of the screen: the
+/// tab bar's clearance, plus the sharing strip and its gap when it is shown.
+fn controls_inset(strip_height: f32) -> f32 {
+    if strip_height > 0.0 {
+        live_strip::ABOVE_TAB_BAR + strip_height + 8.0
+    } else {
+        live_strip::ABOVE_TAB_BAR
+    }
+}
+
 fn map_icon_button(ui: &mut egui::Ui, icon: MapIcon, tip: &str) -> egui::Response {
     map_icon_cell(ui, icon, tip, true)
 }
@@ -1885,9 +1902,21 @@ pub(crate) fn place_sheet_dispatch(
 mod tests {
     use super::egui;
     use super::{
-        map_key_action, map_shortcut_rows, map_shortcuts_enabled, search_shortcut_fires,
-        sheet_escape_target, take_place_focus, EscapableSheet, MapKeyAction, MAP_SHORTCUTS,
+        controls_inset, map_key_action, map_shortcut_rows, map_shortcuts_enabled,
+        search_shortcut_fires, sheet_escape_target, take_place_focus, EscapableSheet, MapKeyAction,
+        MAP_SHORTCUTS,
     };
+
+    #[test]
+    fn controls_stack_above_the_sharing_strip_when_it_shows() {
+        // No strip: the bottom-right controls sit just above the tab bar.
+        assert_eq!(controls_inset(0.0), super::live_strip::ABOVE_TAB_BAR);
+        // A shown strip: the controls clear its top edge by the same 8 pt gap.
+        assert_eq!(
+            controls_inset(90.0),
+            super::live_strip::ABOVE_TAB_BAR + 90.0 + 8.0
+        );
+    }
 
     #[test]
     fn map_shortcuts_need_no_modal_and_no_text_focus() {

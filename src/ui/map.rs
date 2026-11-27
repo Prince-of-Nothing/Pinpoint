@@ -961,32 +961,20 @@ impl PinpointAppUI {
                 .order(egui::Order::Foreground)
                 .fixed_pos(egui::pos2(12.0, chips_top))
                 .show(ctx, |ui| {
-                    // Stop short of the floating controls card on the right.
-                    ui.set_width(width - 76.0);
-                    egui::ScrollArea::horizontal().show(ui, |ui| {
-                        ui.set_width(width - 76.0);
-                        ui.horizontal(|ui| {
-                            for (label, query) in [
-                                ("Food", "restaurant"),
-                                ("Cafe", "cafe"),
-                                ("Fuel", "fuel"),
-                                ("Pharmacy", "pharmacy"),
-                                ("Hospital", "hospital"),
-                                ("Parking", "parking"),
-                                ("ATM", "atm"),
-                                ("Hotel", "hotel"),
-                                ("Park", "park"),
-                            ] {
-                                let button = egui::Button::new(RichText::new(label).size(13.0))
-                                    .fill(theme::float_fill())
-                                    .stroke(egui::Stroke::new(1.0_f32, border))
-                                    .corner_radius(egui::CornerRadius::same(20))
-                                    .min_size(egui::vec2(0.0, 40.0));
-                                if ui.add(button).clicked() {
-                                    chip_query = Some(query);
-                                }
+                    // All nine chips show, wrapping onto more rows as needed.
+                    ui.set_width(width - 24.0);
+                    ui.spacing_mut().item_spacing = egui::vec2(8.0, 8.0);
+                    ui.horizontal_wrapped(|ui| {
+                        for (label, query) in CATEGORY_CHIPS {
+                            let button = egui::Button::new(RichText::new(label).size(13.0))
+                                .fill(theme::float_fill())
+                                .stroke(egui::Stroke::new(1.0_f32, border))
+                                .corner_radius(egui::CornerRadius::same(20))
+                                .min_size(egui::vec2(0.0, 40.0));
+                            if ui.add(button).clicked() {
+                                chip_query = Some(query);
                             }
-                        });
+                        }
                     });
                 });
             if let Some(query) = chip_query {

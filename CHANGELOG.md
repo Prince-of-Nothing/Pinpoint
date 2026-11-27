@@ -89,6 +89,7 @@ The per-item flagged list for this release is in
 - [INFRA] Release `verify-linux` and `verify-macos` jobs run the downloaded bundles: Linux under Xvfb with a screenshot, macOS by opening `Pinpoint.app` and requiring it to stay alive.
 
 ### Changed
+- [FEATURE] Native phone map: all nine category chips show under the search, wrapping onto more rows instead of scrolling sideways.
 - [FEATURE] Native theme: floating surfaces and cards take their shadow from the theme. The dark theme keeps the shadow it has; a light theme gets the web's soft green-black tint instead of a black one.
 - [FEATURE] Native phone map: the zoom, locate, style, route and drawer controls move to the bottom right, as on the web, and stack above the "Sharing with you" strip; they step aside while a sheet is open.
 - [FEATURE] Native messages: the empty states sit on a card, and received bubbles get a soft shadow and a hairline border; bubbles have rounder corners and roomier padding, while your own bubbles stay flat.

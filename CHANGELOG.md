@@ -119,6 +119,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Native phone: Sign out is no longer in every header. It sits in the More menu behind the avatar, in the danger colour, away from the tiles.
 - [FIX] Native emergency: sending an alert now needs a second tap to confirm, so one accidental tap no longer notifies every friend.
 - [FIX] Native emergency: the Send emergency alert label is dark ink on the danger colour, so it passes contrast (about 6.8:1, was about 2.5:1 with white text).
 - [FIX] Native phone map: restore the category chip list that a merge dropped, so `main` compiles again, and put the map button doc back on its function.

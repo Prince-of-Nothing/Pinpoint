@@ -53,6 +53,17 @@ fn is_wide_width(width: f32) -> bool {
     width >= WIDE_LAYOUT_MIN_WIDTH
 }
 
+/// Side margin of the central panel. Phone screens other than the map keep a
+/// 16 pt gutter, so headings and cards share one left edge. The map stays
+/// full bleed, and desktop keeps its own layout.
+fn central_margin(compact: bool, on_map: bool) -> egui::Margin {
+    if compact && !on_map {
+        egui::Margin::symmetric(16, 0)
+    } else {
+        egui::Margin::same(0)
+    }
+}
+
 fn drawer_overlays_map(width: f32) -> bool {
     width < DRAWER_OVERLAY_MAX_WIDTH
 }
@@ -2560,8 +2571,13 @@ impl eframe::App for PinpointAppUI {
         if self.sheet_gate_active(ctx) {
             draw_sheet_input_gate(ctx);
         }
+        let on_map = self.app.current_screen() == CurrentScreen::Map;
         let panel = if compact {
-            egui::CentralPanel::default().frame(egui::Frame::NONE.fill(theme::BG))
+            egui::CentralPanel::default().frame(
+                egui::Frame::NONE
+                    .fill(theme::BG)
+                    .inner_margin(central_margin(compact, on_map)),
+            )
         } else {
             egui::CentralPanel::default()
         };
@@ -4174,5 +4190,18 @@ mod tests {
         assert!(refresh.refresh);
         assert!(refresh.close);
         assert_eq!(refresh.screen, None);
+    }
+}
+
+#[cfg(test)]
+mod central_margin_tests {
+    use super::central_margin;
+
+    #[test]
+    fn phone_gutter_applies_to_every_screen_but_the_map() {
+        assert_eq!(central_margin(true, false).left, 16);
+        assert_eq!(central_margin(true, false).right, 16);
+        assert_eq!(central_margin(true, true).left, 0);
+        assert_eq!(central_margin(false, false).left, 0);
     }
 }

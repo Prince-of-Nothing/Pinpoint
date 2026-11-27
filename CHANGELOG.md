@@ -119,6 +119,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Native phone: screens other than the map keep a 16 pt side margin, so headings and cards share one left edge instead of touching the screen edge.
 - [FIX] Native emergency: sending an alert now needs a second tap to confirm, so one accidental tap no longer notifies every friend.
 - [FIX] Native phone map: restore the category chip list that a merge dropped, so `main` compiles again, and put the map button doc back on its function.
 - [FIX] Deploy: the gateway publishes only on 127.0.0.1, public HTTPS is an opt-in `caddy` profile (`docker compose --profile public up -d`, set `PINPOINT_DOMAIN`), and the gateway trusts forwarding headers only from that proxy, so cookies get `Secure` and rate limits key on real visitors.

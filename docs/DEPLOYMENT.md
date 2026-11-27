@@ -1,8 +1,8 @@
 # Deployment guide — Pinpoint
 
-**Current release:** 3.0.0 · **Stack:** one Rust crate (`pinpoint-desktop`) with an Axum server, a desktop client, an Android app and a web client served by the same server.
+**Current release:** 3.0.1 · **Stack:** one Rust crate (`pinpoint-desktop`) with an Axum server, a desktop client, an Android app and a web client served by the same server.
 
-Release assets: the signed universal Android APK, `pinpoint-desktop-linux-x64-3.0.0.zip`, `pinpoint-desktop-macos-3.0.0.zip`, `pinpoint-desktop-windows-x64-3.0.0.zip`, `pinpoint-server-linux-x64-3.0.0.zip`, `pinpoint-server-macos-3.0.0.zip`, and `pinpoint-server-windows-x64-3.0.0.zip`. The macOS desktop ZIP contains an unsigned `Pinpoint.app` bundle with Info.plist/icns; the Linux desktop ZIP contains the binary, `pinpoint.desktop` and icon. All server zips include the web client; run one and open `http://127.0.0.1:8080/`. The tag workflow builds the Windows ZIPs on `windows-latest`, Linux on `ubuntu-latest` and macOS on `macos-latest`; each job runs the built server and checks `/health`, `/` and `/privacy`, Linux launches the desktop under Xvfb, and macOS opens the app bundle before packaging.
+Release assets: the signed universal Android APK, `pinpoint-desktop-linux-x64-3.0.1.zip`, `pinpoint-desktop-macos-3.0.1.zip`, `pinpoint-desktop-windows-x64-3.0.1.zip`, `pinpoint-server-linux-x64-3.0.1.zip`, `pinpoint-server-macos-3.0.1.zip`, and `pinpoint-server-windows-x64-3.0.1.zip`. The macOS desktop ZIP contains an unsigned `Pinpoint.app` bundle with Info.plist/icns; the Linux desktop ZIP contains the binary, `pinpoint.desktop` and icon. All server zips include the web client; run one and open `http://127.0.0.1:8080/`. The tag workflow builds the Windows ZIPs on `windows-latest`, Linux on `ubuntu-latest` and macOS on `macos-latest`; each job runs the built server and checks `/health`, `/` and `/privacy`, Linux launches the desktop under Xvfb, and macOS opens the app bundle before packaging.
 
 This page covers the supported paths: local in-memory, local PostgreSQL, the Docker Compose stack, a production checklist, the desktop/Android builds and the verification gate. The archived Go/Python/Kotlin prototypes are not buildable from this tree; see ADR-0007.
 
@@ -137,7 +137,7 @@ adb shell am start -n com.pinpoint.desktop/.PinpointActivity
 - The release job checks out the tag, re-runs the same APK check on the downloaded artifact and uses `RELEASE_NOTES.md` as the draft body. It also extracts both Windows ZIPs and checks their exe names and README version, and re-verifies the APK signature with `apksigner` (a tag release rejects the throwaway build key).
 - Separate verification jobs run every downloaded package: `windows-latest` runs `pinpoint-desktop.exe --help` and the server (`/health`, `/privacy`, `/`); `ubuntu-latest` runs the downloaded Linux binary under Xvfb and requires a screenshot; `macos-latest` checks the app's `Info.plist` version and opens the downloaded `Pinpoint.app`, requiring the process to stay alive. All must pass before the draft is created.
 - A manual `Release` run performs the same checkout/aapt/downloaded-APK check and skips only the draft creation, so the gate can be exercised without a tag.
-- The published demo release uses that signed universal `pinpoint-android-3.0.0.apk`; the Gradle debug arm64 APK remains the local device build.
+- The published demo release uses that signed universal `pinpoint-android-3.0.1.apk`; the Gradle debug arm64 APK remains the local device build.
 
 ## 7. iOS
 

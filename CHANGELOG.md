@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+
+## [3.0.1] - 2026-11-27
 ### Added
 - [DOCS] Security: publish-readiness threat model in `docs/security/threat-model-publish-readiness.md` (STRIDE, 17 findings, five publish blockers).
 - [FEATURE] Native phone Chats tab: a badge shows the unread message count ("9+" above nine), and screen readers hear "Chats, 3 unread".

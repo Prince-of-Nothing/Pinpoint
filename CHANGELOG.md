@@ -86,6 +86,7 @@ The per-item flagged list for this release is in
 - [INFRA] Release `verify-linux` and `verify-macos` jobs run the downloaded bundles: Linux under Xvfb with a screenshot, macOS by opening `Pinpoint.app` and requiring it to stay alive.
 
 ### Changed
+- [FEATURE] Native phone map: all nine category chips show under the search, wrapping onto more rows instead of scrolling sideways.
 - [FEATURE] Native messages: the empty states sit on a card, and received bubbles get a soft shadow and a hairline border; bubbles have rounder corners and roomier padding, while your own bubbles stay flat.
 - [FEATURE] Native phone map: floating search, map controls, category chips, sharing strip and tab bar share one translucent surface with a soft shadow; the controls are one card with hairline dividers and a fading hover; chips sit 12 pt under the search pill and the account avatar is centred on it.
 - [FEATURE] Native cards (Friends, Today and the other card screens): a soft shadow lifts each card off the page, as part of the premium direction.

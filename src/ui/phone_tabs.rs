@@ -72,15 +72,21 @@ pub(crate) fn avatar_initial(full_name: Option<&str>) -> char {
         .unwrap_or('?')
 }
 
-/// Full height of the tab bar panel: 4 pt top margin, a 48 pt target row, and
-/// a 20 pt bottom margin that keeps the tabs clear of the gesture bar.
-const BAR_HEIGHT: f32 = 78.0;
+/// Full height of the tab bar panel: a 4 pt top margin, the floating pill, and
+/// a 20 pt bottom margin that keeps the pill clear of the gesture bar.
+pub(crate) const BAR_HEIGHT: f32 = 78.0;
+/// Side inset of the floating pill, as on the web tab bar.
+const PILL_SIDE_INSET: i8 = 12;
+/// Height of one tab's target inside the pill (at least 48 pt with the pill's
+/// own 4 pt padding).
 const TAB_HEIGHT: f32 = 48.0;
+const PILL_PADDING: i8 = 4;
 const TAB_BOTTOM_INSET: i8 = 20;
 
-/// Draws the four-tab bar over the bottom of the screen. Returns the screen to
-/// open when a different tab is tapped; tapping the tab that is already open
-/// does nothing, so a tap on People keeps Sharing open.
+/// Draws the four-tab bar as a floating rounded pill over the bottom of the
+/// screen. Returns the screen to open when a different tab is tapped; tapping
+/// the tab that is already open does nothing, so a tap on People keeps Sharing
+/// open.
 pub(crate) fn draw_tab_bar(ctx: &egui::Context, current: &CurrentScreen) -> Option<CurrentScreen> {
     let owner = PhoneTab::owning(current);
     let mut chosen: Option<CurrentScreen> = None;
@@ -89,45 +95,119 @@ pub(crate) fn draw_tab_bar(ctx: &egui::Context, current: &CurrentScreen) -> Opti
         .exact_height(BAR_HEIGHT)
         .frame(
             egui::Frame::NONE
-                .fill(theme::PANEL)
+                // Only the pill is painted; the map stays visible around it.
+                .fill(egui::Color32::TRANSPARENT)
                 .inner_margin(egui::Margin {
-                    left: 4,
-                    right: 4,
+                    left: PILL_SIDE_INSET,
+                    right: PILL_SIDE_INSET,
                     top: 4,
                     bottom: TAB_BOTTOM_INSET,
                 }),
         )
         .show(ctx, |ui| {
-            ui.spacing_mut().item_spacing.x = 0.0;
-            let tab_width = ui.available_width() / PhoneTab::ALL.len() as f32;
-            ui.horizontal(|ui| {
-                for tab in PhoneTab::ALL {
-                    let selected = owner == Some(tab);
-                    let text_color = if selected {
-                        theme::ACCENT_INK
-                    } else {
-                        theme::TEXT
-                    };
-                    let button = egui::Button::new(
-                        RichText::new(tab.label())
-                            .size(14.0)
-                            .strong()
-                            .color(text_color),
-                    )
-                    .fill(if selected {
-                        theme::ACCENT
-                    } else {
-                        theme::PANEL
-                    })
-                    .min_size(egui::vec2(tab_width, TAB_HEIGHT))
-                    .corner_radius(egui::CornerRadius::same(10));
-                    if ui.add(button).clicked() && !selected {
-                        chosen = Some(tab.screen());
-                    }
-                }
-            });
+            egui::Frame::NONE
+                .fill(theme::PANEL)
+                .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
+                .corner_radius(egui::CornerRadius::same(22))
+                .inner_margin(egui::Margin::same(PILL_PADDING))
+                .show(ui, |ui| {
+                    ui.spacing_mut().item_spacing.x = 0.0;
+                    let tab_width = ui.available_width() / PhoneTab::ALL.len() as f32;
+                    ui.horizontal(|ui| {
+                        for tab in PhoneTab::ALL {
+                            let selected = owner == Some(tab);
+                            let (rect, response) = ui.allocate_exact_size(
+                                egui::vec2(tab_width, TAB_HEIGHT),
+                                egui::Sense::click(),
+                            );
+                            let ink = if selected {
+                                theme::ACCENT
+                            } else {
+                                theme::MUTED
+                            };
+                            let painter = ui.painter();
+                            if selected {
+                                painter.rect_filled(
+                                    rect.shrink(2.0),
+                                    egui::CornerRadius::same(16),
+                                    theme::PANEL_2,
+                                );
+                            }
+                            paint_icon(painter, tab, rect.center() + egui::vec2(0.0, -8.0), ink);
+                            painter.text(
+                                rect.center() + egui::vec2(0.0, 13.0),
+                                egui::Align2::CENTER_CENTER,
+                                tab.label(),
+                                egui::FontId::proportional(14.0),
+                                ink,
+                            );
+                            response.widget_info(|| {
+                                egui::WidgetInfo::labeled(
+                                    egui::WidgetType::Button,
+                                    true,
+                                    tab.label(),
+                                )
+                            });
+                            if response.clicked() && !selected {
+                                chosen = Some(tab.screen());
+                            }
+                        }
+                    });
+                });
         });
     chosen
+}
+
+/// Paints the tab's line icon centred on `center`: a folded map, two people,
+/// a clock, and a speech bubble. Drawn with the painter so the bar needs no
+/// icon font.
+fn paint_icon(painter: &egui::Painter, tab: PhoneTab, center: egui::Pos2, ink: egui::Color32) {
+    let stroke = egui::Stroke::new(1.6_f32, ink);
+    let at = |x: f32, y: f32| center + egui::vec2(x, y);
+    match tab {
+        PhoneTab::Map => {
+            let outline = vec![
+                at(-8.0, -6.0),
+                at(-3.0, -8.0),
+                at(3.0, -6.0),
+                at(8.0, -8.0),
+                at(8.0, 6.0),
+                at(3.0, 8.0),
+                at(-3.0, 6.0),
+                at(-8.0, 8.0),
+            ];
+            painter.add(egui::Shape::closed_line(outline, stroke));
+            painter.line_segment([at(-3.0, -8.0), at(-3.0, 6.0)], stroke);
+            painter.line_segment([at(3.0, -6.0), at(3.0, 8.0)], stroke);
+        }
+        PhoneTab::People => {
+            painter.circle_stroke(at(-3.0, -4.0), 3.5, stroke);
+            painter.circle_stroke(at(4.5, -5.0), 2.8, stroke);
+            let arc: Vec<egui::Pos2> = (0..=12)
+                .map(|step| {
+                    let angle = std::f32::consts::PI + step as f32 * std::f32::consts::PI / 12.0;
+                    at(-3.0 + 6.5 * angle.cos(), 9.0 + 6.5 * angle.sin())
+                })
+                .collect();
+            painter.add(egui::Shape::line(arc, stroke));
+        }
+        PhoneTab::Today => {
+            painter.circle_stroke(center, 8.0, stroke);
+            painter.line_segment([center, at(0.0, -4.5)], stroke);
+            painter.line_segment([center, at(3.5, 1.5)], stroke);
+        }
+        PhoneTab::Chats => {
+            let bubble = egui::Rect::from_min_max(at(-8.0, -7.0), at(8.0, 4.0));
+            painter.rect_stroke(
+                bubble,
+                egui::CornerRadius::same(4),
+                stroke,
+                egui::StrokeKind::Inside,
+            );
+            painter.line_segment([at(-3.0, 4.0), at(-6.0, 8.0)], stroke);
+            painter.line_segment([at(-6.0, 8.0), at(-1.0, 4.0)], stroke);
+        }
+    }
 }
 
 /// Friends | Sharing switch at the top of the People tab. Returns the view
@@ -299,13 +379,14 @@ mod tests {
         bar_frame(ctx, current, release)
     }
 
-    /// Centre of tab `index` in the 360 pt wide bar: the 4 pt side margins and
-    /// four equal columns, with the 48 pt row 4 pt below the top of the bar.
+    /// Centre of tab `index` in the 360 pt wide bar: the 12 pt side inset, the
+    /// pill's 4 pt padding, and four equal columns. The row starts 4 pt below
+    /// the top of the bar plus the pill's 4 pt padding.
     fn tab_centre(index: usize) -> egui::Pos2 {
-        let column = (360.0 - 8.0) / 4.0;
+        let column = (360.0 - 2.0 * 12.0 - 2.0 * 4.0) / 4.0;
         egui::pos2(
-            4.0 + column * (index as f32 + 0.5),
-            800.0 - 78.0 + 4.0 + 24.0,
+            12.0 + 4.0 + column * (index as f32 + 0.5),
+            800.0 - 78.0 + 4.0 + 4.0 + 24.0,
         )
     }
 

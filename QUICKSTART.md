@@ -96,7 +96,7 @@ Click **Sign in** in the top-right to unlock:
 | Feature | Description |
 |---------|-------------|
 | Publish your location | Share your lat/lon with friends |
-| Send friend requests | Invite friends by email |
+| Send friend requests | Add friends by their username |
 | Accept/reject requests | Manage incoming friend requests |
 | Create location shares | Grant friends access to your location (exact/approximate/city) |
 | Pause/resume shares | Temporarily stop sharing without deleting |

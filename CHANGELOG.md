@@ -111,6 +111,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Friends: requests are sent by username only. The server no longer accepts an email address as a friend key, and an accepted friend's card shows the real name and handle, never the email.
 - [SECURITY] Deployment: Postgres and role passwords are required from `.env` with no known defaults; Postgres, diagnostics and admin ports bind to loopback; `db-backup` writes encrypted `.dump.enc` dumps (AES-256-CBC, PBKDF2) that need `PINPOINT_BACKUP_PASSPHRASE`. Refs SEC-38.
 - [SECURITY] Private notes: the server refuses to start with `DATABASE_URL` set and no `DATA_ENCRYPTION_KEY`, and existing plaintext place notes are encrypted at boot. Refs SEC-37.
 - [SECURITY] Auth: wrong TOTP codes count toward the 15-minute lockout, and a correct password no longer resets the failure counter before the TOTP step.

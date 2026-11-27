@@ -108,6 +108,11 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [SECURITY] Deployment: Postgres and role passwords are required from `.env` with no known defaults; Postgres, diagnostics and admin ports bind to loopback; `db-backup` writes encrypted `.dump.enc` dumps (AES-256-CBC, PBKDF2) that need `PINPOINT_BACKUP_PASSPHRASE`. Refs SEC-38.
+- [SECURITY] Private notes: the server refuses to start with `DATABASE_URL` set and no `DATA_ENCRYPTION_KEY`, and existing plaintext place notes are encrypted at boot. Refs SEC-37.
+- [SECURITY] Auth: wrong TOTP codes count toward the 15-minute lockout, and a correct password no longer resets the failure counter before the TOTP step.
+- [SECURITY] Rate limits key on the socket address; `X-Forwarded-For` is honored only when `TRUST_PROXY=1`, which compose sets for the gateway-facing services.
+- [SECURITY] Diagnostics: the sequence name is bound as a query parameter instead of being formatted into SQL.
 - [FIX] Goal queue: a claimed prompt's deletion must land in its PR; `done` only clears the local claim and refuses while the prompt is still pending.
 - [FIX] Build: `src/server/web_handlers.rs` and `tests/router_probe.rs` no longer fail to parse (a missing brace and a merged test body from #607), and the lat/lon range checks and two test-only lints pass `clippy -D warnings` on current stable, so CI builds again.
 - [FIX] Native share: test the SaveShare payload fields; Save and Stop build the same request from the sheet.

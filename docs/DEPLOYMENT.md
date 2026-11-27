@@ -24,7 +24,7 @@ cargo run --bin pinpoint-server
 ## 2. Local with PostgreSQL
 
 ```bash
-export DATABASE_URL=postgresql://pinpoint:pinpoint-local-dev@localhost:5432/pinpoint
+export DATABASE_URL=postgresql://pinpoint:$POSTGRES_PASSWORD@localhost:5432/pinpoint
 cargo run --bin pinpoint-server
 ```
 
@@ -58,13 +58,13 @@ docker exec -i pinpoint-db psql -U pinpoint -d pinpoint < db/init/03-fks.sql
 docker compose --profile demo up -d alice bob
 ```
 
-- `db-backup` runs `pg_dump` every five minutes and keeps the last 24 dumps. Postgres is a single primary; streaming replication/Patroni is a production step beyond this file.
+- `db-backup` runs `pg_dump` every five minutes, encrypts each dump (AES-256-CBC, PBKDF2) to `/backups/*.dump.enc`, and keeps the last 24. It needs `PINPOINT_BACKUP_PASSPHRASE` in `.env`. Postgres is a single primary; streaming replication/Patroni is a production step beyond this file.
 - For a self-signed TLS dev gateway: `./docker/gen-certs.sh && docker compose -f docker-compose.yml -f docker-compose.https.yml up -d`.
 - The internal gateway name is allowed plaintext only through `PINPOINT_ALLOW_PLAINTEXT_HOSTS=gateway`; every other host requires HTTPS.
 
 ### Encrypted backups and restore
 
-The `db-backup` volume holds plaintext dumps. For an encrypted, off-host copy use the wrapper:
+Dumps made before encryption was added are plaintext `.sql` files in the `db-backup` volume. They are not rotated automatically. Copy the newest one off-host if you still need it, then delete the `.sql` files. For an off-host copy use the wrapper:
 
 ```powershell
 $env:PINPOINT_BACKUP_PASSPHRASE = "a long passphrase kept outside the repository"
@@ -81,7 +81,7 @@ powershell -ExecutionPolicy Bypass -File scripts/restore-db.ps1 `
   -File D:\pinpoint-backups\pinpoint-20260101T120000.dump.enc -ConfirmRestore
 ```
 
-The restore script checks the `PGDMP` archive header and runs `pg_restore --clean --if-exists --no-owner`, which **replaces the current objects**. Stop the application services first, rehearse on a disposable database, and keep the passphrase stored separately from the backups. When the encrypted wrapper is the only accepted path, stop the plaintext loop with `docker compose stop db-backup` and protect or delete its volume.
+The restore script checks the `PGDMP` archive header and runs `pg_restore --clean --if-exists --no-owner`, which **replaces the current objects**. Stop the application services first, rehearse on a disposable database, and keep the passphrase stored separately from the backups. The restore script also accepts a `.dump.enc` file copied out of the `db-backup` volume.
 
 ## 4. Production checklist
 

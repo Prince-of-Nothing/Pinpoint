@@ -349,9 +349,37 @@ services:
       start_period: 5s
     networks:
       - pinpoint-net
+    # Loopback only. Public HTTPS goes through the caddy service (profile "public").
     ports:
-      - "8000:80"
-      - "8443:443"
+      - "127.0.0.1:8000:80"
+      - "127.0.0.1:8443:443"
+
+  ###########################################################################
+  # caddy — public HTTPS entrypoint (profile "public" only)
+  # Start with: docker compose --profile public up -d
+  # Set PINPOINT_DOMAIN in .env to a hostname whose DNS points at this host.
+  # Caddy obtains and renews the certificate itself. It is the only container
+  # that publishes ports 80 and 443; the gateway stays on 127.0.0.1.
+  ###########################################################################
+  caddy:
+    profiles: ["public"]
+    image: caddy:2-alpine
+    container_name: pinpoint-caddy
+    restart: unless-stopped
+    environment:
+      PINPOINT_DOMAIN: ${PINPOINT_DOMAIN:-localhost}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - pinpoint-net
+    ports:
+      - "80:80"
+      - "443:443"
 
   ###########################################################################
   # client — Rust desktop GUI (profile "client", Linux X11 host only)
@@ -366,7 +394,8 @@ services:
     image: pinpoint-desktop:latest
     container_name: pinpoint-client
     environment:
-      - PINPOINT_BACKEND=http://host.docker.internal:8000
+      - PINPOINT_BACKEND=http://gateway:80
+      - PINPOINT_ALLOW_PLAINTEXT_HOSTS=gateway
       - PINPOINT_DATA_DIR=/home/pinpoint/.pinpoint
       - DISPLAY=${DISPLAY:-:0}
     user: "1000:1000"
@@ -386,4 +415,8 @@ volumes:
   pinpoint-backups:
     driver: local
   pinpoint-data:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
     driver: local

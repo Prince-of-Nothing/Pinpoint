@@ -38,8 +38,9 @@ adapters. One codebase, platform branches only in `src/platform.rs`.
    No `Co-authored-by` trailers.
 6. Push the branch, open a PR with `Closes #N` or `Refs #N`, wait for CI,
    squash-merge, delete the branch, then update local `main`.
-7. Delete the prompt with `scripts/goal.ps1 done -Id NN -Agent <name>` only
-   after the PR merges.
+7. The claim moved the prompt out of `goal/prompts/`; include that deletion in
+   the PR. After it merges, clear the local claim with
+   `scripts/goal.ps1 done -Id NN -Agent <name>`.
 
 ## Current baseline (re-measure, do not assume)
 

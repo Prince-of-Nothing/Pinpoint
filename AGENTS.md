@@ -87,9 +87,10 @@ multiplatform section); they share `src/` via `cfg(target_os)`.
 - Read `goal/README.md` and `goal/CONTEXT.md` first. Claim exactly one prompt:
   `scripts/goal.ps1 claim -Id NN -Agent <name>` (moves it to
   `goal/claimed/<name>/`, which is gitignored).
-- After the prompt's PR merges, delete it with
-  `scripts/goal.ps1 done -Id NN -Agent <name>`. Release an abandoned claim
-  with `release`.
+- The claim moves the tracked prompt out of `goal/prompts/`; the PR must include
+  that deletion. After it merges, `done` only clears the gitignored local claim
+  and refuses if the prompt is still pending. Release an abandoned claim with
+  `release`.
 - `scripts/goal.ps1 check` validates the queue (10-prompt cap, required
   sections, size, location). Keep the prompts small, independent and within
   one deliverable each.

@@ -153,8 +153,12 @@ switch ($Action) {
         if ($Id -lt 1) { throw "Provide -Id <number>." }
         $claimedPrompt = Find-Claimed $Id $Agent
         if (-not $claimedPrompt) { throw ("No claimed prompt {0:D2} for {1}." -f $Id, $Agent) }
+        $stillPending = Find-Pending $Id
+        if ($stillPending) {
+            throw ("Prompt still exists in goal/prompts: {0}. Include its deletion in the PR, then run done again." -f $stillPending.Name)
+        }
         Remove-Item -Path $claimedPrompt.FullName -Force -ErrorAction Stop
-        Write-Host "DONE  removed $($claimedPrompt.Name)"
+        Write-Host "DONE  removed claim $($claimedPrompt.Name); tracked prompt deletion must already be merged."
     }
     "check" {
         Invoke-Check

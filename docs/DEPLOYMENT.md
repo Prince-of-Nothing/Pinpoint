@@ -41,7 +41,7 @@ docker compose ps
 curl -fsS http://127.0.0.1:8000/health
 ```
 
-- `gateway` (nginx) is the only client entrypoint: `:8000` HTTP and `:8443` HTTPS. It routes `/api/v1/auth`, `/api/v1/users`, `/api/v1/locations`, `/api/v1/messages`, `/map` and `/` to healthy replicas.
+- `gateway` (nginx) is the only client entrypoint. It publishes only on loopback: `127.0.0.1:8000` HTTP and `127.0.0.1:8443` HTTPS. For a public host, start the `caddy` profile (`docker compose --profile public up -d`) with `PINPOINT_DOMAIN` set to your hostname; Caddy obtains the certificate and is the only container on ports 80 and 443. It routes `/api/v1/auth`, `/api/v1/users`, `/api/v1/locations`, `/api/v1/messages`, `/map` and `/` to healthy replicas.
 - Services: `auth` (:8001), `users` (:8002), `locations` (:8003), `map` (:8004), `messages` (:8007, via the gateway), `diag` (:8005), `admin` (:8006), `db` (Postgres 16) and `db-backup`.
 - Each app service runs two replicas by default; the gateway retries another healthy replica.
 - `diag` and `admin` publish their own ports for the dedicated consoles; the other services stay on the internal network.
@@ -85,7 +85,7 @@ The restore script checks the `PGDMP` archive header and runs `pg_restore --clea
 
 ## 4. Production checklist
 
-- Terminate TLS at the gateway (Caddy/nginx) and enable HSTS. HTTPS sessions use `__Host-pinpoint_session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and no `Domain`.
+- Use the `public` profile above (Caddy terminates TLS and the gateway trusts only its forwarding headers) and enable HSTS at the proxy. HTTPS sessions use `__Host-pinpoint_session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and no `Domain`.
 - Set `DATABASE_URL` to a managed Postgres instance; enable backups and monitoring. The server applies migrations.
 - Set `PINPOINT_SESSION_IDLE_MINUTES=30` for a public host; the 12 h default is demo-friendly. Keep `PINPOINT_SESSION_MAX_DAYS=30`.
 - Set `PINPOINT_TILE_URL` to a self-hosted ODbL tile source. Never use `tile.openstreetmap.org`; the bundled fallback is demo-only.

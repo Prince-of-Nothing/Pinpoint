@@ -1,0 +1,7 @@
+# Public HTTPS entrypoint for docker-compose profile "public".
+# PINPOINT_DOMAIN must be a hostname whose DNS points at this server; Caddy
+# obtains and renews the certificate and sets X-Forwarded-Proto itself.
+{$PINPOINT_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy gateway:80
+}

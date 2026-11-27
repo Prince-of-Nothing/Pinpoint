@@ -49,6 +49,7 @@ pub mod webapp;
 pub mod map;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod map_guard;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod map_server;
 // The optional native map window needs `wry`/`tao`, which exist only for the
 // desktop targets (see the `map-webview` feature in Cargo.toml).

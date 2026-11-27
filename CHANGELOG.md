@@ -13,6 +13,8 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Security
 - [SECURITY] Map server: the map page gets a random per-launch token in its URL fragment, and the loopback server refuses requests with a foreign `Origin` or an unexpected `Host`, and any state-changing request without the token. A web page or another local process can no longer start offline downloads or deletes.
+### Removed
+- [INFRA] Config: `.env.example` no longer lists `SECRET_KEY` and `JWT_SECRET`. Nothing read them, so setting them did nothing.
 
 ## [3.0.1] - 2026-11-27
 ### Security

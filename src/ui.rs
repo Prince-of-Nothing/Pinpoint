@@ -3505,7 +3505,6 @@ mod tests {
         frame(&ctx, pointer_press(account.center()));
         frame(&ctx, pointer_release(account.center()));
         assert!(outcome.get().expect("search outcome").account_clicked);
-        drop(frame);
         assert_eq!(query, "Cafe");
     }
 

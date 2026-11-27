@@ -108,6 +108,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
+- [FIX] Friends: requests are sent by username only. The server no longer accepts an email address as a friend key, and an accepted friend's card shows the real name and handle, never the email.
 - [FIX] Goal queue: a claimed prompt's deletion must land in its PR; `done` only clears the local claim and refuses while the prompt is still pending.
 - [FIX] Build: `src/server/web_handlers.rs` and `tests/router_probe.rs` no longer fail to parse (a missing brace and a merged test body from #607), and the lat/lon range checks and two test-only lints pass `clippy -D warnings` on current stable, so CI builds again.
 - [FIX] Native share: test the SaveShare payload fields; Save and Stop build the same request from the sheet.

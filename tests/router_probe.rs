@@ -530,7 +530,7 @@ async fn usernames_are_exact_lookup_and_profiles_are_private() {
         .await
         .unwrap();
     let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(json["email"], "alice@example.com");
+    assert!(json.get("email").is_none(), "friends never see email");
     assert_eq!(json["full_name"], "Alice Example");
     assert!(json.get("role").is_none(), "role is not friend-visible");
 

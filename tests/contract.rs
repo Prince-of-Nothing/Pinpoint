@@ -91,7 +91,7 @@ async fn unsafe_requests_send_csrf_double_submit() {
     let client = login(&server).await;
 
     client
-        .send_friend_request("bob@example.com")
+        .send_friend_request("calm-otter-42")
         .await
         .expect("friend request");
 
@@ -107,8 +107,9 @@ async fn unsafe_requests_send_csrf_double_submit() {
     assert_eq!(post.header("x-csrf-token"), Some("csrf-abc"));
 
     let body: serde_json::Value = serde_json::from_str(&post.body).expect("json body");
-    assert_eq!(body["receiver_email"], "bob@example.com");
-    assert_eq!(body["receiver_username"], "bob@example.com");
+    assert_eq!(body["receiver_username"], "calm-otter-42");
+    // Friends are added by username only: no email field goes on the wire.
+    assert!(body.get("receiver_email").is_none(), "body was: {body}");
 }
 
 #[tokio::test]
@@ -139,7 +140,7 @@ async fn csrf_falls_back_to_response_header_when_body_omits_it() {
         .await
         .expect("login");
     client
-        .send_friend_request("dave@example.com")
+        .send_friend_request("dave-quiet-fox-7")
         .await
         .expect("request");
 
@@ -304,7 +305,7 @@ async fn error_envelope_is_surfaced_readably() {
     let client = login(&server).await;
 
     let err = client
-        .send_friend_request("bob@example.com")
+        .send_friend_request("calm-otter-42")
         .await
         .expect_err("must fail");
     let msg = err.to_string();

@@ -394,7 +394,9 @@ mod tests {
             "/api/v1/friendships/",
             &alice_cookie,
             &alice_csrf,
-            Some(serde_json::json!({"receiver_email": "bob-msg@example.com"})),
+            Some(serde_json::json!({
+                "receiver_username": crate::server::usernames::username_for(bob_id)
+            })),
         )
         .await;
         assert_eq!(response.status(), StatusCode::CREATED);
@@ -549,6 +551,72 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn friend_request_is_username_only_and_friend_card_hides_email() {
+        let app = crate::server::router(AppState::new());
+        let (alice_cookie, alice_csrf, _alice_id) =
+            register(&app, "alice-handle@example.com", "Alice").await;
+        let (bob_cookie, bob_csrf, bob_id) = register(&app, "bob-handle@example.com", "Bob").await;
+        let bob_handle = crate::server::usernames::username_for(bob_id);
+
+        // An email address is no longer a way to send a friend request.
+        let response = request_json(
+            &app,
+            "POST",
+            "/api/v1/friendships/",
+            &alice_cookie,
+            &alice_csrf,
+            Some(json!({"receiver_email": "bob-handle@example.com"})),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            json_body(response).await["error"]["code"],
+            "VALIDATION_FAILED"
+        );
+
+        let response = request_json(
+            &app,
+            "POST",
+            "/api/v1/friendships/",
+            &alice_cookie,
+            &alice_csrf,
+            Some(json!({"receiver_username": bob_handle})),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::CREATED);
+        let friendship = json_body(response).await["id"].as_i64().unwrap();
+        let response = request_json(
+            &app,
+            "POST",
+            &format!("/api/v1/friendships/{friendship}/respond"),
+            &bob_cookie,
+            &bob_csrf,
+            Some(json!({"action": "accept"})),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+
+        // Once accepted, the friend sees the name and handle, never the email.
+        let response = request_json(
+            &app,
+            "GET",
+            &format!("/api/v1/users/{bob_id}"),
+            &alice_cookie,
+            &alice_csrf,
+            None,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let card = json_body(response).await;
+        assert_eq!(card["full_name"], "Bob");
+        assert_eq!(card["username"], bob_handle);
+        assert!(
+            card.get("email").is_none(),
+            "friend card leaked email: {card}"
+        );
+    }
+
+    #[tokio::test]
     async fn malformed_and_replayed_envelopes_are_rejected() {
         let app = crate::server::router(AppState::new());
         let (alice_cookie, alice_csrf, alice_id) =
@@ -560,7 +628,9 @@ mod tests {
             "/api/v1/friendships/",
             &alice_cookie,
             &alice_csrf,
-            Some(serde_json::json!({"receiver_email": "bob-replay@example.com"})),
+            Some(serde_json::json!({
+                "receiver_username": crate::server::usernames::username_for(bob_id)
+            })),
         )
         .await;
         let friendship = json_body(response).await["id"].as_i64().unwrap();

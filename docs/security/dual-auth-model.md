@@ -135,7 +135,7 @@ backfill.
 | Visibility | Fields | Who can see it |
 |---|---|---|
 | Public card | `username`, `display_name` (= username), `auth_method` | Any signed-in user who knows the exact handle |
-| Friend profile | public card + `full_name`, `email` | Accepted friends only |
+| Friend profile | public card + `full_name` (no email) | Accepted friends only |
 | Private record | + `id`, `role`, `is_active`, `must_change_password` | The account itself and admins |
 
 Rules enforced server-side:
@@ -148,10 +148,10 @@ Rules enforced server-side:
   accepted friends, the public card for a pending request, and 404 otherwise.
 - **Pending requests carry handles, not legal names** (`requester_name` /
   `receiver_name` in the friendship rows), so accepting is what reveals the
-  real name and email.
-- **Friend requests accept `receiver_username`.** The legacy exact
-  `receiver_email` path remains for the desktop client; both resolve to the
-  same account and never echo the email back to the requester.
+  real name. Email is never shown to a friend.
+- **Friend requests accept only `receiver_username`.** Email is not a lookup
+  key for friendships, so an address cannot be used to find or probe an
+  account from the friend flow. Email stays with the account owner and admins.
 
 ## 4. API surface
 

@@ -11,6 +11,8 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Security
+- [SECURITY] Map server: the map page gets a random per-launch token in its URL fragment, and the loopback server refuses requests with a foreign `Origin` or an unexpected `Host`, and any state-changing request without the token. A web page or another local process can no longer start offline downloads or deletes.
 
 ## [3.0.1] - 2026-11-27
 ### Security

@@ -66,6 +66,7 @@ frame-ancestors 'none'; form-action 'none'; object-src 'none'";
 pub struct MapServer {
     addr: SocketAddr,
     shutdown: Option<oneshot::Sender<()>>,
+    token: String,
 }
 
 impl MapServer {
@@ -113,6 +114,8 @@ impl MapServer {
             anyhow::bail!("map web root {:?} has no {WEB_MARKER}", root);
         }
 
+        let token = crate::map_guard::new_token();
+        let thread_token = token.clone();
         let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<SocketAddr, String>>();
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let assets = MapAssets {
@@ -159,6 +162,7 @@ impl MapServer {
                         }
                     };
 
+                    let guard = crate::map_guard::MapGuard::new(addr.port(), thread_token);
                     let app = Router::new()
                         .route("/map/route", get(crate::local_route::map_route))
                         .route("/map/catalog", get(crate::offline_install::catalog))
@@ -176,6 +180,9 @@ impl MapServer {
                         .fallback(serve_asset)
                         .layer(Extension(installer))
                         .layer(Extension(router))
+                        .layer(axum::middleware::from_fn(move |request, next| {
+                            crate::map_guard::enforce(guard.clone(), request, next)
+                        }))
                         .with_state(assets);
 
                     if ready_tx.send(Ok(addr)).is_err() {
@@ -203,6 +210,7 @@ impl MapServer {
         Ok(Self {
             addr,
             shutdown: Some(shutdown_tx),
+            token,
         })
     }
 
@@ -216,9 +224,18 @@ impl MapServer {
         format!("http://{}/", self.addr)
     }
 
-    /// URL the WebView must load.
+    /// URL the WebView must load. The fragment hands the token to the page only.
     pub fn index_url(&self) -> String {
-        format!("http://{}/{WEB_MARKER}", self.addr)
+        format!(
+            "http://{}/{WEB_MARKER}{}",
+            self.addr,
+            crate::map_guard::fragment(&self.token)
+        )
+    }
+
+    /// Per-launch token the map page sends with state-changing requests.
+    pub fn token(&self) -> &str {
+        &self.token
     }
 
     /// Stop accepting requests. The server thread also exits when the handle
@@ -959,6 +976,7 @@ mod tests {
         let client = reqwest::Client::new();
         let post = client
             .post(format!("{}map/index.html", server.base_url()))
+            .header(crate::map_guard::TOKEN_HEADER, server.token())
             .send()
             .await
             .expect("post request");

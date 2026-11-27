@@ -69,7 +69,8 @@ pub const SUCCESS: Color32 = Color32::from_rgb(0x8f, 0xc9, 0x9f);
 
 /// Fill for a surface that floats over content (the map's search pill, its
 /// controls and chips, the sharing strip and the tab bar). It is the panel
-/// colour a touch see-through, so the map reads under it.
+/// colour at 93% opacity (238 of 255): near-solid, so text on it reads as it
+/// does on a card, with the map only faintly showing beneath.
 pub fn float_fill() -> Color32 {
     Color32::from_rgba_unmultiplied(PANEL.r(), PANEL.g(), PANEL.b(), 238)
 }

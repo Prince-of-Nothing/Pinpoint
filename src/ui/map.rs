@@ -1578,8 +1578,19 @@ pub(crate) enum MapIcon {
     Menu,
 }
 
-/// A 44 pt control in the floating map card: a painted icon, a hairline
-/// divider under it, and a hover tint that fades in rather than snapping.
+/// The category chips under the search pill: a label and the query it runs.
+const CATEGORY_CHIPS: [(&str, &str); 9] = [
+    ("Food", "restaurant"),
+    ("Cafe", "cafe"),
+    ("Fuel", "fuel"),
+    ("Pharmacy", "pharmacy"),
+    ("Hospital", "hospital"),
+    ("Parking", "parking"),
+    ("ATM", "atm"),
+    ("Hotel", "hotel"),
+    ("Park", "park"),
+];
+
 /// How far the bottom-right controls sit above the bottom of the screen: the
 /// tab bar's clearance, plus the sharing strip and its gap when it is shown.
 fn controls_inset(strip_height: f32) -> f32 {
@@ -1590,6 +1601,8 @@ fn controls_inset(strip_height: f32) -> f32 {
     }
 }
 
+/// A 44 pt control in the floating map card: a painted icon, a hairline
+/// divider under it, and a hover tint that fades in rather than snapping.
 fn map_icon_button(ui: &mut egui::Ui, icon: MapIcon, tip: &str) -> egui::Response {
     map_icon_cell(ui, icon, tip, true)
 }
@@ -1892,8 +1905,17 @@ mod tests {
     use super::{
         controls_inset, map_key_action, map_shortcut_rows, map_shortcuts_enabled,
         search_shortcut_fires, sheet_escape_target, take_place_focus, EscapableSheet, MapKeyAction,
-        MAP_SHORTCUTS,
+        CATEGORY_CHIPS, MAP_SHORTCUTS,
     };
+
+    #[test]
+    fn all_nine_category_chips_are_offered() {
+        let labels: Vec<&str> = CATEGORY_CHIPS.iter().map(|(label, _)| *label).collect();
+        assert_eq!(
+            labels,
+            ["Food", "Cafe", "Fuel", "Pharmacy", "Hospital", "Parking", "ATM", "Hotel", "Park"]
+        );
+    }
 
     #[test]
     fn controls_stack_above_the_sharing_strip_when_it_shows() {

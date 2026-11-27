@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] Release: the tag workflow writes `SHA256SUMS.txt` with the SHA-256 of every asset, checks it with `sha256sum -c`, and attaches it to the draft release. A manual run keeps it as the `release-checksums` artifact and fails if an expected asset is missing.
 - [DOCS] Security: publish-readiness threat model in `docs/security/threat-model-publish-readiness.md` (STRIDE, 17 findings, five publish blockers).
 - [FEATURE] Native phone Chats tab: a badge shows the unread message count ("9+" above nine), and screen readers hear "Chats, 3 unread".
 - [FEATURE] Native map: a "Sharing with you" strip above the phone tab bar lists the friends whose location you can see now, freshest first. A sunflower ring marks a location updated in the last 15 minutes, and tapping a chip flies the map to that friend. The strip steps aside for the menu, sheets, route planner and measure tool.

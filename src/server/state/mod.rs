@@ -92,6 +92,9 @@ pub struct AppState {
     pub oauth_pending: Arc<Mutex<HashMap<String, oauth::PendingOAuth>>>,
     /// Column cipher for private notes/photos; `None` keeps plaintext (dev).
     pub data_cipher: Option<Arc<crate::security::encryption::AesGcmEncryption>>,
+    /// Set `TRUST_PROXY=1` only behind a proxy that overwrites `X-Forwarded-For`
+    /// (the bundled gateway does). It makes the header the rate-limit client key.
+    pub trust_proxy: bool,
 }
 
 /// Which deployable this `AppState` backs (controls persistence ownership).
@@ -214,6 +217,22 @@ fn data_cipher_from_env() -> Option<Arc<crate::security::encryption::AesGcmEncry
     ))
 }
 
+/// `TRUST_PROXY=1|true|yes` marks the server as running behind a trusted proxy.
+fn trust_proxy_from_env() -> bool {
+    matches!(
+        std::env::var("TRUST_PROXY").ok().as_deref().map(str::trim),
+        Some("1") | Some("true") | Some("yes")
+    )
+}
+
+/// Private notes are encrypted at rest, so a database-backed server refuses to start without a key.
+fn check_data_key(key: Option<&str>) -> Result<(), String> {
+    match key.map(str::trim) {
+        Some(value) if !value.is_empty() => Ok(()),
+        _ => Err("DATA_ENCRYPTION_KEY must be set when DATABASE_URL is set, because private notes are stored encrypted at rest. Generate one with `openssl rand -base64 32`.".to_string()),
+    }
+}
+
 /// Marks an encrypted column value (`enc:v1:` + base64 nonce||ciphertext).
 const NOTE_CIPHER_PREFIX: &str = "enc:v1:";
 
@@ -231,6 +250,56 @@ impl AppState {
                 tracing::warn!("note encryption failed; storing the field as plaintext");
                 plaintext.to_string()
             }
+        }
+    }
+
+    /// Stored form of one private-note field: encrypted unless it already is.
+    pub fn note_field_at_rest(&self, stored: &str) -> String {
+        if stored.starts_with(NOTE_CIPHER_PREFIX) {
+            stored.to_string()
+        } else {
+            self.encrypt_note_text(stored)
+        }
+    }
+
+    /// Encrypt place-note rows written before the key was required. Runs once at boot.
+    async fn encrypt_legacy_place_notes(&self) {
+        let Some(pool) = &self.pg else { return };
+        let rows = match sqlx::query_as::<_, (i64, String, String, Option<String>)>(
+            "SELECT id, label, message, photo FROM pinpoint_place_notes",
+        )
+        .fetch_all(pool)
+        .await
+        {
+            Ok(rows) => rows,
+            Err(error) => {
+                eprintln!("warning: could not check place notes for encryption: {error}");
+                return;
+            }
+        };
+        let mut encrypted = 0usize;
+        for (id, label, message, photo) in rows {
+            let label_at_rest = self.note_field_at_rest(&label);
+            let message_at_rest = self.note_field_at_rest(&message);
+            let photo_at_rest = photo.as_deref().map(|p| self.note_field_at_rest(p));
+            if label_at_rest == label && message_at_rest == message && photo_at_rest == photo {
+                continue;
+            }
+            let result = sqlx::query(
+                "UPDATE pinpoint_place_notes SET label = $1, message = $2, photo = $3 WHERE id = $4",
+            )
+            .bind(&label_at_rest)
+            .bind(&message_at_rest)
+            .bind(&photo_at_rest)
+            .bind(id)
+            .execute(pool)
+            .await;
+            if result.is_ok() {
+                encrypted += 1;
+            }
+        }
+        if encrypted > 0 {
+            eprintln!("encrypted {encrypted} legacy private note row(s) at rest");
         }
     }
 
@@ -281,6 +350,7 @@ impl AppState {
             provider_endpoints: Arc::new(Mutex::new(provider_endpoints)),
             oauth_pending: Arc::new(Mutex::new(HashMap::new())),
             data_cipher: data_cipher_from_env(),
+            trust_proxy: trust_proxy_from_env(),
         }
     }
 
@@ -292,6 +362,9 @@ impl AppState {
         let database_url = std::env::var("DATABASE_URL").unwrap_or_default();
         if database_url.trim().is_empty() {
             return Self::for_owner(owner);
+        }
+        if let Err(message) = check_data_key(std::env::var("DATA_ENCRYPTION_KEY").ok().as_deref()) {
+            panic!("{message}");
         }
         match sqlx::PgPool::connect(&database_url).await {
             Ok(pool) => {
@@ -309,8 +382,10 @@ impl AppState {
                     provider_endpoints: Arc::new(Mutex::new(provider_endpoints)),
                     oauth_pending: Arc::new(Mutex::new(HashMap::new())),
                     data_cipher: data_cipher_from_env(),
+                    trust_proxy: trust_proxy_from_env(),
                 };
                 app.init_postgres().await;
+                app.encrypt_legacy_place_notes().await;
                 app
             }
             Err(e) => {
@@ -616,5 +691,39 @@ mod tests {
         assert!(store.emergencies.is_empty());
         assert!(store.diagnostic_reports.is_empty());
         assert!(store.admin_audit.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod notes_at_rest_tests {
+    use super::*;
+    use crate::security::encryption::{AesGcmEncryption, EncryptionKey};
+    use std::sync::Arc;
+
+    fn encrypted_state() -> AppState {
+        let mut state = AppState::for_owner(ServiceKind::All);
+        let key = EncryptionKey::from_bytes(&[7u8; 32]).unwrap();
+        state.data_cipher = Some(Arc::new(AesGcmEncryption::new(key)));
+        state
+    }
+
+    #[test]
+    fn a_data_key_is_required_when_postgres_is_configured() {
+        assert!(check_data_key(None).is_err());
+        assert!(check_data_key(Some("   ")).is_err());
+        assert!(check_data_key(Some("c29tZS1rZXk=")).is_ok());
+    }
+
+    #[test]
+    fn legacy_plaintext_note_fields_are_encrypted_exactly_once() {
+        let state = encrypted_state();
+        let once = state.note_field_at_rest("Home");
+        assert!(once.starts_with(NOTE_CIPHER_PREFIX));
+        assert_eq!(state.decrypt_note_text(&once), "Home");
+        assert_eq!(
+            state.note_field_at_rest(&once),
+            once,
+            "encrypted fields are left alone"
+        );
     }
 }

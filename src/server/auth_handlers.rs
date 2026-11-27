@@ -115,6 +115,18 @@ fn unauthenticated() -> axum::response::Response {
         .into_response()
 }
 
+/// Count one failed sign-in and lock the account for 15 minutes after five in a row.
+fn record_failed_login(state: &AppState, user_id: i64) {
+    let mut store = state.store.lock().unwrap();
+    if let Some(u) = store.users.iter_mut().find(|u| u.id == user_id) {
+        u.failed_login_attempts = u.failed_login_attempts.saturating_add(1);
+        if u.failed_login_attempts >= 5 {
+            u.locked_until =
+                Some((chrono::Utc::now() + chrono::Duration::minutes(15)).to_rfc3339());
+        }
+    }
+}
+
 /// `POST /auth/login` — password verification + real session cookie.
 pub async fn login(
     State(state): State<AppState>,
@@ -170,26 +182,8 @@ pub async fn login(
     };
     let user_id = user.id;
     if !ok {
-        // Increment failed attempts; lock after 5.
-        {
-            let mut store = state.store.lock().unwrap();
-            if let Some(u) = store.users.iter_mut().find(|u| u.id == user_id) {
-                u.failed_login_attempts = u.failed_login_attempts.saturating_add(1);
-                if u.failed_login_attempts >= 5 {
-                    u.locked_until =
-                        Some((chrono::Utc::now() + chrono::Duration::minutes(15)).to_rfc3339());
-                }
-            }
-        }
+        record_failed_login(&state, user_id);
         return invalid();
-    }
-    // Reset on success.
-    {
-        let mut store = state.store.lock().unwrap();
-        if let Some(u) = store.users.iter_mut().find(|u| u.id == user_id) {
-            u.failed_login_attempts = 0;
-            u.locked_until = None;
-        }
     }
     // Transparent upgrade: legacy PBKDF2 hashes are re-hashed to Argon2id.
     if crate::security::password::needs_rehash(user.password_hash.as_deref().unwrap_or_default()) {
@@ -215,12 +209,23 @@ pub async fn login(
                 }
             }
             _ => {
+                // A wrong or replayed code counts toward the lockout, like a wrong password.
+                record_failed_login(&state, user_id);
                 return (
                     StatusCode::UNAUTHORIZED,
                     Json(json!({"error": {"code": "MFA_REQUIRED", "message": "A valid 6-digit authenticator code is required."}})),
                 )
-                    .into_response()
+                    .into_response();
             }
+        }
+    }
+
+    // Reset only once the whole sign-in has succeeded, including the MFA step.
+    {
+        let mut store = state.store.lock().unwrap();
+        if let Some(u) = store.users.iter_mut().find(|u| u.id == user_id) {
+            u.failed_login_attempts = 0;
+            u.locked_until = None;
         }
     }
 

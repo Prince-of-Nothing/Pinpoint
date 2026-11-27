@@ -144,18 +144,19 @@ pub(crate) fn fly_to(entry: &StripEntry) -> FlyTo {
 }
 
 /// Draws the strip bottom-left, `bottom_inset` points above the bottom of the
-/// screen. Returns where the map should fly when a chip is tapped.
+/// screen. Returns where the map should fly when a chip is tapped, and the
+/// strip's height (0 when it is not drawn), so controls can stack above it.
 pub(crate) fn draw_live_strip(
     ctx: &egui::Context,
     entries: &[StripEntry],
     bottom_inset: f32,
-) -> Option<FlyTo> {
+) -> (Option<FlyTo>, f32) {
     if entries.is_empty() {
-        return None;
+        return (None, 0.0);
     }
     let width = (ctx.screen_rect().width() - 24.0).max(120.0);
     let mut chosen: Option<FlyTo> = None;
-    egui::Area::new(egui::Id::new("mobile_live_strip"))
+    let area = egui::Area::new(egui::Id::new("mobile_live_strip"))
         .order(egui::Order::Foreground)
         .anchor(egui::Align2::LEFT_BOTTOM, egui::vec2(12.0, -bottom_inset))
         .show(ctx, |ui| {
@@ -197,7 +198,7 @@ pub(crate) fn draw_live_strip(
                         });
                 });
         });
-    chosen
+    (chosen, area.response.rect.height())
 }
 
 #[cfg(test)]

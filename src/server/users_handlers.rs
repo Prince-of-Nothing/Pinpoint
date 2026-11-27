@@ -13,15 +13,14 @@ use super::state::AppState;
 use super::usernames::{find_user_by_username, public_json, username_for};
 use super::{error_envelope, CurrentUser, IntoResponse};
 
-/// Friend-visible profile: real name + email are revealed only after the
-/// friendship is accepted. `role` and auth internals stay private.
+/// Friend-visible profile: the real name is revealed only after the
+/// friendship is accepted. Email, `role` and auth internals stay private.
 fn friend_json(u: &crate::models::User) -> Value {
     json!({
         "id": u.id,
         "username": username_for(u.id),
         "display_name": u.full_name,
         "full_name": u.full_name,
-        "email": u.email,
         "auth_method": u.auth_method,
     })
 }
@@ -498,8 +497,8 @@ pub async fn search_users(
 
 /// `POST /friendships/` — send friend request by exact username.
 ///
-/// `receiver_username` is the public path. `receiver_email` remains accepted
-/// for the desktop client (exact match only) and is never echoed in a card.
+/// `receiver_username` is the only way to address a friend. Email is never
+/// accepted here, so an email address cannot be used to find or probe accounts.
 pub async fn create_friendship(
     State(state): State<AppState>,
     cu: Option<Extension<CurrentUser>>,
@@ -516,28 +515,14 @@ pub async fn create_friendship(
         .trim()
         .trim_start_matches('@')
         .to_string();
-    let receiver_email = body
-        .get("receiver_email")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .trim();
     let friendship = {
         let mut store = state.store.lock().unwrap();
-        let receiver = if !receiver_username.is_empty() {
-            match find_user_by_username(&store.users, &receiver_username) {
-                Some(u) => u.clone(),
-                None => return error_envelope("USER_NOT_FOUND", "No account with that username."),
-            }
-        } else if !receiver_email.is_empty() {
-            match store.find_user_by_email(receiver_email) {
-                Some(u) => u.clone(),
-                None => return error_envelope("USER_NOT_FOUND", "User not found."),
-            }
-        } else {
-            return error_envelope(
-                "VALIDATION_FAILED",
-                "receiver_username is required (receiver_email is legacy).",
-            );
+        if receiver_username.is_empty() {
+            return error_envelope("VALIDATION_FAILED", "receiver_username is required.");
+        }
+        let receiver = match find_user_by_username(&store.users, &receiver_username) {
+            Some(u) => u.clone(),
+            None => return error_envelope("USER_NOT_FOUND", "No account with that username."),
         };
         if !receiver.is_active {
             return error_envelope("USER_NOT_FOUND", "User not found.");

@@ -24,7 +24,7 @@ cargo run --bin pinpoint-server
 ## 2. Local with PostgreSQL
 
 ```bash
-export DATABASE_URL=postgresql://pinpoint:pinpoint-local-dev@localhost:5432/pinpoint
+export DATABASE_URL=postgresql://pinpoint:$POSTGRES_PASSWORD@localhost:5432/pinpoint
 cargo run --bin pinpoint-server
 ```
 
@@ -41,7 +41,7 @@ docker compose ps
 curl -fsS http://127.0.0.1:8000/health
 ```
 
-- `gateway` (nginx) is the only client entrypoint: `:8000` HTTP and `:8443` HTTPS. It routes `/api/v1/auth`, `/api/v1/users`, `/api/v1/locations`, `/api/v1/messages`, `/map` and `/` to healthy replicas.
+- `gateway` (nginx) is the only client entrypoint. It publishes only on loopback: `127.0.0.1:8000` HTTP and `127.0.0.1:8443` HTTPS. For a public host, start the `caddy` profile (`docker compose --profile public up -d`) with `PINPOINT_DOMAIN` set to your hostname; Caddy obtains the certificate and is the only container on ports 80 and 443. It routes `/api/v1/auth`, `/api/v1/users`, `/api/v1/locations`, `/api/v1/messages`, `/map` and `/` to healthy replicas.
 - Services: `auth` (:8001), `users` (:8002), `locations` (:8003), `map` (:8004), `messages` (:8007, via the gateway), `diag` (:8005), `admin` (:8006), `db` (Postgres 16) and `db-backup`.
 - Each app service runs two replicas by default; the gateway retries another healthy replica.
 - `diag` and `admin` publish their own ports for the dedicated consoles; the other services stay on the internal network.
@@ -58,13 +58,13 @@ docker exec -i pinpoint-db psql -U pinpoint -d pinpoint < db/init/03-fks.sql
 docker compose --profile demo up -d alice bob
 ```
 
-- `db-backup` runs `pg_dump` every five minutes and keeps the last 24 dumps. Postgres is a single primary; streaming replication/Patroni is a production step beyond this file.
+- `db-backup` runs `pg_dump` every five minutes, encrypts each dump (AES-256-CBC, PBKDF2) to `/backups/*.dump.enc`, and keeps the last 24. It needs `PINPOINT_BACKUP_PASSPHRASE` in `.env`. Postgres is a single primary; streaming replication/Patroni is a production step beyond this file.
 - For a self-signed TLS dev gateway: `./docker/gen-certs.sh && docker compose -f docker-compose.yml -f docker-compose.https.yml up -d`.
 - The internal gateway name is allowed plaintext only through `PINPOINT_ALLOW_PLAINTEXT_HOSTS=gateway`; every other host requires HTTPS.
 
 ### Encrypted backups and restore
 
-The `db-backup` volume holds plaintext dumps. For an encrypted, off-host copy use the wrapper:
+Dumps made before encryption was added are plaintext `.sql` files in the `db-backup` volume. They are not rotated automatically. Copy the newest one off-host if you still need it, then delete the `.sql` files. For an off-host copy use the wrapper:
 
 ```powershell
 $env:PINPOINT_BACKUP_PASSPHRASE = "a long passphrase kept outside the repository"
@@ -81,11 +81,11 @@ powershell -ExecutionPolicy Bypass -File scripts/restore-db.ps1 `
   -File D:\pinpoint-backups\pinpoint-20260101T120000.dump.enc -ConfirmRestore
 ```
 
-The restore script checks the `PGDMP` archive header and runs `pg_restore --clean --if-exists --no-owner`, which **replaces the current objects**. Stop the application services first, rehearse on a disposable database, and keep the passphrase stored separately from the backups. When the encrypted wrapper is the only accepted path, stop the plaintext loop with `docker compose stop db-backup` and protect or delete its volume.
+The restore script checks the `PGDMP` archive header and runs `pg_restore --clean --if-exists --no-owner`, which **replaces the current objects**. Stop the application services first, rehearse on a disposable database, and keep the passphrase stored separately from the backups. The restore script also accepts a `.dump.enc` file copied out of the `db-backup` volume.
 
 ## 4. Production checklist
 
-- Terminate TLS at the gateway (Caddy/nginx) and enable HSTS. HTTPS sessions use `__Host-pinpoint_session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and no `Domain`.
+- Use the `public` profile above (Caddy terminates TLS and the gateway trusts only its forwarding headers) and enable HSTS at the proxy. HTTPS sessions use `__Host-pinpoint_session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and no `Domain`.
 - Set `DATABASE_URL` to a managed Postgres instance; enable backups and monitoring. The server applies migrations.
 - Set `PINPOINT_SESSION_IDLE_MINUTES=30` for a public host; the 12 h default is demo-friendly. Keep `PINPOINT_SESSION_MAX_DAYS=30`.
 - Set `PINPOINT_TILE_URL` to a self-hosted ODbL tile source. Never use `tile.openstreetmap.org`; the bundled fallback is demo-only.

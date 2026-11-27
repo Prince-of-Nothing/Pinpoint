@@ -644,17 +644,13 @@ impl ApiClient {
     }
 
     pub async fn send_friend_request(&self, identifier: &str) -> anyhow::Result<()> {
-        // Username is the public path; the exact email is a legacy fallback
-        // for older accounts. Sending both keeps one call site and lets the
-        // server resolve either without guessing the input type.
+        // Friends are added by username only; the server no longer accepts
+        // an email address here.
         let response = self
             .request(
                 reqwest::Method::POST,
                 "/api/v1/friendships/",
-                Some(serde_json::json!({
-                    "receiver_username": identifier,
-                    "receiver_email": identifier,
-                })),
+                Some(serde_json::json!({ "receiver_username": identifier })),
             )
             .await?;
         Self::check(response, "Failed to send friend request").await?;

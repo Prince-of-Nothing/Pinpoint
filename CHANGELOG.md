@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [INFRA] Release: the tag workflow writes `SHA256SUMS.txt` with the SHA-256 of every asset, checks it with `sha256sum -c`, and attaches it to the draft release. A manual run keeps it as the `release-checksums` artifact and fails if an expected asset is missing.
 - [DOCS] Security: publish-readiness threat model in `docs/security/threat-model-publish-readiness.md` (STRIDE, 17 findings, five publish blockers).
 - [FEATURE] Native phone Chats tab: a badge shows the unread message count ("9+" above nine), and screen readers hear "Chats, 3 unread".
 - [FEATURE] Native map: a "Sharing with you" strip above the phone tab bar lists the friends whose location you can see now, freshest first. A sunflower ring marks a location updated in the last 15 minutes, and tapping a chip flies the map to that friend. The strip steps aside for the menu, sheets, route planner and measure tool.
@@ -85,6 +86,8 @@ The per-item flagged list for this release is in
 - [INFRA] Release `verify-linux` and `verify-macos` jobs run the downloaded bundles: Linux under Xvfb with a screenshot, macOS by opening `Pinpoint.app` and requiring it to stay alive.
 
 ### Changed
+- [FEATURE] Native phone map: the zoom, locate, style, route and drawer controls move to the bottom right, as on the web, and stack above the "Sharing with you" strip; they step aside while a sheet is open.
+- [FEATURE] Native messages: the empty states sit on a card, and received bubbles get a soft shadow and a hairline border; bubbles have rounder corners and roomier padding, while your own bubbles stay flat.
 - [FEATURE] Native phone map: floating search, map controls, category chips, sharing strip and tab bar share one translucent surface with a soft shadow; the controls are one card with hairline dividers and a fading hover; chips sit 12 pt under the search pill and the account avatar is centred on it.
 - [FEATURE] Native cards (Friends, Today and the other card screens): a soft shadow lifts each card off the page, as part of the premium direction.
 - [FEATURE] Native chat thread: the safety number moves behind an "i" button that opens a window with the number, its status and "Mark as verified", so the thread keeps its room. The Verified or Changed word stays beside the button.
@@ -109,6 +112,11 @@ The per-item flagged list for this release is in
 
 ### Fixed
 - [FIX] Friends: requests are sent by username only. The server no longer accepts an email address as a friend key, and an accepted friend's card shows the real name and handle, never the email.
+- [SECURITY] Deployment: Postgres and role passwords are required from `.env` with no known defaults; Postgres, diagnostics and admin ports bind to loopback; `db-backup` writes encrypted `.dump.enc` dumps (AES-256-CBC, PBKDF2) that need `PINPOINT_BACKUP_PASSPHRASE`. Refs SEC-38.
+- [SECURITY] Private notes: the server refuses to start with `DATABASE_URL` set and no `DATA_ENCRYPTION_KEY`, and existing plaintext place notes are encrypted at boot. Refs SEC-37.
+- [SECURITY] Auth: wrong TOTP codes count toward the 15-minute lockout, and a correct password no longer resets the failure counter before the TOTP step.
+- [SECURITY] Rate limits key on the socket address; `X-Forwarded-For` is honored only when `TRUST_PROXY=1`, which compose sets for the gateway-facing services.
+- [SECURITY] Diagnostics: the sequence name is bound as a query parameter instead of being formatted into SQL.
 - [FIX] Goal queue: a claimed prompt's deletion must land in its PR; `done` only clears the local claim and refuses while the prompt is still pending.
 - [FIX] Build: `src/server/web_handlers.rs` and `tests/router_probe.rs` no longer fail to parse (a missing brace and a merged test body from #607), and the lat/lon range checks and two test-only lints pass `clippy -D warnings` on current stable, so CI builds again.
 - [FIX] Native share: test the SaveShare payload fields; Save and Stop build the same request from the sheet.

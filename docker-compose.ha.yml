@@ -2,13 +2,13 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.ha.yml up -d db-replica
 # For a FRESH primary volume, the db init also creates the replicator role + slot.
 # For an EXISTING volume, run this once on the primary first:
-#   docker exec pinpoint-db psql -U pinpoint -d pinpoint -c "CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD 'pinpoint-repl-dev'; SELECT pg_create_physical_replication_slot('pinpoint_repl_slot');"
+#   docker exec pinpoint-db psql -U pinpoint -d pinpoint -c "CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD '<POSTGRES_REPL_PASSWORD>'; SELECT pg_create_physical_replication_slot('pinpoint_repl_slot');"
 services:
   db:
     # streaming: wal_keep_size + primary conninfo for replicas (restart to apply)
     command: ["postgres", "-c", "wal_keep_size=1024MB", "-c", "max_wal_senders=3"]
     environment:
-      POSTGRES_REPL_PASSWORD: ${POSTGRES_REPL_PASSWORD:-pinpoint-repl-dev}
+      POSTGRES_REPL_PASSWORD: ${POSTGRES_REPL_PASSWORD:?Set POSTGRES_REPL_PASSWORD in .env}
   db-replica:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -16,7 +16,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      PGPASSWORD: ${POSTGRES_REPL_PASSWORD:-pinpoint-repl-dev}
+      PGPASSWORD: ${POSTGRES_REPL_PASSWORD:?Set POSTGRES_REPL_PASSWORD in .env}
     volumes:
       - pinpoint-db-replica-data:/var/lib/postgresql/data
     healthcheck:
@@ -31,8 +31,8 @@ services:
         set -e
         if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
           echo "db-replica: pg_basebackup from db..."
-          PGPASSWORD="${POSTGRES_REPL_PASSWORD:-pinpoint-repl-dev}" pg_basebackup -h db -U replicator -D /var/lib/postgresql/data -Ft -z -Xs -P -v
-          echo "primary_conninfo = 'host=db port=5432 user=replicator password=${POSTGRES_REPL_PASSWORD:-pinpoint-repl-dev} application_name=db-replica'" >> /var/lib/postgresql/data/postgresql.auto.conf
+          PGPASSWORD="${POSTGRES_REPL_PASSWORD:?Set POSTGRES_REPL_PASSWORD in .env}" pg_basebackup -h db -U replicator -D /var/lib/postgresql/data -Ft -z -Xs -P -v
+          echo "primary_conninfo = 'host=db port=5432 user=replicator password=${POSTGRES_REPL_PASSWORD:?Set POSTGRES_REPL_PASSWORD in .env} application_name=db-replica'" >> /var/lib/postgresql/data/postgresql.auto.conf
           echo "promote_trigger_file = '/tmp/promote'" >> /var/lib/postgresql/data/postgresql.auto.conf
           touch /var/lib/postgresql/data/standby.signal
         fi

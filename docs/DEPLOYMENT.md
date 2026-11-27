@@ -24,7 +24,7 @@ cargo run --bin pinpoint-server
 ## 2. Local with PostgreSQL
 
 ```bash
-export DATABASE_URL=postgresql://pinpoint:pinpoint-local-dev@localhost:5432/pinpoint
+export DATABASE_URL=postgresql://pinpoint:$POSTGRES_PASSWORD@localhost:5432/pinpoint
 cargo run --bin pinpoint-server
 ```
 
@@ -58,13 +58,13 @@ docker exec -i pinpoint-db psql -U pinpoint -d pinpoint < db/init/03-fks.sql
 docker compose --profile demo up -d alice bob
 ```
 
-- `db-backup` runs `pg_dump` every five minutes and keeps the last 24 dumps. Postgres is a single primary; streaming replication/Patroni is a production step beyond this file.
+- `db-backup` runs `pg_dump` every five minutes, encrypts each dump (AES-256-CBC, PBKDF2) to `/backups/*.dump.enc`, and keeps the last 24. It needs `PINPOINT_BACKUP_PASSPHRASE` in `.env`. Postgres is a single primary; streaming replication/Patroni is a production step beyond this file.
 - For a self-signed TLS dev gateway: `./docker/gen-certs.sh && docker compose -f docker-compose.yml -f docker-compose.https.yml up -d`.
 - The internal gateway name is allowed plaintext only through `PINPOINT_ALLOW_PLAINTEXT_HOSTS=gateway`; every other host requires HTTPS.
 
 ### Encrypted backups and restore
 
-The `db-backup` volume holds plaintext dumps. For an encrypted, off-host copy use the wrapper:
+Dumps made before encryption was added are plaintext `.sql` files in the `db-backup` volume. They are not rotated automatically. Copy the newest one off-host if you still need it, then delete the `.sql` files. For an off-host copy use the wrapper:
 
 ```powershell
 $env:PINPOINT_BACKUP_PASSPHRASE = "a long passphrase kept outside the repository"
@@ -81,7 +81,7 @@ powershell -ExecutionPolicy Bypass -File scripts/restore-db.ps1 `
   -File D:\pinpoint-backups\pinpoint-20260101T120000.dump.enc -ConfirmRestore
 ```
 
-The restore script checks the `PGDMP` archive header and runs `pg_restore --clean --if-exists --no-owner`, which **replaces the current objects**. Stop the application services first, rehearse on a disposable database, and keep the passphrase stored separately from the backups. When the encrypted wrapper is the only accepted path, stop the plaintext loop with `docker compose stop db-backup` and protect or delete its volume.
+The restore script checks the `PGDMP` archive header and runs `pg_restore --clean --if-exists --no-owner`, which **replaces the current objects**. Stop the application services first, rehearse on a disposable database, and keep the passphrase stored separately from the backups. The restore script also accepts a `.dump.enc` file copied out of the `db-backup` volume.
 
 ## 4. Production checklist
 
@@ -134,6 +134,7 @@ adb shell am start -n com.pinpoint.desktop/.PinpointActivity
 - The debug manifest sets `allowBackup=0` and `usesCleartextTraffic=0`; release signing needs the keystore secrets.
 - Pushing a `vX.Y.Z` tag that matches `Cargo.toml` builds one signed universal APK (`arm64-v8a` + `armeabi-v7a`), verifies the certificate and creates a draft GitHub release.
 - Before the draft, the workflow runs `scripts/check-release.ps1 -Apk` so a versionName/versionCode/ABI mismatch fails the release job.
+- The release job writes `SHA256SUMS.txt` with the SHA-256 of every asset, checks it with `sha256sum -c` and attaches it to the draft. A manual run keeps it as the `release-checksums` artifact. To check a download, run `sha256sum -c SHA256SUMS.txt` in the folder that holds the files.
 - The release job checks out the tag, re-runs the same APK check on the downloaded artifact and uses `RELEASE_NOTES.md` as the draft body. It also extracts both Windows ZIPs and checks their exe names and README version, and re-verifies the APK signature with `apksigner` (a tag release rejects the throwaway build key).
 - Separate verification jobs run every downloaded package: `windows-latest` runs `pinpoint-desktop.exe --help` and the server (`/health`, `/privacy`, `/`); `ubuntu-latest` runs the downloaded Linux binary under Xvfb and requires a screenshot; `macos-latest` checks the app's `Info.plist` version and opens the downloaded `Pinpoint.app`, requiring the process to stay alive. All must pass before the draft is created.
 - A manual `Release` run performs the same checkout/aapt/downloaded-APK check and skips only the draft creation, so the gate can be exercised without a tag.

@@ -96,8 +96,20 @@ pub fn map_limit(path: &str) -> Option<(&'static str, AuthLimit)> {
     }
 }
 
+/// Rate-limit key for a request. The socket peer is used by default. The first
+/// `X-Forwarded-For` hop (or `X-Real-IP`) is used only when `trust_proxy` is set,
+/// because a client can send that header itself and pick its own bucket.
+pub fn client_ip(headers: &HeaderMap, peer: Option<IpAddr>, trust_proxy: bool) -> Option<String> {
+    if trust_proxy {
+        if let Some(forwarded) = forwarded_ip(headers) {
+            return Some(forwarded);
+        }
+    }
+    peer.map(|ip| ip.to_string())
+}
+
 /// First `X-Forwarded-For` hop, or `X-Real-IP`, as a parsed IP address.
-pub fn client_ip(headers: &HeaderMap) -> Option<String> {
+fn forwarded_ip(headers: &HeaderMap) -> Option<String> {
     let raw = headers
         .get("x-forwarded-for")
         .and_then(|value| value.to_str().ok())
@@ -223,15 +235,27 @@ mod tests {
     }
 
     #[test]
-    fn client_ip_uses_the_first_forwarded_hop() {
+    fn client_ip_ignores_forwarded_headers_unless_a_proxy_is_trusted() {
+        let peer: IpAddr = "198.51.100.4".parse().unwrap();
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", "203.0.113.7, 10.0.0.1".parse().unwrap());
-        assert_eq!(client_ip(&headers).as_deref(), Some("203.0.113.7"));
+        assert_eq!(
+            client_ip(&headers, Some(peer), true).as_deref(),
+            Some("203.0.113.7")
+        );
+        // A client can send this header itself, so without a trusted proxy it must not count.
+        assert_eq!(
+            client_ip(&headers, Some(peer), false).as_deref(),
+            Some("198.51.100.4")
+        );
 
         let mut headers = HeaderMap::new();
         headers.insert("x-real-ip", "203.0.113.9".parse().unwrap());
-        assert_eq!(client_ip(&headers).as_deref(), Some("203.0.113.9"));
-        assert_eq!(client_ip(&HeaderMap::new()), None);
+        assert_eq!(
+            client_ip(&headers, Some(peer), true).as_deref(),
+            Some("203.0.113.9")
+        );
+        assert_eq!(client_ip(&HeaderMap::new(), None, true), None);
     }
 
     #[test]

@@ -163,7 +163,7 @@ impl PinpointAppUI {
             ui.add_space(4.0);
             ui.add(
                 egui::TextEdit::singleline(&mut self.friend_handle)
-                    .hint_text("Username (calm-otter-42) or email")
+                    .hint_text("Username (calm-otter-42)")
                     .desired_width(220.0),
             );
             ui.label("Usernames are exact-match; badges shown here are handles.");

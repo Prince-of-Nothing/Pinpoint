@@ -78,7 +78,8 @@ impl AppState {
 
     async fn next_sequence_id(&self, sequence: &str) -> Option<i64> {
         let pool = self.pg.as_ref()?;
-        sqlx::query_scalar::<_, i64>(&format!("SELECT NEXTVAL('{sequence}')"))
+        sqlx::query_scalar::<_, i64>("SELECT nextval($1::regclass)")
+            .bind(sequence)
             .fetch_one(pool)
             .await
             .ok()

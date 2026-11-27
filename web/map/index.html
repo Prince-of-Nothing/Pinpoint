@@ -107,6 +107,18 @@
     import { createMap } from "./map.js";
     import { createRouteUI } from "../app/route-ui.js";
 
+    // The native shell passes a random per-launch token in the URL fragment.
+    // Read it once, then drop it from the address bar and history so it is not
+    // left in the URL. Mutating requests send it back in a header; the loopback
+    // server rejects them without it.
+    const MAP_TOKEN_HEADER = "X-Pinpoint-Map-Token";
+    const mapToken = (() => {
+      const match = /(?:^#|&)pinpoint-map-token=([^&]+)/.exec(location.hash);
+      if (!match) return "";
+      history.replaceState(null, "", location.pathname + location.search);
+      return decodeURIComponent(match[1]);
+    })();
+
     const MONACO = {
       id: "monaco",
       label: "Monaco fixture",
@@ -830,6 +842,7 @@
           headers: {
             "Content-Type": "application/json",
             Accept: "application/json",
+            [MAP_TOKEN_HEADER]: mapToken,
           },
           body: JSON.stringify({ region: regionId }),
         });
@@ -1107,6 +1120,7 @@
         const response = await fetch("/map/offline/download", {
           method: "POST",
           cache: "no-store",
+          headers: { [MAP_TOKEN_HEADER]: mapToken },
         });
         let payload = null;
         try {

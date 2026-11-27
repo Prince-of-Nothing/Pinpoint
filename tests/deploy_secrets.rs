@@ -36,7 +36,7 @@ fn deployment_files_contain_no_known_password() {
         for secret in KNOWN_DEFAULTS {
             assert!(
                 !text.contains(secret),
-                "{rel} still contains the known password {secret}"
+                "{rel} still contains a known development password"
             );
         }
     }

@@ -10,10 +10,14 @@ use pinpoint_desktop::server::{router, AppState};
 use tower::ServiceExt;
 
 const EMAIL: &str = "mfa-lockout@example.com";
-const PASSWORD: &str = "Right!Pass2026";
 
-async fn login_status(app: &axum::Router, totp: &str) -> StatusCode {
-    let body = format!(r#"{{"email":"{EMAIL}","password":"{PASSWORD}","totp":"{totp}"}}"#);
+/// A fresh password per run, so no credential literal lives in the source.
+fn fresh_password() -> String {
+    format!("Pw-{:016x}!Aa1", rand::random::<u64>())
+}
+
+async fn login_status(app: &axum::Router, password: &str, totp: &str) -> StatusCode {
+    let body = format!(r#"{{"email":"{EMAIL}","password":"{password}","totp":"{totp}"}}"#);
     app.clone()
         .oneshot(
             Request::builder()
@@ -30,6 +34,7 @@ async fn login_status(app: &axum::Router, totp: &str) -> StatusCode {
 
 #[tokio::test]
 async fn wrong_totp_codes_lock_the_account_even_with_the_right_password() {
+    let password = fresh_password();
     let state = AppState::new();
     {
         let mut store = state.store.lock().unwrap();
@@ -41,7 +46,7 @@ async fn wrong_totp_codes_lock_the_account_even_with_the_right_password() {
             role: "resident".to_string(),
             is_active: true,
             must_change_password: false,
-            password_hash: Some(hash_password(PASSWORD, DEFAULT_ITERS)),
+            password_hash: Some(hash_password(&password, DEFAULT_ITERS)),
             totp_secret: Some("JBSWY3DPEHPK3PXP".to_string()),
             mfa_enabled: true,
             mfa_last_step: 0,
@@ -59,13 +64,13 @@ async fn wrong_totp_codes_lock_the_account_even_with_the_right_password() {
     // Five attempts with the right password and a wrong code are five failures.
     for _ in 0..5 {
         assert_eq!(
-            login_status(&app, "not-a-code").await,
+            login_status(&app, &password, "not-a-code").await,
             StatusCode::UNAUTHORIZED
         );
     }
     // The sixth attempt is refused by the lockout, even with the right password.
     assert_eq!(
-        login_status(&app, "not-a-code").await,
+        login_status(&app, &password, "not-a-code").await,
         StatusCode::TOO_MANY_REQUESTS
     );
 }

@@ -185,6 +185,17 @@ pub fn apply(ctx: &egui::Context) {
     ctx.set_style(style);
 }
 
+/// Elevation for a card on the page: a soft, low shadow, so a card lifts off
+/// the background instead of relying on its border alone.
+pub fn card_shadow() -> egui::Shadow {
+    egui::Shadow {
+        offset: [0, 6],
+        blur: 22,
+        spread: 0,
+        color: Color32::from_black_alpha(160),
+    }
+}
+
 /// A filled, rounded, consistently padded card. Replaces bare `ui.group(...)`.
 pub fn card<R>(
     ui: &mut egui::Ui,
@@ -193,6 +204,7 @@ pub fn card<R>(
     egui::Frame::new()
         .fill(PANEL_2)
         .stroke(Stroke::new(1.0_f32, BORDER))
+        .shadow(card_shadow())
         .corner_radius(CornerRadius::same(CARD_RADIUS))
         .inner_margin(Margin::same(16))
         .show(ui, add_contents)

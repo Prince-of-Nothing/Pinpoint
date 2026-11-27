@@ -120,6 +120,7 @@ The per-item flagged list for this release is in
 
 ### Fixed
 - [FIX] Native emergency: sending an alert now needs a second tap to confirm, so one accidental tap no longer notifies every friend.
+- [FIX] Native emergency: the Send emergency alert label is dark ink on the danger colour, so it passes contrast (about 6.8:1, was about 2.5:1 with white text).
 - [FIX] Native phone map: restore the category chip list that a merge dropped, so `main` compiles again, and put the map button doc back on its function.
 - [FIX] Deploy: the gateway publishes only on 127.0.0.1, public HTTPS is an opt-in `caddy` profile (`docker compose --profile public up -d`, set `PINPOINT_DOMAIN`), and the gateway trusts forwarding headers only from that proxy, so cookies get `Secure` and rate limits key on real visitors.
 - [FIX] Friends: requests are sent by username only. The server no longer accepts an email address as a friend key, and an accepted friend's card shows the real name and handle, never the email.

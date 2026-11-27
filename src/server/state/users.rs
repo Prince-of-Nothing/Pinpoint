@@ -12,6 +12,12 @@ impl AppState {
         let Some(pool) = &self.pg else {
             return false;
         };
+        let sql = if self.owner.may_load_user_secrets() {
+            "SELECT id, email, full_name, role, is_active, must_change_password, password_hash, totp_secret, mfa_enabled, mfa_last_step, failed_login_attempts, locked_until, auth_method, public_key, recovery_code_hash, identity_subject FROM pinpoint_users ORDER BY id"
+        } else {
+            // Services that never check passwords or MFA load NULL for the credential columns.
+            "SELECT id, email, full_name, role, is_active, must_change_password, NULL::text AS password_hash, NULL::text AS totp_secret, mfa_enabled, mfa_last_step, failed_login_attempts, locked_until, auth_method, public_key, NULL::text AS recovery_code_hash, NULL::text AS identity_subject FROM pinpoint_users ORDER BY id"
+        };
         let rows: Vec<(
             i64,
             String,
@@ -29,12 +35,10 @@ impl AppState {
             Option<String>,
             Option<String>,
             Option<String>,
-        )> = sqlx::query_as(
-            "SELECT id, email, full_name, role, is_active, must_change_password, password_hash, totp_secret, mfa_enabled, mfa_last_step, failed_login_attempts, locked_until, auth_method, public_key, recovery_code_hash, identity_subject FROM pinpoint_users ORDER BY id",
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
+        )> = sqlx::query_as(sql)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
         if rows.is_empty() {
             return false;
         }

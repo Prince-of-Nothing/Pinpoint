@@ -135,6 +135,7 @@ The per-item flagged list for this release is in
 - [SECURITY] Auth: wrong TOTP codes count toward the 15-minute lockout, and a correct password no longer resets the failure counter before the TOTP step.
 - [SECURITY] Rate limits key on the socket address; `X-Forwarded-For` is honored only when `TRUST_PROXY=1`, which compose sets for the gateway-facing services.
 - [SECURITY] Diagnostics: the sequence name is bound as a query parameter instead of being formatted into SQL.
+- [SECURITY] Database grants: the diag, locations and messages roles read only the non-credential columns of `pinpoint_users`, and the grants file now includes the place-note table the locations and users roles need. Existing deployments re-run `db/02-grants.sql`, which revokes the old table-level grant.
 - [FIX] Goal queue: a claimed prompt's deletion must land in its PR; `done` only clears the local claim and refuses while the prompt is still pending.
 - [FIX] Build: `src/server/web_handlers.rs` and `tests/router_probe.rs` no longer fail to parse (a missing brace and a merged test body from #607), and the lat/lon range checks and two test-only lints pass `clippy -D warnings` on current stable, so CI builds again.
 - [FIX] Native share: test the SaveShare payload fields; Save and Stop build the same request from the sheet.

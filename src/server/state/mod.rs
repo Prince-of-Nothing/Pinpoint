@@ -132,6 +132,10 @@ impl ServiceKind {
     pub fn owns_users(self) -> bool {
         matches!(self, Self::All | Self::Auth)
     }
+    /// Roles whose grants include the credential columns of `pinpoint_users`.
+    pub fn may_load_user_secrets(self) -> bool {
+        matches!(self, Self::All | Self::Auth | Self::Users)
+    }
     pub fn owns_friendships(self) -> bool {
         matches!(self, Self::All | Self::Users)
     }
@@ -264,6 +268,10 @@ impl AppState {
 
     /// Encrypt place-note rows written before the key was required. Runs once at boot.
     async fn encrypt_legacy_place_notes(&self) {
+        // Only the locations owner reads and writes place notes.
+        if !self.owner.owns_locations() {
+            return;
+        }
         let Some(pool) = &self.pg else { return };
         let rows = match sqlx::query_as::<_, (i64, String, String, Option<String>)>(
             "SELECT id, label, message, photo FROM pinpoint_place_notes",

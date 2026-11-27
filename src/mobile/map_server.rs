@@ -131,6 +131,7 @@ pub struct MapServer {
     port: u16,
     shutdown: Option<oneshot::Sender<()>>,
     thread: Option<std::thread::JoinHandle<()>>,
+    token: String,
 }
 
 impl MapServer {
@@ -165,6 +166,8 @@ impl MapServer {
         let installer = Arc::new(make_installer(packs_dir));
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
 
+        let token = crate::map_guard::new_token();
+        let thread_token = token.clone();
         let thread = std::thread::Builder::new()
             .name("pinpoint-map-server".to_string())
             .spawn(move || {
@@ -186,7 +189,8 @@ impl MapServer {
                             return;
                         }
                     };
-                    let app = router(installer, local_router);
+                    let guard = crate::map_guard::MapGuard::new(address.port(), thread_token);
+                    let app = router(installer, local_router, guard);
                     let served = axum::serve(listener, app)
                         .with_graceful_shutdown(async move {
                             let _ = shutdown_rx.await;
@@ -204,6 +208,7 @@ impl MapServer {
             port: address.port(),
             shutdown: Some(shutdown_tx),
             thread: Some(thread),
+            token,
         })
     }
 
@@ -216,9 +221,18 @@ impl MapServer {
         self.port
     }
 
-    /// The MapLibre preview page served by this instance.
+    /// The MapLibre preview page served by this instance. The fragment hands the token to the page only.
     pub fn map_url(&self) -> String {
-        format!("{}/map/index.html", self.origin)
+        format!(
+            "{}/map/index.html{}",
+            self.origin,
+            crate::map_guard::fragment(&self.token)
+        )
+    }
+
+    /// Per-launch token the map page sends with state-changing requests.
+    pub fn token(&self) -> &str {
+        &self.token
     }
 }
 
@@ -255,6 +269,7 @@ pub fn shared() -> Result<&'static MapServer, String> {
 fn router(
     installer: Arc<OfflineInstaller>,
     local_router: Arc<crate::local_route::LocalRouter>,
+    guard: crate::map_guard::MapGuard,
 ) -> Router {
     Router::new()
         .route("/map/route", get(crate::local_route::map_route))
@@ -281,6 +296,9 @@ fn router(
         .route("/*path", get(serve))
         .layer(Extension(installer))
         .layer(Extension(local_router))
+        .layer(axum::middleware::from_fn(move |request, next| {
+            crate::map_guard::enforce(guard.clone(), request, next)
+        }))
 }
 
 async fn serve(method: Method, headers: HeaderMap, UrlPath(path): UrlPath<String>) -> Response {
@@ -490,7 +508,11 @@ mod tests {
         assert_ne!(server.port(), 0);
         assert_eq!(
             server.map_url(),
-            format!("{}/map/index.html", server.origin())
+            format!(
+                "{}/map/index.html#pinpoint-map-token={}",
+                server.origin(),
+                server.token()
+            )
         );
 
         let index = get(&server, "/map/index.html").await;
@@ -750,6 +772,7 @@ mod tests {
 
         let unknown = client()
             .post(format!("{}/map/offline/download", server.origin()))
+            .header(crate::map_guard::TOKEN_HEADER, server.token())
             .json(&serde_json::json!({"region": "atlantis"}))
             .send()
             .await
@@ -767,6 +790,7 @@ mod tests {
 
         let unknown = client()
             .delete(format!("{}/map/offline/atlantis", server.origin()))
+            .header(crate::map_guard::TOKEN_HEADER, server.token())
             .send()
             .await
             .unwrap();
@@ -775,6 +799,7 @@ mod tests {
         // The id arrives percent-encoded, so it is one path segment, not a path.
         let traversal = client()
             .delete(format!("{}/map/offline/..%2Fkeep.pmtiles", server.origin()))
+            .header(crate::map_guard::TOKEN_HEADER, server.token())
             .send()
             .await
             .unwrap();

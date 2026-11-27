@@ -107,10 +107,9 @@ pub async fn session_auth(
     // any password or token work. The key is an HMAC of the address; the raw
     // address is never stored.
     if let Some(limit) = state::auth_limit(req.uri().path()) {
-        if let Some(ip) = state::client_ip(req.headers()) {
-            if let Some(wait) = state.auth_rate.allow(req.uri().path(), &ip, limit) {
-                return rate_limited(wait, "Too many attempts. Try again later.");
-            }
+        let ip = rate_limit_client(&req, state.trust_proxy);
+        if let Some(wait) = state.auth_rate.allow(req.uri().path(), &ip, limit) {
+            return rate_limited(wait, "Too many attempts. Try again later.");
         }
     }
     if let Some(session_id) = cookie_value(req.headers(), "__Host-pinpoint_session")
@@ -183,6 +182,16 @@ pub async fn session_auth(
     next.run(req).await
 }
 
+/// Client key for rate limits: the socket peer, or the proxy header when trusted.
+/// A request with no known address shares one bucket, so it can't skip the limit.
+fn rate_limit_client(req: &axum::http::Request<axum::body::Body>, trust_proxy: bool) -> String {
+    let peer = req
+        .extensions()
+        .get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+        .map(|connect| connect.0.ip());
+    state::client_ip(req.headers(), peer, trust_proxy).unwrap_or_else(|| "unknown".to_string())
+}
+
 /// Throttle the public map proxy per client so one script cannot exhaust the
 /// upstream tile, search or route providers.
 pub async fn map_rate_limit(
@@ -191,10 +200,9 @@ pub async fn map_rate_limit(
     next: Next,
 ) -> axum::response::Response {
     if let Some((bucket, limit)) = state::map_limit(req.uri().path()) {
-        if let Some(ip) = state::client_ip(req.headers()) {
-            if let Some(wait) = state.auth_rate.allow(bucket, &ip, limit) {
-                return rate_limited(wait, "Too many map requests. Try again later.");
-            }
+        let ip = rate_limit_client(&req, state.trust_proxy);
+        if let Some(wait) = state.auth_rate.allow(bucket, &ip, limit) {
+            return rate_limited(wait, "Too many map requests. Try again later.");
         }
     }
     next.run(req).await

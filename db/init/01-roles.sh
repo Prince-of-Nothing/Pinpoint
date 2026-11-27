@@ -2,14 +2,14 @@
 # Create per-service least-privilege DB roles (run once at DB init).
 # Tables are created lazily by services at first boot; run db/02-grants.sql
 # and db/init/03-fks.sql afterwards (see the Docker section in README.md).
-# Local default uses identical dev passwords; production sets AUTH_DB_PWD etc.
-# via environment (never commit real secrets).
+# Passwords are required from the environment (.env). There are no defaults:
+# compose and this script refuse to run without them.
 set -eu
-AUTH_PWD="${AUTH_DB_PWD:-pinpoint-auth-dev}"
-USERS_PWD="${USERS_DB_PWD:-pinpoint-users-dev}"
-LOC_PWD="${LOCATIONS_DB_PWD:-pinpoint-locations-dev}"
-MSG_PWD="${MESSAGES_DB_PWD:-pinpoint-messages-dev}"
-DIAG_PWD="${DIAG_DB_PWD:-pinpoint-diag-dev}"
+AUTH_PWD="${AUTH_DB_PWD:?AUTH_DB_PWD must be set}"
+USERS_PWD="${USERS_DB_PWD:?USERS_DB_PWD must be set}"
+LOC_PWD="${LOCATIONS_DB_PWD:?LOCATIONS_DB_PWD must be set}"
+MSG_PWD="${MESSAGES_DB_PWD:?MESSAGES_DB_PWD must be set}"
+DIAG_PWD="${DIAG_DB_PWD:?DIAG_DB_PWD must be set}"
 psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" <<SQL
 DO \$\$
 BEGIN

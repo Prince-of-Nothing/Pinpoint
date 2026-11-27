@@ -45,12 +45,12 @@ services:
     environment:
       POSTGRES_DB: pinpoint
       POSTGRES_USER: pinpoint
-      POSTGRES_PASSWORD: pinpoint-local-dev
-      AUTH_DB_PWD: ${AUTH_DB_PWD:-pinpoint-auth-dev}
-      USERS_DB_PWD: ${USERS_DB_PWD:-pinpoint-users-dev}
-      LOCATIONS_DB_PWD: ${LOCATIONS_DB_PWD:-pinpoint-locations-dev}
-      MESSAGES_DB_PWD: ${MESSAGES_DB_PWD:-pinpoint-messages-dev}
-      DIAG_DB_PWD: ${DIAG_DB_PWD:-pinpoint-diag-dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      AUTH_DB_PWD: ${AUTH_DB_PWD:?Set AUTH_DB_PWD in .env}
+      USERS_DB_PWD: ${USERS_DB_PWD:?Set USERS_DB_PWD in .env}
+      LOCATIONS_DB_PWD: ${LOCATIONS_DB_PWD:?Set LOCATIONS_DB_PWD in .env}
+      MESSAGES_DB_PWD: ${MESSAGES_DB_PWD:?Set MESSAGES_DB_PWD in .env}
+      DIAG_DB_PWD: ${DIAG_DB_PWD:?Set DIAG_DB_PWD in .env}
     volumes:
       - pinpoint-db-data:/var/lib/postgresql/data
       # Per-service least-privilege roles (db/init/01-roles.sh runs once).
@@ -64,7 +64,7 @@ services:
     networks:
       - pinpoint-net
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
 
   ###########################################################################
   # db-backup — periodic pg_dump (point-in-time recovery)
@@ -78,15 +78,18 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - |
-        echo "pinpoint db-backup: pg_dump every 300s (keep last 24)";
+        apk add --no-cache openssl >/dev/null || { echo "pinpoint db-backup: cannot install openssl"; exit 1; };
+        set -o pipefail;
+        echo "pinpoint db-backup: encrypted pg_dump every 300s (keep last 24)";
         while true; do
           ts=$$(date +%Y%m%dT%H%M%S);
-          pg_dump -h db -U pinpoint -d pinpoint -f /backups/pinpoint-$$ts.sql && echo "backup $$ts ok";
-          ls -1t /backups/*.sql 2>/dev/null | tail -n +25 | xargs -r rm -f;
+          if pg_dump -Fc -h db -U pinpoint -d pinpoint | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:PINPOINT_BACKUP_PASSPHRASE -out /backups/pinpoint-$$ts.dump.enc; then echo "backup $$ts ok"; else echo "backup $$ts FAILED"; fi;
+          ls -1t /backups/*.dump.enc 2>/dev/null | tail -n +25 | xargs -r rm -f;
           sleep 300;
         done
     environment:
-      PGPASSWORD: pinpoint-local-dev
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PINPOINT_BACKUP_PASSPHRASE: ${PINPOINT_BACKUP_PASSPHRASE:?Set PINPOINT_BACKUP_PASSPHRASE in .env}
     volumes:
       - pinpoint-backups:/backups
     networks:
@@ -107,9 +110,10 @@ services:
     deploy:
       replicas: 2
     environment:
+      TRUST_PROXY: "1"   # behind the bundled gateway, which overwrites X-Forwarded-For
       BIND_ADDR: 0.0.0.0:8001
       INTERNAL_PORT: "8001"
-      DATABASE_URL: postgresql://pinpoint_auth:${AUTH_DB_PWD:-pinpoint-auth-dev}@db:5432/pinpoint
+      DATABASE_URL: postgresql://pinpoint_auth:${AUTH_DB_PWD:?Set AUTH_DB_PWD in .env}@db:5432/pinpoint
     depends_on:
       db:
         condition: service_healthy
@@ -139,9 +143,10 @@ services:
     deploy:
       replicas: 2
     environment:
+      TRUST_PROXY: "1"   # behind the bundled gateway, which overwrites X-Forwarded-For
       BIND_ADDR: 0.0.0.0:8002
       INTERNAL_PORT: "8002"
-      DATABASE_URL: postgresql://pinpoint_users:${USERS_DB_PWD:-pinpoint-users-dev}@db:5432/pinpoint
+      DATABASE_URL: postgresql://pinpoint_users:${USERS_DB_PWD:?Set USERS_DB_PWD in .env}@db:5432/pinpoint
     depends_on:
       db:
         condition: service_healthy
@@ -171,9 +176,10 @@ services:
     deploy:
       replicas: 2
     environment:
+      TRUST_PROXY: "1"   # behind the bundled gateway, which overwrites X-Forwarded-For
       BIND_ADDR: 0.0.0.0:8003
       INTERNAL_PORT: "8003"
-      DATABASE_URL: postgresql://pinpoint_locations:${LOCATIONS_DB_PWD:-pinpoint-locations-dev}@db:5432/pinpoint
+      DATABASE_URL: postgresql://pinpoint_locations:${LOCATIONS_DB_PWD:?Set LOCATIONS_DB_PWD in .env}@db:5432/pinpoint
     depends_on:
       db:
         condition: service_healthy
@@ -204,9 +210,10 @@ services:
     deploy:
       replicas: 2
     environment:
+      TRUST_PROXY: "1"   # behind the bundled gateway, which overwrites X-Forwarded-For
       BIND_ADDR: 0.0.0.0:8007
       INTERNAL_PORT: "8007"
-      DATABASE_URL: postgresql://pinpoint_messages:${MESSAGES_DB_PWD:-pinpoint-messages-dev}@db:5432/pinpoint
+      DATABASE_URL: postgresql://pinpoint_messages:${MESSAGES_DB_PWD:?Set MESSAGES_DB_PWD in .env}@db:5432/pinpoint
     depends_on:
       db:
         condition: service_healthy
@@ -237,6 +244,7 @@ services:
     deploy:
       replicas: 2
     environment:
+      TRUST_PROXY: "1"   # behind the bundled gateway, which overwrites X-Forwarded-For
       BIND_ADDR: 0.0.0.0:8004
       INTERNAL_PORT: "8004"
       # Free CARTO Basemaps key (https://carto.com/basemaps/apikey) — required
@@ -266,9 +274,10 @@ services:
     container_name: pinpoint-diag
     restart: unless-stopped
     environment:
+      TRUST_PROXY: "1"   # behind the bundled gateway, which overwrites X-Forwarded-For
       BIND_ADDR: 0.0.0.0:8005
       INTERNAL_PORT: "8005"
-      DATABASE_URL: postgresql://pinpoint_diag:${DIAG_DB_PWD:-pinpoint-diag-dev}@db:5432/pinpoint
+      DATABASE_URL: postgresql://pinpoint_diag:${DIAG_DB_PWD:?Set DIAG_DB_PWD in .env}@db:5432/pinpoint
     depends_on:
       db:
         condition: service_healthy
@@ -281,7 +290,7 @@ services:
     networks:
       - pinpoint-net
     ports:
-      - "8005:8005"
+      - "127.0.0.1:8005:8005"
 
   ###########################################################################
   # admin — dedicated admin API (:8006), every route role-gated
@@ -296,9 +305,10 @@ services:
     container_name: pinpoint-admin
     restart: unless-stopped
     environment:
+      TRUST_PROXY: "1"   # behind the bundled gateway, which overwrites X-Forwarded-For
       BIND_ADDR: 0.0.0.0:8006
       INTERNAL_PORT: "8006"
-      DATABASE_URL: postgresql://pinpoint_users:${USERS_DB_PWD:-pinpoint-users-dev}@db:5432/pinpoint
+      DATABASE_URL: postgresql://pinpoint_users:${USERS_DB_PWD:?Set USERS_DB_PWD in .env}@db:5432/pinpoint
     depends_on:
       db:
         condition: service_healthy
@@ -311,7 +321,7 @@ services:
     networks:
       - pinpoint-net
     ports:
-      - "8006:8006"
+      - "127.0.0.1:8006:8006"
 
   ###########################################################################
   # gateway — nginx reverse proxy (single entrypoint for clients)
@@ -349,9 +359,37 @@ services:
       start_period: 5s
     networks:
       - pinpoint-net
+    # Loopback only. Public HTTPS goes through the caddy service (profile "public").
     ports:
-      - "8000:80"
-      - "8443:443"
+      - "127.0.0.1:8000:80"
+      - "127.0.0.1:8443:443"
+
+  ###########################################################################
+  # caddy — public HTTPS entrypoint (profile "public" only)
+  # Start with: docker compose --profile public up -d
+  # Set PINPOINT_DOMAIN in .env to a hostname whose DNS points at this host.
+  # Caddy obtains and renews the certificate itself. It is the only container
+  # that publishes ports 80 and 443; the gateway stays on 127.0.0.1.
+  ###########################################################################
+  caddy:
+    profiles: ["public"]
+    image: caddy:2-alpine
+    container_name: pinpoint-caddy
+    restart: unless-stopped
+    environment:
+      PINPOINT_DOMAIN: ${PINPOINT_DOMAIN:-localhost}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - pinpoint-net
+    ports:
+      - "80:80"
+      - "443:443"
 
   ###########################################################################
   # client — Rust desktop GUI (profile "client", Linux X11 host only)
@@ -366,7 +404,8 @@ services:
     image: pinpoint-desktop:latest
     container_name: pinpoint-client
     environment:
-      - PINPOINT_BACKEND=http://host.docker.internal:8000
+      - PINPOINT_BACKEND=http://gateway:80
+      - PINPOINT_ALLOW_PLAINTEXT_HOSTS=gateway
       - PINPOINT_DATA_DIR=/home/pinpoint/.pinpoint
       - DISPLAY=${DISPLAY:-:0}
     user: "1000:1000"
@@ -386,4 +425,8 @@ volumes:
   pinpoint-backups:
     driver: local
   pinpoint-data:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
     driver: local

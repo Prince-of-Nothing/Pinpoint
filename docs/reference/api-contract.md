@@ -96,7 +96,7 @@ header. The cookie value is stored server-side only as a SHA-256 hash.
 | POST | `/admin/users/:id/password` | cookie + admin + CSRF | `{password, reset_mfa?}` — temporary password; revokes sessions |
 | DELETE | `/admin/users/:id` | cookie + admin + CSRF | purge an account (admin console) |
 | GET | `/friendships/` | cookie | list friendships involving the caller |
-| POST | `/friendships/` | cookie + CSRF | `{receiver_username}` → pending request (`receiver_email` is a legacy exact-match fallback) |
+| POST | `/friendships/` | cookie + CSRF | `{receiver_username}` → pending request (email is not accepted; `400` without a username) |
 | POST | `/friendships/:id/respond` | cookie + CSRF | `{action:"accept"\|"reject"}` (receiver only); only a pending request can be answered (`400 FRIENDSHIP_NOT_PENDING`), and a rejected request needs a fresh one |
 | DELETE | `/friendships/:id` | cookie + CSRF | remove a friendship and its shares |
 

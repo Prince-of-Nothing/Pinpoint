@@ -21,7 +21,8 @@ async fn main() -> anyhow::Result<()> {
                 rate_state,
                 map_rate_limit,
             ))
-            .layer(axum::middleware::from_fn(security_headers)),
+            .layer(axum::middleware::from_fn(security_headers))
+            .into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
     .await?;
     Ok(())

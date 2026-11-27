@@ -108,13 +108,13 @@ tests; leaf 1 is a **user-consent risk**, mitigated by UX (expiry, precision, on
 | 7 | Secret management (env-only, no repo secrets) | T-I3 | ✅ Implemented | `.env.example`, gitignore |
 | 8 | Logging/monitoring (audit + healthchecks) | T-R1 | ✅ Implemented | `audit.rs` 5 tests |
 | 9 | Backups/recovery (Postgres volume, `pinpoint_state` snapshot) | T-D1 | ✅ Implemented | `docker-compose.yml` volume |
-| 10 | MFA / OIDC-PKCE, E2E encryption, OS keychain | T-S1/T-I3 | ❌ Deferred (post-MVP) | documented trade-off |
+| 10 | MFA (TOTP), E2E messages, OS keychain | T-S1/T-I3 | ✅ MFA and message E2E; OS keychain pending | `mfa.rs`, `message_crypto.rs` |
 
 ## 7. Residual risks & honest gaps (thesis scope)
 
 - No demo accounts are seeded; accounts are created by registration and use Argon2id hashes.
 - `pinpoint_state` JSONB snapshot → needs normalised tables + migrations + least-privilege DB user.
-- No MFA, no E2E encryption (server sees plaintext locations — accepted, documented).
+- Location data is not end-to-end encrypted: the server sees plaintext locations (accepted, documented). TOTP MFA and message E2E are implemented.
 - Request signing exists client-side only; server verification + OS-keychain for bookmark keys pending.
 - HTTPS/TLS termination at gateway/nginx is deployment-config, not code-enforced.
 

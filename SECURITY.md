@@ -17,15 +17,15 @@ the working tree are not maintained.
 ## Security controls
 
 - Transport: plain HTTP only for loopback (ADR-0006); production requires HTTPS.
-- Auth: PBKDF2-HMAC-SHA256 (salted), TOTP MFA with replay protection.
+- Auth: Argon2id password hashes (legacy PBKDF2 hashes are re-hashed at the next sign-in), TOTP MFA with replay protection.
 - Consent: directional shares (to_friend/from_friend/mutual) with precision
   and expiry; enforced server-side; friend coords never sent to OSM services.
-- DB: per-service least-privilege roles, FKs, typed migrations v1–v12.
+- DB: per-service least-privilege roles, FKs, typed migrations v1–v18.
 - No trackers, no analytics, no advertising SDKs.
 
 ## Known limitations (design-only)
 
-- E2E encryption and OS keychain integration.
+- Location data is not end-to-end encrypted. Messages are. OS keychain integration is pending, so a file fallback is used.
 - ZAP active scan pending.
 - Tiles require a free `CARTO_API_KEY` for live 200s.
 

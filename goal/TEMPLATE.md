@@ -39,5 +39,6 @@ tests stay green. Add any device/web check below this block.
 
 - [ ] One `[FLAG]` line under `[Unreleased]` in `CHANGELOG.md`.
 - [ ] Branch, issue, PR with `Closes #N`, green CI, squash merge.
-- [ ] Prompt deleted:
+- [ ] The PR includes `D goal/prompts/NN-….md` (the claim moved it out).
+- [ ] After merge, clear the local claim:
   `powershell -ExecutionPolicy Bypass -File scripts/goal.ps1 done -Id NN -Agent <agent>`

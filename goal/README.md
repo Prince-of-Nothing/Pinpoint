@@ -16,9 +16,10 @@ goal/
   claimed/         local claim locks, gitignored, never committed
 ```
 
-The initial queue has ten prompts, one per agent. Each prompt is one
-deliverable, one branch, one issue and one PR. Prompts name the files they may
-touch so the ten agents do not collide.
+The initial queue had ten prompts, one per agent; it is intentionally finite
+and may be empty after consumption. Each prompt is one deliverable, one branch,
+one issue and one PR. Prompts name the files they may touch so the ten agents
+do not collide.
 
 ## Swarm protocol (10 agents)
 
@@ -28,19 +29,30 @@ Each agent runs independently:
 2. Pick the lowest-numbered pending prompt that fits its role, then:
    `powershell -ExecutionPolicy Bypass -File scripts/goal.ps1 claim -Id 03 -Agent agent-c`
    This **moves** the prompt into `goal/claimed/agent-c/`, so no other agent can
-   claim it. The command prints the new path.
+   claim it. The move removes the tracked prompt from `goal/prompts/`; your PR
+   **must include that deletion**, or the next agent sees it again. The command
+   prints the new path.
 3. Read `goal/CONTEXT.md`, then the claimed prompt. Follow it exactly.
 4. Do the work through the branch → issue → PR → gate → squash-merge flow in
-   `CONTEXT.md`.
+   `CONTEXT.md`. Commit the deletion of `goal/prompts/NN-…md` in the PR.
 5. After the PR merges:
    `powershell -ExecutionPolicy Bypass -File scripts/goal.ps1 done -Id 03 -Agent agent-c`
-   This deletes the claimed prompt. Git history is the archive.
+   The PR already deleted the tracked prompt; `done` only removes the local
+   claim. Git history is the archive.
 
 If an agent stops early, restore its prompt:
 `powershell -ExecutionPolicy Bypass -File scripts/goal.ps1 release -Id 03 -Agent agent-c`.
 
 Do not edit a claimed prompt. Do not copy a prompt out of `goal/` and hand it to
 an agent by chat; the file is the contract.
+
+## Deletion rule
+
+- The claim move is the deletion source: `git status` must show
+  `D goal/prompts/NN-….md` on the agent branch, and the PR must include it.
+- `done` deletes only the gitignored claim and refuses if the prompt is still
+  pending in `goal/prompts/`.
+- Never commit `goal/claimed/`; it is a local lock, not queue state.
 
 ## Validate the queue
 

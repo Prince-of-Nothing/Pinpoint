@@ -97,7 +97,9 @@ impl PinpointAppUI {
         );
         ui.add_space(6.0);
         if conversations.is_empty() {
-            ui.label("No friends yet. Add a friend to start an encrypted conversation.");
+            theme::card(ui, |ui| {
+                ui.label("No friends yet. Add a friend to start an encrypted conversation.");
+            });
             return;
         }
         egui::ScrollArea::vertical()
@@ -229,7 +231,9 @@ impl PinpointAppUI {
         }
         ui.separator();
         if messages.is_empty() {
-            ui.label("No messages yet. Say hello.");
+            theme::card(ui, |ui| {
+                ui.label("No messages yet. Say hello.");
+            });
         }
         egui::ScrollArea::vertical()
             .id_salt("message_thread")
@@ -260,8 +264,18 @@ impl PinpointAppUI {
                     ui.with_layout(layout, |ui| {
                         egui::Frame::new()
                             .fill(fill)
-                            .corner_radius(egui::CornerRadius::same(12))
-                            .inner_margin(egui::Margin::symmetric(12, 8))
+                            .stroke(if message.mine {
+                                egui::Stroke::NONE
+                            } else {
+                                egui::Stroke::new(1.0_f32, theme::BORDER)
+                            })
+                            .shadow(if message.mine {
+                                egui::Shadow::NONE
+                            } else {
+                                theme::card_shadow()
+                            })
+                            .corner_radius(egui::CornerRadius::same(16))
+                            .inner_margin(egui::Margin::symmetric(14, 10))
                             .show(ui, |ui| {
                                 ui.set_max_width((ui.available_width() * 0.72).max(180.0));
                                 ui.label(RichText::new(text).size(14.0).color(ink));

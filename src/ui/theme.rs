@@ -76,11 +76,26 @@ pub fn float_fill() -> Color32 {
 
 /// Elevation for a floating surface: a soft, low shadow instead of a hard edge.
 pub fn float_shadow() -> egui::Shadow {
+    themed_shadow(&DARK, 8, 24, 170)
+}
+
+/// A shadow for `palette`, so it follows the theme. The dark theme keeps the
+/// black shadow at `dark_alpha`. The light theme takes the web's `--shadow`
+/// tint (green-black at about 12%), so a light background never gets a black
+/// smear.
+fn themed_shadow(palette: &Palette, offset_y: i8, blur: u8, dark_alpha: u8) -> egui::Shadow {
+    let bg = palette.bg;
+    let average = (u16::from(bg.r()) + u16::from(bg.g()) + u16::from(bg.b())) / 3;
+    let color = if average < 128 {
+        Color32::from_black_alpha(dark_alpha)
+    } else {
+        Color32::from_rgba_unmultiplied(16, 40, 28, 31)
+    };
     egui::Shadow {
-        offset: [0, 8],
-        blur: 24,
+        offset: [0, offset_y],
+        blur,
         spread: 0,
-        color: Color32::from_black_alpha(170),
+        color,
     }
 }
 
@@ -188,12 +203,7 @@ pub fn apply(ctx: &egui::Context) {
 /// Elevation for a card on the page: a soft, low shadow, so a card lifts off
 /// the background instead of relying on its border alone.
 pub fn card_shadow() -> egui::Shadow {
-    egui::Shadow {
-        offset: [0, 6],
-        blur: 22,
-        spread: 0,
-        color: Color32::from_black_alpha(160),
-    }
+    themed_shadow(&DARK, 6, 22, 160)
 }
 
 /// A filled, rounded, consistently padded card. Replaces bare `ui.group(...)`.
@@ -252,6 +262,19 @@ pub fn wordmark(ui: &mut egui::Ui) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn floating_shadows_follow_the_palette() {
+        // The dark theme keeps the shadow the premium look was approved with.
+        assert_eq!(
+            themed_shadow(&DARK, 8, 24, 170).color,
+            Color32::from_black_alpha(170)
+        );
+        // The light theme takes the web's soft green-black tint, not a black smear.
+        let light = themed_shadow(&LIGHT, 8, 24, 170).color;
+        assert_ne!(light, Color32::from_black_alpha(170));
+        assert!(light.a() < 50, "light shadow alpha {}", light.a());
+    }
 
     /// The web shell stylesheet, the source both palettes must match.
     const WEB_CSS: &str = include_str!("../../web/app/app.css");

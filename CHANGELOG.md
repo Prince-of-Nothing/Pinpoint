@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [FEATURE] Native phone Chats tab: a badge shows the unread message count ("9+" above nine), and screen readers hear "Chats, 3 unread".
 - [FEATURE] Native map: a "Sharing with you" strip above the phone tab bar lists the friends whose location you can see now, freshest first. A sunflower ring marks a location updated in the last 15 minutes, and tapping a chip flies the map to that friend. The strip steps aside for the menu, sheets, route planner and measure tool.
 - [FEATURE] Native navigation: show the distance to the next maneuver in the route banner.
 - [FEATURE] Native: the dark palette now matches the web shell (green accent, Sunflower for live), and a test reads `web/app/app.css` for both light and dark themes.
@@ -84,6 +85,7 @@ The per-item flagged list for this release is in
 
 ### Changed
 - [FEATURE] Native chat thread: the safety number moves behind an "i" button that opens a window with the number, its status and "Mark as verified", so the thread keeps its room. The Verified or Changed word stays beside the button.
+- [FEATURE] Native friends and map: each accepted friend shows what they share and how old it is ("Exact · live now", "City only · 2 h ago", or "Not sharing location with you"), and stale or dead pins are dimmed so an old position never looks current.
 - [FEATURE] Native phone map: remove the header row, place the account avatar (or Sign in) beside the floating search pill, use a magnifier search button, and move Sign out into the More menu. Other screens keep their header.
 - [FEATURE] Native phone tab bar: a floating rounded pill with a line icon and label on each tab, as on the web. Labels stay 14 pt and tap targets 48 pt.
 - [FEATURE] Native phone map: the floating zoom, locate, style, route and menu controls use painted line icons instead of letters and symbols. The actions are unchanged.

@@ -44,3 +44,19 @@ fn gateway_overwrites_forwarded_for() {
         );
     }
 }
+
+#[test]
+fn every_location_sends_hsts() {
+    // nginx: a location that sets any add_header drops the server-level ones, so
+    // HSTS set once at server level never reaches the proxied responses.
+    for (name, config) in [("http", HTTP), ("https", HTTPS)] {
+        for block in config.split("\n    location ").skip(1) {
+            let body = block.split("\n    }").next().unwrap_or(block);
+            assert!(
+                body.contains("Strict-Transport-Security"),
+                "{name}: location {} must set HSTS itself",
+                block.lines().next().unwrap_or_default()
+            );
+        }
+    }
+}

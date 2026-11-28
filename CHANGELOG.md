@@ -19,6 +19,7 @@ The per-item flagged list for this release is in
 
 ### Security
 - [SECURITY] Compose: Postgres is no longer published on a host port by default. `docker-compose.dev-db.yml` opts native development back in, on loopback only.
+- [SECURITY] Gateway: every location sends `Strict-Transport-Security`. nginx drops server-level `add_header` lines in a location that sets its own, so the HTTPS config never sent HSTS on proxied responses.
 - [SECURITY] Compose: diagnostics and the admin API no longer publish host ports on 8005 and 8006. Both are reached through the gateway, and `tests/compose_ports.rs` fails if any service other than the gateway or Caddy publishes a port.
 - [SECURITY] Messages: a changed safety number shows `Key changed` in the danger colour beside the chat header, not only inside the safety-number window.
 - [SECURITY] Sessions: the idle timeout defaults to 2 hours instead of 12. `PINPOINT_SESSION_IDLE_MINUTES` still overrides it, and 30 minutes is the recommended setting for a public host.

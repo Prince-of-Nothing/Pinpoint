@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Added
+- [DOCS] Security: `docs/security/keychain-master-key-plan.md` plans moving the fallback keychain master key out of the app-data folder (Android Keystore, DPAPI, passphrase). Plan only.
 - [DOCS] Performance: `docs/performance/db-reload-plan.md` plans how to stop reloading the whole database on every API request and how to narrow the global store lock. Plan only; nothing is implemented yet.
 - [FEATURE] Photo notes: each account can store 200 photos and 500 MB by default (`PHOTO_NOTE_MAX_COUNT`, `PHOTO_NOTE_MAX_MB`). A note that would pass either limit is refused with 507 `PHOTO_QUOTA_EXCEEDED`.
 

@@ -94,6 +94,17 @@ High = block publish. Medium = fix before launch. Low = track.
 2. **Before launch:** F-6 to F-11. F-6 and F-9 need product decisions.
 3. **Docs and low items:** refresh the threat model and SECURITY.md, then F-12 to F-17.
 
+## Status on Beta (2026-11-28)
+
+- F-1: fixed. Postgres has no host port. `docker-compose.dev-db.yml` opts native development in, on loopback only. `tests/compose_ports.rs` guards it.
+- F-2: fixed. Diagnostics and admin have no host ports and are reached through the gateway.
+- F-3: partly fixed. The default gateway binds to loopback, and every gateway location sends HSTS. Making HTTPS the default for a hosted server is still open; the `public` profile (Caddy) is the HTTPS path today.
+- F-4: fixed. `pinpoint://publish` opens the map and never publishes. `src/mobile/mod.rs` tests that.
+- F-5: fixed for auth and diagnostics (`limit_req`). Map tiles stay unlimited on purpose.
+- F-6: fixed. Sign-up answers a taken email like any refused sign-up.
+- F-13, F-14, F-15, F-17: fixed. The idle timeout is 2 hours, `.env.example` no longer lists the unused secrets, the map page has no inline script, and the location cipher was removed.
+- The `.env.example` item in "Stale docs" is fixed.
+
 ## Not checked
 
 - The running stack, DAST results, the Windows release binary, vendored JavaScript (`web/vendor`), and every route.

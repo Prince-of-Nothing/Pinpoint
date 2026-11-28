@@ -36,7 +36,8 @@ production-hardened. See the functional-state matrix and per-item
   anonymous and never-signed-in), role/active changes, safe purge, PII-free
   diagnostics with triage, and an append-only audit trail. The compose stack
   runs auth, users, locations, messages and map services behind a gateway;
-  diagnostics and the admin API use dedicated ports 8005 and 8006.
+  diagnostics and the admin API sit behind the same gateway, at
+  `/api/v1/diagnostics/` and `/api/v1/admin/`.
 - **Desktop client** — map, Nominatim search, OSRM routing (drive/walk/bike),
   Overpass POIs, bookmarks, check-ins, emergency, offline tile packs.
 - **Android client** - same Rust core packaged with Gradle + cargo-apk; responsive
@@ -135,7 +136,7 @@ the key secrets and caveats.
 
 ```bash
 docker compose up --build -d
-# gateway → http://127.0.0.1:8000/  · diagnostics :8005 · admin API :8006 · messages :8007
+# gateway → http://127.0.0.1:8000/  · diagnostics /api/v1/diagnostics/ · admin API /api/v1/admin/ (local only)
 # first boot: wait until the services have created their tables, then apply
 # the least-privilege grants and the cross-domain foreign keys as superuser:
 docker exec -i pinpoint-db psql -U pinpoint -d pinpoint < db/02-grants.sql

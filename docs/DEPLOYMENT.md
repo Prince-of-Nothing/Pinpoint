@@ -45,7 +45,7 @@ curl -fsS http://127.0.0.1:8000/health
 - `gateway` (nginx) is the only client entrypoint. It publishes only on loopback: `127.0.0.1:8000` HTTP and `127.0.0.1:8443` HTTPS. For a public host, start the `caddy` profile (`docker compose --profile public up -d`) with `PINPOINT_DOMAIN` set to your hostname; Caddy obtains the certificate and is the only container on ports 80 and 443. It routes `/api/v1/auth`, `/api/v1/users`, `/api/v1/locations`, `/api/v1/messages`, `/map` and `/` to healthy replicas.
 - Services: `auth` (:8001), `users` (:8002), `locations` (:8003), `map` (:8004), `messages` (:8007, via the gateway), `diag` (:8005), `admin` (:8006), `db` (Postgres 16) and `db-backup`.
 - Each app service runs two replicas by default; the gateway retries another healthy replica.
-- `diag` and `admin` publish their own ports for the dedicated consoles; the other services stay on the internal network.
+- Only `gateway` (loopback) and, with the `public` profile, `caddy` publish a port. `diag` and `admin` are reached through the gateway at `/api/v1/diagnostics/` and `/api/v1/admin/`, and `db` has no host port unless `docker-compose.dev-db.yml` is added.
 - The gateway answers `/api/v1/admin/` only from the host and the Docker network (`allow`/`deny` in `docker/nginx-gateway.conf`). To administer from elsewhere, use an SSH tunnel to the host.
 - First boot: wait until the services have created their tables, then apply the least-privilege grants and the cross-domain foreign keys as the superuser:
 

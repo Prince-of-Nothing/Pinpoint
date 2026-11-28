@@ -92,6 +92,32 @@ fn operator_ports_are_bound_to_loopback_only() {
 }
 
 #[test]
+fn gateway_admin_route_is_limited_to_local_networks() {
+    // The admin API is role-gated, but the public gateway must still refuse it
+    // to clients outside the host and the Docker network.
+    let text = read("docker/nginx-gateway.conf");
+    let start = text
+        .find("location /api/v1/admin/ {")
+        .expect("admin location in the gateway");
+    let rest = &text[start..];
+    let block = &rest[..rest.find('}').expect("end of admin location")];
+    for allowed in ["allow 127.0.0.1;", "allow 172.16.0.0/12;"] {
+        assert!(
+            block.contains(allowed),
+            "admin route is missing `{allowed}`"
+        );
+    }
+    assert!(
+        block.contains("deny all;"),
+        "admin route must deny clients that are not allowed"
+    );
+    assert!(
+        !block.contains("allow all;") && !block.contains("0.0.0.0/0"),
+        "admin route must not be open to every client"
+    );
+}
+
+#[test]
 fn backups_are_encrypted_and_need_a_passphrase() {
     let text = read("docker-compose.yml");
     assert!(

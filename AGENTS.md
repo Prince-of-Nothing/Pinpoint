@@ -97,6 +97,11 @@ Every commit is authored by the repository owner only. No `Co-authored-by:`
 trailers — not for teammates, not for bots (`qwen.ai[bot]`, copilot,
 dependabot).
 
+No AI trailers or footers in commit messages or PR bodies: no `Co-authored-by:`
+naming Claude, no `Claude-Session:` lines, no "Generated with Claude Code". Enable the
+repo hooks once per clone with `git config core.hooksPath .githooks`. The `commit-msg`
+hook rejects AI trailers, and the `pre-commit` hook rejects a Claude git identity.
+
 Prefix every subject with a type flag so history is scannable:
 
 - `[FEATURE] area: what was added` — new capability

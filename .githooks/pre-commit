@@ -1,0 +1,10 @@
+#!/bin/sh
+# Rejects commits authored or committed as Claude. Enable once per clone with:
+#   git config core.hooksPath .githooks
+name=$(git config user.name); email=$(git config user.email)
+case "$name $email" in
+  *[Cc]laude*|*anthropic.com*)
+    echo "pre-commit: git identity is set to Claude ($name <$email>). Set your owner identity before committing." >&2
+    exit 1 ;;
+esac
+exit 0

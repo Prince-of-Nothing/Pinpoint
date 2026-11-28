@@ -3,6 +3,10 @@
 Thanks for your interest! This is a thesis project with strict security and documentation
 requirements, so contribution rules are tighter than a typical hobby repo.
 
+Before any git write (commit, push, tag or pull request), read
+[`COMMIT_RULES.md`](COMMIT_RULES.md). It covers who commits, the ban on AI trailers and
+footers, and the Beta-only workflow.
+
 ## Ground rules
 
 1. **Security is non-negotiable.** Any change touching authentication, authorization, consent,

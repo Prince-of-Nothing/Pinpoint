@@ -1,5 +1,9 @@
 # AGENTS.md — Pinpoint (Rust multiplatform)
 
+> **Commit rules:** before any git write (commit, push, tag or pull request), read
+> [`COMMIT_RULES.md`](COMMIT_RULES.md). It sets who commits, bans AI trailers and
+> footers, and keeps work on `Beta`.
+
 ## Repo shape (active — Rust only)
 
 - **Rust multiplatform client** (root crate `pinpoint-desktop` v3.0.0):

@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Security
+- [SECURITY] Sign-up: an email that already has an account gets the same answer as any other refused sign-up, so the response no longer confirms it is registered.
 - [SECURITY] Lookup: `/api/v1/users/lookup` is throttled per client to 60 requests a minute.
 - [SECURITY] Gateway: `/api/v1/admin/` answers only from the host and the Docker network; internet clients get 403.
 

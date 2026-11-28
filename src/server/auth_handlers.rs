@@ -43,6 +43,10 @@ const HOST_SESSION_COOKIE: &str = "__Host-pinpoint_session";
 /// Loopback HTTP dev keeps the plain name: `__Host-` requires `Secure`.
 const SESSION_COOKIE: &str = "session_id";
 
+/// The one answer for a refused sign-up. Duplicate emails get it too, so the
+/// response never reveals which addresses already have an account.
+const REGISTRATION_FAILED_MESSAGE: &str = "Could not register the account. Try again.";
+
 pub(crate) fn session_cookie(session_id: &str, secure: bool) -> String {
     if secure {
         format!("{HOST_SESSION_COOKIE}={session_id}; Path=/; HttpOnly; SameSite=Lax; Secure")
@@ -273,7 +277,9 @@ pub async fn register(
     {
         let store = state.store.lock().unwrap();
         if store.find_user_by_email(&email).is_some() {
-            return error_envelope("VALIDATION_FAILED", "email already registered");
+            // Same answer as any other refused sign-up, so the response never
+            // confirms that an address already has an account.
+            return error_envelope("REGISTRATION_FAILED", REGISTRATION_FAILED_MESSAGE);
         }
     }
     let password_hash = crate::security::password::hash_password(
@@ -290,10 +296,7 @@ pub async fn register(
         Ok(id) => id,
         Err(error) => {
             tracing::error!(%error, "registration insert failed");
-            return error_envelope(
-                "REGISTRATION_FAILED",
-                "Could not register the account. Try again.",
-            );
+            return error_envelope("REGISTRATION_FAILED", REGISTRATION_FAILED_MESSAGE);
         }
     };
     let user = crate::models::User {

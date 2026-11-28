@@ -13,11 +13,11 @@
 
 ## Workflow (mandatory)
 
-- [ ] Branch created from an up-to-date `main` (never committed directly to `main`)
+- [ ] Commits are on `Beta` (this PR is the release PR from `Beta` to `main`)
 - [ ] PR title starts with the type flag above
-- [ ] Branch is rebased/mergeable and contains only this change
-- [ ] After CI is green: **Squash and merge**, delete the branch, then create the
-      next branch from `main`
+- [ ] Every commit has a type flag and the gate passed before it was pushed
+- [ ] After CI is green: merge with a merge commit (not a squash), then tag the
+      release commit on `main`
 
 ## Checklist
 

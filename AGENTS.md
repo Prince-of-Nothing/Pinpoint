@@ -51,34 +51,30 @@ multiplatform section); they share `src/` via `cfg(target_os)`.
   no Rust binding (ADR-0017). No Kotlin or AndroidX app rewrite. The APK is
   assembled by `android/gradlew`, not by cargo-apk's generated APK.
 
-## Branching and pull requests (mandatory)
+## Branching and pull requests (Beta workflow)
 
-`main` is release-ready at all times. **Never commit or push directly to
-`main`.**
+All work is committed directly to `Beta`. `main` is the release branch and is
+updated only by a release PR.
 
-- Start every change on a fresh branch from an up-to-date `main`:
-  `feat/<slug>`, `fix/<slug>`, `docs/<slug>`, `infra/<slug>` or
-  `release/vX.Y.Z`.
-- Push the branch and open a pull request. The PR title carries the same type
-  flag as the commit, for example `[FEATURE] map: add offline pack`.
-- Every PR references the issue it fixes with `Closes #N` or `Refs #N`. The
-  `PR issue link` workflow enforces this; `skip-issue-link` is reserved for
-  exceptional release/tooling PRs.
+- Commit each change to `Beta` with its type flag. Do not create per-change
+  feature branches or open a PR per change. Keep commits small and
+  single-purpose.
+- Keep `Beta` current with `main`: after each release, merge `main` back into
+  `Beta` so the two share history.
+- Release: when it is ready, open one PR from `Beta` to `main`. Its title carries
+  the release type flag (for example `[RELEASE] v3.0.1`), and its body lists the
+  changes it brings and links them with `Refs #N`, or carries the
+  `skip-issue-link` label. Merge it with a merge commit, not a squash, so `Beta`
+  and `main` keep shared history. Then tag the release commit on `main` as
+  `vX.Y.Z`.
+- Never commit or push directly to `main`; only the release PR updates it.
+- Run the full gate before every commit to `Beta`, and never push a red tree.
 - Every issue carries a native type (Bug/Feature/Task), a `PREFIX-n` title ID
   and one `severity:*` plus one `priority:*` label. Use
   `scripts/new-issue.ps1` (see `docs/ISSUE_TAXONOMY.md`), and keep the tracker
   current when opening, closing or re-scoping work.
-- Run the full gate and let CI pass before merging. Use **Squash and merge** so
-  `main` keeps one type-flagged commit per change; delete the branch afterward.
-- After the merge, update local `main` and create the **next** branch from it
-  before starting another feature.
-- Multiple branches are fine for independent work, but each must be based on
-  `main`, rebaseable and independently mergeable. Do not keep long-lived or
-  stacked branches; merge the base PR first.
-- Releases: `release/vX.Y.Z` from `main`, gate + review, PR, merge, then tag
-  the merge commit on `main`. Hotfixes use a `fix/` branch and the same PR flow.
-- When the user says "push", push the **current branch** and open/update its PR;
-  do not push `main`.
+- When the user says "push", push `Beta`. Open the release PR only when the user
+  asks for a release.
 
 ## Agent prompt queue (`goal/`)
 
@@ -143,9 +139,9 @@ Additive seams (never rewrite): new table → migration + domain module; new scr
   Fixed/Removed). The `scripts/commit.ps1 -Message "..."` helper does
   both: runs the full gate, prepends a stub, commits.
 - When the user says "push" (or "commit and push"): run the full gate,
-  update `CHANGELOG.md`, commit on the feature branch, push that branch and
-  open/update its pull request (only after the gate is green). Never push
-  `main`; merge through the PR. Never push a red tree.
+  update `CHANGELOG.md`, commit on `Beta` and push `Beta` (only after the gate is
+  green). Never push `main`; `main` changes only through the release PR from
+  `Beta`. Never push a red tree.
 - Never commit without running `cargo fmt/clippy/build/test` first.
 
 ## Docs conventions

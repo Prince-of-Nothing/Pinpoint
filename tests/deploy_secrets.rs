@@ -118,6 +118,50 @@ fn gateway_admin_route_is_limited_to_local_networks() {
 }
 
 #[test]
+fn gateway_api_routes_have_an_edge_rate_limit() {
+    // Admin and diagnostics skip the app's own limiter only when reached directly,
+    // but every API location on the gateway should still carry the edge limit.
+    for file in GATEWAY_CONFS {
+        let text = read(file);
+        assert!(
+            text.contains("limit_req_zone $binary_remote_addr zone=pinpoint_api"),
+            "{file} has no edge rate-limit zone"
+        );
+        let api_locations = text
+            .lines()
+            .filter(|line| line.trim_start().starts_with("location /api/"))
+            .count();
+        let limited = text.matches("limit_req zone=pinpoint_api").count();
+        assert!(
+            api_locations > 0 && limited >= api_locations,
+            "{file}: {limited} of {api_locations} API locations are rate limited"
+        );
+    }
+}
+
+#[test]
+fn gateway_registry_does_not_list_internal_upstreams() {
+    // The registry is public. It may name the services and their paths, never the
+    // internal hosts and ports they run on.
+    for file in GATEWAY_CONFS {
+        let text = read(file);
+        let registry = text
+            .lines()
+            .find(|line| line.contains("\"gateway\":\"pinpoint-gateway\",\"services\""))
+            .unwrap_or_else(|| panic!("{file} has no registry response"));
+        assert!(
+            !registry.contains("\"upstream\""),
+            "{file}: the registry lists internal upstreams"
+        );
+    }
+}
+
+const GATEWAY_CONFS: &[&str] = &[
+    "docker/nginx-gateway.conf",
+    "docker/nginx-gateway-https.conf",
+];
+
+#[test]
 fn backups_are_encrypted_and_need_a_passphrase() {
     let text = read("docker-compose.yml");
     assert!(

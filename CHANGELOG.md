@@ -11,6 +11,9 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
+### Added
+- [FEATURE] Photo notes: each account can store 200 photos and 500 MB by default (`PHOTO_NOTE_MAX_COUNT`, `PHOTO_NOTE_MAX_MB`). A note that would pass either limit is refused with 507 `PHOTO_QUOTA_EXCEEDED`.
+
 ### Security
 - [SECURITY] Sign-up: an email that already has an account gets the same answer as any other refused sign-up, so the response no longer confirms it is registered.
 - [SECURITY] Lookup: `/api/v1/users/lookup` is throttled per client to 60 requests a minute.

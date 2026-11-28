@@ -38,7 +38,10 @@ if ([string]::IsNullOrWhiteSpace($Title)) {
     throw "Title must not be empty."
 }
 
-$json = & gh issue list --repo $Repo --state all --limit 500 --search "in:title $Prefix-" --json title 2>$null
+# Read the plain issue list, not a title search: GitHub's search index lags
+# behind new issues, so two back-to-back runs could hand out the same ID.
+# The prefix match is done below, so the list does not need a search query.
+$json = & gh issue list --repo $Repo --state all --limit 1000 --json title 2>$null
 if ($LASTEXITCODE -ne 0) {
     throw "gh issue list failed; check gh auth and the repository."
 }

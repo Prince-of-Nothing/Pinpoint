@@ -10,7 +10,6 @@
 
 pub mod audit;
 pub mod circuit_breaker;
-pub mod e2e;
 pub mod encryption;
 pub mod keychain;
 pub mod message_crypto;
@@ -26,7 +25,6 @@ pub mod validation;
 
 /// Re-export commonly used types for convenience.
 pub use audit::{AuditEvent, AuditLogger};
-pub use e2e::{decrypt_location, derive_location_key, encrypt_location};
 pub use encryption::{AesGcmEncryption, EncryptionKey, KeyManager};
 pub use keychain::{open_default, FileKeychain, Keychain, OsKeychain, MASTER_KEY_NAME};
 pub use mfa::{generate_secret, otpauth_uri, totp, verify_totp};

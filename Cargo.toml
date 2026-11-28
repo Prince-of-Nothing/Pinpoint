@@ -229,6 +229,24 @@ copyright = "MIT Â© 2026 Pinpoint"
 # manual lat/lon today; GPS requires the same entitlements as Android/iOS
 # (see ios/Info.plist NSLocation* keys).
 
+# Windows MSI installer (cargo-packager with the WiX Toolset). The release
+# workflow builds the release binaries first, then runs
+# `cargo packager --release --formats wix`; the MSI is written to
+# target/packager and copied into dist/. Unsigned until a code-signing
+# certificate exists (see packaging/SIGNING.md).
+[package.metadata.packager]
+product-name = "Pinpoint"
+identifier = "com.pinpoint.desktop"
+publisher = "Pinpoint Team"
+description = "Privacy-first location-sharing client (offline map-first, OSM ODbL)."
+copyright = "Copyright (c) 2026 Pinpoint"
+license-file = "LICENSE"
+icons = ["android/res/mipmap-xxxhdpi/ic_launcher.png"]
+formats = ["wix"]
+binaries = [{ path = "pinpoint-desktop", main = true }]
+binaries-dir = "target/release"
+out-dir = "target/packager"
+
 # Android packaging (`cargo apk build --locked`, see `android/`).
 # cargo-apk builds the Rust .so; Gradle packages the Java bridge, DEX and
 # service manifest into the APK (ADR-0017). Do not install cargo-apk's APK.

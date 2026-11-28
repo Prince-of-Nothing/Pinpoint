@@ -1,0 +1,5 @@
+#!/bin/sh
+# AppRun for the Pinpoint AppImage: start the bundled desktop client and pass
+# any arguments through. Runs from the mounted or extracted AppDir.
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/pinpoint-desktop" "$@"

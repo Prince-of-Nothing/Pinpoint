@@ -128,12 +128,16 @@ jobs:
           # the wrong 32-bit asset on a 64-bit-only device. Gradle builds both
           # Rust .so targets via cargo-apk, packages the Java bridge/DEX and
           # returns an unsigned, unaligned release APK.
-          (cd android && ./gradlew :app:assembleRelease \
+          (cd android && ./gradlew :app:assembleRelease :app:bundleRelease \
             -Pabi=universal -PrustProfile=release --no-daemon)
           out="dist/pinpoint-android-${VERSION}.apk"
           cp android/app/build/outputs/apk/release/app-release-unsigned.apk "$out"
           "$zipalign" -f -p 4 "$out" "$out.aligned"
           mv "$out.aligned" "$out"
+          # Play Store upload bundle (AAB) from the same build; signed by the
+          # "Re-sign with the release key" step below.
+          aab="$(ls android/app/build/outputs/bundle/release/*.aab | head -n 1)"
+          cp "$aab" "dist/pinpoint-android-${VERSION}.aab"
 
       - name: Re-sign with the release key
         if: steps.keys.outputs.has_release_key == 'true'
@@ -154,6 +158,15 @@ jobs:
             fi
             "$apksigner" sign "${args[@]}" "$apk"
           done
+          for aab in dist/*.aab; do
+            [ -e "$aab" ] || continue
+            export JARSIGNER_STORE="$KEYSTORE_PASSWORD"
+            export JARSIGNER_KEY="${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
+            jarsigner -keystore "$PINPOINT_RELEASE_KEYSTORE" \
+              -storepass:env JARSIGNER_STORE -keypass:env JARSIGNER_KEY \
+              -sigalg SHA256withRSA -digestalg SHA-256 \
+              "$aab" "$KEY_ALIAS"
+          done
 
       - name: Verify APKs
         run: |
@@ -169,6 +182,19 @@ jobs:
               echo "    $(basename "$apk")"
               grep "certificate SHA-256" <<<"$certs" | sed 's/^/      /'
             } >>"$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Verify the AAB signature
+        if: steps.keys.outputs.has_release_key == 'true'
+        run: |
+          for aab in dist/*.aab; do
+            [ -e "$aab" ] || continue
+            out="$(jarsigner -verify -certs "$aab" 2>&1 || true)"
+            if ! grep -q "jar verified" <<<"$out"; then
+              echo "::error::$aab is not signed"
+              exit 1
+            fi
+            echo "$(basename "$aab"): jar verified" >>"$GITHUB_STEP_SUMMARY"
           done
 
       - name: Check release version consistency
@@ -273,10 +299,25 @@ jobs:
             Set-Content dist/server/README.txt -NoNewline
           Compress-Archive -Path dist/desktop/* -DestinationPath "dist/pinpoint-desktop-windows-x64-$version.zip" -Force
           Compress-Archive -Path dist/server/* -DestinationPath "dist/pinpoint-server-windows-x64-$version.zip" -Force
+      - name: Install cargo-packager (MSI)
+        run: cargo install cargo-packager --version 0.11.8 --locked
+      - name: Build the MSI installer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          cargo packager --release --formats wix
+          if ($LASTEXITCODE -ne 0) { throw "cargo packager failed" }
+          $msi = Get-ChildItem target/packager -Recurse -Filter *.msi | Select-Object -First 1
+          if (-not $msi) { throw "cargo packager did not produce an MSI" }
+          Copy-Item $msi.FullName "dist/pinpoint-desktop-windows-x64-$version.msi"
+          Write-Host "built pinpoint-desktop-windows-x64-$version.msi"
       - uses: actions/upload-artifact@v4
         with:
           name: release-windows
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.msi
           if-no-files-found: error
 
   linux:
@@ -345,10 +386,47 @@ jobs:
           cp target/release/pinpoint-server dist/server/
           sed "s/@VERSION@/$version/g" packaging/linux-server-README.txt > dist/server/README.txt
           (cd dist/server && zip -j "../pinpoint-server-linux-x64-$version.zip" pinpoint-server README.txt)
+      - name: Install cargo-deb
+        run: cargo install cargo-deb --version 3.8.0 --locked
+      - name: Build the .deb package
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          mkdir -p dist
+          cargo deb --no-build
+          deb="$(ls target/debian/pinpoint_*.deb | head -n 1)"
+          out="dist/pinpoint-desktop-linux-amd64-$version.deb"
+          cp "$deb" "$out"
+          dpkg-deb -I "$out" >/dev/null
+          dpkg-deb -c "$out" | grep -Fq "usr/bin/pinpoint-desktop"
+          dpkg-deb -c "$out" | grep -Fq "usr/share/applications/pinpoint.desktop"
+      - name: Build the AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          tool="$RUNNER_TEMP/appimagetool"
+          curl -fsSL -o "$tool" "https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage"
+          echo "46fdd785094c7f6e545b61afcfb0f3d98d8eab243f644b4b17698c01d06083d1  $tool" | sha256sum -c -
+          chmod +x "$tool"
+          appdir="$RUNNER_TEMP/Pinpoint.AppDir"
+          rm -rf "$appdir"
+          mkdir -p "$appdir/usr/bin"
+          cp target/release/pinpoint-desktop "$appdir/usr/bin/pinpoint-desktop"
+          cp packaging/linux/AppRun "$appdir/AppRun"
+          cp packaging/pinpoint.desktop "$appdir/pinpoint.desktop"
+          cp android/res/mipmap-xxxhdpi/ic_launcher.png "$appdir/pinpoint.png"
+          ln -s pinpoint.png "$appdir/.DirIcon"
+          chmod +x "$appdir/AppRun" "$appdir/usr/bin/pinpoint-desktop"
+          desktop-file-validate "$appdir/pinpoint.desktop"
+          ARCH=x86_64 "$tool" "$appdir" "dist/pinpoint-desktop-linux-x86_64-$version.AppImage"
+          chmod +x "dist/pinpoint-desktop-linux-x86_64-$version.AppImage"
       - uses: actions/upload-artifact@v4
         with:
           name: release-linux
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.deb
+            dist/*.AppImage
           if-no-files-found: error
 
   macos:
@@ -428,6 +506,12 @@ jobs:
           cp target/release/pinpoint-server dist/server/
           sed "s/@VERSION@/$version/g" packaging/macos-server-README.txt > dist/server/README.txt
           (cd dist/server && zip -qj "../pinpoint-server-macos-$version.zip" pinpoint-server README.txt)
+      - name: Ad-hoc sign the app bundle
+        run: |
+          # Ad-hoc signature only (no Developer ID yet): Apple silicon needs a
+          # signed bundle to run. Notarization needs packaging/SIGNING.md.
+          codesign --force --deep --sign - dist/Pinpoint.app
+          codesign --verify --deep --strict --verbose=2 dist/Pinpoint.app
       - name: Launch macOS app bundle
         run: |
           open -n "$PWD/dist/Pinpoint.app" --args --backend http://127.0.0.1:8080
@@ -442,10 +526,67 @@ jobs:
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           (cd dist && zip -qry "pinpoint-desktop-macos-$version.zip" Pinpoint.app README.txt)
+      - name: Build the DMG
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          stage="$RUNNER_TEMP/dmg-stage"
+          rm -rf "$stage"
+          mkdir -p "$stage"
+          cp -R dist/Pinpoint.app "$stage/"
+          cp dist/README.txt "$stage/README.txt"
+          ln -s /Applications "$stage/Applications"
+          hdiutil create -volname "Pinpoint $version" -srcfolder "$stage" \
+            -fs HFS+ -format UDZO -imagekey zlib-level=9 -ov \
+            "dist/pinpoint-desktop-macos-$version.dmg"
+          hdiutil verify "dist/pinpoint-desktop-macos-$version.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: release-macos
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.dmg
+          if-no-files-found: error
+
+  ios:
+    # Unsigned arm64 IPA for iOS. It installs only after signing with an Apple
+    # distribution identity and provisioning profile (packaging/SIGNING.md).
+    name: iOS (unsigned IPA)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain with the iOS target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-ios
+      - name: Build the arm64 iOS binary
+        run: cargo build --release --locked --target aarch64-apple-ios --bin pinpoint-desktop
+      - name: Assemble Pinpoint.app and package the unsigned IPA
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          IFS=. read -r major minor patch <<<"$version"
+          build="$((major * 10000 + minor * 100 + patch))"
+          work="$RUNNER_TEMP/ipa"
+          app="$work/Payload/Pinpoint.app"
+          rm -rf "$work"
+          mkdir -p "$app" dist
+          cp target/aarch64-apple-ios/release/pinpoint-desktop "$app/pinpoint-desktop"
+          cp ios/Info.plist "$app/Info.plist"
+          plutil -replace CFBundleShortVersionString -string "$version" "$app/Info.plist"
+          plutil -replace CFBundleVersion -string "$build" "$app/Info.plist"
+          plutil -lint "$app/Info.plist"
+          printf 'APPL????' >"$app/PkgInfo"
+          lipo -archs "$app/pinpoint-desktop" | grep -qw arm64
+          ipa="$GITHUB_WORKSPACE/dist/pinpoint-ios-$version-unsigned.ipa"
+          (cd "$work" && zip -qry "$ipa" Payload)
+          unzip -l "$ipa" | grep -Fq "Payload/Pinpoint.app/pinpoint-desktop"
+          echo "built pinpoint-ios-$version-unsigned.ipa (build $build)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-ios
+          path: dist/*.ipa
           if-no-files-found: error
 
   verify-windows:
@@ -529,6 +670,30 @@ jobs:
             if ($server -and -not $server.HasExited) { Stop-Process -Id $server.Id -Force }
           }
 
+      - name: Install, run and uninstall the MSI
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "([^"]+)"').Matches[0].Groups[1].Value
+          $msi = (Resolve-Path "dist/pinpoint-desktop-windows-x64-$version.msi").Path
+          $log = "$env:RUNNER_TEMP\msi-install.log"
+          $install = Start-Process msiexec.exe -ArgumentList @("/i", "`"$msi`"", "/qn", "/norestart", "/L*v", "`"$log`"") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "msiexec install failed with $($install.ExitCode); see $log" }
+          $exe = Join-Path $env:ProgramFiles "Pinpoint\pinpoint-desktop.exe"
+          if (-not (Test-Path $exe)) { throw "the MSI did not install $exe" }
+          $helpOut = "$env:RUNNER_TEMP\installed-help.out"
+          $helpErr = "$env:RUNNER_TEMP\installed-help.err"
+          $desktop = Start-Process -FilePath $exe -ArgumentList "--help" `
+            -NoNewWindow -Wait -PassThru -RedirectStandardOutput $helpOut -RedirectStandardError $helpErr
+          if ($desktop.ExitCode -ne 0) { throw "installed pinpoint-desktop --help failed" }
+          $help = (Get-Content $helpOut -Raw -ErrorAction SilentlyContinue) +
+            (Get-Content $helpErr -Raw -ErrorAction SilentlyContinue)
+          if ($help -notmatch [regex]::Escape($version)) { throw "installed desktop --help does not report $version" }
+          $remove = Start-Process msiexec.exe -ArgumentList @("/x", "`"$msi`"", "/qn", "/norestart") -Wait -PassThru
+          if ($remove.ExitCode -ne 0) { throw "msiexec uninstall failed with $($remove.ExitCode)" }
+          if (Test-Path $exe) { throw "uninstall left $exe behind" }
+          Write-Host "MSI installs $version, runs and uninstalls cleanly"
+
   verify-linux:
     name: Verify downloaded Linux packages
     needs: linux
@@ -584,6 +749,25 @@ jobs:
           curl -fsS "http://127.0.0.1:$port/" | grep -Fq "Pinpoint"
           echo "downloaded Linux server serves /health, /privacy and / at $version"
 
+      - name: Install, run and remove the .deb
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          sudo apt-get install -y "./dist/pinpoint-desktop-linux-amd64-$version.deb"
+          help_out="$(pinpoint-desktop --help 2>&1 || true)"
+          grep -Fq "$version" <<<"$help_out"
+          test -f /usr/share/applications/pinpoint.desktop
+          sudo apt-get remove -y pinpoint
+          echo ".deb installs pinpoint-desktop $version and removes cleanly"
+      - name: Run the AppImage
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          app="dist/pinpoint-desktop-linux-x86_64-$version.AppImage"
+          test -s "$app"
+          chmod +x "$app"
+          help_out="$(APPIMAGE_EXTRACT_AND_RUN=1 "$app" --help 2>&1 || true)"
+          grep -Fq "$version" <<<"$help_out"
+          echo "AppImage runs and reports $version"
+
   verify-macos:
     name: Verify downloaded macOS packages
     needs: macos
@@ -632,9 +816,23 @@ jobs:
           curl -fsS "http://127.0.0.1:$port/" | grep -Fq "Pinpoint"
           echo "downloaded macOS server serves /health, /privacy and / at $version"
 
+      - name: Mount the downloaded DMG
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
+          dmg="dist/pinpoint-desktop-macos-$version.dmg"
+          test -s "$dmg"
+          hdiutil verify "$dmg"
+          mount="$RUNNER_TEMP/dmg-mount"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg"
+          trap 'hdiutil detach "$mount" -quiet || true' EXIT
+          test "$(plutil -extract CFBundleShortVersionString raw -o - "$mount/Pinpoint.app/Contents/Info.plist")" = "$version"
+          test -x "$mount/Pinpoint.app/Contents/MacOS/pinpoint-desktop"
+          codesign --verify --deep --strict "$mount/Pinpoint.app"
+          echo "DMG mounts Pinpoint.app $version with a valid signature"
+
   release:
     name: GitHub Release
-    needs: [apk, windows, linux, macos, verify-windows, verify-linux, verify-macos]
+    needs: [apk, windows, linux, macos, ios, verify-windows, verify-linux, verify-macos]
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
@@ -663,6 +861,11 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: release-macos
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-ios
           path: dist
 
       - name: Verify downloaded Windows ZIPs
@@ -821,9 +1024,15 @@ jobs:
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)"
           for name in \
             "pinpoint-android-${version}.apk" \
+            "pinpoint-android-${version}.aab" \
+            "pinpoint-desktop-linux-amd64-${version}.deb" \
+            "pinpoint-desktop-linux-x86_64-${version}.AppImage" \
             "pinpoint-desktop-linux-x64-${version}.zip" \
+            "pinpoint-desktop-macos-${version}.dmg" \
             "pinpoint-desktop-macos-${version}.zip" \
+            "pinpoint-desktop-windows-x64-${version}.msi" \
             "pinpoint-desktop-windows-x64-${version}.zip" \
+            "pinpoint-ios-${version}-unsigned.ipa" \
             "pinpoint-server-linux-x64-${version}.zip" \
             "pinpoint-server-macos-${version}.zip" \
             "pinpoint-server-windows-x64-${version}.zip"; do

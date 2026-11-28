@@ -23,6 +23,7 @@ The per-item flagged list for this release is in
 - [SECURITY] Sign-up: an email that already has an account gets the same answer as any other refused sign-up, so the response no longer confirms it is registered.
 - [SECURITY] Lookup: `/api/v1/users/lookup` is throttled per client to 60 requests a minute.
 - [SECURITY] Gateway: `/api/v1/admin/` answers only from the host and the Docker network; internet clients get 403.
+- [SECURITY] Map page: its two scripts are now files (`theme-init.js`, `map-page.js`), and the page CSP allows only same-origin scripts (`script-src 'self'`), so injected inline script does not run. Inline styles stay allowed, because MapLibre sets them at runtime.
 
 ## [3.0.1] - 2026-11-27
 ### Security

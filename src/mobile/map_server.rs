@@ -530,11 +530,15 @@ mod tests {
         assert!(!csp.contains('*') && !csp.contains("blob:"), "{csp}");
         let body = index.text().await.unwrap();
         assert!(body.contains("id=\"map\""));
+        // The page controller is an external module; check the link and the file.
+        assert!(body.contains("./map-page.js"));
+        let controller = include_str!("../../web/map/map-page.js");
         assert!(
-            body.contains("/fixtures/monaco.pmtiles") || body.contains("./fixtures/monaco.pmtiles")
+            controller.contains("/fixtures/monaco.pmtiles")
+                || controller.contains("./fixtures/monaco.pmtiles")
         );
         assert!(body.contains("route-panel"));
-        assert!(body.contains("../app/route-ui.js"));
+        assert!(controller.contains("../app/route-ui.js"));
         assert!(body.contains("../app/route.css"));
 
         let route_js = get(&server, "/app/route-ui.js").await;

@@ -48,11 +48,12 @@ const MIME_HTML: &str = "text/html; charset=utf-8";
 
 /// CSP for the loopback map page in the desktop `wry` window and the Android
 /// WebView (`docs/offline/android-webview-online.md` §3): one remote origin,
-/// the opt-in OpenFreeMap basemap; the two inline blocks in
-/// `web/map/index.html` need `'unsafe-inline'`; the vendored MapLibre worker is
-/// same-origin, so no `blob:`. Applied to HTML only, never to pack bytes.
+/// the opt-in OpenFreeMap basemap. The page's scripts are external files
+/// (`web/map/theme-init.js`, `web/map/map-page.js`), so `script-src` is
+/// `'self'` only; the vendored MapLibre worker is same-origin, so no `blob:`.
+/// Applied to HTML only, never to pack bytes.
 pub(crate) const MAP_PAGE_CSP: &str = "default-src 'self'; \
-script-src 'self' 'unsafe-inline'; worker-src 'self'; \
+script-src 'self'; worker-src 'self'; \
 style-src 'self' 'unsafe-inline'; \
 img-src 'self' data: https://tiles.openfreemap.org; font-src 'self'; \
 connect-src 'self' https://tiles.openfreemap.org; base-uri 'none'; \
@@ -635,6 +636,28 @@ mod tests {
         assert!(root.join("vendor/pmtiles.js").is_file());
     }
 
+    #[test]
+    fn map_page_scripts_are_external_under_a_strict_script_src() {
+        // An inline <script> would need 'unsafe-inline' in script-src, which
+        // the page CSP no longer allows. Every script tag must load a file.
+        let html = include_str!("../web/map/index.html");
+        let mut rest = html;
+        while let Some(start) = rest.find("<script") {
+            let tail = &rest[start..];
+            let end = tail.find('>').expect("script tag closes");
+            let open_tag = &tail[..=end];
+            assert!(open_tag.contains(" src="), "inline script: {open_tag}");
+            rest = &tail[end..];
+        }
+        let script_src = super::MAP_PAGE_CSP
+            .split(';')
+            .map(str::trim)
+            .find(|d| d.starts_with("script-src"))
+            .expect("CSP has script-src");
+        assert!(!script_src.contains("unsafe-inline"), "{script_src}");
+        assert!(!script_src.contains("unsafe-eval"), "{script_src}");
+    }
+
     #[tokio::test]
     async fn serves_the_map_page_with_attribution_and_mime_types() {
         let server = MapServer::start(repo_web_root()).expect("server");
@@ -658,7 +681,9 @@ mod tests {
         assert!(body.contains("OpenStreetMap contributors"));
         assert!(body.contains("ODbL 1.0"));
         assert!(body.contains("route-panel"));
-        assert!(body.contains("../app/route-ui.js"));
+        // The page controller is an external module; check the link and the file.
+        assert!(body.contains("./map-page.js"));
+        assert!(include_str!("../web/map/map-page.js").contains("../app/route-ui.js"));
         assert!(body.contains("../app/route.css"));
 
         for (path, mime) in [

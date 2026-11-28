@@ -96,7 +96,10 @@ pub async fn create_user(
     {
         let store = state.store.lock().unwrap();
         if store.find_user_by_email(&email).is_some() {
-            return error_envelope("VALIDATION_FAILED", "email already registered");
+            return error_envelope(
+                "VALIDATION_FAILED",
+                "That email can't be used. Choose another.",
+            );
         }
     }
     let role: String = body

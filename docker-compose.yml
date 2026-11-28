@@ -180,6 +180,8 @@ services:
       BIND_ADDR: 0.0.0.0:8003
       INTERNAL_PORT: "8003"
       DATABASE_URL: postgresql://pinpoint_locations:${LOCATIONS_DB_PWD:?Set LOCATIONS_DB_PWD in .env}@db:5432/pinpoint
+      PHOTO_NOTE_MAX_COUNT: ${PHOTO_NOTE_MAX_COUNT:-200}
+      PHOTO_NOTE_MAX_MB: ${PHOTO_NOTE_MAX_MB:-500}
     depends_on:
       db:
         condition: service_healthy

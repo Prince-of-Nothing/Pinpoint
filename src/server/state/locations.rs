@@ -310,6 +310,31 @@ impl AppState {
 
     /// Insert a private note and return the durable id (the in-memory id when
     /// no database is configured).
+    /// Photo notes an account already stores: `(count, stored bytes)`.
+    /// `None` when the database cannot answer, so the caller can fail closed.
+    pub async fn photo_note_usage(&self, user_id: i64) -> Option<(usize, usize)> {
+        let Some(pool) = &self.pg else {
+            let store = self.store.lock().unwrap();
+            let usage = store
+                .place_notes
+                .iter()
+                .filter(|note| note.user_id == user_id)
+                .filter_map(|note| note.photo.as_deref())
+                .fold((0usize, 0usize), |(count, bytes), photo| {
+                    (count + 1, bytes + photo.len())
+                });
+            return Some(usage);
+        };
+        let row: (i64, i64) = sqlx::query_as(
+            "SELECT COUNT(photo), COALESCE(SUM(octet_length(photo)), 0)::bigint FROM pinpoint_place_notes WHERE user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_one(pool)
+        .await
+        .ok()?;
+        Some((row.0 as usize, row.1 as usize))
+    }
+
     pub async fn sql_insert_note(&self, note: &PlaceNote) -> Option<i64> {
         let Some(pool) = &self.pg else {
             return Some(note.id);

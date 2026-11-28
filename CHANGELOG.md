@@ -13,8 +13,14 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Security
 - [SECURITY] Map server: the map page gets a random per-launch token in its URL fragment, and the loopback server refuses requests with a foreign `Origin` or an unexpected `Host`, and any state-changing request without the token. A web page or another local process can no longer start offline downloads or deletes.
+- [SECURITY] Database grants: the diag, locations and messages roles read only the non-credential columns of `pinpoint_users`, and the grants file now includes the place-note table the locations and users roles need. Existing deployments re-run `db/02-grants.sql`, which revokes the old table-level grant.
+### Fixed
+- [FIX] Native phone: Sign out is no longer in every header. It sits in the More menu behind the avatar, in the danger colour, away from the tiles.
+- [FIX] Native phone: screens other than the map keep a 16 pt side margin, so headings and cards share one left edge instead of touching the screen edge.
+- [FIX] Native emergency: the Send emergency alert label is dark ink on the danger colour, so it passes contrast (about 6.8:1, was about 2.5:1 with white text).
 ### Removed
 - [INFRA] Config: `.env.example` no longer lists `SECRET_KEY` and `JWT_SECRET`. Nothing read them, so setting them did nothing.
+- [FIX] Location: removed the client-side location encryption that produced a ciphertext nothing read (`src/security/e2e.rs`, `last_e2e_location_ciphertext`). Locations are sent to the server as before, and the docs now say they are not end-to-end encrypted.
 
 ## [3.0.1] - 2026-11-27
 ### Security
@@ -123,10 +129,7 @@ The per-item flagged list for this release is in
 - [DOCS] Release evidence: v3.0.0's Linux/macOS bundles are recorded as launch-tested (Xvfb screenshot, `Pinpoint.app` opened) and were re-uploaded from the passing dry run.
 
 ### Fixed
-- [FIX] Native phone: Sign out is no longer in every header. It sits in the More menu behind the avatar, in the danger colour, away from the tiles.
-- [FIX] Native phone: screens other than the map keep a 16 pt side margin, so headings and cards share one left edge instead of touching the screen edge.
 - [FIX] Native emergency: sending an alert now needs a second tap to confirm, so one accidental tap no longer notifies every friend.
-- [FIX] Native emergency: the Send emergency alert label is dark ink on the danger colour, so it passes contrast (about 6.8:1, was about 2.5:1 with white text).
 - [FIX] Native phone map: restore the category chip list that a merge dropped, so `main` compiles again, and put the map button doc back on its function.
 - [FIX] Deploy: the gateway publishes only on 127.0.0.1, public HTTPS is an opt-in `caddy` profile (`docker compose --profile public up -d`, set `PINPOINT_DOMAIN`), and the gateway trusts forwarding headers only from that proxy, so cookies get `Secure` and rate limits key on real visitors.
 - [FIX] Friends: requests are sent by username only. The server no longer accepts an email address as a friend key, and an accepted friend's card shows the real name and handle, never the email.
@@ -135,7 +138,6 @@ The per-item flagged list for this release is in
 - [SECURITY] Auth: wrong TOTP codes count toward the 15-minute lockout, and a correct password no longer resets the failure counter before the TOTP step.
 - [SECURITY] Rate limits key on the socket address; `X-Forwarded-For` is honored only when `TRUST_PROXY=1`, which compose sets for the gateway-facing services.
 - [SECURITY] Diagnostics: the sequence name is bound as a query parameter instead of being formatted into SQL.
-- [SECURITY] Database grants: the diag, locations and messages roles read only the non-credential columns of `pinpoint_users`, and the grants file now includes the place-note table the locations and users roles need. Existing deployments re-run `db/02-grants.sql`, which revokes the old table-level grant.
 - [FIX] Goal queue: a claimed prompt's deletion must land in its PR; `done` only clears the local claim and refuses while the prompt is still pending.
 - [FIX] Build: `src/server/web_handlers.rs` and `tests/router_probe.rs` no longer fail to parse (a missing brace and a merged test body from #607), and the lat/lon range checks and two test-only lints pass `clippy -D warnings` on current stable, so CI builds again.
 - [FIX] Native share: test the SaveShare payload fields; Save and Stop build the same request from the sheet.

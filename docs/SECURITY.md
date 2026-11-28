@@ -100,9 +100,9 @@ project without a paid bug-bounty; credit in the thesis acknowledgments is offer
   (`docs/security/session-management.md` §10).
 - No OIDC/PKCE **login wiring** yet (the `security/oauth.rs` primitives exist);
   passkeys and magic links are pending.
-- E2E location encryption and OS-keychain key storage are implemented
-  (`src/security/e2e.rs`, `src/security/keychain.rs`); bookmark encryption
-  wiring is the remaining piece.
+- Location data is not end-to-end encrypted. OS-keychain key storage is
+  implemented (`src/security/keychain.rs`); bookmark encryption wiring is the
+  remaining piece.
 - Users, friendships, locations, messages, sessions, diagnostics and the admin
   audit log persist through PostgreSQL when `DATABASE_URL` is set; without it
   the combined server keeps the in-memory demo store.

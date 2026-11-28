@@ -127,9 +127,6 @@ pub struct PinpointApp {
     rate_limiter: Arc<Mutex<RateLimiter>>,
     audit_logger: Arc<AuditLogger>,
     key_manager: Arc<KeyManager>,
-    /// Per-user E2E location encryption key (`e2e$<salt>$<iters>$<key>`),
-    /// derived on login/register and persisted in the OS keychain.
-    e2e_location_key: Arc<Mutex<Option<String>>>,
     /// Per-account message identity (X25519 + Ed25519). The keychain entry is
     /// namespaced by user id so two accounts on one device never share keys.
     message_identity: Arc<Mutex<Option<(i64, MessageIdentity)>>>,
@@ -203,10 +200,6 @@ impl PinpointApp {
         if key_manager.load_or_generate().is_none() {
             let _ = key_manager.generate_key();
         }
-        let persisted_e2e_key = key_manager
-            .load_secret("e2e_location_key")
-            .and_then(|b| String::from_utf8(b).ok());
-
         Self {
             data: Arc::new(Mutex::new(data)),
             backend,
@@ -225,7 +218,6 @@ impl PinpointApp {
             rate_limiter: Arc::new(Mutex::new(RateLimiter::with_defaults())),
             audit_logger: Arc::new(AuditLogger::with_console()),
             key_manager: Arc::new(key_manager),
-            e2e_location_key: Arc::new(Mutex::new(persisted_e2e_key)),
             message_identity: Arc::new(Mutex::new(None)),
             message_key_published: Arc::new(AtomicBool::new(false)),
             auto_refresh_stop: Arc::new(AtomicBool::new(false)),
@@ -300,8 +292,6 @@ impl PinpointApp {
     /// backends so a cookie or key from one server is never reused on another.
     pub fn forget_local_identity(&self) {
         self.clear_persisted_session();
-        *self.e2e_location_key.lock().unwrap() = None;
-        self.key_manager.delete_secret("e2e_location_key");
         self.clear_message_session(true);
     }
 
@@ -458,33 +448,6 @@ impl PinpointApp {
 
     pub fn key_manager(&self) -> Arc<KeyManager> {
         Arc::clone(&self.key_manager)
-    }
-
-    /// Returns the active E2E location encryption key (`e2e$<salt>$<iters>$<key>`), if any.
-    pub fn e2e_location_key(&self) -> Option<String> {
-        self.e2e_location_key.lock().unwrap().clone()
-    }
-
-    /// Derive a per-user E2E location key from `password`, store it in memory,
-    /// and persist it in the OS/file keychain via `KeyManager`.
-    pub fn activate_e2e_location_key(&self, password: &str) -> String {
-        let key = crate::security::e2e::derive_location_key(password);
-        self.key_manager
-            .persist_secret("e2e_location_key", key.as_bytes());
-        *self.e2e_location_key.lock().unwrap() = Some(key.clone());
-        key
-    }
-
-    /// Encrypt `(lat, lon, accuracy)` with the active E2E location key.
-    pub fn encrypt_my_location(&self, lat: f64, lon: f64, accuracy: f64) -> Option<String> {
-        let key = self.e2e_location_key()?;
-        crate::security::e2e::encrypt_location(&key, lat, lon, accuracy)
-    }
-
-    /// Decrypt an E2E location payload using the active E2E location key.
-    pub fn decrypt_location_payload(&self, ciphertext: &str) -> Option<(f64, f64, f64)> {
-        let key = self.e2e_location_key()?;
-        crate::security::e2e::decrypt_location(&key, ciphertext)
     }
 
     /// Load (or generate) the current account's message identity. The keychain
@@ -976,7 +939,6 @@ impl PinpointApp {
             Ok(user) => {
                 self.audit_logger
                     .log_event("auth", "login", Some(&email), "success");
-                self.activate_e2e_location_key(&password);
                 self.set_offline_mode(false);
                 self.apply_signed_in(user);
                 if self.current_screen() == CurrentScreen::Map {
@@ -1020,7 +982,6 @@ impl PinpointApp {
             Ok(user) => {
                 self.audit_logger
                     .log_event("auth", "register", Some(&email), "success");
-                self.activate_e2e_location_key(&password);
                 self.set_offline_mode(false);
                 self.apply_signed_in(user);
                 if self.current_screen() == CurrentScreen::Map {
@@ -1069,8 +1030,6 @@ impl PinpointApp {
     /// Drops private local state without a server round trip; used by sign-out
     /// and by a session the server has already forgotten.
     fn end_local_session(&self) {
-        *self.e2e_location_key.lock().unwrap() = None;
-        self.key_manager.delete_secret("e2e_location_key");
         self.clear_message_session(false);
         self.clear_persisted_session();
         let fresh = Self::fresh_data();
@@ -1223,8 +1182,6 @@ impl PinpointApp {
         self.backend
             .delete_my_account(&confirm, current_password.as_deref())
             .await?;
-        *self.e2e_location_key.lock().unwrap() = None;
-        self.key_manager.delete_secret("e2e_location_key");
         self.clear_message_session(true);
         self.clear_persisted_session();
         {
@@ -1645,14 +1602,6 @@ impl PinpointApp {
         {
             self.set_error(Some("Rate limited — try again shortly.".to_string()));
             return Err(anyhow::anyhow!("Rate limited — try again shortly."));
-        }
-        // Produce client-side AES-256-GCM E2E ciphertext before publishing
-        // whenever an E2E location key is active (derived at login/register
-        // or restored from the OS keychain).
-        if let Some(ciphertext) = self.encrypt_my_location(lat, lon, accuracy) {
-            self.data.lock().unwrap().last_e2e_location_ciphertext = Some(ciphertext);
-            self.audit_logger
-                .log_event("location", "e2e_encrypt", None, "success");
         }
         let result = self.backend.publish_location(lat, lon, accuracy).await;
         match result {

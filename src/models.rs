@@ -529,8 +529,6 @@ pub struct AppData {
     /// Accumulated pinch zoom (natural log of the gesture factor) so a
     /// multi-finger pinch steps through zoom levels proportionally.
     pub map_pinch_accum: f32,
-    /// Most recent E2E-encrypted location payload produced on this device.
-    pub last_e2e_location_ciphertext: Option<String>,
     /// Resolved kiosk/share-link view model (Kiosk screen).
     pub kiosk_resolved: Option<crate::webapp::kiosk::KioskShareView>,
     /// Map raster style: false = clean light OSM (Organic/Magic-Earth-like),

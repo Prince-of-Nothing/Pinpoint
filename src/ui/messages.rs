@@ -198,7 +198,9 @@ impl PinpointAppUI {
                             ui.label(RichText::new("Verified").size(12.0).color(theme::SUCCESS));
                         }
                         SafetyState::Changed => {
-                            ui.label(RichText::new("Changed").size(12.0).color(theme::ACCENT));
+                            // A changed key is a warning, so it reads in the danger colour
+                            // beside the header, not only inside the info window.
+                            ui.label(RichText::new("Key changed").size(12.0).color(theme::DANGER));
                         }
                         SafetyState::Unverified => {}
                     }

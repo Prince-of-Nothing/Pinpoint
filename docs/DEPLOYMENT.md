@@ -45,6 +45,7 @@ curl -fsS http://127.0.0.1:8000/health
 - Services: `auth` (:8001), `users` (:8002), `locations` (:8003), `map` (:8004), `messages` (:8007, via the gateway), `diag` (:8005), `admin` (:8006), `db` (Postgres 16) and `db-backup`.
 - Each app service runs two replicas by default; the gateway retries another healthy replica.
 - `diag` and `admin` publish their own ports for the dedicated consoles; the other services stay on the internal network.
+- The gateway answers `/api/v1/admin/` only from the host and the Docker network (`allow`/`deny` in `docker/nginx-gateway.conf`). To administer from elsewhere, use an SSH tunnel to the host.
 - First boot: wait until the services have created their tables, then apply the least-privilege grants and the cross-domain foreign keys as the superuser:
 
 ```bash

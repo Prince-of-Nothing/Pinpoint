@@ -13,13 +13,13 @@ The per-item flagged list for this release is in
 ## [Unreleased]
 ### Added
 - [INFRA] Release: a tag builds every platform. Android AAB (Play upload) beside the APK; iOS unsigned IPA on a macOS runner; Windows MSI installer (WiX via cargo-packager), installed, run and removed in CI; macOS DMG, ad-hoc signed; Linux `.deb` and AppImage (appimagetool pinned by SHA-256). Signing still needs the credentials listed in `packaging/SIGNING.md`.
-- [INFRA] Release: a tag builds every platform. Android AAB (Play upload) beside the APK; iOS unsigned IPA on a macOS runner; Windows MSI installer (WiX via cargo-packager), installed, run and removed in CI; macOS DMG, ad-hoc signed; Linux `.deb` and AppImage (appimagetool pinned by SHA-256). Signing still needs the credentials listed in `packaging/SIGNING.md`.
 - [DOCS] Security: `docs/security/keychain-master-key-plan.md` plans moving the fallback keychain master key out of the app-data folder (Android Keystore, DPAPI, passphrase). Plan only.
 - [DOCS] Performance: `docs/performance/db-reload-plan.md` plans how to stop reloading the whole database on every API request and how to narrow the global store lock. Plan only; nothing is implemented yet.
 - [FEATURE] Photo notes: each account can store 200 photos and 500 MB by default (`PHOTO_NOTE_MAX_COUNT`, `PHOTO_NOTE_MAX_MB`). A note that would pass either limit is refused with 507 `PHOTO_QUOTA_EXCEEDED`.
 
 ### Security
 - [SECURITY] Compose: Postgres is no longer published on a host port by default. `docker-compose.dev-db.yml` opts native development back in, on loopback only.
+- [SECURITY] Gateway: every location sends `Strict-Transport-Security`. nginx drops server-level `add_header` lines in a location that sets its own, so the HTTPS config never sent HSTS on proxied responses.
 - [SECURITY] Compose: diagnostics and the admin API no longer publish host ports on 8005 and 8006. Both are reached through the gateway, and `tests/compose_ports.rs` fails if any service other than the gateway or Caddy publishes a port.
 - [SECURITY] Messages: a changed safety number shows `Key changed` in the danger colour beside the chat header, not only inside the safety-number window.
 - [SECURITY] Sessions: the idle timeout defaults to 2 hours instead of 12. `PINPOINT_SESSION_IDLE_MINUTES` still overrides it, and 30 minutes is the recommended setting for a public host.

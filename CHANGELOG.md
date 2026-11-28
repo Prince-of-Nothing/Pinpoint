@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Security
+- [SECURITY] Private notes: a note is refused with an error instead of being saved in plaintext when its encryption fails.
 - [SECURITY] Map server: the map page gets a random per-launch token in its URL fragment, and the loopback server refuses requests with a foreign `Origin` or an unexpected `Host`, and any state-changing request without the token. A web page or another local process can no longer start offline downloads or deletes.
 - [SECURITY] Database grants: the diag, locations and messages roles read only the non-credential columns of `pinpoint_users`, and the grants file now includes the place-note table the locations and users roles need. Existing deployments re-run `db/02-grants.sql`, which revokes the old table-level grant.
 ### Fixed

@@ -241,28 +241,29 @@ fn check_data_key(key: Option<&str>) -> Result<(), String> {
 const NOTE_CIPHER_PREFIX: &str = "enc:v1:";
 
 impl AppState {
-    /// Encrypt one private-note field. A crypto error stores the plaintext so
-    /// the note is never lost; the key is validated at startup, so this is
-    /// practically unreachable.
-    pub fn encrypt_note_text(&self, plaintext: &str) -> String {
+    /// Encrypt one private-note field. Without a configured key (in-memory
+    /// mode only; Postgres requires a key) the value is returned unchanged.
+    /// A crypto failure is an error: a private field is never written in
+    /// plaintext, so the caller must refuse the save.
+    pub fn encrypt_note(&self, plaintext: &str) -> Result<String, String> {
         let Some(cipher) = &self.data_cipher else {
-            return plaintext.to_string();
+            return Ok(plaintext.to_string());
         };
-        match cipher.encrypt_string(plaintext) {
-            Ok(ciphertext) => format!("{NOTE_CIPHER_PREFIX}{ciphertext}"),
-            Err(_) => {
-                tracing::warn!("note encryption failed; storing the field as plaintext");
-                plaintext.to_string()
-            }
-        }
+        cipher
+            .encrypt_string(plaintext)
+            .map(|ciphertext| format!("{NOTE_CIPHER_PREFIX}{ciphertext}"))
+            .map_err(|error| {
+                tracing::error!("note encryption failed; refusing to store the field");
+                format!("note encryption failed: {error}")
+            })
     }
 
     /// Stored form of one private-note field: encrypted unless it already is.
-    pub fn note_field_at_rest(&self, stored: &str) -> String {
+    pub fn note_field_at_rest(&self, stored: &str) -> Result<String, String> {
         if stored.starts_with(NOTE_CIPHER_PREFIX) {
-            stored.to_string()
+            Ok(stored.to_string())
         } else {
-            self.encrypt_note_text(stored)
+            self.encrypt_note(stored)
         }
     }
 
@@ -287,9 +288,27 @@ impl AppState {
         };
         let mut encrypted = 0usize;
         for (id, label, message, photo) in rows {
-            let label_at_rest = self.note_field_at_rest(&label);
-            let message_at_rest = self.note_field_at_rest(&message);
-            let photo_at_rest = photo.as_deref().map(|p| self.note_field_at_rest(p));
+            // A row that cannot be encrypted stays as it is and is retried on
+            // the next boot; reads still accept legacy plaintext.
+            let (Ok(label_at_rest), Ok(message_at_rest)) = (
+                self.note_field_at_rest(&label),
+                self.note_field_at_rest(&message),
+            ) else {
+                eprintln!(
+                    "warning: could not encrypt place note {id}; leaving it for the next boot"
+                );
+                continue;
+            };
+            let photo_at_rest = match photo.as_deref().map(|p| self.note_field_at_rest(p)) {
+                Some(Ok(value)) => Some(value),
+                Some(Err(_)) => {
+                    eprintln!(
+                        "warning: could not encrypt place note {id}; leaving it for the next boot"
+                    );
+                    continue;
+                }
+                None => None,
+            };
             if label_at_rest == label && message_at_rest == message && photo_at_rest == photo {
                 continue;
             }
@@ -725,13 +744,21 @@ mod notes_at_rest_tests {
     #[test]
     fn legacy_plaintext_note_fields_are_encrypted_exactly_once() {
         let state = encrypted_state();
-        let once = state.note_field_at_rest("Home");
+        let once = state.note_field_at_rest("Home").unwrap();
         assert!(once.starts_with(NOTE_CIPHER_PREFIX));
         assert_eq!(state.decrypt_note_text(&once), "Home");
         assert_eq!(
-            state.note_field_at_rest(&once),
+            state.note_field_at_rest(&once).unwrap(),
             once,
             "encrypted fields are left alone"
         );
+    }
+
+    #[test]
+    fn a_note_field_is_never_stored_as_plaintext_when_a_key_is_configured() {
+        let state = encrypted_state();
+        let stored = state.encrypt_note("Private").unwrap();
+        assert!(stored.starts_with(NOTE_CIPHER_PREFIX));
+        assert!(!stored.contains("Private"));
     }
 }

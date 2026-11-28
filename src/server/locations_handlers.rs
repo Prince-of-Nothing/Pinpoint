@@ -542,14 +542,9 @@ pub async fn create_note(
     };
     // Private fields are encrypted before they reach Postgres or the store;
     // the response keeps the plaintext the client just sent.
-    let stored = PlaceNote {
-        label: state.encrypt_note_text(&plaintext.label),
-        message: state.encrypt_note_text(&plaintext.message),
-        photo: plaintext
-            .photo
-            .as_deref()
-            .map(|photo| state.encrypt_note_text(photo)),
-        ..plaintext.clone()
+    let stored = match encrypt_note_fields(&state, &plaintext) {
+        Ok(stored) => stored,
+        Err(_) => return error_envelope("NOTE_SAVE_FAILED", "Could not save the note."),
     };
     let Some(id) = state.sql_insert_note(&stored).await else {
         return error_envelope("NOTE_SAVE_FAILED", "Could not save the note.");
@@ -560,6 +555,21 @@ pub async fn create_note(
         store.place_notes.push(PlaceNote { id, ..stored });
     }
     (StatusCode::CREATED, Json(saved)).into_response()
+}
+
+/// Encrypt the private fields of a note, or fail as a whole: a note is never
+/// saved with one of its fields in plaintext.
+fn encrypt_note_fields(state: &AppState, note: &PlaceNote) -> Result<PlaceNote, String> {
+    Ok(PlaceNote {
+        label: state.encrypt_note(&note.label)?,
+        message: state.encrypt_note(&note.message)?,
+        photo: note
+            .photo
+            .as_deref()
+            .map(|photo| state.encrypt_note(photo))
+            .transpose()?,
+        ..note.clone()
+    })
 }
 
 /// `GET /locations/notes` - the owner's private notes only.

@@ -11,21 +11,13 @@ The per-item flagged list for this release is in
 [`RELEASE_NOTES.md`](./RELEASE_NOTES.md).
 
 ## [Unreleased]
-### Security
-- [SECURITY] Private notes: a note is refused with an error instead of being saved in plaintext when its encryption fails.
-- [SECURITY] Map server: the map page gets a random per-launch token in its URL fragment, and the loopback server refuses requests with a foreign `Origin` or an unexpected `Host`, and any state-changing request without the token. A web page or another local process can no longer start offline downloads or deletes.
-- [SECURITY] Database grants: the diag, locations and messages roles read only the non-credential columns of `pinpoint_users`, and the grants file now includes the place-note table the locations and users roles need. Existing deployments re-run `db/02-grants.sql`, which revokes the old table-level grant.
-### Fixed
-- [FIX] Native phone: Sign out is no longer in every header. It sits in the More menu behind the avatar, in the danger colour, away from the tiles.
-- [FIX] Native phone: screens other than the map keep a 16 pt side margin, so headings and cards share one left edge instead of touching the screen edge.
-- [FIX] Native emergency: the Send emergency alert label is dark ink on the danger colour, so it passes contrast (about 6.8:1, was about 2.5:1 with white text).
-### Removed
-- [INFRA] Config: `.env.example` no longer lists `SECRET_KEY` and `JWT_SECRET`. Nothing read them, so setting them did nothing.
-- [FIX] Location: removed the client-side location encryption that produced a ciphertext nothing read (`src/security/e2e.rs`, `last_e2e_location_ciphertext`). Locations are sent to the server as before, and the docs now say they are not end-to-end encrypted.
 
 ## [3.0.1] - 2026-11-27
 ### Security
 - [SECURITY] Android: `pinpoint://publish` (and its aliases) opens the map and no longer publishes your location on launch, so another app cannot publish it without a tap.
+- [SECURITY] Map server: the map page gets a random per-launch token in its URL fragment, and the loopback server refuses requests with a foreign `Origin` or an unexpected `Host`, and any state-changing request without the token. A web page or another local process can no longer start offline downloads or deletes.
+- [SECURITY] Database grants: the diag, locations and messages roles read only the non-credential columns of `pinpoint_users`, and the grants file now includes the place-note table the locations and users roles need. Existing deployments re-run `db/02-grants.sql`, which revokes the old table-level grant.
+- [SECURITY] Private notes: a note is refused with an error instead of being saved in plaintext when its encryption fails.
 
 ### Added
 - [INFRA] Release: the tag workflow writes `SHA256SUMS.txt` with the SHA-256 of every asset, checks it with `sha256sum -c`, and attaches it to the draft release. A manual run keeps it as the `release-checksums` artifact and fails if an expected asset is missing.
@@ -161,6 +153,12 @@ The per-item flagged list for this release is in
 - [FIX] Native desktop: the drawer's Publish shortcut now opens the Map screen instead of setting the mobile-only publish-sheet flag, which did nothing on wide windows.
 - [FIX] Web: the privacy page now names the current 3.0.0 release instead of 2.6.1; `scripts/check-release.ps1` fails if the version drifts again.
 - [FIX] Release: rebuilt the v3.0.0 Windows server ZIP from current `main`, so its embedded web client serves `/privacy` with `3.0.0`; asset is now 5,179,113 B.
+- [FIX] Native phone: Sign out is no longer in every header. It sits in the More menu behind the avatar, in the danger colour, away from the tiles.
+- [FIX] Native phone: screens other than the map keep a 16 pt side margin, so headings and cards share one left edge instead of touching the screen edge.
+- [FIX] Native emergency: the Send emergency alert label is dark ink on the danger colour, so it passes contrast (about 6.8:1, was about 2.5:1 with white text).
+### Removed
+- [INFRA] Config: `.env.example` no longer lists `SECRET_KEY` and `JWT_SECRET`. Nothing read them, so setting them did nothing.
+- [FIX] Location: removed the client-side location encryption that produced a ciphertext nothing read (`src/security/e2e.rs`, `last_e2e_location_ciphertext`). Locations are sent to the server as before, and the docs now say they are not end-to-end encrypted.
 
 ## [3.0.0] - 2026-11-25
 ### Changed

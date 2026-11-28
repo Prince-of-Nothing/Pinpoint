@@ -12,6 +12,7 @@ The per-item flagged list for this release is in
 
 ## [Unreleased]
 ### Security
+- [SECURITY] Lookup: `/api/v1/users/lookup` is throttled per client to 60 requests a minute.
 - [SECURITY] Gateway: `/api/v1/admin/` answers only from the host and the Docker network; internet clients get 403.
 
 ## [3.0.1] - 2026-11-27

@@ -63,8 +63,8 @@ services:
       start_period: 10s
     networks:
       - pinpoint-net
-    ports:
-      - "127.0.0.1:5432:5432"
+    # No host port: Postgres stays on the internal network. Native development
+    # opts in with docker-compose.dev-db.yml (loopback only).
 
   ###########################################################################
   # db-backup — periodic pg_dump (point-in-time recovery)

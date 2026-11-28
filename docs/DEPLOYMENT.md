@@ -28,6 +28,7 @@ export DATABASE_URL=postgresql://pinpoint:$POSTGRES_PASSWORD@localhost:5432/pinp
 cargo run --bin pinpoint-server
 ```
 
+- With Compose, Postgres has no host port by default. To run the server natively against the Compose database, start it with `docker compose -f docker-compose.yml -f docker-compose.dev-db.yml up -d db`, which publishes it on `127.0.0.1:5432` only.
 - Migrations v1–15 are applied at startup.
 - Sessions become PostgreSQL-authoritative: every authenticated `/api/` request reads the session row, so a revocation on another replica takes effect on the next request.
 - Session lifetime: `PINPOINT_SESSION_IDLE_MINUTES` (default 120 = 2 h) and `PINPOINT_SESSION_MAX_DAYS` (default 30).

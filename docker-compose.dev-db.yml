@@ -1,0 +1,13 @@
+# docker-compose.dev-db.yml — opt-in host access to Postgres for native development.
+#
+# The default stack keeps Postgres on the internal network. A developer who runs
+# `cargo run` against localhost:5432 adds this file, which publishes the database
+# on loopback only:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev-db.yml up -d db
+#
+# Do not use this file on a host that other people can reach.
+services:
+  db:
+    ports:
+      - "127.0.0.1:5432:5432"

@@ -1,8 +1,8 @@
 # Pinpoint — E2E Encryption + MFA Design Note
 
-**Status:** MFA implemented (TOTP + endpoints + unit tests). E2E location
-encryption implemented (`src/security/e2e.rs`) with OS-keychain key storage
-(`src/security/keychain.rs`) and publish wiring (`src/app.rs`); bookmark
+**Status:** MFA implemented (TOTP + endpoints + unit tests). Location
+end-to-end encryption is not implemented: the unused client-side location cipher was
+removed. OS-keychain key storage is implemented (`src/security/keychain.rs`); bookmark
 encryption wiring is the remaining piece. See
 [`auth-mechanisms.md`](auth-mechanisms.md) and
 [`session-management.md`](session-management.md) for the current auth/session
@@ -25,9 +25,8 @@ Goal: server stores only ciphertext; friends decrypt with per-user keys.
   and `PinpointApp` produces the ciphertext on publish
   (`encrypt_my_location`) while the key is persisted in the OS keychain.
 - **Current limitation:** the `/locations/me` contract still carries plaintext
-  coordinates for server-side precision enforcement; the E2E ciphertext is
-  produced and retained client-side (`last_e2e_location_ciphertext`). Moving
-  the ciphertext onto the wire requires the precision-cap design below.
+  coordinates for server-side precision enforcement; no location ciphertext is
+  produced. Adding one requires the precision-cap design below.
 - **Target design:** per-friendship key wrapping (X25519 ECDH), server stores
   an opaque blob + `precision_level` outside the ciphertext, client-side
   coarsening + a server-enforced max-precision cap agreed at share creation

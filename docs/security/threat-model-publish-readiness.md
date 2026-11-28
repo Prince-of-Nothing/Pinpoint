@@ -42,7 +42,7 @@ High = block publish. Medium = fix before launch. Low = track.
 | F-14 | Low | `SECRET_KEY` and `JWT_SECRET` in `.env.example` are not read anywhere in `src`, `db` or `docker` | `.env.example` | Remove them, so operators do not set secrets that do nothing |
 | F-15 | Low | The map page has an inline script, which blocks a strict CSP. The innerHTML sites sampled escape their values, but the review was partial | `web/map/index.html`; `web/app/*.js` | Move the script to a file. Add a strict CSP. Finish the DOM-sink review |
 | F-16 | Low | `web/map/fixtures/balti-search.sqlite` is tracked in git. `audit.toml` ignores 9 advisories | repository | Confirm the fixture holds no sensitive data. Re-check the advisories before release |
-| F-17 | Low | `src/security/e2e.rs` describes a location key derived from the password. Verify whether it is wired in | `src/security/e2e.rs:8`, `:28` | Verify, then remove or wire up, so the docs and the code agree |
+| F-17 | Low | `src/security/e2e.rs` describes a location key derived from the password. Verify whether it is wired in | `src/security/e2e.rs:8`, `:28` | Resolved: the location cipher was never read, so it was removed and the docs now say locations are not E2E |
 
 ## Controls that hold (checked in code)
 

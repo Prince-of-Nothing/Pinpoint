@@ -85,8 +85,8 @@ fetches, and nothing else. 3D buildings use the vector tiles already loaded.
 - Demo/seed identities are fictional; never test with real user data.
 - Logs must not include location coordinates or password material.
 - **Implementation status (1.5.0):** the hosted build stores the latest
-  location server-side so it can enforce shares and precision. The per-user E2E
-  key exists on the device, but ciphertext-only delivery is not complete; the
+  location server-side so it can enforce shares and precision. Locations are not
+  encrypted end to end, and no per-user location key exists on the device. The
   public policy at `/privacy` states this. Do not describe the current build as
   E2E for server-delivered locations.
 - Any future feature that would extend collection (trails, regions, messaging) requires
@@ -99,9 +99,9 @@ short version:- **Life360-style harvesting** collects precise geolocation, drivi
   motion activity and advertising identifiers, and discloses location/movement
   data to business partners for monetisation (with opt-outs). Pinpoint collects
   none of that: no trackers, no ads, no partner sharing, no profiling.
-- **Apple's Advanced Data Protection** is the reference model for Pinpoint's
-  E2E location encryption: keys live on the device (OS keychain), the server
-  stores ciphertext only.
+- **Apple's Advanced Data Protection** is the reference model for a future
+  E2E location design: keys would live on the device (OS keychain) and the
+  server would store ciphertext only. Pinpoint does not do this yet.
 - **Organic Maps / OsmAnd** are the reference for privacy-first offline maps:
   no account, no trackers, OSM data, open source.
 - **Pinpoint's differentiator** is directional, per-recipient consent

@@ -43,6 +43,12 @@ const WRITE_LIMIT: AuthLimit = AuthLimit {
     max: 120,
     window_secs: 60,
 };
+/// Exact username lookups are a discovery path, so an account can not
+/// walk the whole handle space at network speed.
+const USER_LOOKUP_LIMIT: AuthLimit = AuthLimit {
+    max: 60,
+    window_secs: 60,
+};
 const DIAGNOSTIC_LIMIT: AuthLimit = AuthLimit {
     max: 10,
     window_secs: 3600,
@@ -78,6 +84,7 @@ pub fn auth_limit(path: &str) -> Option<AuthLimit> {
         "/api/v1/auth/register" => Some(REGISTER_LIMIT),
         "/api/v1/auth/anonymous" | "/api/v1/auth/anonymous/recover" => Some(ANONYMOUS_LIMIT),
         "/api/v1/diagnostics/report" => Some(DIAGNOSTIC_LIMIT),
+        "/api/v1/users/lookup" => Some(USER_LOOKUP_LIMIT),
         _ => None,
     }
 }
@@ -223,6 +230,7 @@ mod tests {
     #[test]
     fn diagnostics_reports_have_a_client_limit() {
         assert!(auth_limit("/api/v1/diagnostics/report").is_some());
+        assert!(auth_limit("/api/v1/users/lookup").is_some());
         assert!(auth_limit("/api/v1/locations/me").is_none());
     }
 

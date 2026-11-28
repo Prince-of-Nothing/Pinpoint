@@ -470,6 +470,46 @@ fn valid_note_photo(photo: &str) -> bool {
             || photo.starts_with("data:image/png;base64,"))
 }
 
+/// Photo storage allowed per account. `PHOTO_NOTE_MAX_COUNT` and
+/// `PHOTO_NOTE_MAX_MB` override the defaults of 200 photos and 500 MB.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PhotoQuota {
+    pub max_count: usize,
+    pub max_bytes: usize,
+}
+
+impl PhotoQuota {
+    const DEFAULT_COUNT: usize = 200;
+    const DEFAULT_MEGABYTES: usize = 500;
+
+    /// Parse the two settings. An unset or unreadable value keeps its default.
+    pub fn from_settings(count: Option<&str>, megabytes: Option<&str>) -> Self {
+        let max_count = count
+            .and_then(|value| value.trim().parse().ok())
+            .unwrap_or(Self::DEFAULT_COUNT);
+        let megabytes: usize = megabytes
+            .and_then(|value| value.trim().parse().ok())
+            .unwrap_or(Self::DEFAULT_MEGABYTES);
+        Self {
+            max_count,
+            max_bytes: megabytes.saturating_mul(1024 * 1024),
+        }
+    }
+
+    pub fn from_env() -> Self {
+        Self::from_settings(
+            std::env::var("PHOTO_NOTE_MAX_COUNT").ok().as_deref(),
+            std::env::var("PHOTO_NOTE_MAX_MB").ok().as_deref(),
+        )
+    }
+
+    /// Whether an account with `usage` = (photos, stored bytes) may store one
+    /// more photo of `bytes`.
+    pub fn admits(&self, usage: (usize, usize), bytes: usize) -> bool {
+        usage.0 < self.max_count && usage.1.saturating_add(bytes) <= self.max_bytes
+    }
+}
+
 /// `POST /locations/notes` - a private text/photo note attached to a place.
 pub async fn create_note(
     State(state): State<AppState>,
@@ -542,15 +582,25 @@ pub async fn create_note(
     };
     // Private fields are encrypted before they reach Postgres or the store;
     // the response keeps the plaintext the client just sent.
-    let stored = PlaceNote {
-        label: state.encrypt_note_text(&plaintext.label),
-        message: state.encrypt_note_text(&plaintext.message),
-        photo: plaintext
-            .photo
-            .as_deref()
-            .map(|photo| state.encrypt_note_text(photo)),
-        ..plaintext.clone()
+    let stored = match encrypt_note_fields(&state, &plaintext) {
+        Ok(stored) => stored,
+        Err(_) => return error_envelope("NOTE_SAVE_FAILED", "Could not save the note."),
     };
+    if let Some(photo) = &stored.photo {
+        let Some(usage) = state.photo_note_usage(cu.user_id).await else {
+            return error_envelope("NOTE_SAVE_FAILED", "Could not save the note.");
+        };
+        if !PhotoQuota::from_env().admits(usage, photo.len()) {
+            return (
+                StatusCode::INSUFFICIENT_STORAGE,
+                Json(json!({"error": {
+                    "code": "PHOTO_QUOTA_EXCEEDED",
+                    "message": "Photo storage is full. Delete a photo note to add another.",
+                }})),
+            )
+                .into_response();
+        }
+    }
     let Some(id) = state.sql_insert_note(&stored).await else {
         return error_envelope("NOTE_SAVE_FAILED", "Could not save the note.");
     };
@@ -560,6 +610,21 @@ pub async fn create_note(
         store.place_notes.push(PlaceNote { id, ..stored });
     }
     (StatusCode::CREATED, Json(saved)).into_response()
+}
+
+/// Encrypt the private fields of a note, or fail as a whole: a note is never
+/// saved with one of its fields in plaintext.
+fn encrypt_note_fields(state: &AppState, note: &PlaceNote) -> Result<PlaceNote, String> {
+    Ok(PlaceNote {
+        label: state.encrypt_note(&note.label)?,
+        message: state.encrypt_note(&note.message)?,
+        photo: note
+            .photo
+            .as_deref()
+            .map(|photo| state.encrypt_note(photo))
+            .transpose()?,
+        ..note.clone()
+    })
 }
 
 /// `GET /locations/notes` - the owner's private notes only.
@@ -957,4 +1022,44 @@ pub async fn resolve_emergency(
         })),
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod photo_quota_tests {
+    use super::PhotoQuota;
+
+    #[test]
+    fn defaults_are_200_photos_and_500_megabytes() {
+        let quota = PhotoQuota::from_settings(None, None);
+        assert_eq!(quota.max_count, 200);
+        assert_eq!(quota.max_bytes, 500 * 1024 * 1024);
+    }
+
+    #[test]
+    fn settings_override_the_defaults_and_bad_values_fall_back() {
+        let quota = PhotoQuota::from_settings(Some(" 5 "), Some("2"));
+        assert_eq!(quota.max_count, 5);
+        assert_eq!(quota.max_bytes, 2 * 1024 * 1024);
+        let fallback = PhotoQuota::from_settings(Some("many"), Some("-1"));
+        assert_eq!(fallback, PhotoQuota::from_settings(None, None));
+    }
+
+    #[test]
+    fn a_photo_is_refused_once_either_limit_is_reached() {
+        let quota = PhotoQuota {
+            max_count: 2,
+            max_bytes: 100,
+        };
+        assert!(quota.admits((0, 0), 100));
+        assert!(
+            !quota.admits((0, 0), 101),
+            "a photo larger than the byte budget"
+        );
+        assert!(!quota.admits((2, 0), 1), "the count is already full");
+        assert!(
+            !quota.admits((1, 60), 41),
+            "the bytes would pass the budget"
+        );
+        assert!(quota.admits((1, 60), 40));
+    }
 }

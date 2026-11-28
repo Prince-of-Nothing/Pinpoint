@@ -31,34 +31,26 @@ cargo audit
 cargo apk build --lib --target aarch64-linux-android   # Android changes
 ```
 
-## Branching and pull requests (mandatory)
+## Branching and pull requests (Beta workflow)
 
-`main` is release-ready at all times. **Never commit or push directly to `main`.**
+All work is committed directly to `Beta`. `main` is the release branch and is
+updated only by a release PR.
 
-1. Start from an up-to-date `main` and create one branch per change:
-   `feat/<slug>`, `fix/<slug>`, `docs/<slug>`, `infra/<slug>` or
-   `release/vX.Y.Z`.
-2. Commit with a type flag: `[FEATURE] area: ...`, `[FIX] ...`, `[SECURITY] ...`,
-   `[DOCS] ...`, `[INFRA] ...`, `[RELEASE] vX.Y.Z`.
-3. Push the branch, open a pull request and fill in the template. The PR title
-   uses the same type flag. Every PR must reference the issue it fixes with
-   `Closes #N` or `Refs #N`; the `PR issue link` check enforces this.
-4. Wait for CI/review, then **Squash and merge** so `main` keeps one
-   type-flagged commit per change. Delete the branch.
-5. Update local `main` and create the **next** branch from it before starting
-   the next feature.
+1. Commit each change to `Beta` with a type flag: `[FEATURE] area: ...`,
+   `[FIX] ...`, `[SECURITY] ...`, `[DOCS] ...`, `[INFRA] ...`, `[RELEASE] vX.Y.Z`.
+   Do not create per-change feature branches or open a PR per change.
+2. Run the full gate before each commit and keep `Beta` green.
+3. Keep `Beta` current with `main`: after each release, merge `main` back into
+   `Beta`.
+4. Release: open one PR from `Beta` to `main` when the release is ready. Its
+   title uses the `[RELEASE]` flag. Merge it with a merge commit, not a squash,
+   so `Beta` and `main` keep shared history, then tag `vX.Y.Z` on `main`.
 
-Multiple branches are allowed for independent work, but each must be based on
-`main`, rebaseable and independently mergeable. Do not keep stacked or
-long-lived branches; merge the base PR first. Releases branch from `main`, merge
-through a PR, and are tagged on `main` afterward.
-
-Saying "push" means push the current branch and open/update its PR — never push
-`main`.
+Saying "push" means push `Beta`. Never push `main` directly.
 
 ## Pull request checklist
 
-- [ ] Branch is based on the latest `main` and has no unrelated changes
+- [ ] Commits are on `Beta`; a release PR is `Beta` to `main` with a `[RELEASE]` title
 - [ ] PR title starts with the correct type flag
 - [ ] `cargo fmt --all -- --check` passes
 - [ ] `cargo clippy --all-targets -- -D warnings` passes
@@ -70,7 +62,7 @@ Saying "push" means push the current branch and open/update its PR — never pus
 - [ ] Docs/ADR updated in the same PR
 - [ ] No secrets, tokens, keystores or real user data
 - [ ] No `Co-authored-by:` trailers (owner-only authorship, see `AGENTS.md`)
-- [ ] CI is green; merge with **Squash and merge**, then delete the branch
+- [ ] CI is green; merge a release PR with a merge commit, not a squash
 
 ## Issue tracker
 

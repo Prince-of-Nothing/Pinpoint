@@ -92,6 +92,76 @@ fn operator_ports_are_bound_to_loopback_only() {
 }
 
 #[test]
+fn gateway_admin_route_is_limited_to_local_networks() {
+    // The admin API is role-gated, but the public gateway must still refuse it
+    // to clients outside the host and the Docker network.
+    let text = read("docker/nginx-gateway.conf");
+    let start = text
+        .find("location /api/v1/admin/ {")
+        .expect("admin location in the gateway");
+    let rest = &text[start..];
+    let block = &rest[..rest.find('}').expect("end of admin location")];
+    for allowed in ["allow 127.0.0.1;", "allow 172.16.0.0/12;"] {
+        assert!(
+            block.contains(allowed),
+            "admin route is missing `{allowed}`"
+        );
+    }
+    assert!(
+        block.contains("deny all;"),
+        "admin route must deny clients that are not allowed"
+    );
+    assert!(
+        !block.contains("allow all;") && !block.contains("0.0.0.0/0"),
+        "admin route must not be open to every client"
+    );
+}
+
+#[test]
+fn gateway_api_routes_have_an_edge_rate_limit() {
+    // Admin and diagnostics skip the app's own limiter only when reached directly,
+    // but every API location on the gateway should still carry the edge limit.
+    for file in GATEWAY_CONFS {
+        let text = read(file);
+        assert!(
+            text.contains("limit_req_zone $binary_remote_addr zone=pinpoint_api"),
+            "{file} has no edge rate-limit zone"
+        );
+        let api_locations = text
+            .lines()
+            .filter(|line| line.trim_start().starts_with("location /api/"))
+            .count();
+        let limited = text.matches("limit_req zone=pinpoint_api").count();
+        assert!(
+            api_locations > 0 && limited >= api_locations,
+            "{file}: {limited} of {api_locations} API locations are rate limited"
+        );
+    }
+}
+
+#[test]
+fn gateway_registry_does_not_list_internal_upstreams() {
+    // The registry is public. It may name the services and their paths, never the
+    // internal hosts and ports they run on.
+    for file in GATEWAY_CONFS {
+        let text = read(file);
+        let registry = text
+            .lines()
+            .find(|line| line.contains("\"gateway\":\"pinpoint-gateway\",\"services\""))
+            .unwrap_or_else(|| panic!("{file} has no registry response"));
+        assert!(
+            !registry.contains("\"upstream\""),
+            "{file}: the registry lists internal upstreams"
+        );
+    }
+}
+
+const GATEWAY_CONFS: &[&str] = &[
+    "docker/nginx-gateway.conf",
+    "docker/nginx-gateway-https.conf",
+];
+
+#[test]
 fn backups_are_encrypted_and_need_a_passphrase() {
     let text = read("docker-compose.yml");
     assert!(
@@ -105,5 +175,61 @@ fn backups_are_encrypted_and_need_a_passphrase() {
     assert!(
         !text.contains("/backups/pinpoint-$$ts.sql"),
         "db-backup must not write plaintext .sql dumps"
+    );
+}
+
+#[test]
+fn service_roles_cannot_read_credential_columns_of_users() {
+    // diag, locations and messages never check passwords or MFA, so they get only
+    // the non-credential columns of pinpoint_users, never the whole table.
+    let text = read("db/02-grants.sql");
+    assert!(
+        text.contains("REVOKE SELECT ON pinpoint_users FROM"),
+        "grants must revoke the table-level SELECT for existing deployments"
+    );
+    let secrets = [
+        "password_hash",
+        "totp_secret",
+        "recovery_code_hash",
+        "identity_subject",
+    ];
+    for role in ["pinpoint_diag", "pinpoint_locations", "pinpoint_messages"] {
+        let grants: Vec<&str> = text
+            .split(';')
+            .filter(|stmt| {
+                stmt.contains("GRANT")
+                    && stmt.contains(&format!("TO {role}"))
+                    && stmt.contains("pinpoint_users")
+            })
+            .collect();
+        assert!(
+            !grants.is_empty(),
+            "{role} should get a column-level grant on pinpoint_users"
+        );
+        for stmt in grants {
+            assert!(
+                stmt.contains("SELECT ("),
+                "{role} must be granted named columns only: {stmt}"
+            );
+            for secret in secrets {
+                assert!(
+                    !stmt.contains(secret),
+                    "{role} is granted a credential column"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn place_notes_are_granted_to_the_services_that_use_them() {
+    let text = read("db/02-grants.sql");
+    assert!(
+        text.contains("GRANT ALL ON pinpoint_place_notes TO pinpoint_locations"),
+        "the locations role needs its place-note table"
+    );
+    assert!(
+        text.contains("GRANT DELETE ON pinpoint_place_notes TO pinpoint_users"),
+        "account deletion removes place notes through the users role"
     );
 }

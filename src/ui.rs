@@ -53,6 +53,17 @@ fn is_wide_width(width: f32) -> bool {
     width >= WIDE_LAYOUT_MIN_WIDTH
 }
 
+/// Side margin of the central panel. Phone screens other than the map keep a
+/// 16 pt gutter, so headings and cards share one left edge. The map stays
+/// full bleed, and desktop keeps its own layout.
+fn central_margin(compact: bool, on_map: bool) -> egui::Margin {
+    if compact && !on_map {
+        egui::Margin::symmetric(16, 0)
+    } else {
+        egui::Margin::same(0)
+    }
+}
+
 fn drawer_overlays_map(width: f32) -> bool {
     width < DRAWER_OVERLAY_MAX_WIDTH
 }
@@ -1667,7 +1678,6 @@ impl PinpointAppUI {
             let mut back = false;
             let mut nav_open = self.mobile_nav_open;
             let mut sign_in = false;
-            let mut sign_out = false;
             let avatar_name = self
                 .app
                 .data()
@@ -1703,14 +1713,13 @@ impl PinpointAppUI {
                         .color(theme::TEXT),
                 );
                 ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    if !auth_screen {
-                        if signed_in {
-                            if ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
-                                sign_out = true;
-                            }
-                        } else if theme::primary_button(ui, i18n::t(lang, key::SIGN_IN)).clicked() {
-                            sign_in = true;
-                        }
+                    // Signed in, Sign out lives in the More menu behind the
+                    // avatar, not in every header.
+                    if !auth_screen
+                        && !signed_in
+                        && theme::primary_button(ui, i18n::t(lang, key::SIGN_IN)).clicked()
+                    {
+                        sign_in = true;
                     }
                 });
             });
@@ -1720,9 +1729,6 @@ impl PinpointAppUI {
             }
             if sign_in {
                 self.app.set_screen(CurrentScreen::Login);
-            }
-            if sign_out {
-                self.spawn_action(PendingAction::Logout, ctx);
             }
             self.draw_compact_status(ui, lang);
             ui.add_space(6.0);
@@ -2349,8 +2355,18 @@ impl PinpointAppUI {
                         }
                     });
                 ui.add_space(8.0);
-                if signed_in && ui.button(i18n::t(lang, key::SIGN_OUT)).clicked() {
-                    sign_out_requested = true;
+                if signed_in {
+                    // Sign out sits apart from the tools, in the danger colour,
+                    // so it is not hit by accident while reaching for a tile.
+                    let sign_out_button = egui::Button::new(
+                        RichText::new(i18n::t(lang, key::SIGN_OUT)).color(theme::DANGER),
+                    )
+                    .fill(theme::PANEL_2)
+                    .stroke(egui::Stroke::new(1.0_f32, theme::BORDER))
+                    .min_size(egui::vec2(ui.available_width(), 44.0));
+                    if ui.add(sign_out_button).clicked() {
+                        sign_out_requested = true;
+                    }
                 }
                 ui.separator();
                 ui.horizontal(|ui| {
@@ -2560,8 +2576,13 @@ impl eframe::App for PinpointAppUI {
         if self.sheet_gate_active(ctx) {
             draw_sheet_input_gate(ctx);
         }
+        let on_map = self.app.current_screen() == CurrentScreen::Map;
         let panel = if compact {
-            egui::CentralPanel::default().frame(egui::Frame::NONE.fill(theme::BG))
+            egui::CentralPanel::default().frame(
+                egui::Frame::NONE
+                    .fill(theme::BG)
+                    .inner_margin(central_margin(compact, on_map)),
+            )
         } else {
             egui::CentralPanel::default()
         };
@@ -4174,5 +4195,18 @@ mod tests {
         assert!(refresh.refresh);
         assert!(refresh.close);
         assert_eq!(refresh.screen, None);
+    }
+}
+
+#[cfg(test)]
+mod central_margin_tests {
+    use super::central_margin;
+
+    #[test]
+    fn phone_gutter_applies_to_every_screen_but_the_map() {
+        assert_eq!(central_margin(true, false).left, 16);
+        assert_eq!(central_margin(true, false).right, 16);
+        assert_eq!(central_margin(true, true).left, 0);
+        assert_eq!(central_margin(false, false).left, 0);
     }
 }

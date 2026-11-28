@@ -1,7 +1,7 @@
 //! Emergency screen
 use super::theme;
 use super::{PendingAction, PinpointAppUI};
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 
 impl PinpointAppUI {
     pub fn draw_emergency_screen(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
@@ -40,7 +40,7 @@ impl PinpointAppUI {
             let alert = egui::Button::new(
                 RichText::new("Send emergency alert")
                     .strong()
-                    .color(Color32::WHITE),
+                    .color(theme::ACCENT_INK),
             )
             .fill(theme::DANGER)
             .stroke(egui::Stroke::NONE);

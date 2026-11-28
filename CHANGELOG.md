@@ -29,6 +29,9 @@ The per-item flagged list for this release is in
 - [SECURITY] Gateway: `/api/v1/admin/` answers only from the host and the Docker network; internet clients get 403.
 - [SECURITY] Map page: its two scripts are now files (`theme-init.js`, `map-page.js`), and the page CSP allows only same-origin scripts (`script-src 'self'`), so injected inline script does not run. Inline styles stay allowed, because MapLibre sets them at runtime.
 
+### Changed
+- [FIX] Server: the per-request `CONVERGE` lines moved from stderr to debug level. Set `RUST_LOG=pinpoint=debug` to see them.
+
 ## [3.0.1] - 2026-11-27
 ### Security
 - [SECURITY] Android: `pinpoint://publish` (and its aliases) opens the map and no longer publishes your location on launch, so another app cannot publish it without a tap.

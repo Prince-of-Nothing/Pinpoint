@@ -235,14 +235,14 @@ pub async fn converge(
     next: Next,
 ) -> axum::response::Response {
     let method = req.method().clone();
-    eprintln!("CONVERGE run {} {}", method, loggable_uri(req.uri()));
+    tracing::debug!("CONVERGE run {} {}", method, loggable_uri(req.uri()));
     if needs_store_refresh(req.uri().path()) {
         state.refresh_from_db().await;
     }
     let res = next.run(req).await;
     if method != axum::http::Method::GET {
         state.persist().await;
-        eprintln!("CONVERGE persisted");
+        tracing::debug!("CONVERGE persisted");
     }
     res
 }

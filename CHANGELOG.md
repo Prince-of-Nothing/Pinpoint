@@ -15,6 +15,7 @@ The per-item flagged list for this release is in
 - [FEATURE] Photo notes: each account can store 200 photos and 500 MB by default (`PHOTO_NOTE_MAX_COUNT`, `PHOTO_NOTE_MAX_MB`). A note that would pass either limit is refused with 507 `PHOTO_QUOTA_EXCEEDED`.
 
 ### Security
+- [SECURITY] Gateway: API routes are rate limited per client address at the edge (20 requests a second, bursts of 120), and the public `/registry` no longer lists internal service hosts and ports.
 - [SECURITY] Sign-up: an email that already has an account gets the same answer as any other refused sign-up, so the response no longer confirms it is registered.
 - [SECURITY] Lookup: `/api/v1/users/lookup` is throttled per client to 60 requests a minute.
 - [SECURITY] Gateway: `/api/v1/admin/` answers only from the host and the Docker network; internet clients get 403.

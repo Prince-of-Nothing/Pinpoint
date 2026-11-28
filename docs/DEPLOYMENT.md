@@ -30,7 +30,7 @@ cargo run --bin pinpoint-server
 
 - Migrations v1–15 are applied at startup.
 - Sessions become PostgreSQL-authoritative: every authenticated `/api/` request reads the session row, so a revocation on another replica takes effect on the next request.
-- Session lifetime: `PINPOINT_SESSION_IDLE_MINUTES` (default 720 = 12 h) and `PINPOINT_SESSION_MAX_DAYS` (default 30).
+- Session lifetime: `PINPOINT_SESSION_IDLE_MINUTES` (default 120 = 2 h) and `PINPOINT_SESSION_MAX_DAYS` (default 30).
 - The private trail is pruned hourly after 7 days.
 
 ## 3. Full stack with Docker Compose
@@ -88,7 +88,7 @@ The restore script checks the `PGDMP` archive header and runs `pg_restore --clea
 
 - Use the `public` profile above (Caddy terminates TLS and the gateway trusts only its forwarding headers) and enable HSTS at the proxy. HTTPS sessions use `__Host-pinpoint_session` with `Secure`, `HttpOnly`, `SameSite=Lax`, `Path=/` and no `Domain`.
 - Set `DATABASE_URL` to a managed Postgres instance; enable backups and monitoring. The server applies migrations.
-- Set `PINPOINT_SESSION_IDLE_MINUTES=30` for a public host; the 12 h default is demo-friendly. Keep `PINPOINT_SESSION_MAX_DAYS=30`.
+- Set `PINPOINT_SESSION_IDLE_MINUTES=30` for a public host; the 2 h default suits daily use. Keep `PINPOINT_SESSION_MAX_DAYS=30`.
 - Set `PINPOINT_TILE_URL` to a self-hosted ODbL tile source. Never use `tile.openstreetmap.org`; the bundled fallback is demo-only.
 - Promote the first administrator deliberately; no demo accounts are seeded:
 

@@ -68,7 +68,7 @@ alternative in case a native client later needs offline-tolerant sessions.
 
 | Token | Lifetime | Storage | Sent as |
 |---|---|---|---|
-| Session id | sliding idle 12 h demo / 30 min prod, absolute 30 d | `HttpOnly; SameSite=Lax` cookie (`Secure` over TLS) | `session_id` cookie |
+| Session id | sliding idle 2 h default / 30 min prod, absolute 30 d | `HttpOnly; SameSite=Lax` cookie (`Secure` over TLS) | `session_id` cookie |
 | CSRF token | session lifetime | client memory (returned in `X-CSRF-Token` and the login body) | `X-CSRF-Token` header on unsafe methods |
 
 There is no access JWT, no bearer token, and no refresh token. The CSRF token
@@ -97,7 +97,7 @@ each request:
         └─ password change → DELETE all sessions for the user
 ```
 
-Timeouts: **idle 12 h demo / 30 min prod** (configurable), **absolute 30 days**
+Timeouts: **idle 2 h default / 30 min prod** (configurable), **absolute 30 days**
 (created_at floor). Every authenticated request slides `last_activity`. Expired
 rows are pruned when a new session is created; the absolute ceiling is set by
 `PINPOINT_SESSION_MAX_DAYS`.

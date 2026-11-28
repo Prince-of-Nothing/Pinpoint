@@ -448,7 +448,7 @@ This satisfies OSMF Usage Policies and prevents OSM services from becoming a loc
 - [x] No demo accounts are seeded; register real accounts and promote an admin deliberately.
 - [x] HTTPS-only cookies (`__Host-pinpoint_session`, `Secure`, HSTS) through the bundled gateway.
 - [ ] Set `DATABASE_URL` so users, friendships, locations, messages, sessions, diagnostics and the admin audit log persist.
-- [ ] Set `PINPOINT_SESSION_IDLE_MINUTES` (30 recommended in production; the 12 h demo default is too long for a public host).
+- [ ] Set `PINPOINT_SESSION_IDLE_MINUTES` (30 recommended in production; the 2 h default is still long for a public host).
 - [x] Enforce the 30-day absolute session ceiling (`PINPOINT_SESSION_MAX_DAYS`, default 30).
 - [ ] Point `PINPOINT_TILE_URL` at a self-hosted ODbL tile source (the public FOSSGIS fallback is demo-only).
 - [ ] Enable backups and log rotation for the database and gateway logs.

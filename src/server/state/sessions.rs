@@ -35,15 +35,38 @@ fn hash_session_id(raw: &str) -> String {
 }
 
 /// Idle timeout for an opaque session (sliding). `PINPOINT_SESSION_IDLE_MINUTES`
-/// overrides it; the 12 h default keeps the demo usable, while the docs show
-/// how to tighten it (30 min) for production.
-fn session_ttl() -> ChronoDuration {
-    let minutes = std::env::var("PINPOINT_SESSION_IDLE_MINUTES")
-        .ok()
+/// overrides it; the 2 h default keeps people signed in across a day's use, and
+/// the docs show how to tighten it (30 min) for a public host.
+const DEFAULT_IDLE_MINUTES: i64 = 120;
+
+fn idle_minutes_from(value: Option<&str>) -> i64 {
+    value
         .and_then(|v| v.trim().parse::<i64>().ok())
         .filter(|m| *m > 0)
-        .unwrap_or(720);
-    ChronoDuration::minutes(minutes)
+        .unwrap_or(DEFAULT_IDLE_MINUTES)
+}
+
+fn session_ttl() -> ChronoDuration {
+    let value = std::env::var("PINPOINT_SESSION_IDLE_MINUTES").ok();
+    ChronoDuration::minutes(idle_minutes_from(value.as_deref()))
+}
+
+#[cfg(test)]
+mod idle_timeout_tests {
+    use super::{idle_minutes_from, DEFAULT_IDLE_MINUTES};
+
+    #[test]
+    fn the_default_idle_timeout_is_two_hours() {
+        assert_eq!(DEFAULT_IDLE_MINUTES, 120);
+        assert_eq!(idle_minutes_from(None), 120);
+    }
+
+    #[test]
+    fn a_configured_value_overrides_the_default_and_bad_values_fall_back() {
+        assert_eq!(idle_minutes_from(Some(" 30 ")), 30);
+        assert_eq!(idle_minutes_from(Some("0")), 120, "zero is not a timeout");
+        assert_eq!(idle_minutes_from(Some("soon")), 120);
+    }
 }
 
 /// Absolute ceiling for a session, independent of activity.
